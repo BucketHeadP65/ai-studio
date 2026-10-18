@@ -426,7 +426,9 @@ _FIND_PATHS_DESCRIPTION = FIND_PATHS_DESCRIPTION
 # -- the descriptions the builders register ------------
 
 
-def search_description(*, hybrid: bool, can_sql: bool = True, facet_keys: tuple[str, ...] | None = None) -> str:
+def search_description(
+    *, hybrid: bool, can_sql: bool = True, facet_keys: tuple[str, ...] | None = None, takes_collection: bool = True
+) -> str:
     """The `search` description for a leg the host fixes rather than the agent.
 
     Args:
@@ -436,6 +438,8 @@ def search_description(*, hybrid: bool, can_sql: bool = True, facet_keys: tuple[
             `False` drops it.
         facet_keys: The facet keys the knowledge base's schema declares, named in the `facets`
             sentences. `None` (the default) describes a search that takes no `facets`.
+        takes_collection: Whether the tool takes a `collection` argument. `False` drops every
+            sentence about it, for a search that has none.
 
     Returns:
         The full tool description text.
@@ -443,6 +447,8 @@ def search_description(*, hybrid: bool, can_sql: bool = True, facet_keys: tuple[
     text = SEARCH_DESCRIPTION_HYBRID if hybrid else SEARCH_DESCRIPTION_KEYWORD
     if not can_sql:
         text = _without_sql_plane(text)
+    if not takes_collection:
+        text = _pinned_description(text)
     return text if facet_keys is None else _with_facets_clause(text, _facets_clause(facet_keys))
 
 

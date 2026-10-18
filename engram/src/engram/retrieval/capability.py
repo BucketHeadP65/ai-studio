@@ -925,7 +925,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         """The `search` description for one knowledge base or several, without `k` under a host-owned cap."""
         leg = (self.surfaces[0].hybrid if len(self.surfaces) == 1 else any(surface.hybrid for surface in self.surfaces)) if hybrid is None else hybrid
         text = (
-            search_description(hybrid=leg, can_sql=False, facet_keys=self.surfaces[0].facet_keys)
+            search_description(hybrid=leg, can_sql=False, facet_keys=self.surfaces[0].facet_keys, takes_collection=False)
             if len(self.surfaces) == 1
             else self._library_search_description(hybrid=leg, default_name=default_name)
         )

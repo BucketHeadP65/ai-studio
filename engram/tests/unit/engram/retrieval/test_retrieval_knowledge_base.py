@@ -172,7 +172,7 @@ class TestTheDescriptionNamesOnlyThisDoorsOwnTools:
 
         assert "run_sql" not in description
         assert "api.about" not in description
-        assert "`collection`" in description, "the argument itself still exists and is still taught"
+        assert "`collection`" not in description, "this search takes no `collection`, so its text never offers one"
 
 
 class TestSeveralSurfaces:
