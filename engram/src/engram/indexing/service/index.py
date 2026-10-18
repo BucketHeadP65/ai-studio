@@ -146,7 +146,7 @@ class IndexKnowledgeBaseHandler:
             chunk_sizes: How many tokens a chunk of a source mirror aims for and may hold, on the full and the incremental path.
             cut_plan_stage: Gives the mirrors of each load the cut plans the chunk planner chose, on the full and the incremental
                 path, when the schema stores source chunks. Its planner and ceiling enter the stored indexer version either way.
-                `None` fills every longer run of text with no heading.
+                `None` fills every heading section over the maximum chunk size.
         """
         self._kb_reader = kb_reader
         self._embedder = embedder

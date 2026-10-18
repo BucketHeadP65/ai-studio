@@ -121,8 +121,8 @@ async def run_incremental(
         cmd: The index command. Its `collection` scopes every read and write, and its `embed` flag turns embedding on.
         deps: The unit of work factory, reader, embedder, schema, stored pages and fingerprint inputs.
         chunk_sizes: How many tokens a chunk of a changed source mirror aims for and may hold.
-        cut_plan_stage: Gives the changed source mirrors the cut plans the chunk planner chose. `None` fills every longer run of
-            text with no heading.
+        cut_plan_stage: Gives the changed source mirrors the cut plans the chunk planner chose. `None` fills every heading
+            section over the maximum chunk size.
 
     Returns:
         The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `validation` holding

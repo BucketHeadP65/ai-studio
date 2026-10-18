@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 # A heading line in a mirror: one to four `#` then the heading text.
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,4})\s+(?P<text>.+?)\s*$")
 
-# A numbered-heading prefix: a dotted run of integers *or* a lettered appendix label
+# A numbered-heading prefix: a dotted sequence of integers *or* a lettered appendix label
 # (`4`, `3.1`, `7.3.1`, `A`, `A.1`), optionally dot-terminated, then whitespace. The remainder is
 # the human heading title. The captured number becomes the `s`-prefixed ltree path.
 _NUMBER_PREFIX_RE = re.compile(r"^(?P<number>(?:\d+|[A-Z])(?:\.\d+)*)\.?\s+(?P<title>.*)$")
@@ -93,7 +93,7 @@ class MirrorChunk(BaseModel):
 
 
 type _Span = tuple[int, int]
-"""The start and end offsets of a run of text."""
+"""The start and end offsets of a span of text."""
 
 
 def _section_path(heading_text: str) -> str | None:
@@ -153,7 +153,7 @@ def _sentence_spans(text: str, span: _Span) -> list[_Span]:
 
 
 def _line_spans(text: str, span: _Span) -> list[_Span]:
-    """The lines of one run of `text`, without blank ones."""
+    """The lines of one span of `text`, without blank ones."""
     start, end = span
     spans: list[_Span] = []
     line_end = text.find("\n", start, end)
@@ -192,7 +192,7 @@ def _cut_word(text: str, start: int, end: int, max_tokens: int) -> list[_Span]:
 
 
 def _cut_at_maximum(text: str, span: _Span, max_tokens: int) -> list[_Span]:
-    """Cut a run of `text` into pieces within `max_tokens` at its last word break, or inside a word over it."""
+    """Cut a span of `text` into pieces within `max_tokens` at its last word break, or inside a word over it."""
     pieces: list[_Span] = []
     words = [(match.start(), match.end()) for match in _WORD_RE.finditer(text, *span)]
     first = 0
@@ -211,7 +211,7 @@ def _cut_at_maximum(text: str, span: _Span, max_tokens: int) -> list[_Span]:
 
 
 def _units(text: str, max_tokens: int) -> list[_Span]:
-    """The runs of `text` filling joins, each within `max_tokens`: paragraphs, else sentences, else lines, else pieces of a line."""
+    """The spans of `text` filling joins, each within `max_tokens`: paragraphs, else sentences, else lines, else pieces of a line."""
     units: list[_Span] = []
     for paragraph in _paragraph_spans(text):
         if _fits(text[slice(*paragraph)], max_tokens):
@@ -230,7 +230,7 @@ def _units(text: str, max_tokens: int) -> list[_Span]:
 
 
 def _fill(text: str, sizes: ChunkSizes) -> list[str]:
-    """Fill `text` into chunks in reading order, each closed before the next run would pass the target."""
+    """Fill `text` into chunks in reading order, each closed before the next span would pass the target."""
     spans: list[_Span] = []
     for start, end in _units(text, sizes.max_tokens):
         if spans and _fits(text[spans[-1][0] : end], sizes.target_tokens):
@@ -240,18 +240,18 @@ def _fill(text: str, sizes: ChunkSizes) -> list[str]:
     return [text[start:end] for start, end in spans]
 
 
-def planner_paragraphs(run: str) -> list[str]:
-    """The paragraphs of a run of mirror text as the chunk planner is shown them, numbered from 1 by their place.
+def planner_paragraphs(section: str) -> list[str]:
+    """The paragraphs of a heading section's text as the chunk planner is shown them, numbered from 1 by their place.
 
-    Paragraphs are split at blank lines outside code fences, each the run's own text with edge whitespace removed.
+    Paragraphs are split at blank lines outside code fences, each the section's own text with edge whitespace removed.
 
     Args:
-        run: A run of mirror text with no heading.
+        section: The text of one heading section, its heading left out.
 
     Returns:
         The paragraphs in reading order.
     """
-    return [run[start:end] for start, end in _paragraph_spans(run)]
+    return [section[start:end] for start, end in _paragraph_spans(section)]
 
 
 def accepted_starts(answer: Sequence[int], paragraph_count: int) -> tuple[int, ...] | None:
@@ -274,11 +274,11 @@ def accepted_starts(answer: Sequence[int], paragraph_count: int) -> tuple[int, .
     return tuple(number for number in answer if number != 1)
 
 
-def runs_for_planner(text: str, sizes: ChunkSizes, *, ceiling_tokens: int) -> list[str]:
-    """The runs of a mirror the chunk planner is asked to cut: its heading sections that a cut plan would cut.
+def heading_sections_for_planner(text: str, sizes: ChunkSizes, *, ceiling_tokens: int) -> list[str]:
+    """The text of each heading section of a mirror the chunk planner is asked to cut, its heading left out.
 
-    A run is the text of one heading section over `sizes.max_tokens`, within `ceiling_tokens` and of at least two
-    paragraphs. A run is exactly the text `chunk_mirror` looks up in its cut plans by content hash.
+    Such a heading section is over `sizes.max_tokens`, within `ceiling_tokens` and of at least two paragraphs. Each
+    text is exactly the text `chunk_mirror` looks up in its cut plans by content hash.
 
     Args:
         text: The raw mirror file text, frontmatter included.
@@ -286,7 +286,7 @@ def runs_for_planner(text: str, sizes: ChunkSizes, *, ceiling_tokens: int) -> li
         ceiling_tokens: The most tokens of text the chunk planner is shown at once.
 
     Returns:
-        The runs in document order.
+        The heading sections' texts in document order.
     """
     _, body = split_frontmatter(text)
     return [
@@ -308,7 +308,7 @@ def _cut_at_starts(text: str, starts: tuple[int, ...], sizes: ChunkSizes) -> lis
 
 
 def _cut_unheaded(text: str, sizes: ChunkSizes, answer: Sequence[int] | None) -> list[str]:
-    """The chunks of a run of mirror text with no heading that does not fit one chunk: cut by its cut plan, else filled."""
+    """The chunks of a heading section's text that does not fit one chunk: cut by its cut plan, else filled."""
     starts = accepted_starts(answer, len(_paragraph_spans(text))) if answer is not None else None
     return _fill(text, sizes) if starts is None else _cut_at_starts(text, starts, sizes)
 
@@ -343,12 +343,12 @@ def chunk_mirror(text: str, sizes: ChunkSizes, cut_plans: Mapping[str, Sequence[
     filled paragraph by paragraph, each chunk closed before the next paragraph would pass `sizes.target_tokens`. A
     paragraph over the maximum is cut at its sentence ends, a sentence over it at its line breaks, a line over it at
     its last word break within it, and a word over it inside the word. No chunk passes the maximum. Each chunk keeps
-    its section's heading and section path, and each body is a run of the section's own text, edge whitespace removed.
+    its section's heading and section path, and each body is a piece of the section's own text, edge whitespace removed.
 
     Args:
         text: The raw mirror file text, frontmatter included.
         sizes: How many tokens a chunk aims for and may hold.
-        cut_plans: The cut plans by the content hash of the section text each cuts, as `runs_for_planner` yields that
+        cut_plans: The cut plans by the content hash of the section text each cuts, as `heading_sections_for_planner` yields that
             text. `None` fills every longer section.
 
     Returns:

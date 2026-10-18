@@ -18,8 +18,8 @@ from engram.indexing.domain.mirror_chunks import (
     MirrorChunk,
     accepted_starts,
     chunk_mirror,
+    heading_sections_for_planner,
     planner_paragraphs,
-    runs_for_planner,
 )
 
 _SIZES = ChunkSizes(target_tokens=400, max_tokens=800)
@@ -142,15 +142,15 @@ class TestFilling:
         assert all(token_count(chunk.body) <= _SIZES.max_tokens for chunk in chunks)
         assert [line for chunk in chunks for line in chunk.body.split("\n")] == lines
 
-    def test_a_run_with_no_sentence_end_is_cut_at_the_maximum(self) -> None:
-        run = " ".join(f"w{index}" for index in range(3_000))
+    def test_a_line_with_no_sentence_end_is_cut_at_the_maximum(self) -> None:
+        line = " ".join(f"w{index}" for index in range(3_000))
 
-        chunks = list(chunk_mirror(run, _SIZES))
+        chunks = list(chunk_mirror(line, _SIZES))
 
         assert len(chunks) > 1
         assert all(token_count(chunk.body) <= _SIZES.max_tokens for chunk in chunks)
         assert all(token_count(chunk.body) > _SIZES.target_tokens for chunk in chunks[:-1])
-        assert _words(" ".join(chunk.body for chunk in chunks)) == _words(run)
+        assert _words(" ".join(chunk.body for chunk in chunks)) == _words(line)
 
     def test_a_single_word_over_the_maximum_is_cut_within_it(self) -> None:
         word = "".join(f"{index:04x}" for index in range(3_000))
@@ -196,17 +196,17 @@ def _paragraphs(count: int) -> list[str]:
     return [_paragraph(index) for index in range(count)]
 
 
-def _plan_for(run: str, starts: tuple[int, ...]) -> dict[str, tuple[int, ...]]:
-    return {content_hash(run): starts}
+def _plan_for(section: str, starts: tuple[int, ...]) -> dict[str, tuple[int, ...]]:
+    return {content_hash(section): starts}
 
 
 class TestCutPlans:
     def test_a_cut_plan_cuts_text_with_no_heading_at_its_paragraphs_as_exact_source_text(self) -> None:
         paragraphs = _paragraphs(12)
         text = "---\nsource_key: K1\n---\n" + "\n\n".join(paragraphs) + "\n"
-        (run,) = runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+        (section,) = heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
 
-        chunks = list(chunk_mirror(text, _SIZES, _plan_for(run, (4, 9))))
+        chunks = list(chunk_mirror(text, _SIZES, _plan_for(section, (4, 9))))
 
         assert [chunk.body for chunk in chunks] == ["\n\n".join(paragraphs[0:3]), "\n\n".join(paragraphs[3:8]), "\n\n".join(paragraphs[8:12])]
         assert [chunk.ord for chunk in chunks] == [0, 1, 2]
@@ -215,18 +215,18 @@ class TestCutPlans:
     @pytest.mark.parametrize("starts", [(9, 4), (4, 4), (0, 4), (4, 13), (-1,)])
     def test_a_cut_plan_that_is_not_strictly_increasing_paragraph_numbers_falls_back_to_filling(self, starts: tuple[int, ...]) -> None:
         text = "\n\n".join(_paragraphs(12))
-        (run,) = runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+        (section,) = heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
 
-        chunks = list(chunk_mirror(text, _SIZES, _plan_for(run, starts)))
+        chunks = list(chunk_mirror(text, _SIZES, _plan_for(section, starts)))
 
         assert chunks == list(chunk_mirror(text, _SIZES))
 
     def test_a_chunk_of_a_cut_plan_over_the_maximum_is_filled(self) -> None:
         paragraphs = _paragraphs(12)
         text = "\n\n".join(paragraphs)
-        (run,) = runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+        (section,) = heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
 
-        first, *rest = chunk_mirror(text, _SIZES, _plan_for(run, (2,)))
+        first, *rest = chunk_mirror(text, _SIZES, _plan_for(section, (2,)))
 
         oversized = "\n\n".join(paragraphs[1:])
         assert token_count(oversized) > _SIZES.max_tokens
@@ -238,11 +238,11 @@ class TestCutPlans:
         paragraphs = _paragraphs(12)
         long_body = "\n\n".join(paragraphs)
         text = f"## 4 Experiments\n\n{long_body}\n\n## 5 Results\n\nThe gauge held steady.\n"
-        (run,) = runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+        (section,) = heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
 
-        chunks = list(chunk_mirror(text, _SIZES, _plan_for(run, (7,))))
+        chunks = list(chunk_mirror(text, _SIZES, _plan_for(section, (7,))))
 
-        assert run == long_body
+        assert section == long_body
         assert chunks == [
             MirrorChunk(ord=0, section_path="s4", heading="4 Experiments", body="\n\n".join(paragraphs[0:6])),
             MirrorChunk(ord=1, section_path="s4", heading="4 Experiments", body="\n\n".join(paragraphs[6:12])),
@@ -272,33 +272,33 @@ class TestAcceptedStarts:
         assert accepted_starts(answer, 12) is None
 
 
-class TestRunsForPlanner:
-    def test_text_with_no_heading_over_the_maximum_is_one_run_numbered_by_its_paragraphs(self) -> None:
+class TestHeadingSectionsForPlanner:
+    def test_text_with_no_heading_over_the_maximum_is_one_heading_section_numbered_by_its_paragraphs(self) -> None:
         paragraphs = _paragraphs(12)
         text = "---\nsource_key: K1\n---\n" + "\n\n".join(paragraphs) + "\n"
 
-        runs = runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+        sections = heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
 
-        assert runs == ["\n\n".join(paragraphs)]
-        assert planner_paragraphs(runs[0]) == paragraphs
+        assert sections == ["\n\n".join(paragraphs)]
+        assert planner_paragraphs(sections[0]) == paragraphs
 
-    def test_text_that_fits_one_chunk_is_no_run(self) -> None:
-        assert runs_for_planner("\n\n".join(_paragraphs(3)), _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == []
+    def test_text_that_fits_one_chunk_is_not_asked(self) -> None:
+        assert heading_sections_for_planner("\n\n".join(_paragraphs(3)), _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == []
 
-    def test_text_over_the_ceiling_is_no_run(self) -> None:
+    def test_text_over_the_ceiling_is_not_asked(self) -> None:
         text = "\n\n".join(_paragraphs(12))
 
         assert token_count(text) > 1_000
-        assert runs_for_planner(text, _SIZES, ceiling_tokens=1_000) == []
+        assert heading_sections_for_planner(text, _SIZES, ceiling_tokens=1_000) == []
 
-    def test_one_paragraph_over_the_maximum_is_no_run_since_it_has_no_paragraph_to_start_a_chunk_at(self) -> None:
-        assert runs_for_planner(_paragraph(1, sentences=150), _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == []
+    def test_one_paragraph_over_the_maximum_is_not_asked_since_it_has_no_paragraph_to_start_a_chunk_at(self) -> None:
+        assert heading_sections_for_planner(_paragraph(1, sentences=150), _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == []
 
-    def test_only_the_heading_sections_over_the_maximum_are_runs(self) -> None:
+    def test_only_the_heading_sections_over_the_maximum_are_asked(self) -> None:
         long_body = "\n\n".join(_paragraphs(12))
         text = f"Opening line.\n\n## 1 Short\n\nThe gauge held steady.\n\n## 2 Long\n\n{long_body}\n"
 
-        assert runs_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == [long_body]
+        assert heading_sections_for_planner(text, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS) == [long_body]
 
     def test_a_blank_line_inside_a_code_fence_does_not_number_a_new_paragraph(self) -> None:
         fence = "```\nfirst line\n\nsecond line\n```"

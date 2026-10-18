@@ -178,9 +178,9 @@ The chunk planner is a port, `ChunkPlanner` (`src/engram/indexing/internal_contr
 `identity` is its model name and prompt version, and `chunk_starts(paragraphs)` answers paragraph
 numbers. `CutPlanStage` (`src/engram/indexing/service/cut_plan_stage.py`) runs on the full and the
 incremental path before the rows are built, and only when the schema stores source chunks. For each
-run of text the chunk planner may cut (`runs_for_planner`) it reads the cut plan stored under the
-knowledge base, the sha256 of the text and the planner's identity, and shows the planner only the runs
-with none, at most `chunk_planner_concurrency` at once. Each accepted answer is stored in `kb.cut_plans`
+heading section the chunk planner may cut (`heading_sections_for_planner`) it reads the cut plan stored
+under the knowledge base, the sha256 of the section's text and the planner's identity, and shows the
+planner only the heading sections with none, at most `chunk_planner_concurrency` at once. Each accepted answer is stored in `kb.cut_plans`
 (migration 0069), so indexing the same text again with the same chunk planner calls no model and cuts it
 the same way. A planner call that raises, runs past `chunk_planner_deadline_seconds` or answers refused
 numbers fills its text, is not stored, and never fails the index, so the next index asks again. The
@@ -195,7 +195,7 @@ the stored indexer version names the planner. The studio wires `PydanticAiChunkP
 disclosure summaries use, at a low thinking level. Its prompt asks for the paragraphs
 that open a new topic and its structured output is a list of paragraph numbers. An empty
 `chunk_planner_model`, or no `infrastructure.azure_openai.endpoint`, indexes with no chunk planner, and
-every such run is filled. A library caller passes `cut_plan_stage=CutPlanStage(planner, plans, queries)`
+every such heading section is filled. A library caller passes `cut_plan_stage=CutPlanStage(planner, plans, queries)`
 to `IndexKnowledgeBaseHandler`, with `SqlAlchemyCutPlans(engine)` as both stores, or passes nothing.
 
 | Setting | Default | What it does |

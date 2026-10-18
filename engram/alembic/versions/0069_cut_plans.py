@@ -4,7 +4,7 @@ Revision ID: 0069
 Revises: 0068
 Create Date: 2026-10-18 00:00:00.000000
 
-A chunk planner reads a run of mirror text with no heading as numbered paragraphs and answers the numbers of the
+A chunk planner reads one heading section of a mirror as numbered paragraphs and answers the numbers of the
 paragraphs where a new chunk starts. The indexer stores each accepted answer keyed by collection, the sha256 of the
 text and the planner's model name and prompt version, and reuses it whenever the same text meets the same planner.
 `starts` holds the paragraph numbers, paragraph 1 left out. No reader is granted the table. Downgrade drops it, and
@@ -32,7 +32,7 @@ CREATE TABLE kb.cut_plans (
 
 _COMMENT = (
     "COMMENT ON TABLE kb.cut_plans IS "
-    "'The cut plans a chunk planner chose: the paragraph numbers where a new chunk starts in one run of mirror text, "
+    "'The cut plans a chunk planner chose: the paragraph numbers where a new chunk starts in one heading section of a mirror, "
     "paragraph 1 left out, by collection, the sha256 of the text and the planner''s model name and prompt version. "
     "The indexer reuses a stored plan instead of asking the planner again. No reader is granted it.'"
 )
