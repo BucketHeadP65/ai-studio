@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 20,772 tokens.
+Sections: 10 · whole document ≈ 20,835 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -80,8 +80,8 @@ Sections: 10 · whole document ≈ 20,772 tokens.
 - **Load when:** cross-cutting, cqrs bus, unit of work, db base, wikibase, wireup, composition root, settings, observability, cli, dependency injection
 
 ### 09 — System data model (ERD)
-[sections/09-system-data-model-erd.md](sections/09-system-data-model-erd.md) · ~2,155 tokens
-- **TL;DR:** The single system ERD, 17 tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
+[sections/09-system-data-model-erd.md](sections/09-system-data-model-erd.md) · ~2,218 tokens
+- **TL;DR:** The single system ERD, 18 of the 21 `kb` tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
 - **Load when:** erd, schema, tables, data model, entity relationship, database tables, identity, composite key, containment, citation, facets, tenancy
 
 ### 10 — Quality, risks, tech debt
