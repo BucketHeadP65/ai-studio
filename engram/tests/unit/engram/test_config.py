@@ -7,7 +7,9 @@ tests do.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+
+from pathlib import Path
 
 import pytest
 
@@ -17,9 +19,6 @@ from engram.config import IngestionSettings, KnowledgeBaseEntry, resolve_active_
 from engram.indexing.contracts import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.mirror_chunks import MIRROR_CHUNK_TOKEN_BUDGET
 from engram.indexing.service.cut_plan_stage import DEFAULT_PLANNER_CONCURRENCY, DEFAULT_PLANNER_DEADLINE_SECONDS
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _make_knowledge_base(root: Path) -> Path:
@@ -132,8 +131,13 @@ class TestIngestionChunkSizes:
 
 
 class TestIngestionChunkPlanner:
-    def test_the_chunk_planner_runs_on_a_named_deployment_by_default(self) -> None:
-        assert IngestionSettings().chunk_planner_model == "gpt-6-luna"
+    def test_the_chunk_planner_is_off_until_the_settings_name_a_deployment(self) -> None:
+        assert IngestionSettings().chunk_planner_model == ""
+
+    def test_the_example_settings_leave_the_chunk_planner_off(self) -> None:
+        example = json.loads((Path(__file__).parents[3] / "config" / "application_settings.example.json").read_text(encoding="utf-8"))
+
+        assert example["ingestion"]["chunk_planner_model"] == ""
 
     def test_the_chunk_planner_limits_default_to_the_indexers_own(self) -> None:
         settings = IngestionSettings()
@@ -142,8 +146,8 @@ class TestIngestionChunkPlanner:
         assert settings.chunk_planner_deadline_seconds == DEFAULT_PLANNER_DEADLINE_SECONDS
         assert settings.chunk_planner_concurrency == DEFAULT_PLANNER_CONCURRENCY
 
-    def test_an_empty_chunk_planner_model_is_accepted(self) -> None:
-        assert IngestionSettings(chunk_planner_model="").chunk_planner_model == ""
+    def test_a_named_chunk_planner_deployment_is_kept(self) -> None:
+        assert IngestionSettings(chunk_planner_model="example-deployment").chunk_planner_model == "example-deployment"
 
     @pytest.mark.parametrize("field", ["chunk_planner_ceiling_tokens", "chunk_planner_deadline_seconds", "chunk_planner_concurrency"])
     def test_a_chunk_planner_limit_that_is_not_positive_is_refused(self, field: str) -> None:

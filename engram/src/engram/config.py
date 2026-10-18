@@ -210,8 +210,8 @@ class IngestionSettings(BaseModel):
     """The tokens the index aims for in one chunk of a source mirror."""
     chunk_max_tokens: int = Field(default=800, gt=0, le=7_500)
     """The most tokens one chunk of a source mirror holds, at most 7,500. A heading section within it stays one chunk."""
-    chunk_planner_model: str = "gpt-6-luna"
-    """The Azure OpenAI deployment the chunk planner runs on, at a low thinking level. Empty indexes with no chunk planner."""
+    chunk_planner_model: str = ""
+    """The Azure OpenAI deployment the chunk planner runs on, at a low thinking level. Empty, the default, indexes with no chunk planner."""
     chunk_planner_ceiling_tokens: int = Field(default=12_000, gt=0)
     """The most tokens of text the chunk planner is shown at once. Longer text is filled."""
     chunk_planner_deadline_seconds: float = Field(default=60.0, gt=0)

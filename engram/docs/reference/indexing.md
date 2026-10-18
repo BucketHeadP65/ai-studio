@@ -187,9 +187,12 @@ numbers fills its text, is not stored, and never fails the index, so the next in
 stage logs how many plans it reused, chose and filled. The plans reach the chunker on the mirror itself
 (`MirrorDoc.cut_plans`, by text hash), so the raw chunk rows and their embed inputs are cut alike.
 
-The studio wires `PydanticAiChunkPlanner` (`src/engram/indexing/infrastructure/chunk_planner.py`) over
-the Azure OpenAI deployment `IngestionSettings.chunk_planner_model` names (`gpt-6-luna` by default), on
-the resource the disclosure summaries use, at a low thinking level. Its prompt asks for the paragraphs
+The chunk planner is off by default. To turn it on, set `ingestion.chunk_planner_model` to a chat
+deployment on the Azure OpenAI resource `infrastructure.azure_openai.endpoint` names (this project runs
+`gpt-6-luna`), or `APP_INGESTION__CHUNK_PLANNER_MODEL`. The next plain index is then a full one, since
+the stored indexer version names the planner. The studio wires `PydanticAiChunkPlanner`
+(`src/engram/indexing/infrastructure/chunk_planner.py`) over that deployment, on the resource the
+disclosure summaries use, at a low thinking level. Its prompt asks for the paragraphs
 that open a new topic and its structured output is a list of paragraph numbers. An empty
 `chunk_planner_model`, or no `infrastructure.azure_openai.endpoint`, indexes with no chunk planner, and
 every such run is filled. A library caller passes `cut_plan_stage=CutPlanStage(planner, plans, queries)`
@@ -197,7 +200,7 @@ to `IndexKnowledgeBaseHandler`, with `SqlAlchemyCutPlans(engine)` as both stores
 
 | Setting | Default | What it does |
 |---|---|---|
-| `ingestion.chunk_planner_model` | `gpt-6-luna` | The Azure OpenAI deployment the chunk planner runs on. Empty turns the chunk planner off. |
+| `ingestion.chunk_planner_model` | empty | The Azure OpenAI deployment the chunk planner runs on. Empty, the default, leaves the chunk planner off. |
 | `ingestion.chunk_planner_ceiling_tokens` | 12,000 | The most tokens of text the chunk planner is shown at once. Longer text is filled. |
 | `ingestion.chunk_planner_deadline_seconds` | 60 | How long one chunk planner call may take before its text is filled. |
 | `ingestion.chunk_planner_concurrency` | 4 | How many chunk planner calls may run at once in one index. |

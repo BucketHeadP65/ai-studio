@@ -717,7 +717,10 @@ class TestStatusIndexDrift:
 
     def test_a_chunk_planner_change_shows_stale_hint(self):
         factory = _StatusContainerFactory(
-            fingerprint=_fingerprint_row(), files_tracked=42, azure_openai=AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
+            fingerprint=_fingerprint_row(),
+            files_tracked=42,
+            ingestion=IngestionSettings(chunk_planner_model="example-deployment"),
+            azure_openai=AzureOpenAiSettings(endpoint="https://example.openai.azure.com"),
         )
 
         result = runner.invoke(app, ["status"], obj=factory)
@@ -731,6 +734,16 @@ class TestStatusIndexDrift:
         ingestion = IngestionSettings(chunk_planner_model="example-deployment")
         stored = indexer_version(DEFAULT_CHUNK_SIZES, planner="example-deployment/prompt-1", planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
         factory = _StatusContainerFactory(fingerprint=_fingerprint_row(indexer_version=stored), files_tracked=42, ingestion=ingestion, azure_openai=azure_openai)
+
+        result = runner.invoke(app, ["status"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "next run is --full" not in result.stdout
+
+    def test_an_azure_endpoint_alone_turns_no_chunk_planner_on(self):
+        factory = _StatusContainerFactory(
+            fingerprint=_fingerprint_row(), files_tracked=42, azure_openai=AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
+        )
 
         result = runner.invoke(app, ["status"], obj=factory)
 
