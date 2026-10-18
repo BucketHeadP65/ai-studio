@@ -390,7 +390,7 @@ class TestEvalsRun:
             "source-level retrieval over 1 case(s) with gold ids: recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
             "  no query type: 1 case(s), recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
         ) in result.stdout
-        assert "Seen recall is the share of each case's gold sources that any tool result the agent received named, cited or not.\n" in result.stdout
+        assert "Seen recall is the share of each case's gold sources that any tool result the model received named, cited or not.\n" in result.stdout
         assert (
             "The recall, precision and mrr in the table above compare cited page ids with the gold ids, "
             "so they do not apply when the gold ids are source ids.\n"

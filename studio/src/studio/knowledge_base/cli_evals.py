@@ -269,7 +269,7 @@ def evals_run_cmd(
     source_level: bool = typer.Option(
         default=False,
         help="Map each cited id to its source document and score recall@4, recall@10 and mrr against the dataset's gold "
-        "source ids, and score seen recall: the share of the gold sources that any tool result the agent received named. "
+        "source ids, and score seen recall: the share of the gold sources that any tool result the model received named. "
         "The scores land in the results file, so it needs --results, and their means print after the table, overall and "
         "per query type.",
     ),
@@ -299,7 +299,7 @@ def evals_run_cmd(
     `--code-mode`, and `--pinned-search` keeps search in the knowledge base, its date range kept.
     `--results` writes one line per case, and `--source-level` scores that file's retrieval against source ids, so it
     is refused without `--results`. It then prints the mean source-level recall@4, recall@10 and mrr over the cases with
-    gold ids, beside the mean seen recall, the share of the gold sources that any tool result the agent received named,
+    gold ids, beside the mean seen recall, the share of the gold sources that any tool result the model received named,
     cited or not, overall and per query type. The table's recall, precision and mrr compare cited page ids and do not
     apply to source-id gold. `--resume` continues the `--results` file, so it is refused without `--results`. It keeps
     every case that did not fail transiently, runs only the missing cases and the transient failures, and rewrites the
@@ -394,7 +394,7 @@ def _echo_source_level_retrieval(written: ResultsFile) -> None:
         for row in source_level_retrieval_per_query_type(written.lines):
             label = row.query_type if row.query_type is not None else "no query type"
             typer.echo(f"  {label}: {row.retrieval.cases} case(s), {_retrieval_text(row.retrieval)}")
-        typer.echo("Seen recall is the share of each case's gold sources that any tool result the agent received named, cited or not.")
+        typer.echo("Seen recall is the share of each case's gold sources that any tool result the model received named, cited or not.")
     typer.echo(
         "The recall, precision and mrr in the table above compare cited page ids with the gold ids, "
         "so they do not apply when the gold ids are source ids."

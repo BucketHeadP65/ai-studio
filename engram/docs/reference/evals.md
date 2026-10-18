@@ -117,7 +117,7 @@ source ids. The cited ids map to sources through `kb.pages.source_id` for a page
 one, and to the id before the last `:` for anything else, so a raw chunk maps to the source it was
 cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
 those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
-gold sources that any tool result the agent received during the case named, and `seen_gold`, those
+gold sources that any tool result the model received during the case named, and `seen_gold`, those
 gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
 and did not cite it. A case with a seen recall of 0 never received it, which is a retrieval miss.
 
@@ -130,12 +130,18 @@ unit it read, a leveled `fetch` its own unit and every child it lists, and `grap
 `id`, `page_id`, `section_id`, `claim_id` and `source_id` columns, the row's own unit or the unit
 that holds it. The other end of a relation, such as `src_id`, `dst_id` or `subject_id`, never
 counts, and nor does any other column, a title or a body for example, even when it mentions an id.
-Under `--code-mode` a `run_code` call names what its program's own tool calls returned, which code
-mode records on the call's return (`metadata["tool_returns"]`), read by the same rules as a direct
-call. What the program prints or returns is never read, so an id a fetched body links to does not
-count however the program passes it on. A unit whose content a program receives counts even when the
-program prints nothing of it. Every unit seen maps to its source the way the cited ids map, in the
-same one page lookup and one source lookup. Reading a tool result never raises, whatever its shape,
+A claim counts for its page only when its text came with it: a claim hit with its snippet, a fetched
+claim with its body, or a SQL row with a `text`, `quote`, `snippet` or `body` beside its claim id. A
+bare claim id or a provenance pointer never counts.
+
+Under `--code-mode` seen recall reads the `run_code` output the model reads, since the model never
+receives the program's own tool returns. A unit counts only when both hold: one of the program's
+tool calls returned it, as code mode records on the call's return (`metadata["tool_returns"]`) and
+read by the same rules as a direct call, and the output carries its id or its ref, as a word of its
+text or of a key. A program that searches and prints only a count sees nothing. An id that a fetched
+body links to never counts, because no tool call of the program returned that unit. A unit whose
+text the program prints without its id does not count either. Every unit seen maps to its source the
+way the cited ids map, in the same one page lookup and one source lookup. Reading a tool result never raises, whatever its shape,
 so the measure never changes how a case ends or whether its failure is transient. A run without
 `--source-level`, or whose source lookup failed, writes null for both keys.
 

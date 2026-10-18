@@ -1501,7 +1501,7 @@ class TestSourceLevelRetrieval(_ResetsLogfire):
         assert [collection for collection, _ids in hit_sources.source_lookups] == ["research"]
 
 
-# -- seen recall: which gold sources the tool results the agent received named ----------
+# -- seen recall: which gold sources the tool results the model received named ----------
 
 
 def _handlers_over(gateway: FakeSqlGateway) -> RetrievalHandlers:
@@ -1651,11 +1651,11 @@ class TestSeenRecall(_ResetsLogfire):
         _header, lines = _read_results(results)
         assert (lines["case-a"]["failed"], lines["case-a"]["seen_recall"], lines["case-a"]["recall@4"]) == (True, 1.0, 0.0)
 
-    async def test_in_code_mode_what_the_program_s_own_tool_calls_returned_counts_whatever_it_prints(self, tmp_path: Path):
+    async def test_in_code_mode_a_returned_unit_counts_only_when_the_output_the_model_reads_carries_its_id(self, tmp_path: Path):
         gateway = FakeSqlGateway(routed={"api.search": _search_hits(("note.alpha#s1", "section", "note.alpha"))})
         programs = {
             "question case-a": "found = await search(query='alpha')\nlen(found['hits'])",
-            "question case-b": "found = await search(query='alpha')\nfound['hits'][0]['id']",
+            "question case-b": "found = await search(query='alpha')\nprint(found['hits'][0]['id'])",
         }
 
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -1676,7 +1676,7 @@ class TestSeenRecall(_ResetsLogfire):
         )
 
         _header, lines = _read_results(results)
-        assert lines["case-a"]["seen_recall"] == 1.0
+        assert lines["case-a"]["seen_recall"] == 0.0
         assert lines["case-b"]["seen_recall"] == 1.0
 
     async def test_in_code_mode_a_gold_id_that_a_fetched_body_links_to_is_not_seen(self, tmp_path: Path):
@@ -1693,11 +1693,43 @@ class TestSeenRecall(_ResetsLogfire):
             FakeContainer(handlers=_handlers_over(gateway)),
             config=config,
             dataset=_named_dataset(("case-a", "yes", ("src-alpha", "src-beta"))),
-            model=_calls_then_answers(ToolCallPart("run_code", {"code": "unit = await fetch(unit_id='note.beta')\nunit['body']"})),
+            model=_calls_then_answers(ToolCallPart("run_code", {"code": "unit = await fetch(unit_id='note.beta')\nprint(unit['id'], unit['body'])"})),
         )
 
         _header, lines = _read_results(results)
         assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-beta"], 0.5)
+
+    async def test_a_claim_counts_for_its_page_only_when_the_sql_row_carried_its_text(self, tmp_path: Path):
+        rows = {
+            "question case-a": SqlResult(rows=({"claim_id": "note.alpha#c1"},), columns=("claim_id",)),
+            "question case-b": SqlResult(rows=({"claim_id": "note.alpha#c1", "text": "Graphs help recall."},), columns=("claim_id", "text")),
+        }
+        statements = {"question case-a": "SELECT claim_id FROM api.claims", "question case-b": "SELECT claim_id, text FROM api.claims"}
+        gateway = FakeSqlGateway(routed={"SELECT claim_id FROM": rows["question case-a"], "SELECT claim_id, text FROM": rows["question case-b"]})
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            if _tool_calls_made(messages) == 0:
+                return ModelResponse(parts=[ToolCallPart("run_sql", {"sql": statements[_prompt_text(messages)]})])
+            return _answer_part(info, "yes", [])
+
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model",
+            instructions="Cite.",
+            sql=_sql_knowledge_base(gateway),
+            hit_sources=_FakeHitSources(sources=_SEEN_SOURCES),
+            results_path=results,
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha",)), ("case-b", "yes", ("src-alpha",))),
+            model=FunctionModel(respond),
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["seen_recall"], lines["case-b"]["seen_recall"]) == (0.0, 1.0)
 
     async def test_a_program_result_keyed_by_a_number_leaves_an_answered_case_answered_and_a_transient_failure_transient(self, tmp_path: Path):
         gateway = FakeSqlGateway(routed={"api.search": _search_hits(("note.alpha#s1", "section", "note.alpha"))})

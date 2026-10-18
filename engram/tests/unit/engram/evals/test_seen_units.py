@@ -99,7 +99,7 @@ def test_a_sql_row_names_its_own_unit_columns_and_never_the_other_end_of_a_relat
         "rows": [
             {"source_id": "src-alpha", "title": "src-gamma", "src_id": "note.beta"},
             {"id": "note.delta", "body": "See note.epsilon for more.", "dst_id": "note.zeta", "subject_id": "note.eta"},
-            {"claim_id": "note.theta#c1", "page_id": "note.iota", "section_id": "note.kappa#s1"},
+            {"claim_id": "note.theta#c1", "quote": "Measured on two datasets.", "page_id": "note.iota", "section_id": "note.kappa#s1"},
         ],
         "note": None,
     }
@@ -122,17 +122,66 @@ def test_a_run_code_result_keyed_by_a_number_never_raises_and_names_nothing():
 def test_a_key_that_is_not_text_never_raises():
     rows = {"rows": [{1: "note.alpha", "page_id": "note.beta"}], "note": None}
 
-    assert seen_units(_run_code({2: "done"}, ("run_sql", rows)), collection="notes") == ("note.beta",)
+    assert seen_units(_run_code({2: "note.beta", 3: 4}, ("run_sql", rows)), collection="notes") == ("note.beta",)
 
 
-def test_a_run_code_call_names_what_its_program_s_own_tool_calls_returned_and_nothing_it_printed():
+def test_a_run_code_call_names_a_unit_only_when_a_program_tool_call_returned_it_and_the_output_carries_its_id():
     search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
     fetched = FetchResult(id="note.beta", level="card", body="Builds on [[note.zeta]] and the chunk src-eta:2.")
-    output = {"output": "saw note.gamma and page:notes/note.delta\n", "result": {"source_id": "src-epsilon", "body": fetched.body}}
+    output = {"output": "saw note.alpha#s1 and page:notes/note.delta.\n", "result": {"source_id": "src-epsilon", "body": fetched.body}}
+
+    seen = seen_units(_run_code(output, ("search", search), ("fetch", fetched)), collection="notes")
+
+    assert seen == ("note.alpha#s1",)
+
+
+def test_a_run_code_output_carries_a_returned_unit_by_its_ref_or_as_a_key():
+    search = SearchResult(
+        hits=(
+            SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),
+            SearchHit(id="note.gamma", hit_level="card", score=0.5),
+        ),
+        next_steps=_NEXT,
+    )
+    fetched = FetchResult(id="note.beta", level="card", body="The body.")
+    output = {"output": "see section:notes/note.alpha#s1.\n", "result": {"note.beta": "The body."}}
 
     seen = seen_units(_run_code(output, ("search", search), ("fetch", fetched)), collection="notes")
 
     assert seen == ("note.alpha#s1", "note.beta")
+
+
+def test_a_run_code_output_that_holds_only_a_count_names_no_unit_its_program_received():
+    search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
+
+    assert seen_units(_run_code(1, ("search", search)), collection="notes") == ()
+
+
+def test_a_claim_counts_when_the_result_carried_its_text():
+    hits = SearchResult(hits=(SearchHit(id="note.alpha#c1", hit_level="claim", page_id="note.alpha", snippet="Graphs help recall.", score=1.0),), next_steps=_NEXT)
+    fetched = FetchResult(id="note.beta#c2", level="claim", body="Caching halves the latency.")
+    rows = {
+        "rows": [
+            {"claim_id": "note.gamma#c3", "text": "Reranking adds four points."},
+            {"id": "note.delta#c4", "hit_level": "claim", "snippet": "A claim's words."},
+        ],
+        "note": None,
+    }
+
+    seen = seen_units(_returned(("search", hits), ("fetch", fetched), ("run_sql", rows)), collection="notes")
+
+    assert seen == ("note.alpha#c1", "note.beta#c2", "note.gamma#c3", "note.delta#c4")
+
+
+def test_a_claim_id_that_came_without_its_text_names_no_unit():
+    hits = SearchResult(hits=(SearchHit(id="note.alpha#c1", hit_level="claim", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
+    fetched = FetchResult(id="note.beta#c2", level="claim", body=None)
+    rows = {"rows": [{"claim_id": "note.gamma#c3"}, {"id": "note.delta#c4", "hit_level": "claim", "snippet": " "}], "note": None}
+    pointed = GraphResult(edges=(GraphEdge(src_id="note.epsilon", dst_id="note.zeta", rel="cites", provenance_claim="note.eta#c5"),))
+
+    seen = seen_units(_returned(("search", hits), ("fetch", fetched), ("run_sql", rows), ("graph_expand", pointed)), collection="notes")
+
+    assert seen == ()
 
 
 def test_a_run_code_call_whose_program_received_no_tool_return_names_no_unit():
