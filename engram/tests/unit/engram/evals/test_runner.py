@@ -1699,6 +1699,57 @@ class TestSeenRecall(_ResetsLogfire):
         _header, lines = _read_results(results)
         assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-beta"], 0.5)
 
+    async def test_in_code_mode_a_link_in_a_printed_body_never_counts_even_when_a_search_returned_the_linked_unit(self, tmp_path: Path):
+        hits = SqlResult(
+            rows=(
+                {"id": "note.alpha", "hit_level": "card", "page_id": None, "snippet": "The second day of the vote count.", "score": 1.0},
+                {"id": "note.beta", "hit_level": "card", "page_id": None, "snippet": "The date of the vote count was set.", "score": 0.5},
+            ),
+            columns=("id", "hit_level", "page_id", "snippet", "score"),
+        )
+        body = "Day two of the vote count. It follows up on [[note.beta]] from the day before, which set the date of the count."
+        fetched = SqlResult(rows=({"id": "note.alpha", "level": "card", "title": "Alpha", "body": body},), columns=("id", "level", "title", "body"))
+        gateway = FakeSqlGateway(routed={"api.search": hits, "api.fetch": fetched})
+        program = "found = await search(query='vote count')\nunit = await fetch(unit_id='note.alpha')\nprint(unit['body'])"
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", code_mode=True, hit_sources=_FakeHitSources(sources=_SEEN_SOURCES), results_path=results
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(handlers=_handlers_over(gateway)),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha", "src-beta"))),
+            model=_calls_then_answers(ToolCallPart("run_code", {"code": program})),
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-alpha"], 0.5)
+
+    async def test_in_code_mode_a_hit_one_run_code_call_returned_counts_when_a_later_call_prints_it(self, tmp_path: Path):
+        hits = SqlResult(
+            rows=({"id": "note.alpha#s1", "hit_level": "section", "page_id": "note.alpha", "snippet": "Graph indexes speed up recall.", "score": 1.0},),
+            columns=("id", "hit_level", "page_id", "snippet", "score"),
+        )
+        gateway = FakeSqlGateway(routed={"api.search": hits})
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", code_mode=True, hit_sources=_FakeHitSources(sources=_SEEN_SOURCES), results_path=results
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(handlers=_handlers_over(gateway)),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha",))),
+            model=_calls_then_answers(
+                ToolCallPart("run_code", {"code": "hits = (await search(query='graph'))['hits']\nlen(hits)"}),
+                ToolCallPart("run_code", {"code": "print(hits[0]['id'], hits[0]['snippet'])"}),
+            ),
+        )
+
+        _header, lines = _read_results(results)
+        assert lines["case-a"]["seen_recall"] == 1.0
+
     async def test_a_claim_counts_for_its_page_only_when_the_sql_row_carried_its_text(self, tmp_path: Path):
         rows = {
             "question case-a": SqlResult(rows=({"claim_id": "note.alpha#c1"},), columns=("claim_id",)),
@@ -1792,6 +1843,27 @@ class TestSeenRecall(_ResetsLogfire):
 
         _header, lines = _read_results(results)
         assert (lines["case-a"]["seen_recall"], lines["case-a"]["seen_gold"]) == (None, None)
+
+
+class TestCitedRefs(_ResetsLogfire):
+    async def test_a_cited_ref_maps_to_its_source_like_its_bare_id(self, tmp_path: Path):
+        hit_sources = _FakeHitSources(sources={"note.alpha": "src-alpha", "note.beta": "src-beta"})
+        citations = ["page:research/note.alpha", "section:research/note.beta#s1", "unit:research/src-gamma:4"]
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return _answer_part(info, "yes", citations)
+
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", hit_sources=hit_sources, results_path=results)
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(), config=config, dataset=_named_dataset(("case-a", "yes", ("src-alpha", "src-beta", "src-gamma"))), model=FunctionModel(respond)
+        )
+
+        _header, lines = _read_results(results)
+        assert lines["case-a"]["cited"] == citations
+        assert lines["case-a"]["sources"] == ["src-alpha", "src-beta", "src-gamma"]
+        assert lines["case-a"]["recall@4"] == 1.0
 
 
 class TestAnswerScoring(_ResetsLogfire):

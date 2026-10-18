@@ -125,14 +125,14 @@ def test_a_key_that_is_not_text_never_raises():
     assert seen_units(_run_code({2: "note.beta", 3: 4}, ("run_sql", rows)), collection="notes") == ("note.beta",)
 
 
-def test_a_run_code_call_names_a_unit_only_when_a_program_tool_call_returned_it_and_the_output_carries_its_id():
+def test_a_run_code_output_never_names_a_unit_no_program_tool_call_returned():
     search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
     fetched = FetchResult(id="note.beta", level="card", body="Builds on [[note.zeta]] and the chunk src-eta:2.")
     output = {"output": "saw note.alpha#s1 and page:notes/note.delta.\n", "result": {"source_id": "src-epsilon", "body": fetched.body}}
 
     seen = seen_units(_run_code(output, ("search", search), ("fetch", fetched)), collection="notes")
 
-    assert seen == ("note.alpha#s1",)
+    assert seen == ("note.alpha#s1", "note.beta")
 
 
 def test_a_run_code_output_carries_a_returned_unit_by_its_ref_or_as_a_key():
@@ -155,6 +155,64 @@ def test_a_run_code_output_that_holds_only_a_count_names_no_unit_its_program_rec
     search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
 
     assert seen_units(_run_code(1, ("search", search)), collection="notes") == ()
+
+
+_ALPHA_BODY = "Day two of the vote count. It follows up on [[note.beta]] from the day before, which set the date of the count."
+_ALPHA_SNIPPET = "The second day of the vote count in the northern district."
+_BETA_SNIPPET = "The date of the vote count was set for the end of the month."
+
+
+def test_a_link_inside_a_printed_body_never_counts_even_when_the_linked_unit_was_returned():
+    search = SearchResult(
+        hits=(
+            SearchHit(id="note.alpha", hit_level="card", snippet=_ALPHA_SNIPPET, score=1.0),
+            SearchHit(id="note.beta", hit_level="card", snippet=_BETA_SNIPPET, score=0.5),
+        ),
+        next_steps=_NEXT,
+    )
+    fetched = FetchResult(id="note.alpha", level="card", body=_ALPHA_BODY)
+
+    seen = seen_units(_run_code({"output": f"{_ALPHA_BODY}\n"}, ("search", search), ("fetch", fetched)), collection="notes")
+
+    assert seen == ("note.alpha",)
+
+
+def test_a_body_printed_without_its_id_counts_for_the_unit_it_belongs_to():
+    body = "Line one of the report.\n\n  It spans   several lines and keeps going well past sixty characters in all."
+    fetched = FetchResult(id="note.beta", level="card", body=body)
+
+    printed = seen_units(_run_code({"output": f"{body[:90]}\n"}, ("fetch", fetched)), collection="notes")
+    in_a_printed_dict = seen_units(_run_code({"output": f"{ {'body': body}!r}\n"}, ("fetch", fetched)), collection="notes")
+
+    assert (printed, in_a_printed_dict) == (("note.beta",), ("note.beta",))
+
+
+def test_a_unit_an_earlier_run_code_call_returned_counts_when_a_later_call_prints_it():
+    search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", snippet=_ALPHA_SNIPPET, score=1.0),), next_steps=_NEXT)
+
+    seen = seen_units([*_run_code(1, ("search", search)), *_run_code({"output": f"note.alpha#s1 {_ALPHA_SNIPPET}\n"})], collection="notes")
+
+    assert seen == ("note.alpha#s1",)
+
+
+def test_an_id_written_after_an_equals_sign_counts():
+    search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
+
+    assert seen_units(_run_code({"output": "id=note.alpha#s1 score=1.0\n"}, ("search", search)), collection="notes") == ("note.alpha#s1",)
+
+
+def test_a_returned_unit_counts_through_its_page_id_printed_with_its_snippet():
+    search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", snippet=_ALPHA_SNIPPET, score=1.0),), next_steps=_NEXT)
+
+    seen = seen_units(_run_code({"output": f"note.alpha: {_ALPHA_SNIPPET}\n"}, ("search", search)), collection="notes")
+
+    assert seen == ("note.alpha#s1",)
+
+
+def test_a_returned_unit_counts_through_its_page_id_alone():
+    search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
+
+    assert seen_units(_run_code({"output": "pages: note.alpha\n"}, ("search", search)), collection="notes") == ("note.alpha#s1",)
 
 
 def test_a_claim_counts_when_the_result_carried_its_text():

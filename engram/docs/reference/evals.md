@@ -113,9 +113,10 @@ failures were recorded reads whether it was one from its error text. A line that
 keeps that value, so a resume runs that case again only once its line is dropped from the file.
 
 `--source-level` (`EvaluationRunConfig.hit_sources`) scores each line against the dataset's gold
-source ids. The cited ids map to sources through `kb.pages.source_id` for a page, or an anchor on
-one, and to the id before the last `:` for anything else, so a raw chunk maps to the source it was
-cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
+source ids. A cited ref is read as the bare unit id it names first, so `page:<collection>/<id>`,
+`section:` and `unit:` refs map like their bare ids. The cited ids map to sources through
+`kb.pages.source_id` for a page, or an anchor on one, and to the id before the last `:` for anything
+else, so a raw chunk maps to the source it was cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
 those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
 gold sources that any tool result the model received during the case named, and `seen_gold`, those
 gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
@@ -132,17 +133,30 @@ that holds it. The other end of a relation, such as `src_id`, `dst_id` or `subje
 counts, and nor does any other column, a title or a body for example, even when it mentions an id.
 A claim counts for its page only when its text came with it: a claim hit with its snippet, a fetched
 claim with its body, or a SQL row with a `text`, `quote`, `snippet` or `body` beside its claim id. A
-bare claim id or a provenance pointer never counts.
+bare claim id or a provenance pointer never counts. The SQL side has two limits. A claims row that
+selects `claim_id` and `page_id` without the claim's text still counts its page through `page_id`,
+which is the claim's own page and source. A row whose `id` column holds a claim with no `hit_level`
+or `level` beside it, such as `SELECT id, page_title FROM api.search(...)`, counts that claim as a
+bare id, because nothing in the row marks it as a claim.
 
-Under `--code-mode` seen recall reads the `run_code` output the model reads, since the model never
-receives the program's own tool returns. A unit counts only when both hold: one of the program's
-tool calls returned it, as code mode records on the call's return (`metadata["tool_returns"]`) and
-read by the same rules as a direct call, and the output carries its id or its ref, as a word of its
-text or of a key. A program that searches and prints only a count sees nothing. An id that a fetched
-body links to never counts, because no tool call of the program returned that unit. A unit whose
-text the program prints without its id does not count either. Every unit seen maps to its source the
-way the cited ids map, in the same one page lookup and one source lookup. Reading a tool result never raises, whatever its shape,
-so the measure never changes how a case ends or whether its failure is transient. A run without
+Under `--code-mode` seen recall reads the `run_code` output the model reads, never the program's
+own tool returns directly. The candidates are every unit that any tool call of any program in the
+case returned so far, as code mode records them on each call's return (`metadata["tool_returns"]`)
+and read by the same rules as a direct call, so a search in one call that a later call prints
+counts. A candidate counts when an output carries the first 60 characters of its body or snippet,
+whitespace collapsed on both sides and the escaped line breaks of a printed Python value read as
+spaces, or all of it when shorter. Every candidate text an output carries is then cut out of it, and
+a candidate also counts when what remains carries its id, its ref or its page id as a word, `=`
+splitting words like whitespace. So a program that prints a hit list counts its hits, a program that
+prints a fetched body counts that unit, and a link inside a printed body never counts, even when a
+search also returned the linked unit. A program that searches and prints only a count sees nothing,
+a body printed from its middle counts only by an id printed beside it, and a link inside such a
+fragment can count the linked unit when a tool call returned it. A program that prints and then
+raises reaches the model as a retry prompt that carries its printed output but no tool returns,
+because code mode records none for a failed call, so what such a program showed never counts. Every
+unit seen maps to its source the way the cited ids map, in the same one page lookup and one source
+lookup. Reading a tool result never raises, whatever its shape, so the measure never changes how a
+case ends or whether its failure is transient. A run without
 `--source-level`, or whose source lookup failed, writes null for both keys.
 
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen

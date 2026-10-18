@@ -42,7 +42,7 @@ from engram.evals.harness.domain.evaluators import AnswerAccuracy
 from engram.evals.harness.domain.experiments import ExperimentRun, expand_variants
 from engram.evals.harness.infrastructure.instrumentation import configure_logfire, enable_local_span_recording, resolve_logfire_settings
 from engram.evals.harness.infrastructure.results import ResultsHeader, dataset_sha256, read_results, results_lines, write_results
-from engram.evals.harness.seen_units import seen_units
+from engram.evals.harness.seen_units import bare_unit_id, seen_units
 from engram.evals.harness.transient_failures import is_transient_failure
 from engram.evals.outcomes.contracts import GuardedTracingToolset, WithheldRefs, page_of
 from engram.evals.shared.contracts import (
@@ -702,7 +702,7 @@ class _CaseSources:
 async def _case_sources(
     report: EvaluationRunReport, seen_units: Mapping[str, Sequence[str]], hit_sources: HitSources, collection: str
 ) -> _CaseSources:
-    """The sources each case cited and each case's tool results named, from one page lookup and one source lookup."""
+    """The sources each case cited, each ref read as its bare unit id, and each case's tool results named, in one lookup of each kind."""
     from engram.evals.scoring.contracts import (  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.scoring)
         HitRef,
         ranked_sources,
@@ -713,7 +713,7 @@ async def _case_sources(
         page = page_of(ref)
         return HitRef(id=page, hit_level="page", page_id=page) if page in pages else HitRef(id=ref, hit_level="raw", page_id=None)
 
-    cited = {case.name: case.output.cited_source_ids for case in report.cases}
+    cited = {case.name: [bare_unit_id(ref, collection=collection) for ref in case.output.cited_source_ids] for case in report.cases}
     candidates = list(dict.fromkeys(page_of(ref) for refs in (*cited.values(), *seen_units.values()) for ref in refs))
     pages = await hit_sources.page_ids(collection, candidates) if candidates else frozenset[str]()
     page_sources = await hit_sources.source_ids(collection, sorted(pages)) if pages else {}
