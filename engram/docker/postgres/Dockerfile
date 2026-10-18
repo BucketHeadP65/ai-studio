@@ -20,7 +20,7 @@
 # published 5434:5432, env POSTGRES_DB=knowledge_bases POSTGRES_USER=wiki POSTGRES_PASSWORD=wiki.
 
 # Pin the Debian variant for reproducible source builds (PGDG apt sources baked in).
-FROM postgres:17-bookworm
+FROM postgres:18-bookworm
 
 # --- Pinned extension versions (stable, the extensions the managed Postgres target ships, see retrieval-concepts.md) ---
 #   AGE: the PG17 branch advanced to 1.6.0; PG17/v1.6.0-rc0 is the canonical 1.6.0
