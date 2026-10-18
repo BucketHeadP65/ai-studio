@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
 import KnowledgeBasesPage from "./page";
 
 // The Knowledge-bases station, exercised through knowledgeBaseApi alone, MSW answers the wire
-// and `onUnhandledRequest: "error"` means a wrong path or verb fails here rather than
+// and `onUnhandledFrame: "error"` means a wrong path or verb fails here rather than
 // falling through.
 
 afterEach(cleanup);

@@ -9,7 +9,7 @@ import { installTestLifecycle } from "client-core/test-support/setup";
 import { server } from "./msw/server";
 
 // The shared lifecycle (jest-dom matchers, scrollIntoView stub, MSW
-// listen/reset/close with onUnhandledRequest:"error") lives in client-core; the
+// listen/reset/close with onUnhandledFrame:"error") lives in client-core; the
 // MSW server instance + its handlers stay app-local.
 installTestLifecycle(server);
 

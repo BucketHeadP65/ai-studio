@@ -69,17 +69,17 @@ describe("createApiClient — request<T>", () => {
 
   it("sends credentials: include so the auth cookie travels", async () => {
     const { request } = createApiClient({ baseUrl: API_URL });
-    let credentials: RequestCredentials | undefined;
-    server.use(
-      http.get(`${API_URL}/thing`, ({ request }) => {
-        credentials = request.credentials;
-        return HttpResponse.json({ value: "ok" });
-      }),
-    );
+    server.use(http.get(`${API_URL}/thing`, () => HttpResponse.json({ value: "ok" })));
+    // msw reads the request off the wire, where credentials never travel, so the fetch call is read instead.
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
 
-    await request("/thing", BodySchema);
+    try {
+      await request("/thing", BodySchema);
 
-    expect(credentials).toBe("include");
+      expect(fetchSpy.mock.calls[0]?.[1]?.credentials).toBe("include");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("invokes onUnauthorized and throws ApiError(401) on a 401", async () => {
