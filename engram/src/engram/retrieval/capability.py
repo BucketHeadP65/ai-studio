@@ -50,6 +50,7 @@ from .envelope import (
     BadRefError,
     WrongCollectionError,
     fetch_description,
+    fetchable_forms,
     flat_fetch_description,
     library_fetch_description,
     parse_ref,
@@ -467,7 +468,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     async def _search_answer(
         self, hits: tuple[SearchHit, ...], *, query: str, surfaces: tuple[ReadSurface, ...], hybrid: bool, dated: bool, filtered: bool
     ) -> SearchResult:
-        """One `search` answer: status, next move, and the stamp and map ref when a single surface answered."""
+        """One `search` answer: status, next move, the stamp when a single surface answered, and its map ref under leveled reads."""
         status = search_result_status(hits)
         named = surfaces[0].name if len(surfaces) == 1 else ", ".join(surface.name for surface in surfaces)
         sole = surfaces[0] if len(surfaces) == 1 else None
@@ -481,7 +482,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 knowledge_base=named,
                 hybrid=hybrid,
                 status=status,
-                map_collection=None if sole is None else sole.collection,
+                map_collection=None if sole is None or self._dials().fetch == "flat" else sole.collection,
                 dated=dated,
                 filtered=filtered,
             ),
@@ -500,7 +501,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                     described.append(tool_def)
                 continue
             if tool_def.name == FETCH and dials.fetch == "flat":
-                described.append(replace(tool_def, description=flat_fetch_description()))
+                described.append(replace(tool_def, description=flat_fetch_description(self._sole_collection())))
             elif tool_def.name == SEARCH:
                 hybrid = False if dials.search == "keyword" else None
                 described.append(replace(tool_def, description=self._search_description(hybrid=hybrid, default_name=default_name)))
@@ -841,14 +842,15 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
             return await self._flat_in(self._collection_surface(owner), unit_id)
         refused: RefRefusal | None = None
         unknown = False
-        for surface in self._default_chosen({candidate.name: candidate for candidate in self.surfaces}):
+        chosen = self._default_chosen({candidate.name: candidate for candidate in self.surfaces})
+        for surface in chosen:
             try:
                 return await self._flat_in(surface, unit_id)
             except RefRefusal as refusal:
                 refused = refusal
             except ModelRetry:
                 unknown = True
-        raise _fan_out_refusal(unit_id, refused, unknown=unknown)
+        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen))
 
     async def _flat_in(self, surface: ReadSurface, unit_id: str) -> FetchResult:
         """One unit's full text, read from `surface` alone and stamped by it."""
@@ -864,7 +866,10 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
             raise RefRefusal(str(WrongCollectionError(surface.collection, resolved.collection)))
         unit = await fetch_unit(surface.handlers, resolved.unit_id)
         if unit is None:
-            msg = f"No unit found with id {resolved.unit_id!r} in {surface.name!r}. Re-ground the id with `search` and try again."
+            msg = (
+                f"No unit found with id {resolved.unit_id!r} in {surface.name!r}. {fetchable_forms(surface.collection)} "
+                "Re-ground the id with `search` and try again."
+            )
             raise ModelRetry(msg)
         stamp = await surface.stamp() if surface.stamp is not None else None
         return unit.model_copy(update={"ref": qualify_ref(f"unit:{unit.id}", surface.collection), "knowledge_base": stamp})
@@ -893,14 +898,15 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
             return await self._open_in(self._collection_surface(owner), unit_id)
         refused: RefRefusal | None = None
         unknown = False
-        for surface in self._default_chosen(by_name):
+        chosen = self._default_chosen(by_name)
+        for surface in chosen:
             try:
                 return await self._open_in(surface, unit_id)
             except RefRefusal as refusal:
                 refused = refusal
             except ModelRetry:
                 unknown = True
-        raise _fan_out_refusal(unit_id, refused, unknown=unknown)
+        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen))
 
     async def _map(self, surface: ReadSurface) -> FetchEnvelope | FetchUnit:
         """The knowledge base map, as `surface.envelope` renders it, under that base's own stamp."""
@@ -1009,6 +1015,10 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         """The knowledge-base bullet list a library-variant description names, one line per surface."""
         return "\n".join(f"- '{surface.name}': {surface.domain.split('.')[0].lower()}" for surface in self.surfaces)
 
+    def _sole_collection(self) -> str | None:
+        """The one surface's collection, or `None` when this capability holds several."""
+        return _sole(self.surfaces)
+
     def _fetch_description(self) -> str:
         """The `fetch` description: the knowledge base's own text, or the variant for several."""
         if len(self.surfaces) == 1:
@@ -1045,16 +1055,21 @@ def _named_collection(ref: str) -> str | None:
     return None if resolved.collection == _UNNAMED else resolved.collection
 
 
-def _no_unit(unit_id: str) -> str:
-    """The refusal for a handle no knowledge base here recognized."""
-    return f"No unit found with id {unit_id!r}. Re-ground the id with `search` and try again."
+def _sole(surfaces: Sequence[ReadSurface]) -> str | None:
+    """The collection of the one surface in `surfaces`, or `None` when there are several."""
+    return surfaces[0].collection if len(surfaces) == 1 else None
 
 
-def _fan_out_refusal(unit_id: str, refused: RefRefusal | None, *, unknown: bool) -> ModelRetry:
+def _no_unit(unit_id: str, collection: str | None) -> str:
+    """The refusal for a handle no knowledge base here recognized, naming the id forms in `collection` when only it was read."""
+    return f"No unit found with id {unit_id!r}. {fetchable_forms(collection)} Re-ground the id with `search` and try again."
+
+
+def _fan_out_refusal(unit_id: str, refused: RefRefusal | None, *, unknown: bool, collection: str | None) -> ModelRetry:
     """The refusal for a read no knowledge base answered: not-found, unless every base refused the ref itself."""
     if refused is not None and not unknown:
         return refused
-    return ModelRetry(_no_unit(unit_id))
+    return ModelRetry(_no_unit(unit_id, collection))
 
 
 def _date_range(since: str | None, until: str | None) -> tuple[date | None, date | None]:

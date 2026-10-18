@@ -47,6 +47,7 @@ from engram.retrieval.domain import (
     SearchResult,
     SqlResult,
 )
+from engram.retrieval.envelope import EnvelopeHandler
 from engram.retrieval.queries import GraphExpandHandler, GraphPathsHandler
 from engram.retrieval.tools import (
     DATE_RANGE_CLAUSE,
@@ -172,6 +173,11 @@ def _search_rows() -> SqlResult:
         ),
         columns=("id", "hit_level", "page_id", "page_title", "snippet", "score"),
     )
+
+
+def _envelope(collection: str = _COLLECTION) -> EnvelopeHandler:
+    """A leveled read over an empty store, so `fetch` serves a map and `search` may offer it."""
+    return EnvelopeHandler(FakeSqlGateway(), collection=collection)
 
 
 def _fetch_row() -> SqlResult:
@@ -430,7 +436,7 @@ class TestSearchCollectionOverride:
         assert {hit.knowledge_base for hit in result.hits} == {"other-knowledge-base"}
 
     async def test_a_given_collection_names_its_own_map_on_a_miss(self):
-        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection="workdocs")
+        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection="workdocs", envelope=_envelope("workdocs"))
 
         result = await _call(toolset, "search", {"query": "no such thing anywhere", "collection": "other-knowledge-base"})
 
@@ -638,7 +644,7 @@ class TestSearchNextSteps:
         assert "never the source" in option  # a hit is an address plus a snippet, not the text itself
 
     async def test_no_hits_names_the_map_as_the_way_out(self):
-        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection=_COLLECTION)
+        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection=_COLLECTION, envelope=_envelope())
 
         result = await _call(toolset, "search", {"query": "no such thing anywhere"})
 
@@ -650,7 +656,7 @@ class TestSearchNextSteps:
         assert "map" in joined
 
     async def test_a_scoped_collection_names_its_own_map(self):
-        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection="workdocs")
+        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection="workdocs", envelope=_envelope("workdocs"))
 
         result = await _call(toolset, "search", {"query": "no such thing anywhere"})
 
@@ -864,9 +870,9 @@ _RANKED_COLUMNS = (
 async def _search_result(
     rows: tuple[dict[str, object], ...], *, collection: str = _COLLECTION, query: str = "graph rag", **args: object
 ) -> SearchResult:
-    """Drive the registered `search` tool over scripted rows and return its result."""
+    """Drive the registered `search` tool of a leveled toolset over scripted rows and return its result."""
     handlers = _handlers(search=FakeSearchHandler(result=SqlResult(rows=rows, columns=_RANKED_COLUMNS)))
-    toolset = build_retrieval_toolset(handlers, collection=collection)
+    toolset = build_retrieval_toolset(handlers, collection=collection, envelope=_envelope(collection))
     result = await _call(toolset, "search", {"query": query, **args})
     assert isinstance(result, SearchResult)
     return result

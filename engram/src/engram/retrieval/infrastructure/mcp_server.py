@@ -15,7 +15,7 @@ import re
 from typing import TYPE_CHECKING
 
 # `GraphPathsResult` and `GraphResult` must be imported at runtime: FastMCP evaluates tool annotations to publish `outputSchema`.
-from core.ai.retrieval.contracts import RUN_CODE, TOOL_NAMES, GraphPathsResult, fetch_one
+from core.ai.retrieval.contracts import RUN_CODE, TOOL_NAMES, GraphPathsResult
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
@@ -39,7 +39,7 @@ from engram.evals.generation.contracts import (
 from engram.evals.recommendation.contracts import register_recommendation_tools
 from engram.evals.shared.contracts import DEFAULT_DIFFICULTY_THRESHOLDS, ExpectedQa, Seed
 from engram.evals.tuning.contracts import register_tuning_tools
-from engram.retrieval.domain import FeedbackCategory, FetchResult, GraphExpand, GraphPaths, GraphResult
+from engram.retrieval.domain import FeedbackCategory, GraphExpand, GraphPaths, GraphResult
 from engram.retrieval.infrastructure.gateway import read_snapshot
 from engram.retrieval.queries import expansion_hops, graph_next_steps, paths_next_steps, route_hops, routed_graph_paths, routed_graph_result
 from engram.retrieval.sql_tools import (
@@ -60,6 +60,7 @@ from engram.retrieval.tools import (
     build_retrieval_toolset,
     fetch_description,
     find_paths_description,
+    flat_fetch,
     graph_expand_description,
     register_mcp_tools,
     register_routed_mcp_tools,
@@ -514,7 +515,7 @@ def _register_read_tools(
         return
     if handlers is None:
         if fetch_handler is not None and _admits(FETCH, only):
-            _add_flat_fetch(server, fetch_handler, descriptions=descriptions, stamp=stamp, can_search=False)
+            _add_flat_fetch(server, fetch_handler, collection=collection, descriptions=descriptions, stamp=stamp, can_search=False)
         return
     _register_single_source_tools(
         server,
@@ -726,21 +727,16 @@ def _add_flat_fetch(
     server: FastMCP,
     handler: FetchHandler,
     *,
+    collection: str,
     descriptions: Mapping[str, str] | None = None,
     stamp: StampSource | None = None,
     can_search: bool,
 ) -> None:
-    """Register the flat `fetch` from one handler, failing the call on an unknown id."""
+    """Register the flat `fetch` from one handler, reading every id form and failing the call on an unknown id."""
     reground = "`search`" if can_search else "`graph_expand` or `find_paths`, or the ids supplied with the task"
-
-    async def fetch(unit_id: str) -> FetchResult:
-        unit = await fetch_one(handler, unit_id)
-        if unit is None:
-            msg = f"No unit found with id {unit_id!r}. Re-ground the id with {reground} and try again."
-            raise ToolError(msg)
-        return unit if stamp is None else unit.model_copy(update={"knowledge_base": await stamp()})
-
-    server.add_tool(fetch, name=FETCH, description=resolve_description(FETCH, fetch_description(can_search=can_search), descriptions))
+    fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground, refuse=ToolError)
+    description = fetch_description(can_search=can_search, collection=collection)
+    server.add_tool(fetch, name=FETCH, description=resolve_description(FETCH, description, descriptions))
 
 
 def _add_graph_expand(
