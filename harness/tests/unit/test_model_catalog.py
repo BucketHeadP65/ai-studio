@@ -6,6 +6,7 @@ the settings file or the network. `gateway_provider` builds real HTTP clients wi
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -115,7 +116,9 @@ def test_other_openrouter_models_are_never_sent_to_inference_net() -> None:
 
 def test_a_glm_response_is_priced_from_the_registry_on_its_route() -> None:
     usage = RequestUsage(input_tokens=1_000_000, output_tokens=1_000_000)
-    response = ModelResponse(parts=[], model_name="z-ai/glm-5.3-flash", provider_name="openrouter", usage=usage)
+    response = ModelResponse(
+        parts=[], model_name="z-ai/glm-5.3-flash", provider_name="openrouter", usage=usage, timestamp=datetime(2026, 10, 1, tzinfo=UTC)
+    )
 
     assert models.price_response(response) == Decimal("0.65")
     assert models.response_cost(response) == Decimal("0.65")

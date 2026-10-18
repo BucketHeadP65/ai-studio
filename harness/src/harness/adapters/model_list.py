@@ -10,12 +10,12 @@ from __future__ import annotations
 import time
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Protocol
 
 import httpx
 
+from core.cqrs.contracts import utcnow
 from genai_prices.data_snapshot import get_snapshot
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,7 @@ from harness.adapters.models import CATALOG, context_window_for, openrouter_wire
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
+    from datetime import datetime
 
     from genai_prices.types import ModelPrice, TieredPrices
 
@@ -141,6 +142,9 @@ class ModelList:
 
     listing: ModelListing | None
     clock: Callable[[], float] = time.monotonic
+    """The monotonic clock the refresh interval is measured on."""
+    wall_clock: Callable[[], datetime] = utcnow
+    """The current date and time, which picks the registry price in force for a pinned entry."""
     _remote: tuple[ModelEntry, ...] = field(default=(), init=False)
     _fetched_at: float | None = field(default=None, init=False)
 
@@ -203,8 +207,9 @@ class ModelList:
         return next((entry for entry in self._merged() if entry.id == model_id), None)
 
     def _merged(self) -> tuple[ModelEntry, ...]:
+        at = self.wall_clock()
         by_wire = {entry.id: entry for entry in self._remote}
-        pinned = tuple(_pinned(model_id, by_wire, on_openrouter=self.listing is not None) for model_id in CATALOG)
+        pinned = tuple(_pinned(model_id, by_wire, on_openrouter=self.listing is not None, at=at) for model_id in CATALOG)
         wired = {openrouter_wire_name(model_id) for model_id in CATALOG}
         return (*pinned, *(entry for entry in self._remote if entry.id not in wired))
 
@@ -214,22 +219,22 @@ def _flat_price(value: Decimal | TieredPrices | None) -> Decimal | None:
     return value if isinstance(value, Decimal) else None
 
 
-def _registry_price(wire: str) -> ModelPrice | None:
-    """The price registry's OpenRouter price for `wire` in force now, or `None` when it carries none."""
+def _registry_price(wire: str, at: datetime) -> ModelPrice | None:
+    """The price registry's OpenRouter price for `wire` in force at `at`, or `None` when it carries none."""
     try:
         _, model = get_snapshot().find_provider_model(wire, None, "openrouter", None)
     except LookupError:
         return None
-    return model.get_prices(datetime.now(tz=UTC))
+    return model.get_prices(at)
 
 
-def _pinned(model_id: str, remote: dict[str, ModelEntry], *, on_openrouter: bool) -> ModelEntry:
-    """A catalog id as a list entry, with remote facts when listed, else the registry's. `on_openrouter` decides its route."""
+def _pinned(model_id: str, remote: dict[str, ModelEntry], *, on_openrouter: bool, at: datetime) -> ModelEntry:
+    """A catalog id as a list entry, with remote facts when listed, else the registry's price at `at`. `on_openrouter` decides its route."""
     wire = openrouter_wire_name(model_id)
     routed = on_openrouter and wire is not None
     azure = CATALOG[model_id].vendor == "azure"
     seen = remote.get(wire) if wire is not None else None
-    registry = _registry_price(wire) if wire is not None else None
+    registry = _registry_price(wire, at) if wire is not None else None
     return ModelEntry(
         id=model_id,
         name=seen.name if seen is not None else model_id,
