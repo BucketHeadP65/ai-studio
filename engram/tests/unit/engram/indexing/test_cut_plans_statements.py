@@ -13,8 +13,6 @@ if TYPE_CHECKING:
     from sqlalchemy import Select
     from sqlalchemy.dialects.postgresql import Insert
 
-    from engram.indexing.contracts import CutPlanQueries, CutPlans
-
 
 def _compiles(statement: Insert | Select[tuple[str, list[int]]]) -> str:
     return str(statement.compile(dialect=postgresql.dialect()))
@@ -37,9 +35,10 @@ def test_the_read_binds_every_text_hash_as_one_parameter() -> None:
     assert len(compiled.params) == 3
 
 
-def test_one_adapter_serves_the_write_and_the_read_port() -> None:
-    adapter = SqlAlchemyCutPlans(create_async_engine("postgresql+asyncpg://example:example@localhost/example"))
-    plans: CutPlans = adapter
-    queries: CutPlanQueries = adapter
+async def test_an_empty_insert_and_an_empty_read_open_no_connection() -> None:
+    # Nothing listens on port 1, so any connection the adapter opened would fail the test.
+    adapter = SqlAlchemyCutPlans(create_async_engine("postgresql+asyncpg://example:example@127.0.0.1:1/example"))
 
-    assert plans is queries
+    await adapter.insert("research", "example-model/prompt-1", {})
+
+    assert await adapter.cut_plans("research", "example-model/prompt-1", []) == {}
