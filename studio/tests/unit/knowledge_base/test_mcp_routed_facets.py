@@ -67,3 +67,21 @@ async def test_the_served_search_filters_each_knowledge_base_by_the_facet_keys_i
         (json.loads(str(call.params["facets"])), call.params["collection"]) for call in gateway.rows_calls if "facets" in call.params
     ]
     assert searched == [({"shade": ["teal", "amber"]}, "alpha"), ({"weight": ["heavy"]}, "beta")]
+
+
+async def test_the_served_search_states_the_cap_on_hits_per_document_the_database_applies(tmp_path: Path) -> None:
+    served = _knowledge_base(tmp_path / "alpha", slug="alpha", facet_keys=("shade",))
+    registered = _knowledge_base(tmp_path / "beta", slug="beta", facet_keys=("weight",))
+    settings_path = tmp_path / "application_settings.json"
+    settings_path.write_text(json.dumps({"knowledge_bases": {"beta": {"path": str(registered)}}}), encoding="utf-8")
+    capped = SqlResult(rows=({"hits_per_document": 2},), columns=("hits_per_document",))
+    gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()), routed={"api.search_hits_per_document": capped})
+    container = _McpServerContainer(knowledge_base=KnowledgeBaseSettings(path=served), gateway=gateway)
+
+    server = await _build_mcp_server(container, settings_path=settings_path)
+    async with connect_in_memory(server) as client:
+        await client.initialize()
+        listing = await client.list_tools()
+
+    [tool] = [published for published in listing.tools if published.name == "search"]
+    assert "At most 2 hits come from one document" in (tool.description or "")

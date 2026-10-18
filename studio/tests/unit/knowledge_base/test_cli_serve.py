@@ -208,6 +208,19 @@ class TestSearch:
         assert "claim" in result.stdout
         assert "0.87" in result.stdout
 
+    def test_each_hits_folded_units_print_indented_under_it_with_their_level(self):
+        folded = [{"id": "paper.lightrag-2025#s2", "hit_level": "section"}, {"id": "src.lightrag:4", "hit_level": "raw"}]
+        row = {**_search_result().rows[0], "folded_units": folded}
+        factory = _Factory(gateway=_gateway(SqlResult(rows=(row,), columns=(*_search_result().columns, "folded_units"))))
+
+        result = runner.invoke(app, ["search", "graph rag", "--bm25-only"], obj=factory)
+
+        lines = result.stdout.splitlines()
+        hit = next(index for index, line in enumerate(lines) if "paper.lightrag-2025#c1" in line)
+        assert result.exit_code == 0, result.stdout
+        assert [line.strip() for line in lines[hit + 1 : hit + 3]] == ["paper.lightrag-2025#s2  [section]", "src.lightrag:4  [raw]"]
+        assert all(line.startswith(" ") for line in lines[hit + 1 : hit + 3])
+
     def test_default_search_is_hybrid_and_embeds_the_query_once(self):
         factory = _Factory(gateway=_gateway(_search_result()))
 
