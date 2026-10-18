@@ -466,7 +466,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     async def _search_answer(
         self, hits: tuple[SearchHit, ...], *, query: str, surfaces: tuple[ReadSurface, ...], hybrid: bool, dated: bool, filtered: bool
     ) -> SearchResult:
-        """One `search` answer: status, next move, the stamp when a single surface answered, and its map ref under leveled reads."""
+        """One `search` answer: status, next move, the stamp when a single surface answered, and its map ref when `fetch` opens one."""
         status = search_result_status(hits)
         named = surfaces[0].name if len(surfaces) == 1 else ", ".join(surface.name for surface in surfaces)
         sole = surfaces[0] if len(surfaces) == 1 else None
@@ -480,7 +480,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 knowledge_base=named,
                 hybrid=hybrid,
                 status=status,
-                map_collection=None if sole is None or self._dials().fetch == "flat" else sole.collection,
+                map_collection=None if sole is None or not self._opens_map(sole) else sole.collection,
                 dated=dated,
                 filtered=filtered,
             ),
@@ -1008,6 +1008,10 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     def _knowledge_base_listing(self) -> str:
         """The knowledge-base bullet list a library-variant description names, one line per surface."""
         return "\n".join(f"- '{surface.name}': {surface.domain.split('.')[0].lower()}" for surface in self.surfaces)
+
+    def _opens_map(self, surface: ReadSurface) -> bool:
+        """Whether this call's `fetch` opens `surface`'s map: leveled reads over a knowledge base that is not `search_only`."""
+        return self._dials().fetch != "flat" and surface.envelope.mode != "search_only"
 
     def _sole_collection(self) -> str | None:
         """The one surface's collection, or `None` when this capability holds several."""

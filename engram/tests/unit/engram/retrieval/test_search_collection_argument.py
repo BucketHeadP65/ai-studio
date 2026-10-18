@@ -22,7 +22,8 @@ from engram.retrieval.capability import ReadSurface, RetrievalKnowledgeBase
 from engram.retrieval.dials import ReadDials
 from engram.retrieval.domain import Search, SqlResult
 from engram.retrieval.envelope import EnvelopeHandler
-from engram.retrieval.queries import FetchHandler, GraphExpandHandler, GraphPathsHandler
+from engram.retrieval.infrastructure.mcp_server import create_mcp_server
+from engram.retrieval.queries import DescribeSchemaHandler, FetchHandler, GraphExpandHandler, GraphPathsHandler
 from engram.retrieval.tools import (
     RetrievalHandlers,
     add_routed_read_tools,
@@ -131,3 +132,50 @@ async def test_the_routed_mcp_search_names_collection_only_when_it_takes_it():
     description, parameters = await _published_mcp(server)
 
     assert ("`collection`" in description) == (_COLLECTION_ARGUMENT in parameters), description
+
+
+async def test_the_single_source_handshake_never_sends_the_model_to_pass_collection_to_search():
+    server = create_mcp_server(
+        FakeSqlGateway(),
+        DescribeSchemaHandler(FakeSqlGateway()),
+        search_handler=FakeNoHitSearch(),
+        fetch_handler=FetchHandler(FakeSqlGateway(), _HOME),
+        graph_expand_handler=GraphExpandHandler(FakeSqlGateway(), _HOME),
+        find_paths_handler=GraphPathsHandler(FakeSqlGateway(), _HOME),
+        collection=_HOME,
+    )
+
+    instructions = server.instructions or ""
+
+    assert "collection to search" not in instructions
+    assert f"'{_HOME}' only" in instructions
+    assert "api.about" in instructions
+
+
+async def test_the_routed_handshake_names_the_collections_search_can_reach():
+    server = create_mcp_server(
+        FakeSqlGateway(),
+        DescribeSchemaHandler(FakeSqlGateway()),
+        read_surfaces=(_surface(_HOME), _surface(_OTHER)),
+        collection=_HOME,
+    )
+
+    instructions = server.instructions or ""
+
+    assert f"({_HOME}, {_OTHER})" in instructions
+    assert "Pass `collection` to `search`" in instructions
+    assert "api.about" in instructions
+
+
+async def test_a_routed_handshake_without_search_never_offers_it():
+    server = create_mcp_server(
+        FakeSqlGateway(),
+        DescribeSchemaHandler(FakeSqlGateway()),
+        read_surfaces=(_surface(_HOME), _surface(_OTHER)),
+        collection=_HOME,
+        only=frozenset({"fetch"}),
+    )
+
+    instructions = server.instructions or ""
+
+    assert "`search`" not in instructions

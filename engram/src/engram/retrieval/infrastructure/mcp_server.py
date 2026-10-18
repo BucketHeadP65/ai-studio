@@ -287,12 +287,19 @@ class _SubmittedCase(BaseModel):
 _SUBMITTED_CASES_ADAPTER = TypeAdapter(list[_SubmittedCase])
 
 
-def _library_paragraph(collection: str) -> str:
-    """The handshake paragraph naming `collection` as the default and pointing at `api.about` for the rest."""
+def _library_paragraph(collection: str, read_surfaces: tuple[ReadSurface, ...] | None, available: frozenset[str]) -> str:
+    """The handshake paragraph: which collections the read tools serve, and `api.about` with `run_sql` for the rest."""
+    if read_surfaces is None:
+        served = f"The read tools here serve '{collection}' only."
+    else:
+        choices = ", ".join(surface.collection for surface in read_surfaces)
+        served = f"The read tools here serve the registered collections ({choices}), '{collection}' when a call names none."
+        if SEARCH in available:
+            served = f"{served} Pass `collection` to `search` to reach another of them."
     return (
-        f"This database is shared across more than one collection. The default here is '{collection}'. "
-        "Run api.about (via run_sql) to see what else is here and what each one covers, and pass "
-        "collection to search, or filter on it in run_sql, to reach them."
+        f"This database is shared across more than one collection. {served} "
+        "Run api.about (via run_sql) to see what else is here and what each one covers, and filter on "
+        "collection in run_sql to reach the rest."
     )
 
 
@@ -402,7 +409,17 @@ def create_mcp_server(
         ValueError: When `read_surfaces` is given, none of them serves `collection`, and `search`, `fetch` or
             `run_code` registers.
     """
-    library_paragraph = _library_paragraph(collection)
+    only = _switched_on(only, switches)
+    handlers = _full_retrieval_handlers(search_handler, fetch_handler, graph_expand_handler, find_paths_handler)
+    available = _available_read_tools(
+        handlers=handlers,
+        fetch_handler=fetch_handler,
+        graph_expand_handler=graph_expand_handler,
+        find_paths_handler=find_paths_handler,
+        read_surfaces=read_surfaces,
+        only=only,
+    )
+    library_paragraph = _library_paragraph(collection, read_surfaces, available)
     combined_instructions = f"{library_paragraph}\n\n{instructions}" if instructions else library_paragraph
     server = FastMCP(name="engram", instructions=combined_instructions)
 
@@ -414,16 +431,6 @@ def create_mcp_server(
     server.add_tool(run_sql, name="run_sql", description=RUN_SQL_DESCRIPTION)
     if feedback_sink is not None:
         _add_feedback(server, feedback_sink)
-    only = _switched_on(only, switches)
-    handlers = _full_retrieval_handlers(search_handler, fetch_handler, graph_expand_handler, find_paths_handler)
-    available = _available_read_tools(
-        handlers=handlers,
-        fetch_handler=fetch_handler,
-        graph_expand_handler=graph_expand_handler,
-        find_paths_handler=find_paths_handler,
-        read_surfaces=read_surfaces,
-        only=only,
-    )
     if graph_expand_handler is not None and _admits(GRAPH_EXPAND, only):
         _add_graph_expand(server, graph_expand_handler, descriptions=descriptions, stamp=stamp, tools=available)
     if find_paths_handler is not None and _admits(FIND_PATHS, only):
@@ -514,6 +521,7 @@ def _register_read_tools(
             only=only,
             descriptions=descriptions,
             k_source=k_source,
+            served=available,
         )
         return
     if handlers is None:
@@ -737,7 +745,7 @@ def _add_flat_fetch(
 ) -> None:
     """Register the flat `fetch` from one handler, reading every id form, its refusals naming only `tools`."""
     fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground_phrase(tools), refuse=ToolError)
-    description = fetch_description(can_search=SEARCH in tools, collection=collection)
+    description = fetch_description(tools=tools, collection=collection)
     server.add_tool(fetch, name=FETCH, description=resolve_description(FETCH, description, descriptions))
 
 

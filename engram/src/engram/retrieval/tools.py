@@ -295,21 +295,21 @@ SEARCH_DESCRIPTION_KEYWORD = (
     "appeared, never that the hit answers your question: every hit stays a candidate until you "
     "fetch and read it."
 )
-def fetch_description(*, can_search: bool, collection: str | None = None) -> str:
+def fetch_description(*, tools: frozenset[str] = TOOL_NAMES, collection: str | None = None) -> str:
     """The flat `fetch` tool's description, naming only tools the agent holds as the source of a `unit_id`.
 
-    Without `search`, the description sends the agent to a prior `graph_expand` or `find_paths`
-    result or to the task itself for an id.
+    Without `search`, the description sends the agent to a prior result of the graph tools in `tools`,
+    or to the task itself for an id.
 
     Args:
-        can_search: Whether the resolved profile also exposes `search`.
+        tools: The read tools the surface registers. The default is all four.
         collection: The knowledge base the reads resolve within, named in the id forms. `None` names a stand-in.
 
     Returns:
         The full tool description text.
     """
     forms = fetchable_forms(collection)
-    if can_search:
+    if SEARCH in tools:
         return (
             "Fetch one unit's full text by id: a whole page, a section within one, or a smaller unit. "
             f"`unit_id` names a unit a `search` hit returned. {forms} "
@@ -318,14 +318,29 @@ def fetch_description(*, can_search: bool, collection: str | None = None) -> str
             "search hit before relying on it or citing it. An unknown id is reported so you can re-ground it "
             "with `search`."
         )
+    graph = _graph_tools_named(tools)
+    if graph is None:
+        return (
+            "Fetch one unit's full text by id: a whole page, a section within one, or a smaller unit. "
+            f"`unit_id` names a unit supplied with the task. {forms} Returns the unit's `id`, `level` (a page, "
+            "a section, or a smaller unit), `title`, and `body`. Use it to read a unit's full text before relying "
+            "on it or citing it. An unknown id is reported so you can re-ground it with the ids supplied with the "
+            "task and try again."
+        )
     return (
         "Fetch one unit's full text by id: a whole page, a section within one, or a smaller unit. "
-        "`unit_id` names a node or a claim from a prior `graph_expand` or `find_paths` result, or a unit supplied "
+        f"`unit_id` names a node or a claim from a prior {graph} result, or a unit supplied "
         f"with the task. {forms} Returns the unit's `id`, `level` (a page, a section, or a smaller unit), "
         "`title`, and `body`. Use it to read a reached node's full text before relying on it or citing "
-        "it. An unknown id is reported so you can re-ground it with `graph_expand` or `find_paths` "
+        f"it. An unknown id is reported so you can re-ground it with {graph} "
         "and try again."
     )
+
+
+def _graph_tools_named(tools: frozenset[str]) -> str | None:
+    """The graph tools in `tools` as text names them, or `None` when it holds neither."""
+    named = [f"`{name}`" for name in (GRAPH_EXPAND, FIND_PATHS) if name in tools]
+    return " or ".join(named) if named else None
 
 
 def graph_expand_description(*, can_search: bool, can_fetch: bool) -> str:
@@ -409,7 +424,7 @@ def find_paths_description(*, can_search: bool, can_fetch: bool) -> str:
     )
 
 
-FETCH_DESCRIPTION = fetch_description(can_search=True)
+FETCH_DESCRIPTION = fetch_description()
 GRAPH_EXPAND_DESCRIPTION = graph_expand_description(can_search=True, can_fetch=True)
 FIND_PATHS_DESCRIPTION = find_paths_description(can_search=True, can_fetch=True)
 
@@ -503,7 +518,7 @@ def _final_descriptions(
         search_text = _served_description(search_text, served)
     return {
         SEARCH: elide_k(search_text) if k_source is not None else search_text,
-        FETCH: resolve_description(FETCH, fetch_description(can_search=can_search, collection=collection), descriptions),
+        FETCH: resolve_description(FETCH, fetch_description(tools=selected, collection=collection), descriptions),
         GRAPH_EXPAND: resolve_description(GRAPH_EXPAND, graph_expand_description(can_search=can_search, can_fetch=can_fetch), descriptions),
         FIND_PATHS: resolve_description(FIND_PATHS, find_paths_description(can_search=can_search, can_fetch=can_fetch), descriptions),
     }
@@ -1217,14 +1232,13 @@ def reground_phrase(tools: frozenset[str]) -> str:
         tools: The read tools the surface registers.
 
     Returns:
-        `search` when it is registered, else the graph tools and the task's ids when a graph tool is,
-        else the task's ids alone.
+        `search` when it is registered, else the graph tools it holds and the task's ids, else the
+        task's ids alone.
     """
     if SEARCH in tools:
         return _REGROUND_WITH_SEARCH
-    if GRAPH_EXPAND in tools or FIND_PATHS in tools:
-        return "`graph_expand` or `find_paths`, or the ids supplied with the task"
-    return "the ids supplied with the task"
+    graph = _graph_tools_named(tools)
+    return "the ids supplied with the task" if graph is None else f"{graph}, or the ids supplied with the task"
 
 
 def no_unit_refusal(unit_id: str, collection: str | None, *, named: str = "", reground: str = _REGROUND_WITH_SEARCH) -> str:
@@ -1271,7 +1285,7 @@ def flat_fetch(
 ) -> Callable[[str], Awaitable[FetchResult]]:
     """The flat `fetch` tool function: one unit's full text, read by any id form the other tools hand out.
 
-    A `page:`, `section:` or `unit:` ref reads the same unit as its bare id, with or without its collection.
+    A collection-qualified `page:`, `section:` or `unit:` ref reads the same unit as its bare id.
     A `collection:` or `group:` ref is refused, since a flat read lists nothing. A ref naming another
     collection is refused naming both, and an id that names no unit is refused naming the forms `fetch` takes.
 
@@ -1628,6 +1642,7 @@ def register_routed_mcp_tools(
     only: frozenset[str] | None = None,
     descriptions: Mapping[str, str] | None = None,
     k_source: Callable[[], int] | None = None,
+    served: frozenset[str] | None = None,
 ) -> None:
     """Register one `search` and one `fetch` over several registered knowledge bases, routed by collection.
 
@@ -1653,6 +1668,8 @@ def register_routed_mcp_tools(
         k_source: The search row cap when the host owns it rather than the agent, read on every call.
             When set, `search` takes no `k` and its description drops every sentence about it.
             `None` keeps `k` an agent-argued parameter.
+        served: Every read tool the server registers, graph tools included, which `fetch`'s refusals
+            name. `None` takes it to be `only`, or all four when `only` is `None`.
 
     Raises:
         ValueError: When two surfaces claim one collection, or when `default_knowledge_base` names none
@@ -1666,7 +1683,7 @@ def register_routed_mcp_tools(
         server.add_tool(_routed_search(surfaces, home, k_source=k_source, refuse=ToolError), name=SEARCH, description=searching)
     if only is None or FETCH in only:
         server.add_tool(
-            _routed_fetch(surfaces, home, refuse=ToolError, tools=TOOL_NAMES if only is None else only), name=FETCH, description=reading
+            _routed_fetch(surfaces, home, refuse=ToolError, tools=served if served is not None else (TOOL_NAMES if only is None else only)), name=FETCH, description=reading
         )
 
 
@@ -1797,6 +1814,7 @@ def _routed_search(
             facet_keys=surface.facet_keys,
             facet_owner=_named_base(surface.collection),
             refuse=refuse,
+            browsable=surface.envelope.mode != "search_only",
         )
 
     if k_source is None:

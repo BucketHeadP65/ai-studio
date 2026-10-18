@@ -39,6 +39,7 @@ from engram.testing.fakes.gateway import FakeSqlGateway
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from core.ai.disclosure.contracts import DisclosureMode
     from mcp.types import CallToolResult
     from pydantic_ai.toolsets import AbstractToolset
 
@@ -418,13 +419,13 @@ class TestTheLeveledToolsetReadsWhatSearchNames:
         _assert_names_the_forms(description, _HOME)
 
 
-def _surface(name: str, search: FakeOneHitSearch | FakeNoHitSearch | None = None) -> ReadSurface:
+def _surface(name: str, search: FakeOneHitSearch | FakeNoHitSearch | None = None, *, mode: DisclosureMode = "strict") -> ReadSurface:
     gateway = _gateway(name)
     return ReadSurface(
         name=name,
         collection=name,
         handlers=_handlers(gateway, search),
-        envelope=EnvelopeHandler(gateway, collection=name),
+        envelope=EnvelopeHandler(gateway, mode=mode, collection=name),
         domain=f"The {name} knowledge base.",
     )
 
@@ -626,3 +627,96 @@ class TestASingleSourceSearchReadsOnlyItsOwnCollection:
 
         assert "search a different one" not in description
         assert f"'{_HOME}'" in description
+
+
+class TestNoSurfaceOffersTheMapOfASearchOnlyKnowledgeBase:
+    """A `search_only` knowledge base withholds its map, so no `search` over it offers one, routed or not."""
+
+    async def test_the_routed_search_offers_no_map_of_a_search_only_base(self):
+        toolset = FunctionToolset[object]()
+        surfaces = (_surface(_HOME, FakeNoHitSearch(), mode="search_only"), _surface(_OTHER, FakeNoHitSearch()))
+        add_routed_read_tools(toolset, surfaces, default_knowledge_base=_HOME)
+
+        found = await _call(toolset, "search", {"query": "nothing"})
+
+        assert isinstance(found, SearchResult)
+        assert "collection:" not in " ".join(found.next_steps.options)
+
+    async def test_the_routed_search_still_offers_the_map_of_a_strict_base(self):
+        toolset = FunctionToolset[object]()
+        surfaces = (_surface(_HOME, FakeNoHitSearch(), mode="search_only"), _surface(_OTHER, FakeNoHitSearch()))
+        add_routed_read_tools(toolset, surfaces, default_knowledge_base=_HOME)
+
+        found = await _call(toolset, "search", {"query": "nothing", "collection": _OTHER})
+
+        assert isinstance(found, SearchResult)
+        assert f"fetch(unit_id='collection:{_OTHER}')" in " ".join(found.next_steps.options)
+
+    async def test_the_capability_search_offers_no_map_of_a_search_only_base(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, FakeNoHitSearch(), mode="search_only"),))
+
+        found = await knowledge_base.direct_call_tool("search", {"query": "nothing"})
+
+        assert isinstance(found, SearchResult)
+        assert "collection:" not in " ".join(found.next_steps.options)
+
+    async def test_the_capability_search_still_offers_the_map_of_a_strict_base(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, FakeNoHitSearch()),))
+
+        found = await knowledge_base.direct_call_tool("search", {"query": "nothing"})
+
+        assert isinstance(found, SearchResult)
+        assert f"fetch(unit_id='collection:{_HOME}')" in " ".join(found.next_steps.options)
+
+
+class TestRefusalsNameOnlyTheGraphToolsServed:
+    """A refusal and a description name a graph tool only when the surface registers it."""
+
+    async def test_a_toolset_serving_one_graph_tool_names_only_that_one(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), only=frozenset({"fetch", "graph_expand"}), collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "note.missing"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with `graph_expand`, or the ids supplied with the task" in message
+        assert "find_paths" not in message
+
+    async def test_a_routed_server_names_only_the_graph_tools_it_registers_not_the_ones_only_lists(self):
+        gateway = _gateway()
+        server = create_mcp_server(
+            gateway,
+            DescribeSchemaHandler(FakeSqlGateway()),
+            fetch_handler=FetchHandler(gateway, _HOME),
+            graph_expand_handler=GraphExpandHandler(gateway, _HOME),
+            read_surfaces=(_surface(_HOME),),
+            collection=_HOME,
+            only=frozenset({"fetch", "graph_expand", "find_paths"}),
+        )
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            listing = await client.list_tools()
+            failed = await client.call_tool("fetch", {"unit_id": f"unit:{_HOME}/note.missing"})
+
+        assert "find_paths" not in {tool.name for tool in listing.tools}
+        message = _text(failed)
+        assert "Re-ground the id with `graph_expand`, or the ids supplied with the task" in message
+        assert "find_paths" not in message
+
+    async def test_a_fetch_alone_description_names_no_graph_tool(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), only=frozenset({"fetch"}), collection=_HOME)
+
+        description = toolset.tools["fetch"].description or ""
+
+        assert "graph_expand" not in description
+        assert "find_paths" not in description
+        assert "supplied with the task" in description
+
+    async def test_a_one_graph_tool_description_names_only_that_one(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), only=frozenset({"fetch", "find_paths"}), collection=_HOME)
+
+        description = toolset.tools["fetch"].description or ""
+
+        assert "`find_paths`" in description
+        assert "graph_expand" not in description
