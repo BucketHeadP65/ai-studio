@@ -145,7 +145,7 @@ def _paragraph_spans(text: str) -> list[_Span]:
     in_fence = False
     offset = 0
     for line in text.splitlines(keepends=True):
-        if line.lstrip().startswith("```"):
+        if _is_fence(line):
             in_fence = not in_fence
         if line.strip():
             if start is None:
@@ -332,12 +332,20 @@ def _cut_unheaded(text: str, sizes: ChunkSizes, answer: Sequence[int] | None) ->
     return _fill(text, sizes) if starts is None else _cut_at_starts(text, starts, sizes)
 
 
+def _is_fence(line: str) -> bool:
+    """Whether `line` opens or closes a code fence."""
+    return line.lstrip().startswith("```")
+
+
 def _heading_sections(body: str) -> Iterator[tuple[str | None, str]]:
-    """Each heading section of `body` as its heading and its text, the text before the first heading only when it holds text."""
+    """Each heading section of `body` as its heading and text, the text before the first heading only when it holds any, fenced lines never headings."""
     heading: str | None = None
     lines: list[str] = []
+    in_fence = False
     for line in body.splitlines():
-        match = _HEADING_RE.match(line)
+        if _is_fence(line):
+            in_fence = not in_fence
+        match = None if in_fence else _HEADING_RE.match(line)
         if match is None:
             lines.append(line)
             continue
@@ -355,7 +363,8 @@ def chunk_mirror(text: str, sizes: ChunkSizes, cut_plans: Mapping[str, Sequence[
     """Cut a raw mirror's body into `MirrorChunk` drafts sized for retrieval.
 
     Frontmatter is stripped first. The body is cut at its headings: every heading opens a heading section, even
-    one with an empty body, and the text before the first heading is one only when it holds text. A section within
+    one with an empty body, and the text before the first heading is one only when it holds text. A `#` line inside
+    a code fence is text, never a heading. A section within
     `sizes.max_tokens` is one chunk, so a body with no heading that fits stays whole. A longer section with a cut
     plan is cut before each paragraph the plan numbers, from 1, and a chunk of it over the maximum is filled. A plan
     that is not strictly increasing paragraph numbers is refused. A longer section with no plan, or a refused one, is

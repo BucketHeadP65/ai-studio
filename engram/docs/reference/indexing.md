@@ -145,7 +145,10 @@ shape picks the step:
 2. **Headings.** A mirror with headings (`#` to `####`) is cut at them into heading sections. Every
    heading opens one, even with an empty body, and the text before the first heading is one when it
    holds text. A heading section within the maximum is one chunk. A short mirror with several
-   headings is still cut at each of them, so every section keeps its own locator.
+   headings is still cut at each of them, so every section keeps its own locator. A `#` line inside a
+   code fence (between two lines opening with three backticks) is text, never a heading, so a shell or
+   Python comment in a fenced block opens no heading section. Indexer version 7 brought this in, so an
+   index stored at 6 rebuilds in full.
 3. **Chunk planner.** Text over the maximum, a mirror with no heading or one heading section, of at
    least two paragraphs and within the planner ceiling (12,000 tokens by default), is cut where the
    chunk planner says its topic changes. The planner is shown the text as paragraphs numbered from 1
@@ -169,8 +172,8 @@ The sizes are `IngestionSettings.chunk_target_tokens` (400 by default) and `chun
 by default, at most 7,500, the embedding budget less room for the breadcrumb). The studio's index
 handler reads them from the `ingestion` settings section. A library caller passes `ChunkSizes` to
 `IndexKnowledgeBaseHandler`, or gets `DEFAULT_CHUNK_SIZES`. The fingerprint stores the indexer version
-with the sizes and the chunk planner (`indexer_version`, such as `6+400-800`, or
-`6+400-800+12000+gpt-6-luna/prompt-1/thinking-low/paragraphs-1` with a chunk planner), so the next index
+with the sizes and the chunk planner (`indexer_version`, such as `7+400-800`, or
+`7+400-800+12000+gpt-6-luna/prompt-1/thinking-low/paragraphs-1` with a chunk planner), so the next index
 after a change of sizes, of chunk planner (its deployment, prompt version or thinking level), of the
 paragraph numbering or of the planner ceiling is a full one, and `studio status` names it stale until
 then. `indexer_version` is the one place the version is put together: the handler calls it with its

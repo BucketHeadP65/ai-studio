@@ -84,7 +84,7 @@ if TYPE_CHECKING:
 _logger = get_logger(__name__)
 
 
-INDEXER_VERSION = "6"
+INDEXER_VERSION = "7"
 """The indexer's version, stored in the index fingerprint with the chunk sizes and the chunk planner (`indexer_version`). Another stored version forces a full rebuild.
 
 You must change it whenever a change alters what the index writes, such as a new parse rule or a new row shape.
@@ -103,7 +103,7 @@ def indexer_version(chunk_sizes: ChunkSizes, *, planner: str | None = None, plan
         planner_ceiling_tokens: The most tokens of text the chunk planner is shown at once. Ignored with no chunk planner.
 
     Returns:
-        The version, such as `6+400-800`, or `6+400-800+12000+<planner>` with a chunk planner.
+        The version, such as `7+400-800`, or `7+400-800+12000+<planner>` with a chunk planner.
     """
     version = f"{INDEXER_VERSION}+{chunk_sizes.target_tokens}-{chunk_sizes.max_tokens}"
     return version if planner is None else f"{version}+{planner_ceiling_tokens}+{planner}"

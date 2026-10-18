@@ -90,6 +90,38 @@ class TestHeadings:
         assert results == MirrorChunk(ord=len(experiments), section_path="s5", heading="5 Results", body="The gauge held steady.")
 
 
+class TestCodeFences:
+    def test_a_hash_line_inside_a_code_fence_opens_no_heading_section(self) -> None:
+        fence = "```bash\n# install the tools\npip install harbour-gauge\n# 3 start the reader\ngauge-read --station north\n```"
+        text = f"## 2 Setup\n\nRun these lines.\n\n{fence}\n\nThen check the reading.\n"
+
+        chunks = list(chunk_mirror(text, _SIZES))
+
+        assert chunks == [MirrorChunk(ord=0, section_path="s2", heading="2 Setup", body=f"Run these lines.\n\n{fence}\n\nThen check the reading.")]
+
+    def test_a_document_with_no_heading_whose_fence_holds_hash_lines_stays_one_heading_section(self) -> None:
+        fence = "```python\n# read the gauge\nvalue = gauge.read()\n# 1 store it\nstore(value)\n```"
+        body = "\n\n".join([*_paragraphs(6), fence, *(_paragraph(index) for index in range(6, 12))])
+
+        chunks = list(chunk_mirror(body, _SIZES))
+        sections = heading_sections_for_planner(body, _SIZES, ceiling_tokens=DEFAULT_PLANNER_CEILING_TOKENS)
+
+        assert sections == [body]
+        assert {(chunk.heading, chunk.section_path) for chunk in chunks} == {(None, None)}
+        assert any(fence in chunk.body for chunk in chunks)
+        assert _words(" ".join(chunk.body for chunk in chunks)) == _words(body)
+
+    def test_a_heading_after_a_closed_fence_still_opens_a_heading_section(self) -> None:
+        text = "```\n# not a heading\n```\n\n## 5 Results\n\nThe gauge held steady.\n"
+
+        chunks = list(chunk_mirror(text, _SIZES))
+
+        assert chunks == [
+            MirrorChunk(ord=0, section_path=None, heading=None, body="```\n# not a heading\n```"),
+            MirrorChunk(ord=1, section_path="s5", heading="5 Results", body="The gauge held steady."),
+        ]
+
+
 class TestFilling:
     def test_a_headless_document_over_the_maximum_is_filled_within_the_sizes_keeping_every_word_in_order(self) -> None:
         body = "\n\n".join(_paragraph(index) for index in range(30))
