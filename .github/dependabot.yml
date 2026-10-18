@@ -1,0 +1,92 @@
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/core"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      core-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "uv"
+    directory: "/engram"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      engram-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "uv"
+    directory: "/studio"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      studio-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "uv"
+    directory: "/harness"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      harness-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "uv"
+    directory: "/connectors"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      connectors-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/client-core"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      client-core-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "npm"
+    directory: "/studio-client"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      studio-client-dependencies:
+        patterns:
+          - "*"
+  - package-ecosystem: "docker"
+    directory: "/engram/docker/postgres"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      postgres-image:
+        patterns:
+          - "*"
+  - package-ecosystem: "docker-compose"
+    directory: "/engram"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      engram-compose:
+        patterns:
+          - "*"
+  - package-ecosystem: "docker-compose"
+    directory: "/harness"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      harness-compose:
+        patterns:
+          - "*"
