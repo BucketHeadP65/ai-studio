@@ -24,7 +24,10 @@ Every leg stops at a budget and the fusion weighs each tier's leg. Those numbers
 function reads as its owner and clamps to bounds it carries. Each tier keeps a row whose key is in its pool through one
 hashed lookup, never a join, so a keyword leg reads its BM25 index in score order, and reads its title from the pool.
 After the fusion a card whose title is the query goes first when no other candidate holds that title, and each page or
-source keeps at most `rows_per_group` hits.
+source keeps at most `rows_per_group` hits. Then each document keeps at most `max_hits_per_document` hits, 1 by default,
+and lists its next few matching units under its best hit as `folded_units`. A unit's document is the source it was made
+from when it has one, so a page made from a source, its sections, its claims and the source's raw chunks are one
+document, and otherwise its own page.
 """
 
 from __future__ import annotations
@@ -40,6 +43,12 @@ def _in_pages(alias: str, page_col: str) -> str:
 def _page_title(alias: str, page_col: str) -> str:
     """A row's page title, read from the page pool by key."""
     return f"(SELECT page_pool.title FROM page_pool WHERE page_pool.collection = {alias}.collection AND page_pool.id = {alias}.{page_col})"  # noqa: S608 (built from this module's own names)
+
+
+def _page_document(alias: str, page_col: str) -> str:
+    """The document of a row inside a page: the source the page was made from, read from the page pool, else the page."""
+    source = f"(SELECT page_pool.source_id FROM page_pool WHERE page_pool.collection = {alias}.collection AND page_pool.id = {alias}.{page_col})"  # noqa: S608 (built from this module's own names)
+    return f"coalesce('source:' || {source}, 'page:' || {alias}.{page_col})"
 
 
 # The surfaces are ordered card, section, claim, raw, and their legs union in this order. The facet
@@ -60,6 +69,7 @@ KB_SEARCH_SCHEMA = SearchSchema(
             bm25_index="pages_bm25",
             membership=_in_pages("p", "id"),
             title_pin=True,
+            document_expr="coalesce('source:' || p.source_id, 'page:' || p.id)",
             partition_col="collection",
             vector_filters=("p.collection NOT IN (SELECT foreign_models.collection FROM foreign_models)",),
         ),
@@ -75,6 +85,7 @@ KB_SEARCH_SCHEMA = SearchSchema(
             title_expr=_page_title("s", "page_id"),
             bm25_index="sections_bm25",
             membership=_in_pages("s", "page_id"),
+            document_expr=_page_document("s", "page_id"),
             partition_col="collection",
             vector_filters=("s.collection NOT IN (SELECT foreign_models.collection FROM foreign_models)",),
         ),
@@ -91,6 +102,7 @@ KB_SEARCH_SCHEMA = SearchSchema(
             bm25_index="claims_bm25",
             membership=_in_pages("c", "page_id"),
             filters=("(NOT {only_current} OR c.status = 'active')",),
+            document_expr=_page_document("c", "page_id"),
             partition_col="collection",
             vector_filters=("c.collection NOT IN (SELECT foreign_models.collection FROM foreign_models)",),
         ),
@@ -107,6 +119,7 @@ KB_SEARCH_SCHEMA = SearchSchema(
             bm25_index="raw_chunks_bm25",
             membership="((r.collection, r.source_id) IN (SELECT raw_keys.collection, raw_keys.source_id FROM raw_keys)) IS TRUE",
             group_expr="'source:' || r.source_id",
+            document_expr="'source:' || r.source_id",
             partition_col="collection",
             vector_filters=("r.collection NOT IN (SELECT foreign_models.collection FROM foreign_models)",),
         ),
@@ -165,5 +178,5 @@ KB_SEARCH_SCHEMA = SearchSchema(
     collection_facet="collection",
     embedding_sql_type="halfvec(1024)",
     partition_result_col="src_collection",
-    tuning=SearchTuning(relation="kb.retrieval_tuning"),
+    tuning=SearchTuning(relation="kb.retrieval_tuning", max_hits_per_document=1),
 )

@@ -60,6 +60,7 @@ from .queries import expansion_hops, graph_next_steps, paths_next_steps, route_h
 from .sql_tools import DESCRIBE_SCHEMA_DESCRIPTION, RUN_SQL_DESCRIPTION, make_describe_schema, make_run_sql, tooling_instructions
 from .tools import (
     DATE_RANGE_CLAUSE,
+    DOCUMENT_CLAUSE,
     FIND_PATHS_DESCRIPTION,
     GRAPH_EXPAND_DESCRIPTION,
     RefRefusal,
@@ -937,7 +938,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         return (
             f"Search your knowledge bases ({ranking}): returns the top-`k` "
             "ranked hits (a page, a section within one, or a smaller unit) as a list, each with its "
-            "`id`, `hit_level`, `page_id`/`page_title`, a `snippet`, and a relevance `score`.\n\n"
+            f"`id`, `hit_level`, `page_id`/`page_title`, a `snippet`, and a relevance `score`. {DOCUMENT_CLAUSE}\n\n"
             f"`query` is the search text. `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} "
             f"{declared_facets_clause({surface.name: surface.facet_keys for surface in self.surfaces}, several_per_call=self.cross_search)} "
             f"{self._knowledge_base_clause(default_name=default_name)}\n"

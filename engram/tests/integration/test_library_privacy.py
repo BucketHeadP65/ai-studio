@@ -23,6 +23,8 @@ What this pins:
 
 from __future__ import annotations
 
+import json
+
 from typing import TYPE_CHECKING
 
 import asyncpg
@@ -282,9 +284,12 @@ class TestOwnSession:
         assert '"private": true' in switches
 
     async def test_search_ranks_its_own_page(self, own_session: asyncpg.Connection):
-        hits = await own_session.fetch("SELECT id FROM api.search($1, 20, NULL, NULL, '{}'::jsonb, $2, true)", _SEARCH_TERM, _PRIVATE)
+        hits = await own_session.fetch(
+            "SELECT id, folded_units FROM api.search($1, 20, NULL, NULL, '{}'::jsonb, $2, true)", _SEARCH_TERM, _PRIVATE
+        )
 
-        assert {row["id"] for row in hits} == {_PRIVATE_PAGE, f"{_PRIVATE_PAGE}#s1", f"{_PRIVATE_PAGE}#c1"}
+        folded = {unit["id"] for row in hits for unit in json.loads(row["folded_units"])}
+        assert {row["id"] for row in hits} | folded == {_PRIVATE_PAGE, f"{_PRIVATE_PAGE}#s1", f"{_PRIVATE_PAGE}#c1"}
 
     async def test_the_graph_walk_runs_inside_its_own_collection(self, own_session: asyncpg.Connection):
         reached = await own_session.fetch("SELECT id FROM api.graph_expand($1, ARRAY[$2], 2, NULL, 20)", _PRIVATE, _PRIVATE_PAGE)

@@ -50,8 +50,8 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   (`level`/`task`/`stage`/`domain`/`collection`). `GraphExpand` / `GraphPaths` carry the
   seed/endpoint ids, the hop bound (`hops`, at most 6, or `max_hops`, at most 8), an optional
   `rel_types` filter, `include_superseded`, and `k`.
-- **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, and `rerank_score` when a model
-  re-ranked it), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
+- **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, `rerank_score` when a model
+  re-ranked it, and `folded_units`, the other matching units of its document as `FoldedUnit`s), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
   `GraphPathsResult` (ranked multi-hop routes from `find_paths`), `GraphReach` (how far a walk's
   seeds reach, carried on graph results as `reach`), `SchemaDescription` (+ `ObjectInfo` /
   `ColumnInfo`), `StatusReport` (`src/engram/retrieval/domain.py`).
@@ -369,13 +369,22 @@ read or write, as its owner, and holds each to a bound generated into the functi
 | `k_ceiling` | 50 | 1..50 | The most rows one search returns |
 | `snippet_chars` | 480 | 80..2000 | The longest snippet |
 | `rows_per_group` | 3 | 1..50 | The most hits one page (its card, sections and claims) or one source (its raw chunks) keeps |
+| `max_hits_per_document` | 1 | 0..50, 0 or null keeping every hit | The most hits one document keeps, the next three folded under its best hit |
 | `weights` | `{}` | 0..10 each | A weight per tier and leg, keyed `<tier>:<lexical\|semantic>` (`card:semantic`), 1 when not named |
 
 The owner changes a number with an `UPDATE kb.retrieval_tuning SET tuning = tuning || '{...}'`, and a
-check constraint refuses a value that is not a number. Two rank policies run after the fusion: a card
-whose title equals the query, ignoring case and surrounding spaces, goes first when no other card holds
-that title, outside its page's count, and every other hit keeps at most `rows_per_group` rows per page
-or source. `include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
+check constraint refuses a value that is not a number (`max_hits_per_document` also takes null). Three
+rank policies run after the fusion: a card whose title equals the query, ignoring case and surrounding
+spaces, goes first when no other card holds that title, outside its page's count, every other hit keeps
+at most `rows_per_group` rows per page or source, and then each document keeps at most
+`max_hits_per_document` hits, its best first and the pinned card its best, so `k` counts documents
+(migration 0069). A unit's document is the source it was made from (`kb.pages.source_id`, or a raw
+chunk's own source) when it has one, otherwise its own page, so a page made from a source, its sections,
+its claims and the source's raw chunks are one document. The next three matching units of a document
+come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level}` best
+first, and every other hit carries an empty array. `search_hits` gives each folded unit the ref a hit of
+its level carries (`section:<collection>/<id>`, `page:` for a card, `unit:` for a claim or a raw chunk),
+so the agent fetches one without searching again. `include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
 own `meta.*` pages out before `k` is applied, so a search returns `k` rows when that many match. A raw
 `api.search` call keeps them unless it passes the same argument. `since` and `until` keep a page by its page date
 (`kb.pages.page_date`, migration 0066), which is `created` when the schema names no other field. A raw chunk carries

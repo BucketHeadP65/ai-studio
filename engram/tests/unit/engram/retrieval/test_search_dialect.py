@@ -238,7 +238,7 @@ class TestPgTextSearchDialect:
         assert "api.search(" in body
         assert (
             "RETURNS TABLE (id text, src_collection text, hit_level text, page_id text, page_title text, snippet text, "
-            "score float8, lexical_rank int, vector_rank int, vector_distance float8, snippet_truncated boolean)"
+            "score float8, lexical_rank int, vector_rank int, vector_distance float8, snippet_truncated boolean, folded_units jsonb)"
         ) in body
         assert "SECURITY DEFINER" in body
 
@@ -352,4 +352,6 @@ class TestPgTextSearchDialect:
     def test_api_search_body_caps_the_fused_result_set(self):
         # The result keeps the k cap after the policies: a lone exact title first, then the fused order.
         # Whitespace-collapsed: the generated body's indentation is not the contract.
-        assert "ORDER BY ruled.pin_alone DESC, ruled.rrf DESC, ruled.id LIMIT capped_k;" in " ".join(PgTextSearchDialect().api_search_body().split())
+        assert "ORDER BY documented.pin_alone DESC, documented.rrf DESC, documented.id LIMIT capped_k;" in " ".join(
+            PgTextSearchDialect().api_search_body().split()
+        )

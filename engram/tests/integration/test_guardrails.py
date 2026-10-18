@@ -80,8 +80,10 @@ async def _seed(admin_url: str) -> None:
                     ),
                     {"id": f"paper.guard#s{i}", "h": f"S{i}", "p": f"s{i}", "ord": i, "bh": f"hs{i}"},
                 )
-            # The 60 sections share one page, so lift the per-page cap past k: the k clamp alone limits the rows.
-            await conn.execute(text("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"rows_per_group": 50}'::jsonb WHERE id = 1"""))
+            # The 60 sections share one page, so lift the per-page cap past k and the cap per document off: the k clamp alone limits the rows.
+            await conn.execute(
+                text("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"rows_per_group": 50, "max_hits_per_document": 0}'::jsonb WHERE id = 1""")
+            )
     finally:
         await engine.dispose()
 

@@ -562,11 +562,27 @@ class TestSearchSignatureDriftGuard:
     def test_0066_restores_exactly_the_shape_0065_published(self) -> None:
         assert _load_migration_module("0066")._search_schema(page_dated=False) == _load_migration_module("0065")._search_schema(sourced=True)
 
-    def test_0066_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
-        assert _load_migration_module("0066")._search_schema(page_dated=True) == KB_SEARCH_SCHEMA
-
     def test_0066_restores_the_comment_0065_set(self) -> None:
         assert _load_migration_module("0066")._PREVIOUS_COMMENT_TEXT == _load_migration_module("0065")._COMMENT_TEXT
+
+    def test_0069_frozen_schemas_match_their_hardcoded_signature_constant(self) -> None:
+        module = _load_migration_module("0069")
+
+        for documented in (True, False):
+            rendered = _bare_type_signature("api.search", module._search_schema(documented=documented))
+            assert _canonical_types(rendered) == _canonical_types(module._SEARCH_SIGNATURE)
+
+    def test_0069_restores_exactly_the_shape_0066_published(self) -> None:
+        assert _load_migration_module("0069")._search_schema(documented=False) == _load_migration_module("0066")._search_schema(page_dated=True)
+
+    def test_0069_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
+        assert _load_migration_module("0069")._search_schema(documented=True) == KB_SEARCH_SCHEMA
+
+    def test_0069_restores_the_comment_0066_set(self) -> None:
+        assert _load_migration_module("0069")._PREVIOUS_COMMENT_TEXT == _load_migration_module("0066")._COMMENT_TEXT
+
+    def test_0069_restores_the_table_comment_0061_set(self) -> None:
+        assert _load_migration_module("0069")._PREVIOUS_TUNING_COMMENT == _load_migration_module("0061")._TUNING_COMMENT
 
 
 class TestGraphSignatureDriftGuard:

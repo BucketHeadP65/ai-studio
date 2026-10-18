@@ -58,8 +58,9 @@ if TYPE_CHECKING:
 # view SELECT lists (0002_api_surface.py, 0004_graph.py via the GraphBackendSql bodies).
 
 # api.search → SearchHit: id, hit_level (the 0002 OUT rename of `level`), page_id, page_title,
-# snippet, score, src_collection (the collection a hit belongs to), plus the per-leg facts behind that score — lexical_rank, vector_rank,
-# vector_distance — and snippet_truncated, which says whether the excerpt was cut
+# snippet, score, src_collection (the collection a hit belongs to), plus the per-leg facts behind that score (lexical_rank, vector_rank,
+# vector_distance), snippet_truncated, which says whether the excerpt was cut, and folded_units, the next matching
+# units of the hit's document
 # (0002 _create_functions / search_dialect.{paradedb,pg_textsearch} RETURNS TABLE).
 _SEARCH_COLUMNS = frozenset(
     {
@@ -74,6 +75,7 @@ _SEARCH_COLUMNS = frozenset(
         "vector_rank",
         "vector_distance",
         "snippet_truncated",
+        "folded_units",
     }
 )
 

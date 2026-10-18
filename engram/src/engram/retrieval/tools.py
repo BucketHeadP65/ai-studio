@@ -77,6 +77,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DATE_RANGE_CLAUSE",
+    "DOCUMENT_CLAUSE",
     "FETCH",
     "FIND_PATHS",
     "GRAPH_EXPAND",
@@ -160,6 +161,13 @@ DATE_RANGE_CLAUSE = (
 )
 """The sentences every `search` description spends on its date range."""
 
+DOCUMENT_CLAUSE = (
+    "Each hit is a distinct document: a source together with every page made from it, or a page made from no source. "
+    "A hit's `folded_units` lists more units of its document that matched, best first, each with the `ref` that "
+    "fetches it, so `fetch` one directly rather than searching again."
+)
+"""The sentences every `search` description spends on what one hit stands for and on its folded units."""
+
 
 def _facets_clause(facet_keys: tuple[str, ...]) -> str:
     """What a `search` description says about `facets`, naming the declared keys or saying there are none."""
@@ -237,7 +245,7 @@ def _pinned_description(description: str) -> str:
 SEARCH_DESCRIPTION = (
     "Hybrid search over the knowledge base (semantic vector similarity + BM25 keyword matching, fused): "
     "returns the top-`k` ranked hits, each with its `id`, "
-    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
+    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. {DOCUMENT_CLAUSE} "
     "`query` is the search text (the server embeds it for the vector leg unless `bm25_only`). `k` "
     "caps the hits (default 12). Set `bm25_only=true` "
     f"for keyword-only ranking. {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to find candidate sources, then "
@@ -254,8 +262,8 @@ SEARCH_DESCRIPTION_HYBRID = (
     "(names, acronyms, ids) in the `query` rank on the keyword leg while conceptual phrasing ranks "
     "on the vector leg: feed both. Returns the top-`k` ranked "
     "hits, each with its `id`, "
-    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. `query` is the search "
-    f"text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
+    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. {DOCUMENT_CLAUSE} "
+    f"`query` is the search text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
     " Read the result's `status` for what this search actually found, its `window` for whether "
@@ -268,7 +276,7 @@ SEARCH_DESCRIPTION_KEYWORD = (
     "ranks on exact and overlapping terms, ideal for specific names, ids, or quoted phrasing: "
     "returns the top-`k` ranked hits, "
     f"each with its `id`, `hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
-    f"`query` is the search text (matched lexically). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
+    f"{DOCUMENT_CLAUSE} `query` is the search text (matched lexically). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
     " Read the result's `status` for what this search actually found and its `window` for whether "
@@ -574,13 +582,13 @@ def search_result_status(hits: tuple[SearchHit, ...]) -> SearchResultStatus:
 
 
 def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, hybrid: bool) -> tuple[SearchHit, ...]:
-    """Project search rows into hits carrying their fetchable ref, their support, and a bounded snippet.
+    """Project search rows into hits carrying their fetchable ref, their support, a bounded snippet and their folded units.
 
     `answered_by` follows the legs that actually selected each hit: the semantic leg contributing
     makes it `hybrid`, its absence makes it `lexical`. A row from a database that publishes no
     component ranks has no per-leg facts to read, so it keeps the leg this call ran and no support
     label. Snippets are bounded here as well as in the generated SQL, so a hit is an excerpt
-    whichever database answered.
+    whichever database answered. Each folded unit carries the ref a hit of its level would carry.
 
     Args:
         rows: The search handler's rows, in rank order.
@@ -599,6 +607,9 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
         selected_semantically = hit.vector_rank is not None if ranked else hybrid
         leg: Literal["lexical", "hybrid"] = "hybrid" if selected_semantically else "lexical"
         snippet = _clip(hit.snippet, SEARCH_SNIPPET_CHARS)
+        folded = tuple(
+            unit.model_copy(update={"ref": qualify_ref(f"{search_ref_type(unit.hit_level)}:{unit.id}", collection)}) for unit in hit.folded_units
+        )
         projected.append(
             hit.model_copy(
                 update={
@@ -608,6 +619,7 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
                     "support": support,
                     "snippet": snippet,
                     "snippet_truncated": hit.snippet_truncated or snippet != hit.snippet,
+                    "folded_units": folded,
                 }
             )
         )
