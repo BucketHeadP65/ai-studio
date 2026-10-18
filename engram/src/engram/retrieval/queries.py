@@ -121,6 +121,9 @@ SEARCH_SQL = (
     "include_meta => false)"
 )
 
+# The cap on hits per document `api.search` applies, as the database's tuning row sets it, 0 for every hit kept.
+HITS_PER_DOCUMENT_SQL = "SELECT api.search_hits_per_document() AS hits_per_document"
+
 # The `api.fetch` call behind the structured fetch tool. A `meta.*` id returns no unit. An id is
 # unique only within its collection, so `:collection` is always bound.
 FETCH_SQL = "SELECT * FROM api.fetch(:collection, :unit_id) WHERE id NOT LIKE 'meta.%'"
@@ -269,6 +272,16 @@ class SearchHandler:
             "until": query.until,
         }
         return await self._gateway.rows(SEARCH_SQL, params, cap=query.k)
+
+    async def hits_per_document(self) -> int:
+        """Read the most hits one document keeps in this handler's search, as the database's tuning row sets it.
+
+        Returns:
+            The cap, 0 when the search keeps every hit or the database answers no number.
+        """
+        result = await self._gateway.rows(HITS_PER_DOCUMENT_SQL, {}, cap=1)
+        value = result.rows[0].get("hits_per_document") if result.rows else None
+        return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
     async def _embed_once(self, query: str) -> list[float]:
         """Embed the single query string (one `embed_batch` call, one returned vector)."""

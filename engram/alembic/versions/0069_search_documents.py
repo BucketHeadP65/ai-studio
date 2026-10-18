@@ -17,6 +17,10 @@ refuses a value that is neither a number nor null. The arguments do not change a
 so the function is dropped and created again under the same signature, EXECUTE is granted again and the comment is set
 again with the cap and the folded units. Downgrade restores 0066's function and comment, the row without the key, 0061's
 check and the table comment. What this revision freezes is the descriptor, never the rendered SQL.
+
+`api.search_hits_per_document()` answers the cap the search applies, read from the tuning row as the search reads it,
+0 when every hit is kept. A reader may call it, so a host states the cap in its search tool's description. Downgrade
+drops it.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from core.ai.retrieval.contracts import (
     SearchSchema,
     SearchSurface,
     SearchTuning,
+    hits_per_document_body,
 )
 
 revision: str = "0069"
@@ -40,6 +45,14 @@ depends_on: str | tuple[str, ...] | None = None
 _READER_ROLE = "kb_reader"
 
 _SEARCH_SIGNATURE = "api.search(text, integer, halfvec, text, jsonb, text, boolean, date, date, text, boolean)"
+
+_CAP_FUNCTION = "api.search_hits_per_document"
+
+_CAP_COMMENT = (
+    "The most hits one document keeps in api.search, as the owner's max_hits_per_document in kb.retrieval_tuning sets "
+    "it, 1 unless the owner sets another. 0 means api.search keeps every hit and folds nothing. A document is the "
+    "source a unit was made from, or its own page when it was made from none."
+)
 
 _NUMBERS = ("budget", "rrf_constant", "k_ceiling", "snippet_chars", "rows_per_group")
 
@@ -356,16 +369,20 @@ def _publish_search(*, documented: bool, comment: str) -> None:
 
 
 def upgrade() -> None:
-    """Check and seed `max_hits_per_document`, and publish `api.search` keeping the best hit of each document."""
+    """Check and seed `max_hits_per_document`, publish `api.search` keeping the best hit of each document, and its cap."""
     op.execute("ALTER TABLE kb.retrieval_tuning DROP CONSTRAINT retrieval_tuning_numbers")
     op.execute(_numbers_check(capped=True))
     op.execute("UPDATE kb.retrieval_tuning SET tuning = jsonb_build_object('max_hits_per_document', 1) || tuning WHERE id = 1")
     op.execute(_TUNING_COMMENT)
     _publish_search(documented=True, comment=_COMMENT_TEXT)
+    op.execute(hits_per_document_body(_search_schema(documented=True), function_name=_CAP_FUNCTION))
+    op.execute(f"GRANT EXECUTE ON FUNCTION {_CAP_FUNCTION}() TO {_READER_ROLE}")
+    op.execute(f"COMMENT ON FUNCTION {_CAP_FUNCTION}() IS '{_CAP_COMMENT.replace("'", "''")}'")
 
 
 def downgrade() -> None:
-    """Put 0066's `api.search` and comment, the row without `max_hits_per_document`, 0061's check and table comment back."""
+    """Drop the cap's function, put 0066's `api.search` and comment, the row without the cap, 0061's check and table comment back."""
+    op.execute(f"DROP FUNCTION {_CAP_FUNCTION}()")
     _publish_search(documented=False, comment=_PREVIOUS_COMMENT_TEXT)
     op.execute("UPDATE kb.retrieval_tuning SET tuning = tuning - 'max_hits_per_document' WHERE id = 1")
     op.execute("ALTER TABLE kb.retrieval_tuning DROP CONSTRAINT retrieval_tuning_numbers")

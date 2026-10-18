@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         parse_ref,
         paths_next_steps,
         qualify_ref,
+        read_hits_per_document,
         search_next_steps,
         search_result_status,
     )
@@ -93,6 +94,7 @@ __all__ = [
     "paths_next_steps",
     "primary_at_k_key",
     "qualify_ref",
+    "read_hits_per_document",
     "search_next_steps",
     "search_result_status",
 ]
@@ -119,6 +121,7 @@ _LAZY_IMPORTS = {
     "search_result_status": _SERVE_BRIDGE,
     "parse_ref": _SERVE_BRIDGE,
     "qualify_ref": _SERVE_BRIDGE,
+    "read_hits_per_document": _SERVE_BRIDGE,
     "SEARCH": _SERVE_BRIDGE,
     "GRAPH_EXPAND": _SERVE_BRIDGE,
     "FIND_PATHS": _SERVE_BRIDGE,

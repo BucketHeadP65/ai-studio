@@ -165,6 +165,8 @@ class FakeContainer:
     # unless a spec scripts another collection.
     spec: KnowledgeBaseSchema = field(default_factory=research_spec)
     inventory: _FakeInventoryReaders = field(default_factory=_FakeInventoryReaders)
+    # The search handler the run reads the cap on hits per document through: no answer reads as no cap.
+    search: SearchHandler = field(default_factory=lambda: SearchHandler(FakeSqlGateway(), FakeEmbedding()))
     requested: list[type] = field(default_factory=list)
 
     async def get[T](self, klass: type[T]) -> T:
@@ -177,6 +179,7 @@ class FakeContainer:
             EnvelopeHandler: self.envelope_handler,
             KnowledgeBaseSchema: self.spec,
             InventoryReaderFactory: self.inventory,
+            SearchHandler: self.search,
         }
         service = services.get(klass)
         if not isinstance(service, klass):
@@ -379,6 +382,7 @@ def _spy_on_build_retrieval_toolset(monkeypatch: pytest.MonkeyPatch) -> list[tup
         can_sql: bool = False,
         pinned: bool = False,
         facet_keys: tuple[str, ...] = (),
+        hits_per_document: int = 0,
     ) -> RetrievalToolset:
         captured.append((descriptions, collection))
         return real_build(
@@ -391,6 +395,7 @@ def _spy_on_build_retrieval_toolset(monkeypatch: pytest.MonkeyPatch) -> list[tup
             can_sql=can_sql,
             pinned=pinned,
             facet_keys=facet_keys,
+            hits_per_document=hits_per_document,
         )
 
     monkeypatch.setattr(service, "build_retrieval_toolset", _spy)
@@ -570,6 +575,18 @@ class TestRunEvalOnDataset:
         assert len(report.cases) == 2
         for case in report.cases:
             assert set(case.scores) >= _EXPECTED_METRICS, f"missing metrics for {case.name}: {_EXPECTED_METRICS - set(case.scores)}"
+
+    async def test_the_search_description_states_the_cap_the_database_applies(self):
+        capped = FakeSqlGateway(routed={"api.search_hits_per_document": SqlResult(rows=({"hits_per_document": 2},), columns=("hits_per_document",))})
+        model = TestModel(call_tools=[])
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.")
+
+        await run_eval_on_dataset(FakeContainer(search=SearchHandler(capped, FakeEmbedding())), config=config, dataset=_golden_dataset(), model=model)
+
+        parameters = model.last_model_request_parameters
+        assert parameters is not None
+        [search] = [tool for tool in parameters.function_tools if tool.name == "search"]
+        assert "At most 2 hits come from one document" in (search.description or "")
 
     async def test_max_concurrency_defaults_to_unbounded(self):
         # No cap unless a caller asks for one, so the offline/`test-model` runs keep pydantic-evals'

@@ -237,7 +237,8 @@ and runs inside `SELECT * FROM (...) AS q LIMIT cap + 1` (engram ADR-0047). A to
 read-only `REPEATABLE READ` transaction, released before any model call. `api.search` reads its numbers from the one-row
 `kb.retrieval_tuning`, changed with an `UPDATE` (engram ADR-0048). It keeps the best hit of each document (the source a
 unit was made from, else its page) up to `max_hits_per_document`, 1 by default and 0 for every hit, and lists the
-document's next matching units under that hit as `folded_units`, which the search tools give the refs that fetch them. The graph walks keep a reached-node set on both backends, and
+document's next matching units under that hit as `folded_units`, which the search tools give the refs that fetch them.
+Every `search` description states the cap the database applies, read once through `api.search_hits_per_document()`. The graph walks keep a reached-node set on both backends, and
 `api.graph_reach` says how far a walk can go (engram ADR-0049).
 
 ## Search re-ranking

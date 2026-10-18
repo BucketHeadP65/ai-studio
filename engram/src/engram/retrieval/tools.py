@@ -62,7 +62,7 @@ from .infrastructure.gateway import read_snapshot
 from .knowledge_base_schema import KB_SEARCH_SCHEMA
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from core.ai.retrieval.contracts import StampSource
     from mcp.server.fastmcp import FastMCP
@@ -77,7 +77,6 @@ if TYPE_CHECKING:
 
 __all__ = [
     "DATE_RANGE_CLAUSE",
-    "DOCUMENT_CLAUSE",
     "FETCH",
     "FIND_PATHS",
     "GRAPH_EXPAND",
@@ -99,6 +98,7 @@ __all__ = [
     "bound_search_result",
     "build_retrieval_toolset",
     "declared_facets_clause",
+    "document_clause",
     "elide_k",
     "envelope_next_steps",
     "fetch_description",
@@ -114,6 +114,7 @@ __all__ = [
     "search_next_steps",
     "search_ref_type",
     "search_result_status",
+    "shared_hits_per_document",
 ]
 
 # A short phrase for each known `hit_level` value, used in the search descriptions. A level absent
@@ -161,12 +162,57 @@ DATE_RANGE_CLAUSE = (
 )
 """The sentences every `search` description spends on its date range."""
 
-DOCUMENT_CLAUSE = (
-    "Each hit is a distinct document: a source together with every page made from it, or a page made from no source. "
-    "A hit's `folded_units` lists more units of its document that matched, best first, each with the `ref` that "
-    "fetches it, so `fetch` one directly rather than searching again."
-)
-"""The sentences every `search` description spends on what one hit stands for and on its folded units."""
+_DOCUMENT = "a source together with every page made from it, or a page made from no source"
+"""What one document is, as a `search` description says it."""
+
+_FOLDED = "best first, each with the `ref` that fetches it, so `fetch` one directly rather than searching again."
+"""How a `search` description says a hit's folded units are listed and read."""
+
+_SCORE_SENTENCE_END = "a relevance `score`."
+"""The words every shipped `search` description ends its result sentence with, where the document sentences go."""
+
+
+def document_clause(hits_per_document: int) -> str:
+    """What a `search` description says about documents under the cap on hits per document the database applies.
+
+    Args:
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it. 0 keeps every hit.
+
+    Returns:
+        The sentences for a cap of 1 or more. An empty string for 0, since a search that keeps every hit says nothing
+        about documents.
+    """
+    if hits_per_document <= 0:
+        return ""
+    if hits_per_document == 1:
+        return f"Each hit is a distinct document: {_DOCUMENT}. A hit's `folded_units` lists more units of its document that matched, {_FOLDED}"
+    return (
+        f"At most {hits_per_document} hits come from one document: {_DOCUMENT}. The best hit of a document lists its next "
+        f"matching units as `folded_units`, {_FOLDED}"
+    )
+
+
+def shared_hits_per_document(caps: Iterable[int]) -> int:
+    """The cap on hits per document several knowledge bases share, 0 when they disagree or there are none.
+
+    Args:
+        caps: Each knowledge base's cap on hits per document.
+
+    Returns:
+        The one cap every knowledge base applies, or 0, so a description never states a cap one of them does not apply.
+    """
+    distinct = set(caps)
+    return distinct.pop() if len(distinct) == 1 else 0
+
+
+def _with_document_clause(description: str, hits_per_document: int) -> str:
+    """`description` with the document sentences for `hits_per_document` after its result sentence, or appended."""
+    clause = document_clause(hits_per_document)
+    if not clause:
+        return description
+    if _SCORE_SENTENCE_END in description:
+        return description.replace(_SCORE_SENTENCE_END, f"{_SCORE_SENTENCE_END} {clause}", 1)
+    return f"{description} {clause}"
 
 
 def _facets_clause(facet_keys: tuple[str, ...]) -> str:
@@ -245,7 +291,7 @@ def _pinned_description(description: str) -> str:
 SEARCH_DESCRIPTION = (
     "Hybrid search over the knowledge base (semantic vector similarity + BM25 keyword matching, fused): "
     "returns the top-`k` ranked hits, each with its `id`, "
-    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. {DOCUMENT_CLAUSE} "
+    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
     "`query` is the search text (the server embeds it for the vector leg unless `bm25_only`). `k` "
     "caps the hits (default 12). Set `bm25_only=true` "
     f"for keyword-only ranking. {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to find candidate sources, then "
@@ -262,7 +308,7 @@ SEARCH_DESCRIPTION_HYBRID = (
     "(names, acronyms, ids) in the `query` rank on the keyword leg while conceptual phrasing ranks "
     "on the vector leg: feed both. Returns the top-`k` ranked "
     "hits, each with its `id`, "
-    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. {DOCUMENT_CLAUSE} "
+    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
     f"`query` is the search text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
@@ -276,7 +322,7 @@ SEARCH_DESCRIPTION_KEYWORD = (
     "ranks on exact and overlapping terms, ideal for specific names, ids, or quoted phrasing: "
     "returns the top-`k` ranked hits, "
     f"each with its `id`, `hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
-    f"{DOCUMENT_CLAUSE} `query` is the search text (matched lexically). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
+    f"`query` is the search text (matched lexically). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
     " Read the result's `status` for what this search actually found and its `window` for whether "
@@ -413,7 +459,9 @@ _FIND_PATHS_DESCRIPTION = FIND_PATHS_DESCRIPTION
 # -- the descriptions the builders register ------------
 
 
-def search_description(*, hybrid: bool, can_sql: bool = True, facet_keys: tuple[str, ...] | None = None) -> str:
+def search_description(
+    *, hybrid: bool, can_sql: bool = True, facet_keys: tuple[str, ...] | None = None, hits_per_document: int = 0
+) -> str:
     """The `search` description for a leg the host fixes rather than the agent.
 
     Args:
@@ -423,11 +471,13 @@ def search_description(*, hybrid: bool, can_sql: bool = True, facet_keys: tuple[
             `False` drops it.
         facet_keys: The facet keys the knowledge base's schema declares, named in the `facets`
             sentences. `None` (the default) describes a search that takes no `facets`.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the
+            description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
         The full tool description text.
     """
-    text = SEARCH_DESCRIPTION_HYBRID if hybrid else SEARCH_DESCRIPTION_KEYWORD
+    text = _with_document_clause(SEARCH_DESCRIPTION_HYBRID if hybrid else SEARCH_DESCRIPTION_KEYWORD, hits_per_document)
     if not can_sql:
         text = _without_sql_plane(text)
     return text if facet_keys is None else _with_facets_clause(text, _facets_clause(facet_keys))
@@ -461,6 +511,7 @@ def _final_descriptions(
     can_sql: bool = True,
     pinned: bool = False,
     facets_clause: str | None = None,
+    hits_per_document: int = 0,
 ) -> dict[str, str]:
     """Each retrieval tool's description by tool name after any override, `facets_clause` `None` for a search without `facets`."""
     can_search = SEARCH in selected
@@ -471,6 +522,7 @@ def _final_descriptions(
         search_default = SEARCH_DESCRIPTION_HYBRID
     else:
         search_default = SEARCH_DESCRIPTION_KEYWORD
+    search_default = _with_document_clause(search_default, hits_per_document)
     if not can_sql:
         search_default = _without_sql_plane(search_default)
     if facets_clause is not None:
@@ -674,6 +726,29 @@ def _fitted(
     return longest_fitting(candidate, shorten=_shortened, fits=fits, longest=max(len(candidate.page_title or ""), len(candidate.snippet or "")))
 
 
+def _without_folded_units_past_the_budget(
+    hits: tuple[SearchHit, ...],
+    *,
+    status: SearchResultStatus,
+    next_steps: NextSteps,
+    knowledge_base: KnowledgeBaseStamp | None,
+    max_chars: int,
+) -> tuple[SearchHit, ...]:
+    """`hits` with folded units dropped from the lowest-ranked hit's last one up, until every hit fits whole or none is left."""
+    trimmed = list(hits)
+
+    def fits_whole() -> bool:
+        whole = _windowed(tuple(trimmed), status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
+        return fits_budget(whole, max_chars)
+
+    for position in range(len(trimmed) - 1, -1, -1):
+        while trimmed[position].folded_units:
+            if fits_whole():
+                return tuple(trimmed)
+            trimmed[position] = trimmed[position].model_copy(update={"folded_units": trimmed[position].folded_units[:-1]})
+    return tuple(trimmed)
+
+
 def bound_search_result(
     hits: tuple[SearchHit, ...],
     *,
@@ -684,10 +759,11 @@ def bound_search_result(
 ) -> SearchResult:
     """The largest prefix of `hits` whose complete serialized result fits `max_chars`.
 
-    Rank order is kept and a hit's id and ref are never shortened. A hit is added whole when it fits,
-    else with its title and snippet bounded, else not at all, and then every later hit is left out
-    too. The window counts what was left out. When not even the top hit's id and ref fit, the answer
-    is an empty `budget_refused` result with a fixed next move.
+    Rank order is kept and a hit's id and ref are never shortened. When every hit does not fit whole, folded units go
+    first, one at a time from the lowest-ranked hit's last one up, before any title or snippet is cut. Then a hit is
+    added whole when it fits, else with its title and snippet bounded, else not at all, and then every later hit is
+    left out too. The window counts what was left out. When not even the top hit's id and ref fit, the answer is an
+    empty `budget_refused` result with a fixed next move.
 
     Args:
         hits: The projected hits, in rank order.
@@ -699,6 +775,7 @@ def bound_search_result(
     Returns:
         The bounded result, its window saying how much of the retrieved list it carries.
     """
+    hits = _without_folded_units_past_the_budget(hits, status=status, next_steps=next_steps, knowledge_base=knowledge_base, max_chars=max_chars)
     kept: tuple[SearchHit, ...] = ()
     for candidate in hits:
         fitted = _fitted(
@@ -1301,6 +1378,7 @@ def build_retrieval_toolset(
     can_sql: bool = False,
     pinned: bool = False,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> RetrievalToolset:
     """Build a pydantic-ai `FunctionToolset` of engram's retrieval tools, or a subset of them.
 
@@ -1337,6 +1415,8 @@ def build_retrieval_toolset(
             these keys only and refuses any other key with a `ModelRetry` naming them. Its shipped
             description names them, and a `descriptions` override replaces that sentence with the rest.
             Empty (the default) refuses every key, saying the knowledge base declares no facets.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+            `search` description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
         A `FunctionToolset` exposing the selected subset of `search` / `fetch` / `graph_expand` /
@@ -1355,6 +1435,7 @@ def build_retrieval_toolset(
         can_sql=can_sql,
         pinned=pinned,
         facets_clause=_facets_clause(facet_keys),
+        hits_per_document=hits_per_document,
     )
     # `SEARCH` is always withheld from the shared builder. engram registers it below, so every
     # result carries `next_steps`.
@@ -1404,6 +1485,7 @@ def register_mcp_tools(
     k_source: Callable[[], int] | None = None,
     stamp: StampSource | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> None:
     """Register engram's four retrieval tools on a FastMCP `server`.
 
@@ -1435,6 +1517,8 @@ def register_mcp_tools(
         facet_keys: The facet keys the knowledge base's schema declares, which `search` takes in
             `facets` as in `build_retrieval_toolset`. Any other key fails the call with a tool error
             naming them. Empty (the default) refuses every key.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+            `search` description states. 0 (the default) keeps every hit and states nothing about documents.
     """
     resolved_hybrid = _resolve_search_hybrid(search_hybrid, switches)
     selected = _switch_gated_selection(TOOL_NAMES if only is None else only, switches)
@@ -1442,7 +1526,12 @@ def register_mcp_tools(
     capped = k_source if SEARCH in selected else None
     search_type = _scoped_search_type(collection)
     final = _final_descriptions(
-        search_hybrid=resolved_hybrid, descriptions=descriptions, k_source=capped, selected=selected, facets_clause=_facets_clause(facet_keys)
+        search_hybrid=resolved_hybrid,
+        descriptions=descriptions,
+        k_source=capped,
+        selected=selected,
+        facets_clause=_facets_clause(facet_keys),
+        hits_per_document=hits_per_document,
     )
     # `SEARCH` is always withheld from the shared builder, as in `build_retrieval_toolset`.
     _register_mcp_tools(
@@ -1581,7 +1670,13 @@ def _routed_descriptions(
     """The `search` and `fetch` descriptions a routed registration serves, in that order."""
     choices = ", ".join(surface.collection for surface in surfaces)
     facets_clause = declared_facets_clause({surface.collection: surface.facet_keys for surface in surfaces}, several_per_call=False)
-    resolved = _final_descriptions(search_hybrid=home.hybrid, descriptions=descriptions, k_source=k_source, facets_clause=facets_clause)[SEARCH]
+    resolved = _final_descriptions(
+        search_hybrid=home.hybrid,
+        descriptions=descriptions,
+        k_source=k_source,
+        facets_clause=facets_clause,
+        hits_per_document=shared_hits_per_document(surface.hits_per_document for surface in surfaces),
+    )[SEARCH]
     reading = resolve_description(
         FETCH, leveled_fetch_description(home.collection, mode=home.envelope.mode, can_search=can_search), descriptions
     )

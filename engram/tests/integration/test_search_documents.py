@@ -20,8 +20,9 @@ What this pins:
 * a cap of 2 keeps two hits of a document and folds the rest under its best.
 * `facets` still narrow a capped search.
 * the tuning row starts with a cap of 1 and refuses a cap that is neither a number nor null.
-* the comment an agent reads names the cap and the folded units, and one step down puts 0068's search, row and
-  comment back.
+* the reader reads the cap the search applies, through SQL and through the search handler.
+* the comment an agent reads names the cap and the folded units, and one step down puts 0068's search, row, check,
+  comment and functions back.
 """
 
 from __future__ import annotations
@@ -33,6 +34,13 @@ from typing import TYPE_CHECKING
 import asyncpg
 import pytest
 
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
+
+from engram.retrieval.contracts import read_hits_per_document
+from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway
+from engram.retrieval.queries import SearchHandler
+from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.infrastructure.knowledge_base_db import run_downgrade, run_upgrade_head
 from tests.integration.test_migrations import _asyncpg_dsn, _load_migration_module
 
@@ -264,6 +272,26 @@ async def test_the_tuning_row_starts_with_a_cap_of_one_and_takes_a_number_or_nul
     assert tuning["max_hits_per_document"] == 1
 
 
+@pytest.mark.parametrize(("cap", "read"), [("1", 1), ("0", 0), ("null", 0), ("2", 2), ("99", 50)])
+async def test_the_reader_reads_the_cap_the_search_applies(admin: asyncpg.Connection, reader: asyncpg.Connection, cap: str, read: int):
+    await _cap(admin, cap)
+
+    assert await reader.fetchval("SELECT api.search_hits_per_document()") == read
+
+
+async def test_the_search_handler_reads_the_cap_through_the_reader_gateway(admin: asyncpg.Connection, reader_url: str):
+    await _cap(admin, "2")
+    engine = create_async_engine(reader_url, poolclass=NullPool)
+    try:
+        search = SearchHandler(ReadOnlySqlGateway(engine, collection=_COLLECTION), FakeEmbedding())
+        direct = await search.hits_per_document()
+        safe = await read_hits_per_document(search)
+    finally:
+        await engine.dispose()
+
+    assert (direct, safe) == (2, 2)
+
+
 async def _comment(url: str) -> str:
     """The comment on `api.search`."""
     connection = await asyncpg.connect(_asyncpg_dsn(url))
@@ -286,8 +314,29 @@ async def test_one_step_down_puts_the_previous_search_row_and_comment_back(migra
     columns = [attribute.name for attribute in (await reader.prepare(_SEARCH)).get_attributes()]
     tuning = json.loads(str(await admin.fetchval("SELECT tuning FROM kb.retrieval_tuning WHERE id = 1")))
     below = await _comment(migrated)
+    reader_function = await admin.fetchval("SELECT to_regprocedure('api.search_hits_per_document()')")
     run_upgrade_head(migrated)
 
     assert "folded_units" not in columns
     assert "max_hits_per_document" not in tuning
     assert below == _load_migration_module("0066")._COMMENT_TEXT
+    assert reader_function is None
+
+
+_CHECK = (
+    "SELECT pg_get_constraintdef(c.oid) FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid"
+    " WHERE t.relname = 'retrieval_tuning' AND c.conname = 'retrieval_tuning_numbers'"
+)
+
+
+async def test_one_step_down_puts_back_the_check_that_knows_no_cap(migrated: str, admin: asyncpg.Connection):
+    run_downgrade(migrated, "0068")
+    check = str(await admin.fetchval(_CHECK))
+    await admin.execute("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"max_hits_per_document": "one"}'::jsonb WHERE id = 1""")
+    with pytest.raises(asyncpg.CheckViolationError):
+        await admin.execute("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"rows_per_group": "three"}'::jsonb WHERE id = 1""")
+    await admin.execute("UPDATE kb.retrieval_tuning SET tuning = tuning - 'max_hits_per_document' WHERE id = 1")
+    run_upgrade_head(migrated)
+
+    assert "rows_per_group" in check
+    assert "max_hits_per_document" not in check

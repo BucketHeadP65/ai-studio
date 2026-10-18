@@ -50,7 +50,9 @@ from engram.evals.shared.contracts import (
     RetrievalAnswer,
     RetrievalHandlers,
     RetrievalToolset,
+    SearchHandler,
     build_retrieval_toolset,
+    read_hits_per_document,
 )
 from engram.evals.tuning.contracts import DEFAULT_STRATEGY, resolve_strategy
 from engram.kb.contracts import KnowledgeBaseSchema
@@ -367,6 +369,8 @@ async def run_traced_eval_on_dataset(
     # Read before the first case, so the stamp is the index the run starts on and a failed read costs no case.
     fingerprint = await _knowledge_base_fingerprint(container, collection) if config.results_path is not None else ""
     envelope_handler = await container.get(EnvelopeHandler) if config.disclosure else None
+    # The cap on hits per document is read once, so every case's `search` description states the same cap.
+    hits_per_document = await read_hits_per_document(await container.get(SearchHandler))
     toolset: RetrievalToolset = build_retrieval_toolset(
         resolved_handlers,
         only=profile.tools,
@@ -377,6 +381,7 @@ async def run_traced_eval_on_dataset(
         can_sql=config.sql is not None,
         pinned=config.pinned_search,
         facet_keys=tuple(facet.key for facet in schema.facets),
+        hits_per_document=hits_per_document,
     )
     collections_read: dict[str, set[str]] = {}
     capabilities: list[AbstractCapability] = [ProgressiveDisclosure()] if config.disclosure else []

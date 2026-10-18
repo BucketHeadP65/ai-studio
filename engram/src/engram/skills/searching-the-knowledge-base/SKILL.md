@@ -109,7 +109,7 @@ top = await fetch(unit_id=ranked[0]["id"])   # full text of the single best hit
 "${STUDIO_BIN:-studio}" fetch ID
 ```
 
-The CLI exposes the same hybrid retrieval as the MCP `search` tool. Use it when the MCP server is not attached (e.g. in a fresh session before reload, or in a non-interactive context). `ID` is the full page id (e.g. `recipe.bolognese` in a cooking knowledge base).
+The CLI exposes the same hybrid retrieval as the MCP `search` tool. Use it when the MCP server is not attached (e.g. in a fresh session before reload, or in a non-interactive context). `search` prints one line per hit, `score  id  [level]  title`, and under a hit, indented, its folded units: more units of the same document that matched, each as `id  [level]`. `fetch ID` reads any of those ids. `ID` is the full page id (e.g. `recipe.bolognese` in a cooking knowledge base), or the id of a section, claim or chunk a search printed.
 
 #### Giving feedback (`submit_feedback`)
 

@@ -815,6 +815,10 @@ land. `ranked_metrics` (`RankedMetrics`: `recall`, `precision`, `reciprocal_rank
   call). A call that is not `ok`, stored no evidence, or whose payload the reader refuses reads
   `unknown` for that call alone. A trial with no `search` call at all is `not_applicable` (`calls == ()`).
 
+A search hit's folded units carry an id, a level and a ref, never any of the unit's text. A pointer the model was not
+shown the content of is not a unit it saw, so the surfaced layer and each `search` call's ranking count a hit's own
+unit alone and never its folded units, and so does any count of the units a trial saw.
+
 Granularity (`"page"` collapses a reference to everything before its first `#` anchor delimiter,
 `"unit"` scores it exact) is a named argument on every layer function, applied identically to `got`
 and `want` so the two stay comparable. `layered_evidence_metrics` (in `engram.evals.outcomes.service`, beside
