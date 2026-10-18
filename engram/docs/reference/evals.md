@@ -696,10 +696,13 @@ reached the model.
 
 ### What withholding actually removes
 
-`WithheldRefs(collection, refs)` matches a reference by either spelling a result or an argument can
-carry: the collection-qualified handle, and the bare id resolved within the trial's own collection
-through the same `qualify_ref` grammar the retrieval surface reads. A call cannot reach a withheld
-unit by naming it the other way round.
+`WithheldRefs(collection, refs)` matches a unit, not a spelling. Every reference a result or an
+argument carries is resolved to the unit it reads (`unit_of`) through the same `parse_ref` grammar
+the retrieval surface reads: a `page:`, `section:` or `unit:` ref, with or without its collection,
+and a bare id resolved within the trial's own collection all resolve to one unit. A unit withheld
+under any of those spellings is matched under every other, so a call cannot reach it by naming it
+another way. The free-text leak check looks for every collection-qualified spelling of a withheld
+unit.
 
 | Result | What removal means |
 |---|---|
@@ -715,8 +718,9 @@ behind a relation, and a child stub's reference and title straight into it. Leav
 place would hand the model the exact reference the row was removed to hide, and the model would then
 fetch it in good faith. So a result that lost a row has its block rebuilt from the rows that remain,
 by the same builders that wrote the original one, reading the call's own arguments, the leg the run
-fixed its `search` to, and the tools the surface actually serves. A result that lost nothing is
-returned untouched.
+fixed its `search` to, the tools the surface actually serves, and whether its `fetch` opens a map
+(`GuardedTracingToolset.browsable`, so a rebuilt answer never offers a map the flat read refuses). A
+result that lost nothing is returned untouched.
 
 The last step before storing is a check over the finished payload: if it still names a withheld
 reference as a whole handle, the call raises `WithheldEvidenceLeakError` and the trial fails. A
