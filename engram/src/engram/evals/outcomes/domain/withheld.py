@@ -1,18 +1,22 @@
 """The references one case withholds, how a text names one, and what the model is told in its place."""
 
-from engram.evals.shared.contracts import BadRefError, qualify_ref
+from engram.evals.shared.contracts import BadRefError, parse_ref, qualify_ref
 
 # The characters a reference can continue with. A withheld reference found inside a longer
 # identifier is a different unit, not a leak, so the leak check requires a boundary on both sides.
 _REF_CHARACTERS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.~:@+#/")
 
+# The ref prefixes that name one unit, any of which reads the same unit by its id.
+_UNIT_PREFIXES = ("page", "section", "unit")
+
 
 class WithheldRefs:
-    """The references one case withholds, matched however a result or an argument spells them.
+    """The units one case withholds, matched however a result or an argument spells them.
 
-    A knowledge base names a unit either by its collection-qualified reference or by a bare id
-    resolved within the trial's own collection. Both spellings are matched, so a call cannot reach a
-    withheld unit by naming it the other way round.
+    A knowledge base names a unit by a `page:`, `section:` or `unit:` ref, with or without its
+    collection, or by a bare id resolved within the trial's own collection. Every spelling that
+    resolves to a withheld unit is matched, whatever spelling withheld it, so a call cannot reach a
+    withheld unit by naming it another way.
     """
 
     def __init__(self, collection: str, refs: frozenset[str] = frozenset()) -> None:
@@ -24,11 +28,12 @@ class WithheldRefs:
         """
         self.collection = collection
         self.refs = refs
-        self._matched = frozenset(refs) | frozenset(self.canonical(ref) for ref in refs)
+        self._units = frozenset(self.unit_of(ref) for ref in refs)
         # Free text is searched only for handle-shaped spellings. A bare id short enough to be an
         # ordinary word would match prose that names no unit at all, and the row and argument checks
-        # already canonicalize a bare id before matching it.
-        self._handles = frozenset(ref for ref in self._matched if ":" in ref or "/" in ref)
+        # already resolve a bare id to its unit before matching it.
+        spellings = (spelling for ref in refs for spelling in (ref, *self._qualified_spellings(ref)))
+        self._handles = frozenset(spelling for spelling in spellings if ":" in spelling or "/" in spelling)
 
     def canonical(self, ref: str) -> str:
         """`ref` in its collection-qualified form.
@@ -44,16 +49,44 @@ class WithheldRefs:
         except BadRefError:
             return ref
 
+    def unit_of(self, ref: str) -> str:
+        """The unit `ref` resolves to, one value for every spelling of the same unit.
+
+        Args:
+            ref: A bare, prefixed or collection-qualified reference.
+
+        Returns:
+            `<collection>/<id>` for a page, section or unit ref or a bare id, the collection-qualified
+            reference for a map or a group, or `ref` unchanged when it is not a readable reference.
+        """
+        try:
+            resolved = parse_ref(ref, self.collection)
+        except BadRefError:
+            return ref
+        if resolved.kind in {"collection", "group"}:
+            return self.canonical(ref)
+        return f"{resolved.collection}/{resolved.unit_id}"
+
     def holds(self, ref: str) -> bool:
         """Whether `ref` names a unit this case withholds.
 
         Args:
-            ref: A bare or collection-qualified reference.
+            ref: A bare, prefixed or collection-qualified reference.
 
         Returns:
-            True when either spelling of `ref` is withheld.
+            True when `ref` resolves to a withheld unit, whichever spelling withheld it.
         """
-        return ref in self._matched or self.canonical(ref) in self._matched
+        return self.unit_of(ref) in self._units
+
+    def _qualified_spellings(self, ref: str) -> tuple[str, ...]:
+        """Every collection-qualified ref reading the unit `ref` resolves to, or its canonical form for a map or a group."""
+        try:
+            resolved = parse_ref(ref, self.collection)
+        except BadRefError:
+            return ()
+        if resolved.kind in {"collection", "group"}:
+            return (self.canonical(ref),)
+        return tuple(f"{prefix}:{resolved.collection}/{resolved.unit_id}" for prefix in _UNIT_PREFIXES)
 
     def named_in(self, text: str) -> str | None:
         """The first withheld handle `text` names.
