@@ -73,7 +73,7 @@ class ResultsHeader:
     knowledge_base_fingerprint: str
     """The knowledge base's index fingerprint and its name."""
     index_build: str | None = None
-    """The index build the run read: the stored indexer version and the embedding model. None, read as unknown, in a header that did not record it."""
+    """The index build the run read: its indexer version, embedding model, vocabulary and switches. None, read as unknown, in a header that did not record it."""
     started: str
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None

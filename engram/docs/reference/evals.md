@@ -66,10 +66,13 @@ the program's calls too, under the same header, so a code-mode variant is run ag
 rather than resumed from such a file.
 
 `studio evals run --results PATH` writes the results file: a header line that records how the run
-was set up, then one line per case. The header's `index_build` records the index build the run read:
-the stored indexer version of `kb.index_fingerprint`, which carries the chunk sizes, then its
-embedding model, such as `6+400-800 text-embedding-3-small`, or `not indexed` for a knowledge base
-never indexed. The knowledge base fingerprint hashes the knowledge base's schema, not its index, so
+was set up, then one line per case. The header's `index_build` records the index build the run read
+from `kb.index_fingerprint`: the stored indexer version, which carries the chunk sizes and the chunk
+planner, the embedding model, the first twelve characters of the vocabulary hash, and the embeddings,
+SQL and graph switches that are on, such as
+`6+400-800 text-embedding-3-small vocabulary 0123456789ab switches embeddings+graph`. The switches
+part is left out when no switch is on, as for a fixed-mode knowledge base, and a knowledge base never
+indexed reads `not indexed`. The knowledge base fingerprint hashes the knowledge base's schema, not its index, so
 two runs over the same files before and after the chunk sizes change share a fingerprint and differ
 only in their index build. A header written before the key was recorded reads it as unknown. The header's `search_date_range` says whether `search` took
 `since` and `until`. Every run writes true. A header written before the key was recorded reads it as
@@ -95,7 +98,7 @@ range, dataset hash and knowledge base) and on the index build, the run keeps ev
 missing cases and the transient failures, and rewrites the file under the earlier header in
 dataset order, every kept line exactly as it was. A header that differs is refused before any case
 runs, and the message names each differing field with both values, such as
-`index_build (6+400-800 text-embedding-3-small in the file, 6+300-600 text-embedding-3-small now)`.
+`index_build (6+400-800 text-embedding-3-small vocabulary 0123456789ab in the file, 6+300-600 text-embedding-3-small vocabulary 0123456789ab now)`.
 A header with no index build is refused against any build the run reads, named as `unknown in the
 file`, so a file written before the key was recorded is run again from scratch. With no file there yet, every
 case runs. Without `--resume`, an existing file is replaced. The file is always replaced whole,

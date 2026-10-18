@@ -197,13 +197,13 @@ class SupportsCoverageReader(Protocol):
         ...
 
     async def index_build(self, *, collection: str) -> str:
-        """The index build `collection` was last indexed into: its stored indexer version, then its embedding model.
+        """The index build `collection` was last indexed into: its indexer version, embedding model, vocabulary and switches on.
 
         Args:
             collection: The knowledge base to read.
 
         Returns:
-            The two separated by a space, or `not indexed` for a knowledge base never indexed.
+            The parts separated by spaces, or `not indexed` for a knowledge base never indexed.
         """
         ...
 
