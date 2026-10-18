@@ -18,6 +18,7 @@ from engram.indexing.contracts import (
     MirrorDoc,
     StoredFingerprint,
     content_hash,
+    cut_plan_identity,
     indexer_version,
 )
 from engram.indexing.domain.manifest import FileType
@@ -162,14 +163,14 @@ async def test_an_accepted_cut_plan_is_stored_under_the_knowledge_base_and_the_p
 
     await _handler(tmp_path, FakeKnowledgeBaseUnitOfWork(), _stage(planner, plans)).handle(IndexKnowledgeBase(collection="research", embed=False))
 
-    assert plans.stored == {("research", "example-model/prompt-1", content_hash(_BODY)): (5, 9)}
+    assert plans.stored == {("research", cut_plan_identity("example-model/prompt-1"), content_hash(_BODY)): (5, 9)}
 
 
 async def test_a_stored_cut_plan_is_reused_without_calling_the_planner(tmp_path: Path) -> None:
     _knowledge_base(tmp_path, "tide-log")
     planner = FakeChunkPlanner((2, 3), identity="example-model/prompt-1")
     plans = FakeCutPlans()
-    plans.stored[("research", "example-model/prompt-1", content_hash(_BODY))] = (5, 9)
+    plans.stored[("research", cut_plan_identity("example-model/prompt-1"), content_hash(_BODY))] = (5, 9)
     uow = FakeKnowledgeBaseUnitOfWork()
 
     await _handler(tmp_path, uow, _stage(planner, plans)).handle(IndexKnowledgeBase(collection="research", embed=False))
@@ -195,7 +196,7 @@ async def test_a_stored_cut_plan_of_another_planner_is_not_reused(tmp_path: Path
     _knowledge_base(tmp_path, "tide-log")
     planner = FakeChunkPlanner((5, 9), identity="example-model/prompt-2")
     plans = FakeCutPlans()
-    plans.stored[("research", "example-model/prompt-1", content_hash(_BODY))] = (2, 3)
+    plans.stored[("research", cut_plan_identity("example-model/prompt-1"), content_hash(_BODY))] = (2, 3)
     uow = FakeKnowledgeBaseUnitOfWork()
 
     await _handler(tmp_path, uow, _stage(planner, plans)).handle(IndexKnowledgeBase(collection="research", embed=False))
@@ -282,7 +283,7 @@ async def test_a_knowledge_base_that_stores_no_chunks_still_stores_the_version_o
 
     written = uow.fingerprint.fingerprint
     assert written is not None
-    assert written["indexer_version"] == indexer_version(_SIZES, planner="example-model/prompt-1")
+    assert written["indexer_version"] == indexer_version(_SIZES, planner=cut_plan_identity("example-model/prompt-1"))
 
 
 async def test_without_a_chunk_planner_the_text_is_filled(tmp_path: Path) -> None:
@@ -334,7 +335,7 @@ async def test_the_handler_stores_the_indexer_version_of_its_chunk_planner(tmp_p
 
     written = uow.fingerprint.fingerprint
     assert written is not None
-    assert written["indexer_version"] == indexer_version(_SIZES, planner="example-model/prompt-1", planner_ceiling_tokens=9_000)
+    assert written["indexer_version"] == indexer_version(_SIZES, planner=cut_plan_identity("example-model/prompt-1"), planner_ceiling_tokens=9_000)
 
 
 async def test_a_chunk_planner_change_makes_the_next_plain_index_a_full_one(tmp_path: Path) -> None:

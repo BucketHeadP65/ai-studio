@@ -18,6 +18,7 @@ from engram.indexing.contracts import (
     IndexKnowledgeBaseHandler,
     SqlAlchemyKnowledgeBaseUnitOfWork,
     content_hash,
+    cut_plan_identity,
 )
 from engram.indexing.infrastructure import orm
 from engram.indexing.infrastructure.cut_plans import SqlAlchemyCutPlans
@@ -91,7 +92,7 @@ async def test_a_second_full_index_reuses_the_stored_plan_and_writes_the_same_ch
             stored = (await conn.execute(text("SELECT text_hash, planner, starts FROM kb.cut_plans WHERE collection = 'research'"))).all()
 
         assert bodies[0] == bodies[1] == ["\n\n".join(_PARAGRAPHS[0:4]), "\n\n".join(_PARAGRAPHS[4:8]), "\n\n".join(_PARAGRAPHS[8:12])]
-        assert [tuple(row) for row in stored] == [(content_hash(_BODY), "example-model/prompt-1", [5, 9])]
+        assert [tuple(row) for row in stored] == [(content_hash(_BODY), cut_plan_identity("example-model/prompt-1"), [5, 9])]
         assert len(planner.calls) == 1
     finally:
         await engine.dispose()

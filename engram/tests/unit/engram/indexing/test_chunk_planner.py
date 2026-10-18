@@ -41,10 +41,14 @@ def test_satisfies_the_chunk_planner_port() -> None:
     assert isinstance(PydanticAiChunkPlanner(TestModel(), model_id="example-deployment"), ChunkPlanner)
 
 
-def test_the_identity_is_the_deployment_name_and_the_prompt_version() -> None:
+def test_the_identity_names_the_deployment_the_prompt_version_and_the_thinking_level() -> None:
     planner = PydanticAiChunkPlanner(TestModel(model_name="other"), model_id="example-deployment")
 
-    assert planner.identity == "example-deployment/prompt-1"
+    assert planner.identity == "example-deployment/prompt-1/thinking-low"
+
+
+def test_the_identity_of_a_deployment_is_known_with_no_model() -> None:
+    assert PydanticAiChunkPlanner.identity_for("example-deployment") == PydanticAiChunkPlanner(TestModel(), model_id="example-deployment").identity
 
 
 async def test_the_answer_is_the_paragraph_numbers_of_the_structured_output() -> None:
@@ -89,7 +93,7 @@ def test_from_settings_builds_over_the_named_deployment() -> None:
         AzureOpenAiSettings(endpoint="https://example.openai.azure.com"), IngestionSettings(chunk_planner_model="test-model")
     )
 
-    assert planner.identity == "test-model/prompt-1"
+    assert planner.identity == "test-model/prompt-1/thinking-low"
 
 
 async def test_the_test_model_shortcut_answers_without_network() -> None:

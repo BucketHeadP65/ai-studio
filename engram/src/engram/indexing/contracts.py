@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from engram.indexing.domain.card import content_hash, token_count
 from engram.indexing.domain.manifest import ManifestEntry
-from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS, ChunkSizes
+from engram.indexing.domain.mirror_chunks import (
+    DEFAULT_CHUNK_SIZES,
+    DEFAULT_PLANNER_CEILING_TOKENS,
+    PARAGRAPH_NUMBERING_VERSION,
+    ChunkSizes,
+    cut_plan_identity,
+)
 from engram.indexing.domain.models import (
     CitingPagesChanged,
     DryRunPreview,
@@ -63,6 +69,7 @@ __all__ = [
     "DEFAULT_CHUNK_SIZES",
     "DEFAULT_PLANNER_CEILING_TOKENS",
     "INDEXER_VERSION",
+    "PARAGRAPH_NUMBERING_VERSION",
     "ChunkPlanner",
     "ChunkSizes",
     "CitingPagesChanged",
@@ -118,6 +125,7 @@ __all__ = [
     "ValidationReportSink",
     "VocabGovernance",
     "content_hash",
+    "cut_plan_identity",
     "indexer_version",
     "load_vocab",
     "register_pgvector",

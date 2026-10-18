@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from engram.indexing.contracts import ChunkSizes, indexer_version
+from engram.indexing.contracts import PARAGRAPH_NUMBERING_VERSION, ChunkSizes, indexer_version
 from engram.kb.contracts import KnowledgeBaseSchema, PageTypeSpec
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -85,7 +85,7 @@ class TestChunkPlannerWiring:
         planner = ingestion_chunk_planner(_AZURE, IngestionSettings(chunk_planner_model="example-deployment"))
 
         assert planner is not None
-        assert planner.identity == "example-deployment/prompt-1"
+        assert planner.identity == "example-deployment/prompt-1/thinking-low"
 
     def test_an_empty_chunk_planner_model_indexes_with_no_chunk_planner(self) -> None:
         assert ingestion_chunk_planner(_AZURE, IngestionSettings(chunk_planner_model="")) is None
@@ -99,17 +99,20 @@ class TestChunkPlannerWiring:
         stage = ingestion_cut_plan_stage(create_async_engine(_ENGINE_URL), _AZURE, ingestion)
 
         assert stage is not None
-        assert (stage.planner, stage.ceiling_tokens) == ("example-deployment/prompt-1", 9_000)
+        assert (stage.planner, stage.ceiling_tokens) == (f"example-deployment/prompt-1/thinking-low/paragraphs-{PARAGRAPH_NUMBERING_VERSION}", 9_000)
 
     def test_no_chunk_planner_means_no_cut_plan_stage(self) -> None:
         assert ingestion_cut_plan_stage(create_async_engine(_ENGINE_URL), AzureOpenAiSettings(endpoint=""), IngestionSettings()) is None
 
     def test_the_indexer_version_names_the_settings_chunk_planner_as_the_handler_stores_it(self) -> None:
         ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600, chunk_planner_model="example-deployment", chunk_planner_ceiling_tokens=9_000)
+        stage = ingestion_cut_plan_stage(create_async_engine(_ENGINE_URL), _AZURE, ingestion)
 
+        assert stage is not None
         assert ingestion_indexer_version(_AZURE, ingestion) == indexer_version(
-            ChunkSizes(target_tokens=300, max_tokens=600), planner="example-deployment/prompt-1", planner_ceiling_tokens=9_000
+            ChunkSizes(target_tokens=300, max_tokens=600), planner=stage.planner, planner_ceiling_tokens=stage.ceiling_tokens
         )
+        assert ingestion_indexer_version(_AZURE, ingestion).endswith(f"+9000+example-deployment/prompt-1/thinking-low/paragraphs-{PARAGRAPH_NUMBERING_VERSION}")
 
     def test_the_indexer_version_with_no_chunk_planner_names_the_chunk_sizes_only(self) -> None:
         ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600)

@@ -264,7 +264,7 @@ Source: `alembic/versions/0001_wiki_schema.py`, `alembic/versions/0005_eval_runs
   `index` is the only writer, and they appear in **no** `api` view/function,
   distinct from the `api`-exposed Knowledge tables. `cut_plans` (migration `0069`)
   is indexing-private too: the paragraph numbers a chunk planner chose for one heading
-  section of a mirror, keyed by `collection`, the text's hash and the planner's identity.
+  section of a mirror, keyed by `collection`, the text's hash and the cut plan identity.
 - **Evals** (run summary, D10, migration `0005`): `evaluation_runs` (one summary row
   per tuning/evaluation run) and `evaluation_case_results` (per-case scores, FK to
   `evaluation_runs`). These are a thin Postgres summary. Logfire is the deep store, and

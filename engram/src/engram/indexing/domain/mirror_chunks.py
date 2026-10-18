@@ -118,6 +118,25 @@ def _trimmed(text: str, start: int, end: int) -> _Span:
     return start, end
 
 
+PARAGRAPH_NUMBERING_VERSION = 1
+"""The version of how `_paragraph_spans` splits and numbers paragraphs.
+
+You must raise it whenever `_paragraph_spans` splits text differently, so every stored cut plan is chosen again.
+"""
+
+
+def cut_plan_identity(planner_identity: str) -> str:
+    """The identity a cut plan is stored under and the index fingerprint names: the chunk planner's identity and the paragraph numbering version.
+
+    Args:
+        planner_identity: The chunk planner's identity, its model name, prompt version and thinking level.
+
+    Returns:
+        The cut plan identity, such as `gpt-6-luna/prompt-1/thinking-low/paragraphs-1`.
+    """
+    return f"{planner_identity}/paragraphs-{PARAGRAPH_NUMBERING_VERSION}"
+
+
 def _paragraph_spans(text: str) -> list[_Span]:
     """The paragraphs of `text` in reading order, split at blank lines outside code fences."""
     spans: list[_Span] = []

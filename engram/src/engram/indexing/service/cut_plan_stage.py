@@ -1,7 +1,7 @@
 """Chooses the cut plans of a load's mirrors before their rows are built: stored plans first, else the chunk planner.
 
 `CutPlanStage` finds each heading section a cut plan would cut, reads the plans stored for those sections under
-the chunk planner's identity and shows the chunk planner only the sections with none. An accepted answer is stored,
+the cut plan identity and shows the chunk planner only the sections with none. An accepted answer is stored,
 so indexing the same text again with the same chunk planner calls no model. A planner call that fails, runs past
 its deadline or answers numbers the domain refuses leaves its heading section with no plan, and the section is filled.
 No planner call ever fails an index.
@@ -20,6 +20,7 @@ from engram.indexing.domain.card import content_hash
 from engram.indexing.domain.mirror_chunks import (
     DEFAULT_PLANNER_CEILING_TOKENS,
     accepted_starts,
+    cut_plan_identity,
     heading_sections_for_planner,
     planner_paragraphs,
 )
@@ -64,6 +65,7 @@ class CutPlanStage:
             concurrency: How many chunk planner calls may run at once.
         """
         self._planner = planner
+        self._identity = cut_plan_identity(planner.identity)
         self._plans = plans
         self._queries = queries
         self._ceiling_tokens = ceiling_tokens
@@ -72,8 +74,8 @@ class CutPlanStage:
 
     @property
     def planner(self) -> str:
-        """The chunk planner's identity: its model name and prompt version."""
-        return self._planner.identity
+        """The cut plan identity: the chunk planner's identity and the paragraph numbering version, which plans are stored under."""
+        return self._identity
 
     @property
     def ceiling_tokens(self) -> int:
@@ -102,19 +104,19 @@ class CutPlanStage:
         sections = {text_hash: section for source_sections in sections_by_source for text_hash, section in source_sections.items()}
         if not sections:
             return tuple(sources)
-        stored = await self._queries.cut_plans(collection, self._planner.identity, sections.keys())
+        stored = await self._queries.cut_plans(collection, self._identity, sections.keys())
         asked = [text_hash for text_hash in sections if text_hash not in stored]
         limit = asyncio.Semaphore(self._concurrency)
         answers = await asyncio.gather(*(self._ask(sections[text_hash], limit) for text_hash in asked))
         chosen = {text_hash: starts for text_hash, starts in zip(asked, answers, strict=True) if starts is not None}
         if chosen:
-            await self._plans.insert(collection, self._planner.identity, chosen)
+            await self._plans.insert(collection, self._identity, chosen)
         _logger.info(
             "Cut plans for {collection}: {reused} reused, {chosen} chosen by {planner}, {filled} filled",
             collection=collection,
             reused=len(stored),
             chosen=len(chosen),
-            planner=self._planner.identity,
+            planner=self._identity,
             filled=len(asked) - len(chosen),
         )
         plans = {**stored, **chosen}
@@ -133,7 +135,7 @@ class CutPlanStage:
             except Exception as exc:  # noqa: BLE001 (a failed or late planner call fills its text and never fails the index)
                 _logger.warning(
                     "Chunk planner {planner} gave no cut plan for a heading section of {count} paragraphs, so it is filled: {reason}",
-                    planner=self._planner.identity,
+                    planner=self._identity,
                     count=len(paragraphs),
                     reason=repr(exc),
                 )
@@ -142,7 +144,7 @@ class CutPlanStage:
         if starts is None:
             _logger.warning(
                 "Chunk planner {planner} answered {answer} for a heading section of {count} paragraphs, not strictly increasing paragraph numbers, so it is filled",
-                planner=self._planner.identity,
+                planner=self._identity,
                 answer=list(answer),
                 count=len(paragraphs),
             )

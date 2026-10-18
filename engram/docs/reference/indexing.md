@@ -169,17 +169,23 @@ by default, at most 7,500, the embedding budget less room for the breadcrumb). T
 handler reads them from the `ingestion` settings section. A library caller passes `ChunkSizes` to
 `IndexKnowledgeBaseHandler`, or gets `DEFAULT_CHUNK_SIZES`. The fingerprint stores the indexer version
 with the sizes and the chunk planner (`indexer_version`, such as `6+400-800`, or
-`6+400-800+12000+gpt-6-luna/prompt-1` with a chunk planner), so the next index after a change of sizes,
-of chunk planner or of its ceiling is a full one, and `studio status` names it stale until then.
+`6+400-800+12000+gpt-6-luna/prompt-1/thinking-low/paragraphs-1` with a chunk planner), so the next index
+after a change of sizes, of chunk planner (its deployment, prompt version or thinking level), of the
+paragraph numbering or of the planner ceiling is a full one, and `studio status` names it stale until
+then. `indexer_version` is the one place the version is put together: the handler calls it with its
+`CutPlanStage`'s identity and ceiling, and the studio (`ingestion_indexer_version`) with the identity it
+reads from the settings, with no model built.
 
 ### The chunk planner and cut plans
 
 The chunk planner is a port, `ChunkPlanner` (`src/engram/indexing/internal_contracts.py`): its
-`identity` is its model name and prompt version, and `chunk_starts(paragraphs)` answers paragraph
-numbers. `CutPlanStage` (`src/engram/indexing/service/cut_plan_stage.py`) runs on the full and the
+`identity` names its model, prompt version and thinking level (`PydanticAiChunkPlanner.identity_for(deployment)`
+gives it with no model built), and `chunk_starts(paragraphs)` answers paragraph numbers. Plans are stored
+under the cut plan identity, `cut_plan_identity(identity)`, which adds the paragraph numbering version
+(`PARAGRAPH_NUMBERING_VERSION`, kept beside the code that splits paragraphs). `CutPlanStage` (`src/engram/indexing/service/cut_plan_stage.py`) runs on the full and the
 incremental path before the rows are built, and only when the schema stores source chunks. For each
 heading section the chunk planner may cut (`heading_sections_for_planner`) it reads the cut plan stored
-under the knowledge base, the sha256 of the section's text and the planner's identity, and shows the
+under the knowledge base, the sha256 of the section's text and the cut plan identity, and shows the
 planner only the heading sections with none, at most `chunk_planner_concurrency` at once. Each accepted answer is stored in `kb.cut_plans`
 (migration 0069), so indexing the same text again with the same chunk planner calls no model and cuts it
 the same way. A planner call that raises, runs past `chunk_planner_deadline_seconds` or answers refused

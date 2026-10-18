@@ -846,7 +846,7 @@ class ChunkPlanner(Protocol):
 
     @property
     def identity(self) -> str:
-        """The planner's model name and prompt version, stored with each cut plan it chooses and in the index fingerprint."""
+        """What decides the planner's answers: its model name, prompt version and thinking level, named by each cut plan it chooses and by the index fingerprint."""
         ...
 
     async def chunk_starts(self, paragraphs: Sequence[str]) -> Sequence[int]:

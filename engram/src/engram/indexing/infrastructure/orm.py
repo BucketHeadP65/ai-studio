@@ -405,8 +405,8 @@ class PageTypeContractORM(KbBase):
 class CutPlanORM(KbBase):
     """`kb.cut_plans`, one cut plan per text and chunk planner, composite PK `(collection, text_hash, planner)`.
 
-    `text_hash` is the sha256 of the heading section text the plan cuts, `planner` the chunk planner's model name and prompt
-    version, and `starts` the paragraph numbers where a new chunk starts, paragraph 1 left out. A plan is written once and
+    `text_hash` is the sha256 of the heading section text the plan cuts, `planner` the cut plan identity (the chunk
+    planner's identity with the paragraph numbering version), and `starts` the paragraph numbers where a new chunk starts, paragraph 1 left out. A plan is written once and
     never changed. The table is ungranted.
     """
 

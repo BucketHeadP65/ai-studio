@@ -1,6 +1,6 @@
 """`PydanticAiChunkPlanner`, the `ChunkPlanner` that asks a pydantic-ai model where a text changes topic.
 
-The model is passed in once and runs at a low thinking level. Each call builds a fresh agent that is shown the
+The model is passed in once and runs at a low thinking level, which the planner's identity names. Each call builds a fresh agent that is shown the
 paragraphs numbered from 1 and answers paragraph numbers in a structured output, never text.
 """
 
@@ -17,14 +17,18 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from core.settings import AzureOpenAiSettings
+    from core.thinking import Thinking
     from pydantic_ai.models import Model
 
     from engram.config import IngestionSettings
 
 __all__ = ["PydanticAiChunkPlanner"]
 
-# You must raise it whenever the instructions, the paragraph numbering or the answer's shape change, so stored cut plans are chosen again.
+# You must raise it whenever the instructions, the way paragraphs are shown or the answer's shape change, so stored cut plans are chosen again.
 _PROMPT_VERSION = 1
+
+# The thinking level every call runs at. It is part of the planner's identity, so changing it chooses stored cut plans again.
+_THINKING: Thinking = "low"
 
 _INSTRUCTIONS = (
     "You find where a document changes topic, so that a search index can store each topic as its own chunk. "
@@ -35,7 +39,7 @@ _INSTRUCTIONS = (
     "Answer paragraph numbers only, never text."
 )
 
-_MODEL_SETTINGS = ModelSettings(thinking="low")
+_MODEL_SETTINGS = ModelSettings(thinking=_THINKING)
 
 
 class _TopicStarts(BaseModel):
@@ -59,8 +63,20 @@ class PydanticAiChunkPlanner:
 
     @property
     def identity(self) -> str:
-        """The deployment name and prompt version, such as `gpt-6-luna/prompt-1`."""
-        return f"{self._model_id}/prompt-{_PROMPT_VERSION}"
+        """The deployment name, prompt version and thinking level, such as `gpt-6-luna/prompt-1/thinking-low`."""
+        return self.identity_for(self._model_id)
+
+    @staticmethod
+    def identity_for(model_id: str) -> str:
+        """The identity a planner over one deployment has, known without building a model.
+
+        Args:
+            model_id: The deployment name.
+
+        Returns:
+            The deployment name, prompt version and thinking level.
+        """
+        return f"{model_id}/prompt-{_PROMPT_VERSION}/thinking-{_THINKING}"
 
     async def chunk_starts(self, paragraphs: Sequence[str]) -> Sequence[int]:
         """Ask the model which paragraphs open a new topic, showing each paragraph after its number in square brackets.

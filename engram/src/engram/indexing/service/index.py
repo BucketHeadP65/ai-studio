@@ -98,7 +98,7 @@ def indexer_version(chunk_sizes: ChunkSizes, *, planner: str | None = None, plan
 
     Args:
         chunk_sizes: How many tokens a chunk of a source mirror aims for and may hold.
-        planner: The chunk planner's identity, or `None` when the index has no chunk planner.
+        planner: The cut plan identity (`cut_plan_identity`), or `None` when the index has no chunk planner.
         planner_ceiling_tokens: The most tokens of text the chunk planner is shown at once. Ignored with no chunk planner.
 
     Returns:

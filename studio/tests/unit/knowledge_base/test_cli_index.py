@@ -34,6 +34,7 @@ import typer
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
 from engram.indexing.contracts import (
     DEFAULT_CHUNK_SIZES,
+    PARAGRAPH_NUMBERING_VERSION,
     CollectionIsForeignError,
     IndexKnowledgeBase,
     IndexReport,
@@ -732,7 +733,11 @@ class TestStatusIndexDrift:
     def test_a_fingerprint_written_with_the_settings_chunk_planner_shows_no_stale_hint(self):
         azure_openai = AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
         ingestion = IngestionSettings(chunk_planner_model="example-deployment")
-        stored = indexer_version(DEFAULT_CHUNK_SIZES, planner="example-deployment/prompt-1", planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
+        stored = indexer_version(
+            DEFAULT_CHUNK_SIZES,
+            planner=f"example-deployment/prompt-1/thinking-low/paragraphs-{PARAGRAPH_NUMBERING_VERSION}",
+            planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens,
+        )
         factory = _StatusContainerFactory(fingerprint=_fingerprint_row(indexer_version=stored), files_tracked=42, ingestion=ingestion, azure_openai=azure_openai)
 
         result = runner.invoke(app, ["status"], obj=factory)

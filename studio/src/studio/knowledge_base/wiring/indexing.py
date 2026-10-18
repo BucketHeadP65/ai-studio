@@ -28,6 +28,7 @@ from engram.indexing.contracts import (
     Summarizer,
     SummaryStage,
     ValidationReportSink,
+    cut_plan_identity,
     indexer_version,
     register_pgvector,
 )
@@ -273,9 +274,14 @@ def ingestion_chunk_planner(azure_openai: AzureOpenAiSettings, ingestion: Ingest
     Returns:
         The chunk planner, or `None` when the settings name no deployment or the resource has no endpoint.
     """
-    if not ingestion.chunk_planner_model or not azure_openai.endpoint:
+    if not _names_a_chunk_planner(azure_openai, ingestion):
         return None
     return PydanticAiChunkPlanner.from_settings(azure_openai, ingestion)
+
+
+def _names_a_chunk_planner(azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> bool:
+    """Whether the settings name a chunk planner deployment and the Azure OpenAI resource has an endpoint."""
+    return bool(ingestion.chunk_planner_model and azure_openai.endpoint)
 
 
 def ingestion_cut_plan_stage(engine: AsyncEngine, azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> CutPlanStage | None:
@@ -306,6 +312,8 @@ def ingestion_cut_plan_stage(engine: AsyncEngine, azure_openai: AzureOpenAiSetti
 def ingestion_indexer_version(azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> str:
     """The indexer version an index under these settings stores: the chunk sizes and the chunk planner with its ceiling.
 
+    It builds no model: the chunk planner's identity comes from its deployment name.
+
     Args:
         azure_openai: The Azure OpenAI resource the chunk planner runs on.
         ingestion: The ingestion settings that name the chunk sizes and the chunk planner.
@@ -313,11 +321,11 @@ def ingestion_indexer_version(azure_openai: AzureOpenAiSettings, ingestion: Inge
     Returns:
         The version the index handler built from the same settings stores.
     """
-    planner = ingestion_chunk_planner(azure_openai, ingestion)
     sizes = ingestion_chunk_sizes(ingestion)
-    if planner is None:
+    if not _names_a_chunk_planner(azure_openai, ingestion):
         return indexer_version(sizes)
-    return indexer_version(sizes, planner=planner.identity, planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
+    planner = cut_plan_identity(PydanticAiChunkPlanner.identity_for(ingestion.chunk_planner_model))
+    return indexer_version(sizes, planner=planner, planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
 
 
 def _path_root(knowledge_base: KnowledgeBaseSettings, schema: KnowledgeBaseSchema) -> Path:

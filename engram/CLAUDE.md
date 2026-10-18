@@ -247,7 +247,7 @@ changes. Any other longer text, or text the chunk planner gave no accepted answe
 chunk sizes. The chunk planner is a port the host provides (`ChunkPlanner`): it is shown the text as numbered paragraphs and
 answers paragraph numbers only, never text, so every chunk is the mirror's own text, and the domain refuses an answer that is not
 strictly increasing paragraph numbers. `CutPlanStage` stores each accepted answer as a cut plan in `kb.cut_plans`, by knowledge
-base, text hash and planner identity (model name and prompt version), and reuses it with no model call. A failed or late planner
+base, text hash and cut plan identity (the planner's model, prompt version and thinking level, with the paragraph numbering version), and reuses it with no model call. A failed or late planner
 call fills its text and never fails an index. The studio wires `PydanticAiChunkPlanner` over the Azure OpenAI deployment
 `ingestion.chunk_planner_model` names. That setting is empty by default, and with no deployment or no endpoint the index has no chunk planner. The stored indexer
 version names the chunk sizes, the chunk planner and its ceiling, so changing any of them makes the next index a full one.

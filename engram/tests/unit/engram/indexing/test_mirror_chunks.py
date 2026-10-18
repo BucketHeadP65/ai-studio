@@ -15,9 +15,11 @@ from engram.indexing.contracts import DEFAULT_CHUNK_SIZES, ChunkSizes, content_h
 from engram.indexing.domain.mirror_chunks import (
     DEFAULT_PLANNER_CEILING_TOKENS,
     MIRROR_CHUNK_TOKEN_BUDGET,
+    PARAGRAPH_NUMBERING_VERSION,
     MirrorChunk,
     accepted_starts,
     chunk_mirror,
+    cut_plan_identity,
     heading_sections_for_planner,
     planner_paragraphs,
 )
@@ -255,6 +257,11 @@ class TestCutPlans:
         chunks = list(chunk_mirror(text, _SIZES, _plan_for("Some other text.", (4, 9))))
 
         assert chunks == list(chunk_mirror(text, _SIZES))
+
+
+class TestCutPlanIdentity:
+    def test_a_cut_plan_identity_names_the_chunk_planner_and_the_paragraph_numbering_version(self) -> None:
+        assert cut_plan_identity("example-model/prompt-1") == f"example-model/prompt-1/paragraphs-{PARAGRAPH_NUMBERING_VERSION}"
 
 
 class TestAcceptedStarts:
