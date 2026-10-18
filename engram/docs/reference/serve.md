@@ -84,6 +84,17 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   each knowledge base's schema, so a key filters only a base that declares it. A key the searched
   base does not declare fails the call naming that base's keys, and the shipped description names
   every served base's keys.
+- **Every id form `fetch` takes:** whichever `fetch` a surface registers (the flat read
+  `flat_fetch`, the leveled read `leveled_fetch`, the routed pair, or `RetrievalKnowledgeBase` under
+  either dial) reads a `page:<collection>/<id>`, `section:<collection>/<id>` or
+  `unit:<collection>/<id>` ref exactly as `search`, a listing or a graph answer returned it, the same
+  ref without its collection (`page:<id>`), and the bare id, and all of them read one unit. So the
+  ref a `search` next step names is always fetchable as written. The flat read has no map: it
+  refuses a `collection:` or `group:` ref, and a `search` beside it never offers one. A ref naming
+  another collection is refused naming both on a single-source surface, and on the routed pair
+  opens in that knowledge base when it is registered, else is refused naming the registered ones.
+  An id that names no unit is refused, and the refusal names the forms `fetch` takes. The tool
+  descriptions name them too (`fetchable_forms`, `src/engram/retrieval/envelope.py`).
 - **Facets over several knowledge bases:** `RetrievalKnowledgeBase` (the capability
   `embedded_read_tools` builds, each surface's keys read from its spec) checks `facets` against the
   bases a call searches. A call naming one base is refused a key that base does not declare, naming
