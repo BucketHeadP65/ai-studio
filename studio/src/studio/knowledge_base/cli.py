@@ -1480,9 +1480,7 @@ def serve_http_cmd(
 
 def _migrate_knowledge_base_words() -> None:
     """Rewrite any registered knowledge base still written in the old words, logging and continuing on failure."""
-    from studio.migrations.contracts import (  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
-        BOOT_MIGRATIONS,
-    )
+    from studio.migrations.contracts import BOOT_MIGRATIONS  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
 
     for name, needed, run in BOOT_MIGRATIONS:
         try:

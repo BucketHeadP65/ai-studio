@@ -117,8 +117,8 @@ def test_a_glm_response_is_priced_from_the_registry_on_its_route() -> None:
     usage = RequestUsage(input_tokens=1_000_000, output_tokens=1_000_000)
     response = ModelResponse(parts=[], model_name="z-ai/glm-5.3-flash", provider_name="openrouter", usage=usage)
 
-    assert models.price_response(response) == Decimal("0.325")
-    assert models.response_cost(response) == Decimal("0.325")
+    assert models.price_response(response) == Decimal("0.65")
+    assert models.response_cost(response) == Decimal("0.65")
 
 
 def test_a_glm_response_the_registry_cannot_price_is_left_unpriced() -> None:

@@ -10,13 +10,13 @@ from __future__ import annotations
 import time
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Protocol
 
 import httpx
 
 from genai_prices.data_snapshot import get_snapshot
-from genai_prices.types import ModelPrice
 from pydantic import BaseModel, ConfigDict, Field
 
 from harness.adapters.models import CATALOG, context_window_for, openrouter_wire_name
@@ -24,7 +24,7 @@ from harness.adapters.models import CATALOG, context_window_for, openrouter_wire
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from genai_prices.types import TieredPrices
+    from genai_prices.types import ModelPrice, TieredPrices
 
 Route = Literal["openrouter", "gateway", "azure"]
 Reasoning = Literal["effort", "toggle", "none"]
@@ -215,12 +215,12 @@ def _flat_price(value: Decimal | TieredPrices | None) -> Decimal | None:
 
 
 def _registry_price(wire: str) -> ModelPrice | None:
-    """The price registry's flat OpenRouter price for `wire`, or `None` when it carries none."""
+    """The price registry's OpenRouter price for `wire` in force now, or `None` when it carries none."""
     try:
         _, model = get_snapshot().find_provider_model(wire, None, "openrouter", None)
     except LookupError:
         return None
-    return model.prices if isinstance(model.prices, ModelPrice) else None
+    return model.get_prices(datetime.now(tz=UTC))
 
 
 def _pinned(model_id: str, remote: dict[str, ModelEntry], *, on_openrouter: bool) -> ModelEntry:

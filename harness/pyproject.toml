@@ -55,7 +55,7 @@ dependencies = [
     "pydantic-ai>=2.20.0",
     # ``acp`` rides along for ``harness.acp`` — the studio served to ACP clients (Zed et al.)
     # with the save gesture as a protocol-level permission request; experimental upstream.
-    "pydantic-ai-harness[code-mode,acp]>=0.54.0",
+    "pydantic-ai-harness[code-mode,acp]>=0.56.0",
     # `from acp import ...` in harness.features.running.infrastructure.acp_gate — the dist behind the
     # harness's `acp` extra, declared for the same direct-import reason as fastmcp/monty.
     "agent-client-protocol>=0.11",
@@ -85,10 +85,10 @@ harness = "harness.cli:app"
 
 [dependency-groups]
 dev = [
-    "pyright (>=1.1.411,<2.0.0)",
+    "pyright (>=1.1.414,<2.0.0)",
     # Pinned to the same minor as every other project in the monorepo so ``select = ["ALL"]``
     # resolves to the same rule set everywhere.
-    "ruff (>=0.16.0,<0.17.0)",
+    "ruff (>=0.17.1,<0.18.0)",
     "types-pyyaml>=6.0.12.20260724",
 ]
 test = [

@@ -882,7 +882,7 @@ def json_output(produced: object, output_type: type) -> JsonValue:
     Returns:
         The output as JSON.
     """
-    return _JSON.validate_python(TypeAdapter(output_type).dump_python(produced, mode="json"))
+    return _JSON.validate_python(TypeAdapter[object](output_type).dump_python(produced, mode="json"))
 
 
 def _delivery() -> tuple[str, str]:

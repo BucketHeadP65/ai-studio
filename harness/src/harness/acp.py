@@ -32,11 +32,7 @@ warnings.filterwarnings("ignore", category=HarnessExperimentalWarning)
 
 async def main() -> None:
     """Build the session, then serve its agent on stdio until the client hangs up."""
-    from pydantic_ai_harness.experimental.acp import (  # noqa: PLC0415 (the module warns on import, so it follows the filter above)
-        AcpSession,
-        AcpSessionConfig,
-        run_acp_stdio,
-    )
+    from pydantic_ai_harness.experimental.acp import AcpSession, AcpSessionConfig, run_acp_stdio  # noqa: PLC0415 (the module warns on import, so it follows the filter above)
 
     settings = HarnessSettings()
     container = create_container(settings)

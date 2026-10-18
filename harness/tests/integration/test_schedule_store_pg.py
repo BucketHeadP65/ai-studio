@@ -15,10 +15,7 @@ from uuid import uuid4
 import asyncpg
 import pytest_asyncio
 
-from engram.testing.infrastructure.knowledge_base_db import (  # noqa: F401 -- imported to be used as pytest fixtures, never called directly
-    migrated,
-    pg,
-)
+from engram.testing.infrastructure.knowledge_base_db import migrated, pg  # noqa: F401 -- imported to be used as pytest fixtures, never called directly
 
 from harness.features.scheduling.domain import Schedule, ScheduleUpdate
 from harness.features.scheduling.infrastructure.postgres import PostgresSchedules

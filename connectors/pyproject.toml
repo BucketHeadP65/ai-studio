@@ -99,7 +99,7 @@ core = { path = "../core", editable = true }
 engram = { path = "../engram", editable = true }
 
 [dependency-groups]
-dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.16.0,<0.17.0)"]
+dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.17.1,<0.18.0)"]
 test = [
     "engram-connectors[conversion,source-queue,testing,x,youtube,zotero]",
     "engram[testing]",

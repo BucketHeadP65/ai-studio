@@ -68,10 +68,7 @@ def _describe(kind: str, payload: dict[str, object]) -> str:
 
 async def _library_session(stack: AsyncExitStack, settings: HarnessSettings) -> tuple[LibraryCollection, StepRegistry]:
     """The library and the registry for one console verb, from the container the serving entries build, closed with `stack`."""
-    from harness.adapters.contracts import (  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
-        DatabaseBinding,
-        ModelTiers,
-    )
+    from harness.adapters.contracts import DatabaseBinding, ModelTiers  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
     from harness.composition import library_composition  # noqa: PLC0415 (same)
     from harness.container import create_container  # noqa: PLC0415 (same)
     from harness.features.running.contracts import RunRecords  # noqa: PLC0415 (same)
@@ -182,9 +179,7 @@ async def import_sessions_report(directories: list[Path], *, container: AsyncCon
     Returns:
         One line per directory, with its counts or `nothing there`.
     """
-    from pydantic_ai_harness.step_persistence import (  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
-        FileStepStore,
-    )
+    from pydantic_ai_harness.step_persistence import FileStepStore  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
     from harness.domain.contracts import SessionTranscript  # noqa: PLC0415 (same)
     from harness.features.sessions.contracts import import_file_store  # noqa: PLC0415 (same)
@@ -653,12 +648,7 @@ async def run_benchmark_in_session(asked: _BenchmarkFlags) -> OutcomeStateReport
     from core.ai.evaluation.contracts import FileEvaluationBudgetRecord  # noqa: PLC0415 (same)
     from pydantic import TypeAdapter, ValidationError  # noqa: PLC0415 (same)
 
-    from harness.features.evals.contracts import (  # noqa: PLC0415 (same)
-        BenchmarkInputs,
-        BenchmarkRequest,
-        OutcomeObjective,
-        run_outcome_benchmark,
-    )
+    from harness.features.evals.contracts import BenchmarkInputs, BenchmarkRequest, OutcomeObjective, run_outcome_benchmark  # noqa: PLC0415 (same)
     from harness.settings import HarnessSettings  # noqa: PLC0415 (same)
 
     try:
@@ -710,12 +700,7 @@ class _DeploymentComposer:
             WorkflowAutomationTaskRunner,
             budgeted,
         )
-        from harness.features.evals.infrastructure.agents import (  # noqa: PLC0415 (same)
-            BASELINE_IDENTITY,
-            GRADER_IDENTITY,
-            ModelTaskGrader,
-            SingleRunTaskRunner,
-        )
+        from harness.features.evals.infrastructure.agents import BASELINE_IDENTITY, GRADER_IDENTITY, ModelTaskGrader, SingleRunTaskRunner  # noqa: PLC0415 (same)
         from harness.features.evals.infrastructure.files import FilePilotRuns  # noqa: PLC0415 (same)
         from harness.features.running.contracts import RunArchiveQueries, SpendLogQueries  # noqa: PLC0415 (same)
 

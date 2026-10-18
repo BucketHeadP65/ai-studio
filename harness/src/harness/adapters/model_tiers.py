@@ -260,10 +260,7 @@ def environment_stamps(custom: Path) -> dict[str, str]:
         The stamps by name.
     """
     # An upward import the layering test sanctions, kept lazy so importing this adapter never imports a slice.
-    from harness.features.selfauthoring.contracts import (  # noqa: PLC0415 (sanctioned upward edge)
-        FileCustomCapabilities,
-        promoted_capabilities_digest,
-    )
+    from harness.features.selfauthoring.contracts import FileCustomCapabilities, promoted_capabilities_digest  # noqa: PLC0415 (sanctioned upward edge)
 
     capabilities = FileCustomCapabilities.read_only(custom / "capabilities")
     return {"promoted_capabilities": promoted_capabilities_digest(capabilities)}

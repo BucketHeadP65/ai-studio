@@ -650,10 +650,7 @@ async def _knowledge_base_fingerprint(container: Resolver, collection: str) -> s
 
 async def _cited_sources(report: EvaluationRunReport, hit_sources: HitSources, collection: str) -> dict[str, list[str]]:
     """The ranked source ids each answered case's citations map to, from one page lookup and one source lookup."""
-    from engram.evals.scoring.contracts import (  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.scoring)
-        HitRef,
-        ranked_sources,
-    )
+    from engram.evals.scoring.contracts import HitRef, ranked_sources  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.scoring)
 
     def as_hit(ref: str, pages: Collection[str]) -> HitRef:
         """A cited page, or an anchor on one, as a page hit, and any other id as a raw chunk hit."""
