@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import time
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from core.cqrs.contracts import narrow_command
@@ -26,7 +26,7 @@ from core.observability import get_logger
 
 from engram.indexing.domain import card
 from engram.indexing.domain.manifest import FileType, identity_hash
-from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES
+from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.models import (
     CitingPagesChanged,
     EmbeddingsRefreshed,
@@ -76,6 +76,7 @@ if TYPE_CHECKING:
     from engram.indexing.domain.resolver import ResolveResult
     from engram.indexing.internal_contracts import IncrementalDeps, IndexUnitOfWork, KnowledgeBaseReader, ReaderScopes, ValidationReportSink
     from engram.indexing.read_models import StoredFingerprint
+    from engram.indexing.service.cut_plan_stage import CutPlanStage
     from engram.indexing.service.summary_stage import SummaryStage
     from engram.kb.contracts import KnowledgeBaseNote, VocabularyIndex
 
@@ -83,24 +84,28 @@ _logger = get_logger(__name__)
 
 
 INDEXER_VERSION = "6"
-"""The indexer's version, stored in the index fingerprint with the chunk sizes (`indexer_version`). Another stored version forces a full rebuild.
+"""The indexer's version, stored in the index fingerprint with the chunk sizes and the chunk planner (`indexer_version`). Another stored version forces a full rebuild.
 
 You must change it whenever a change alters what the index writes, such as a new parse rule or a new row shape.
 """
 
 
-def indexer_version(chunk_sizes: ChunkSizes) -> str:
-    """The indexer version an index fingerprint stores: `INDEXER_VERSION` and the chunk sizes the mirrors were cut by.
+def indexer_version(chunk_sizes: ChunkSizes, *, planner: str | None = None, planner_ceiling_tokens: int = DEFAULT_PLANNER_CEILING_TOKENS) -> str:
+    """The indexer version an index fingerprint stores: `INDEXER_VERSION`, the chunk sizes and the chunk planner the mirrors were cut by.
 
-    A stored fingerprint whose version differs forces a full rebuild, so a change of chunk sizes rebuilds every mirror.
+    A stored fingerprint whose version differs forces a full rebuild, so a change of chunk sizes, of chunk planner or of
+    its ceiling rebuilds every mirror.
 
     Args:
         chunk_sizes: How many tokens a chunk of a source mirror aims for and may hold.
+        planner: The chunk planner's identity, or `None` when the index has no chunk planner.
+        planner_ceiling_tokens: The most tokens of text the chunk planner is shown at once. Ignored with no chunk planner.
 
     Returns:
-        The version, such as `6+400-800`.
+        The version, such as `6+400-800`, or `6+400-800+12000+<planner>` with a chunk planner.
     """
-    return f"{INDEXER_VERSION}+{chunk_sizes.target_tokens}-{chunk_sizes.max_tokens}"
+    version = f"{INDEXER_VERSION}+{chunk_sizes.target_tokens}-{chunk_sizes.max_tokens}"
+    return version if planner is None else f"{version}+{planner_ceiling_tokens}+{planner}"
 
 
 class IndexKnowledgeBaseHandler:
@@ -120,6 +125,7 @@ class IndexKnowledgeBaseHandler:
         path_root_source: str | None = None,
         reader_scopes: ReaderScopes | None = None,
         chunk_sizes: ChunkSizes = DEFAULT_CHUNK_SIZES,
+        cut_plan_stage: CutPlanStage | None = None,
     ) -> None:
         """Create the handler over its reader, embedder, unit of work factory and the knowledge base's schema.
 
@@ -138,6 +144,8 @@ class IndexKnowledgeBaseHandler:
                 `None` leaves it out.
             reader_scopes: Gives a private knowledge base its reader role after each real run. `None` leaves roles alone.
             chunk_sizes: How many tokens a chunk of a source mirror aims for and may hold, on the full and the incremental path.
+            cut_plan_stage: Gives the mirrors of each load the cut plans the chunk planner chose, on the full and the incremental
+                path, when the schema stores source chunks. `None` fills every longer run of text with no heading.
         """
         self._kb_reader = kb_reader
         self._embedder = embedder
@@ -151,7 +159,13 @@ class IndexKnowledgeBaseHandler:
         self._path_root = path_root
         self._path_root_source = path_root_source
         self._chunk_sizes = chunk_sizes
-        self._indexer_version = indexer_version(chunk_sizes)
+        # A schema that stores no source chunk has nothing to cut, so it asks no planner and its version names none.
+        self._cut_plan_stage = cut_plan_stage if "source-chunk" in spec.active_embed_strategies() else None
+        self._indexer_version = (
+            indexer_version(chunk_sizes, planner=self._cut_plan_stage.planner, planner_ceiling_tokens=self._cut_plan_stage.ceiling_tokens)
+            if self._cut_plan_stage is not None
+            else indexer_version(chunk_sizes)
+        )
         self.events: list[Event] = []
         self._clean_page_view: Callable[[], Sequence[CleanPage]] | None = None
 
@@ -231,6 +245,9 @@ class IndexKnowledgeBaseHandler:
         validation = self._validate_stage(resolved, parsed)
         self._emit(ValidationCompleted(n_errors=validation.n_errors, n_warnings=validation.n_warnings))
 
+        if self._cut_plan_stage is not None:
+            sources = await self._cut_plan_stage.run(parsed.sources, collection=command.collection, sizes=self._chunk_sizes)
+            parsed = replace(parsed, sources=sources)
         load = self._build_load(resolved, parsed, validation, command.collection)
         state = self._build_state(resolved, parsed, validation, command.collection, spec_hash=spec_hash, vocabulary_hash=vocabulary_hash)
         pruned = await self._load_stage(load, state, command.collection)
@@ -264,7 +281,7 @@ class IndexKnowledgeBaseHandler:
     async def _incremental_path(self, command: IndexKnowledgeBase, *, spec_hash: str, vocabulary_hash: str, started: float) -> IndexReport:
         """Reindex only the dirty set through `run_incremental` and emit the events its report describes."""
         deps = await self._incremental_deps(command.collection, spec_hash=spec_hash, vocabulary_hash=vocabulary_hash)
-        report = await run_incremental(command, deps=deps, chunk_sizes=self._chunk_sizes)
+        report = await run_incremental(command, deps=deps, chunk_sizes=self._chunk_sizes, cut_plan_stage=self._cut_plan_stage)
 
         self._emit(ValidationCompleted(n_errors=report.validation.n_errors, n_warnings=report.validation.n_warnings))
         if command.embed:

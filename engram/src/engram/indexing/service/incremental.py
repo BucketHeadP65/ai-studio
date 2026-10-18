@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     from engram.indexing.domain.resolver import ResolveResult
     from engram.indexing.internal_contracts import IncrementalDeps, IncrementalUnitOfWork, KnowledgeBaseReader
     from engram.indexing.read_models import CleanPage, StoredFingerprint
+    from engram.indexing.service.cut_plan_stage import CutPlanStage
     from engram.kb.contracts import ClaimGrammarSpec, FacetSpec, KnowledgeBaseNote, KnowledgeBaseSchema, SectionSummarySpec, VocabularyIndex
 
 _logger = get_logger(__name__)
@@ -106,7 +107,9 @@ class RunIncrementalDeps:
         return self.clean_pages
 
 
-async def run_incremental(cmd: IndexKnowledgeBase, *, deps: IncrementalDeps, chunk_sizes: ChunkSizes = DEFAULT_CHUNK_SIZES) -> IndexReport:
+async def run_incremental(
+    cmd: IndexKnowledgeBase, *, deps: IncrementalDeps, chunk_sizes: ChunkSizes = DEFAULT_CHUNK_SIZES, cut_plan_stage: CutPlanStage | None = None
+) -> IndexReport:
     """Reindex only the dirty set in one transaction and return its report.
 
     You must call it only when the stored fingerprint matches and the manifest is not empty.
@@ -118,6 +121,8 @@ async def run_incremental(cmd: IndexKnowledgeBase, *, deps: IncrementalDeps, chu
         cmd: The index command. Its `collection` scopes every read and write, and its `embed` flag turns embedding on.
         deps: The unit of work factory, reader, embedder, schema, stored pages and fingerprint inputs.
         chunk_sizes: How many tokens a chunk of a changed source mirror aims for and may hold.
+        cut_plan_stage: Gives the changed source mirrors the cut plans the chunk planner chose. `None` fills every longer run of
+            text with no heading.
 
     Returns:
         The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `validation` holding
@@ -177,9 +182,12 @@ async def run_incremental(cmd: IndexKnowledgeBase, *, deps: IncrementalDeps, chu
     )
 
     orientation = read_orientation(deps.kb_reader) if rebuild_about else {}
+    dirty_mirrors = loadable_mirrors(dirty_sources)
+    if cut_plan_stage is not None:
+        dirty_mirrors = await cut_plan_stage.run(dirty_mirrors, collection=collection, sizes=chunk_sizes)
     load = _build_dirty_load(
         resolved,
-        loadable_mirrors(dirty_sources),
+        dirty_mirrors,
         vocabulary,
         collection,
         section_summary_spec=deps.spec.section_summaries,

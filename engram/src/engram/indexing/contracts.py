@@ -42,8 +42,18 @@ from engram.indexing.infrastructure.orm import (
 from engram.indexing.infrastructure.summary_governance import SummaryGovernance
 from engram.indexing.infrastructure.uow import SqlAlchemyKnowledgeBaseUnitOfWork
 from engram.indexing.infrastructure.vocab_governance import VocabGovernance
-from engram.indexing.internal_contracts import IndexUnitOfWork, KnowledgeBaseReader, ReaderScopes, Summarizer, ValidationReportSink
+from engram.indexing.internal_contracts import (
+    ChunkPlanner,
+    CutPlanQueries,
+    CutPlans,
+    IndexUnitOfWork,
+    KnowledgeBaseReader,
+    ReaderScopes,
+    Summarizer,
+    ValidationReportSink,
+)
 from engram.indexing.read_models import PageKeyRowResult, PendingEmbedChunk, PendingEmbedRow, PendingSummary, StoredFingerprint
+from engram.indexing.service.cut_plan_stage import CutPlanStage
 from engram.indexing.service.index import INDEXER_VERSION, IndexKnowledgeBaseHandler, indexer_version
 from engram.indexing.service.ingest import IngestPageHandler
 from engram.indexing.service.summary_stage import SummaryStage
@@ -53,11 +63,15 @@ __all__ = [
     "DEFAULT_CHUNK_SIZES",
     "DEFAULT_PLANNER_CEILING_TOKENS",
     "INDEXER_VERSION",
+    "ChunkPlanner",
     "ChunkSizes",
     "CitingPagesChanged",
     "ClaimORM",
     "CollectionIsForeignError",
     "CollectionIsIndexedError",
+    "CutPlanQueries",
+    "CutPlanStage",
+    "CutPlans",
     "DryRunPreview",
     "EdgeORM",
     "FilesystemKnowledgeBaseReader",
