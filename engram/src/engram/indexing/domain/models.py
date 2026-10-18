@@ -492,6 +492,22 @@ class DryRunPreview(BaseModel):
     graph_refresh: bool = False
 
 
+class CutPlanCounts(BaseModel):
+    """What the chunk planner gave one index, each count over distinct heading section texts."""
+
+    model_config = ConfigDict(frozen=True)
+
+    reused: int = 0
+    """The heading sections cut by a cut plan already stored, with no model call."""
+    chosen: int = 0
+    """The heading sections the chunk planner gave an accepted answer for, now stored as cut plans."""
+    filled: int = 0
+    """The heading sections the chunk planner gave no accepted answer for, because it failed, was late or was refused.
+
+    They were filled and nothing was stored, so the next index that cuts them asks again.
+    """
+
+
 class IndexReport(BaseModel):
     """The full result of a rebuild: counts per stage, the validation summary, and duration.
 
@@ -523,6 +539,8 @@ class IndexReport(BaseModel):
     """
     duration_seconds: float = 0.0
     dry_run: DryRunPreview | None = None
+    cut_plans: CutPlanCounts = CutPlanCounts()
+    """What the chunk planner gave this run's mirrors. All zero with no chunk planner."""
 
 
 class IngestResult(BaseModel):

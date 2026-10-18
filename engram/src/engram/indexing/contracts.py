@@ -13,6 +13,7 @@ from engram.indexing.domain.mirror_chunks import (
 )
 from engram.indexing.domain.models import (
     CitingPagesChanged,
+    CutPlanCounts,
     DryRunPreview,
     IndexKnowledgeBase,
     IndexReport,
@@ -76,6 +77,7 @@ __all__ = [
     "ClaimORM",
     "CollectionIsForeignError",
     "CollectionIsIndexedError",
+    "CutPlanCounts",
     "CutPlanQueries",
     "CutPlanStage",
     "CutPlans",

@@ -33,6 +33,7 @@ from engram.indexing.domain.manifest import (
 from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES
 from engram.indexing.domain.models import (
     CitingPagesChanged,
+    CutPlanCounts,
     DryRunPreview,
     IndexReport,
     MirrorDoc,
@@ -183,8 +184,9 @@ async def run_incremental(
 
     orientation = read_orientation(deps.kb_reader) if rebuild_about else {}
     dirty_mirrors = loadable_mirrors(dirty_sources)
+    cut_plans = CutPlanCounts()
     if cut_plan_stage is not None:
-        dirty_mirrors = await cut_plan_stage.run(dirty_mirrors, collection=collection, sizes=chunk_sizes)
+        dirty_mirrors, cut_plans = await cut_plan_stage.run(dirty_mirrors, collection=collection, sizes=chunk_sizes)
     load = _build_dirty_load(
         resolved,
         dirty_mirrors,
@@ -234,6 +236,7 @@ async def run_incremental(
         mode="incremental",
         validation=validation,
         standing_validation=standing_validation,
+        cut_plans=cut_plans,
     )
     return report
 

@@ -53,8 +53,9 @@ wraps it in a `JobRegistry` job (`JobKind.INDEX`) for async tracking.
 - **Outputs:** `IndexReport` (`src/engram/indexing/domain/models.py`), counts,
   embedding metadata, duration, an embedded `ValidationReport` of `ValidationIssue`s, the run
   `mode` (`"incremental"` | `"full"`), `skipped` (pages the manifest hit left
-  untouched this run), and a `dry_run` preview (`DryRunPreview`, `None` on a real
-  run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
+  untouched this run), `cut_plans` (the cut plans reused and chosen and the heading sections filled, see
+  [The chunk planner and cut plans](#the-chunk-planner-and-cut-plans)), and a `dry_run` preview
+  (`DryRunPreview`, `None` on a real run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
 - **Events:** the handler emits the pipeline `Event`s as it advances. After `PagesLoaded`
   it emits `CitingPagesChanged{paper_ids}` (`src/engram/indexing/domain/models.py`), consumed by the
   evals QA-generation subscriber to enqueue papers whose datasets may need
@@ -190,7 +191,9 @@ planner only the heading sections with none, at most `chunk_planner_concurrency`
 (migration 0069), so indexing the same text again with the same chunk planner calls no model and cuts it
 the same way. A planner call that raises, runs past `chunk_planner_deadline_seconds` or answers refused
 numbers fills its text, is not stored, and never fails the index, so the next index asks again. The
-stage logs how many plans it reused, chose and filled. The plans reach the chunker on the mirror itself
+report carries how many cut plans the index reused and chose, and how many heading sections it filled for
+want of an accepted answer (`IndexReport.cut_plans`, distinct section texts), and `studio index` prints
+them as `Cut plans: 3 reused, 5 chosen, 1 filled` whenever one is not zero. The plans reach the chunker on the mirror itself
 (`MirrorDoc.cut_plans`, by text hash), so the raw chunk rows and their embed inputs are cut alike.
 
 The chunk planner is off by default. To turn it on, set `ingestion.chunk_planner_model` to a chat

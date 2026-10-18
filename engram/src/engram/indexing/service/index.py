@@ -29,6 +29,7 @@ from engram.indexing.domain.manifest import FileType, identity_hash
 from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.models import (
     CitingPagesChanged,
+    CutPlanCounts,
     EmbeddingsRefreshed,
     IndexingCompleted,
     IndexingStarted,
@@ -247,8 +248,9 @@ class IndexKnowledgeBaseHandler:
         validation = self._validate_stage(resolved, parsed)
         self._emit(ValidationCompleted(n_errors=validation.n_errors, n_warnings=validation.n_warnings))
 
+        cut_plans = CutPlanCounts()
         if self._cut_plan_stage is not None:
-            sources = await self._cut_plan_stage.run(parsed.sources, collection=command.collection, sizes=self._chunk_sizes)
+            sources, cut_plans = await self._cut_plan_stage.run(parsed.sources, collection=command.collection, sizes=self._chunk_sizes)
             parsed = replace(parsed, sources=sources)
         load = self._build_load(resolved, parsed, validation, command.collection)
         state = self._build_state(resolved, parsed, validation, command.collection, spec_hash=spec_hash, vocabulary_hash=vocabulary_hash)
@@ -275,6 +277,7 @@ class IndexKnowledgeBaseHandler:
             validation=validation,
             mode="full",
             duration_seconds=self._clock() - started,
+            cut_plans=cut_plans,
         )
         await self._validation_report_sink.write(validation)
         self._emit(IndexingCompleted(report=report))

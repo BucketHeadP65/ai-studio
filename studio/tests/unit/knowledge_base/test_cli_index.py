@@ -36,6 +36,7 @@ from engram.indexing.contracts import (
     DEFAULT_CHUNK_SIZES,
     PARAGRAPH_NUMBERING_VERSION,
     CollectionIsForeignError,
+    CutPlanCounts,
     IndexKnowledgeBase,
     IndexReport,
     KnowledgeBaseReader,
@@ -224,6 +225,23 @@ class TestIndexExitCode:
         result = runner.invoke(app, ["index"], obj=factory)
 
         assert result.exit_code == 0
+
+    def test_index_prints_the_cut_plan_counts_before_the_validation_lines(self):
+        report = IndexReport(pages=3, cut_plans=CutPlanCounts(reused=2, chosen=3, filled=1))
+        factory = FakeContainerFactory(report)
+
+        result = runner.invoke(app, ["index"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "Cut plans: 2 reused, 3 chosen, 1 filled" in result.stdout
+        assert result.stdout.index("Cut plans:") < result.stdout.index("Validation:")
+
+    def test_index_prints_no_cut_plan_line_when_the_chunk_planner_did_nothing(self):
+        factory = FakeContainerFactory(_clean_report())
+
+        result = runner.invoke(app, ["index"], obj=factory)
+
+        assert "Cut plans" not in result.stdout
 
     def test_index_dispatches_a_index_knowledge_base_command(self):
         factory = FakeContainerFactory(_clean_report())

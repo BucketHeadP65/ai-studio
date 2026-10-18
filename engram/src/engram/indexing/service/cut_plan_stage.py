@@ -24,6 +24,7 @@ from engram.indexing.domain.mirror_chunks import (
     heading_sections_for_planner,
     planner_paragraphs,
 )
+from engram.indexing.domain.models import CutPlanCounts
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -82,7 +83,7 @@ class CutPlanStage:
         """The most tokens of text the chunk planner is shown at once."""
         return self._ceiling_tokens
 
-    async def run(self, sources: Sequence[MirrorDoc], *, collection: str, sizes: ChunkSizes) -> tuple[MirrorDoc, ...]:
+    async def run(self, sources: Sequence[MirrorDoc], *, collection: str, sizes: ChunkSizes) -> tuple[tuple[MirrorDoc, ...], CutPlanCounts]:
         """Return the mirrors, each carrying the cut plans of its heading sections: stored ones, else ones the chunk planner chose.
 
         Each distinct heading section text with no stored plan is shown to the chunk planner once. Each accepted answer is
@@ -95,7 +96,8 @@ class CutPlanStage:
             sizes: The chunk sizes the mirrors are cut by, which decide the heading sections a cut plan would cut.
 
         Returns:
-            The mirrors in the order given, each with `cut_plans` by the content hash of each heading section that has one.
+            The mirrors in the order given, each with `cut_plans` by the content hash of each heading section that has one,
+            and the counts of cut plans reused and chosen and of heading sections filled.
         """
         sections_by_source = [
             {content_hash(section): section for section in heading_sections_for_planner(source.text, sizes, ceiling_tokens=self._ceiling_tokens)}
@@ -103,7 +105,7 @@ class CutPlanStage:
         ]
         sections = {text_hash: section for source_sections in sections_by_source for text_hash, section in source_sections.items()}
         if not sections:
-            return tuple(sources)
+            return tuple(sources), CutPlanCounts()
         stored = await self._queries.cut_plans(collection, self._identity, sections.keys())
         asked = [text_hash for text_hash in sections if text_hash not in stored]
         limit = asyncio.Semaphore(self._concurrency)
@@ -111,19 +113,21 @@ class CutPlanStage:
         chosen = {text_hash: starts for text_hash, starts in zip(asked, answers, strict=True) if starts is not None}
         if chosen:
             await self._plans.insert(collection, self._identity, chosen)
+        counts = CutPlanCounts(reused=len(stored), chosen=len(chosen), filled=len(asked) - len(chosen))
         _logger.info(
             "Cut plans for {collection}: {reused} reused, {chosen} chosen by {planner}, {filled} filled",
             collection=collection,
-            reused=len(stored),
-            chosen=len(chosen),
+            reused=counts.reused,
+            chosen=counts.chosen,
             planner=self._identity,
-            filled=len(asked) - len(chosen),
+            filled=counts.filled,
         )
         plans = {**stored, **chosen}
-        return tuple(
+        planned = tuple(
             replace(source, cut_plans={text_hash: plans[text_hash] for text_hash in source_sections if text_hash in plans})
             for source, source_sections in zip(sources, sections_by_source, strict=True)
         )
+        return planned, counts
 
     async def _ask(self, section: str, limit: asyncio.Semaphore) -> tuple[int, ...] | None:
         """The chunk planner's accepted answer for one heading section, or `None` when the call failed, ran late or was refused."""

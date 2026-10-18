@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from engram.indexing.contracts import (
     DEFAULT_PLANNER_CEILING_TOKENS,
     ChunkSizes,
+    CutPlanCounts,
     CutPlanStage,
     FilesystemKnowledgeBaseReader,
     IndexKnowledgeBase,
@@ -312,6 +313,64 @@ async def test_an_incremental_index_cuts_a_new_mirror_where_the_chunk_planner_sa
     wind = [paragraph.replace("tide", "wind") for paragraph in _PARAGRAPHS]
     assert _chunk_bodies(uow, "wind-log") == ["\n\n".join(wind[0:4]), "\n\n".join(wind[4:8]), "\n\n".join(wind[8:12])]
     assert len(planner.calls) == 2
+
+
+async def test_the_report_counts_the_reused_and_the_chosen_cut_plans(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log")
+    wind = "\n\n".join(paragraph.replace("tide", "wind") for paragraph in _PARAGRAPHS)
+    KnowledgeBaseBuilder(tmp_path).add_source_mirror("wind-log", _mirror_text("wind-log", wind))
+    plans = FakeCutPlans()
+    plans.stored[("research", cut_plan_identity("example-model/prompt-1"), content_hash(_BODY))] = (5, 9)
+    planner = FakeChunkPlanner((5, 9), identity="example-model/prompt-1")
+
+    report = await _handler(tmp_path, FakeKnowledgeBaseUnitOfWork(), _stage(planner, plans)).handle(IndexKnowledgeBase(collection="research", embed=False))
+
+    assert report.cut_plans == CutPlanCounts(reused=1, chosen=1, filled=0)
+
+
+async def test_the_report_counts_the_heading_sections_filled_after_a_failed_planner_call(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log", "wind-log")
+    planner = FakeChunkPlanner((5, 9), error=RuntimeError("model unavailable"))
+
+    report = await _handler(tmp_path, FakeKnowledgeBaseUnitOfWork(), _stage(planner, FakeCutPlans())).handle(
+        IndexKnowledgeBase(collection="research", embed=False)
+    )
+
+    assert report.cut_plans == CutPlanCounts(reused=0, chosen=0, filled=1)
+
+
+async def test_the_report_counts_a_refused_answer_as_filled(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log")
+
+    report = await _handler(tmp_path, FakeKnowledgeBaseUnitOfWork(), _stage(FakeChunkPlanner((9, 5)), FakeCutPlans())).handle(
+        IndexKnowledgeBase(collection="research", embed=False)
+    )
+
+    assert report.cut_plans == CutPlanCounts(reused=0, chosen=0, filled=1)
+
+
+async def test_an_incremental_report_counts_the_cut_plans_of_its_changed_mirrors(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log")
+    uow = FakeKnowledgeBaseUnitOfWork()
+    handler = _handler(tmp_path, uow, _stage(FakeChunkPlanner((5, 9)), FakeCutPlans()))
+    await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+    _seed_stored_state(uow)
+    handler.set_clean_page_view(list)
+    wind = "\n\n".join(paragraph.replace("tide", "wind") for paragraph in _PARAGRAPHS)
+    KnowledgeBaseBuilder(tmp_path).add_source_mirror("wind-log", _mirror_text("wind-log", wind))
+
+    report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+
+    assert report.mode == "incremental"
+    assert report.cut_plans == CutPlanCounts(reused=0, chosen=1, filled=0)
+
+
+async def test_an_index_with_no_chunk_planner_reports_no_cut_plans(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log")
+
+    report = await _handler(tmp_path, FakeKnowledgeBaseUnitOfWork(), None).handle(IndexKnowledgeBase(collection="research", embed=False))
+
+    assert report.cut_plans == CutPlanCounts()
 
 
 def test_the_stored_indexer_version_names_the_chunk_planner_and_its_ceiling() -> None:
