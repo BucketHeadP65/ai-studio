@@ -217,7 +217,8 @@ class FoldedUnit(BaseModel):
     hit_level: str = Field(description="The unit's granularity tier, one of the values a hit's hit_level takes.")
     ref: str | None = Field(
         default=None,
-        description="The exact collection-qualified handle to pass to fetch. None on legacy rows that predate routed reads.",
+        description="The exact collection-qualified handle to pass to fetch, set by the search tool. None on a row read "
+        "straight from the search function.",
     )
 
 

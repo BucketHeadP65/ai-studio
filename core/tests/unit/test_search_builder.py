@@ -25,6 +25,7 @@ from core.ai.retrieval.contracts import (
     SearchSchema,
     SearchSurface,
     SearchTuning,
+    hits_per_document_body,
 )
 
 if TYPE_CHECKING:
@@ -767,3 +768,26 @@ def test_a_facet_named_like_the_cap_is_refused() -> None:
     schema = _corpus()
     with pytest.raises(ValueError, match="max_hits_per_document"):
         replace(schema, facets=(*schema.facets, Facet("max_hits_per_document", "int")), tuning=SearchTuning(max_hits_per_document=1))
+
+
+def test_a_facet_named_like_the_cap_is_taken_when_the_search_caps_nothing() -> None:
+    schema = _corpus()
+
+    uncapped = replace(schema, facets=(*schema.facets, Facet("max_hits_per_document", "int")), tuning=SearchTuning())
+
+    assert uncapped.facets[-1].name == "max_hits_per_document"
+
+
+def test_a_capped_search_answers_its_cap_through_a_function_that_reads_the_tuning_row_as_the_search_does() -> None:
+    body = hits_per_document_body(_documented_corpus(), function_name="api.search_hits_per_document")
+
+    assert body.startswith("CREATE FUNCTION api.search_hits_per_document() RETURNS int\n")
+    assert "LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, kb, public, pg_temp AS $$" in body
+    assert "coalesce((SELECT t.tuning FROM kb.search_tuning t WHERE t.id = 1), '{}'::jsonb)" in body
+    assert '"max_hits_per_document": 1' in body
+    assert "least(greatest(coalesce((settings.tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), 50)" in body
+
+
+def test_a_search_that_caps_nothing_has_no_cap_to_answer() -> None:
+    with pytest.raises(ValueError, match="caps no hits per document"):
+        hits_per_document_body(_pinned_corpus(), function_name="api.search_hits_per_document")

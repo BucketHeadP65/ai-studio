@@ -98,8 +98,9 @@ class SearchSurface:
             expression over the surface. Empty groups a hit by `parent_id_expr`, and a NULL group
             by the hit's own key.
         document_expr: The document a hit counts against for the tuned cap on hits per document,
-            an expression over the surface. Empty documents a hit by its group, and a NULL
-            document by the hit's own key. Read only when the tuning caps hits per document.
+            an expression over the surface. Empty counts a hit against its group as its document,
+            and a NULL document against the hit's own key. Read only when the tuning caps hits per
+            document.
     """
 
     name: str
@@ -337,7 +338,9 @@ class SearchSchema:
         if unknown:
             msg = f"SearchSchema.tuning weighs no surface and leg of this schema: {', '.join(unknown)}"
             raise ValueError(msg)
-        declared = {"tuning", "capped_k", "leg_budget", "rrf_constant", "snippet_chars", "rows_per_group", "max_hits_per_document"}
+        declared = {"tuning", "capped_k", "leg_budget", "rrf_constant", "snippet_chars", "rows_per_group"}
+        if self.tuning.max_hits_per_document is not None:
+            declared.add("max_hits_per_document")
         declared |= {f"weight_{surface.name}_{leg}" for surface in self.surfaces for leg in SEARCH_LEGS}
         taken = sorted(facet.name for facet in self.facets if facet.name in declared)
         if taken:

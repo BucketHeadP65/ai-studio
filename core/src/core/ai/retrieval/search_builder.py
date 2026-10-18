@@ -121,10 +121,42 @@ def _declarations(schema: SearchSchema) -> str:
         for leg in SEARCH_LEGS
     )
     if _capped(schema):
-        lines.append(
-            f"  max_hits_per_document int := least(greatest(coalesce((tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), {_MAX_HITS_BOUND});"
-        )
+        lines.append(f"  max_hits_per_document int := {_max_hits_clamp('tuning')};")
     return "\n".join(lines)
+
+
+def _max_hits_clamp(tuning: str) -> str:
+    """The cap on hits per document read from the jsonb `tuning` names, 0 for a missing or null value, held to its bound."""
+    return f"least(greatest(coalesce(({tuning} ->> 'max_hits_per_document')::numeric::int, 0), 0), {_MAX_HITS_BOUND})"
+
+
+def hits_per_document_body(schema: SearchSchema, *, function_name: str) -> str:
+    """Return the `CREATE FUNCTION` statement answering the cap on hits per document a capped search applies.
+
+    The function reads the tuning row as its owner, over the same defaults and bound the search carries, so it answers
+    the number the search reads when it runs. It answers 0 when the search keeps every hit.
+
+    Args:
+        schema: The knowledge base schema whose search caps hits per document.
+        function_name: The schema-qualified function name to create.
+
+    Returns:
+        The complete `CREATE FUNCTION` DDL statement, a SQL function taking no argument and returning `int`.
+
+    Raises:
+        ValueError: When the schema's search caps no hits per document.
+    """
+    tuning = schema.tuning
+    if tuning is None or tuning.max_hits_per_document is None:
+        msg = "this search caps no hits per document, so it has no cap to answer"
+        raise ValueError(msg)
+    return (
+        f"CREATE FUNCTION {function_name}() RETURNS int\n"
+        f"LANGUAGE sql STABLE SECURITY DEFINER SET search_path = {_search_path_schemas(schema)} AS $$\n"
+        f"SELECT {_max_hits_clamp('settings.tuning')}\n"
+        f"FROM (SELECT {_tuning_source(tuning)} AS tuning) AS settings\n"
+        "$$"
+    )
 
 
 def _tuning_source(tuning: SearchTuning) -> str:
