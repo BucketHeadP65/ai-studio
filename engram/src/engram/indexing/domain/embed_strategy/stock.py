@@ -111,7 +111,7 @@ class SourceChunkStrategy:
         self._chunk_sizes = chunk_sizes
 
     def units(self, item: MirrorDoc) -> Iterable[EmbedStrategyUnit]:
-        """Yield one unit per chunk `chunk_mirror` cuts the mirror's body into under the held chunk sizes.
+        """Yield one unit per chunk `chunk_mirror` cuts the mirror's body into under the held chunk sizes and the mirror's cut plans.
 
         Args:
             item: The source mirror.
@@ -120,7 +120,7 @@ class SourceChunkStrategy:
             One unit per chunk, keyed `<source-key>:<ord>`.
         """
         title = str(item.frontmatter.get("title") or item.source_key)
-        for chunk in chunk_mirror(item.text, self._chunk_sizes):
+        for chunk in chunk_mirror(item.text, self._chunk_sizes, item.cut_plans):
             chunk_id = f"{item.source_key}:{chunk.ord}"
             text = card.raw_chunk_embed_input(title, section_path=chunk.section_path, heading=chunk.heading, body=chunk.body)
             yield EmbedStrategyUnit(id=chunk_id, level=self.level, text=text)

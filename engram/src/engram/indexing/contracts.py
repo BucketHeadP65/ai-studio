@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from engram.indexing.domain.card import content_hash, token_count
 from engram.indexing.domain.manifest import ManifestEntry
-from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, ChunkSizes
+from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS, ChunkSizes
 from engram.indexing.domain.models import (
     CitingPagesChanged,
     DryRunPreview,
@@ -51,6 +51,7 @@ from engram.indexing.service.vocab import load_vocab
 
 __all__ = [
     "DEFAULT_CHUNK_SIZES",
+    "DEFAULT_PLANNER_CEILING_TOKENS",
     "INDEXER_VERSION",
     "ChunkSizes",
     "CitingPagesChanged",

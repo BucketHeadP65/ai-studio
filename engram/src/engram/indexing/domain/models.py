@@ -22,7 +22,7 @@ No database or IO imports.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING, Literal
 
@@ -210,6 +210,8 @@ class MirrorDoc:
     text: str
     collection: str
     path: str
+    cut_plans: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
+    """The cut plans chosen for this mirror's text, by the content hash of the heading section text each cuts. Empty fills every longer section."""
 
     @property
     def provider(self) -> str:
