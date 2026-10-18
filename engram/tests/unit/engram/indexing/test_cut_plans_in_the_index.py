@@ -272,6 +272,19 @@ async def test_a_knowledge_base_that_stores_no_chunks_calls_no_planner(tmp_path:
     assert planner.calls == []
 
 
+async def test_a_knowledge_base_that_stores_no_chunks_still_stores_the_version_of_its_chunk_planner(tmp_path: Path) -> None:
+    _knowledge_base(tmp_path, "tide-log")
+    planner = FakeChunkPlanner((5, 9), identity="example-model/prompt-1")
+    spec = research_spec().model_copy(update={"embed_strategies": EmbedStrategiesSpec(active=("page-card", "section"))})
+    uow = FakeKnowledgeBaseUnitOfWork()
+
+    await _handler(tmp_path, uow, _stage(planner, FakeCutPlans()), spec).handle(IndexKnowledgeBase(collection="research", embed=False))
+
+    written = uow.fingerprint.fingerprint
+    assert written is not None
+    assert written["indexer_version"] == indexer_version(_SIZES, planner="example-model/prompt-1")
+
+
 async def test_without_a_chunk_planner_the_text_is_filled(tmp_path: Path) -> None:
     _knowledge_base(tmp_path, "tide-log")
     uow = FakeKnowledgeBaseUnitOfWork()

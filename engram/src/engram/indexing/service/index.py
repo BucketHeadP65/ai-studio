@@ -145,7 +145,8 @@ class IndexKnowledgeBaseHandler:
             reader_scopes: Gives a private knowledge base its reader role after each real run. `None` leaves roles alone.
             chunk_sizes: How many tokens a chunk of a source mirror aims for and may hold, on the full and the incremental path.
             cut_plan_stage: Gives the mirrors of each load the cut plans the chunk planner chose, on the full and the incremental
-                path, when the schema stores source chunks. `None` fills every longer run of text with no heading.
+                path, when the schema stores source chunks. Its planner and ceiling enter the stored indexer version either way.
+                `None` fills every longer run of text with no heading.
         """
         self._kb_reader = kb_reader
         self._embedder = embedder
@@ -159,13 +160,14 @@ class IndexKnowledgeBaseHandler:
         self._path_root = path_root
         self._path_root_source = path_root_source
         self._chunk_sizes = chunk_sizes
-        # A schema that stores no source chunk has nothing to cut, so it asks no planner and its version names none.
-        self._cut_plan_stage = cut_plan_stage if "source-chunk" in spec.active_embed_strategies() else None
         self._indexer_version = (
-            indexer_version(chunk_sizes, planner=self._cut_plan_stage.planner, planner_ceiling_tokens=self._cut_plan_stage.ceiling_tokens)
-            if self._cut_plan_stage is not None
+            indexer_version(chunk_sizes, planner=cut_plan_stage.planner, planner_ceiling_tokens=cut_plan_stage.ceiling_tokens)
+            if cut_plan_stage is not None
             else indexer_version(chunk_sizes)
         )
+        # A schema that stores no source chunk has nothing to cut, so it asks no planner. Its version still names the planner,
+        # so it matches the version a host builds from the same settings.
+        self._cut_plan_stage = cut_plan_stage if "source-chunk" in spec.active_embed_strategies() else None
         self.events: list[Event] = []
         self._clean_page_view: Callable[[], Sequence[CleanPage]] | None = None
 
