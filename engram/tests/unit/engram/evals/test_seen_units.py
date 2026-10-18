@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from typing import TYPE_CHECKING
 
 from core.ai.disclosure.contracts import ChildSummary, DisclosureEnvelope
@@ -213,6 +215,48 @@ def test_a_returned_unit_counts_through_its_page_id_alone():
     search = SearchResult(hits=(SearchHit(id="note.alpha#s1", hit_level="section", page_id="note.alpha", score=1.0),), next_steps=_NEXT)
 
     assert seen_units(_run_code({"output": "pages: note.alpha\n"}, ("search", search)), collection="notes") == ("note.alpha#s1",)
+
+
+_QUOTED_BODY = 'The company\'s chief said "growth" would return by the spring. It follows up on [[note.beta]] from the café.'
+
+
+def _quoted_body_returns() -> tuple[tuple[str, object], ...]:
+    """A search that returned note.alpha and note.beta, then a fetch of note.alpha whose body holds both quote marks and a link."""
+    search = SearchResult(
+        hits=(
+            SearchHit(id="note.alpha", hit_level="card", snippet=_ALPHA_SNIPPET, score=1.0),
+            SearchHit(id="note.beta", hit_level="card", snippet=_BETA_SNIPPET, score=0.5),
+        ),
+        next_steps=_NEXT,
+    )
+    return ("search", search), ("fetch", FetchResult(id="note.alpha", level="card", title="Alpha", body=_QUOTED_BODY))
+
+
+def test_a_body_printed_as_a_python_value_is_matched_and_cut_through_its_escaped_quotes():
+    printed = {"id": "note.alpha", "level": "card", "title": "Alpha", "body": _QUOTED_BODY}
+
+    assert seen_units(_run_code({"output": f"{printed!r}\n"}, *_quoted_body_returns()), collection="notes") == ("note.alpha",)
+
+
+def test_a_unit_printed_as_json_is_matched_and_cut_through_its_escaped_quotes_and_characters():
+    printed = {"id": "note.alpha", "level": "card", "title": "Alpha", "body": _QUOTED_BODY}
+
+    assert seen_units(_run_code({"output": f"{json.dumps(printed)}\n"}, *_quoted_body_returns()), collection="notes") == ("note.alpha",)
+
+
+def test_a_body_printed_as_a_json_string_counts_its_unit_and_never_its_link():
+    output = {"output": f"{json.dumps(_QUOTED_BODY)}\n"}
+
+    assert seen_units(_run_code(output, *_quoted_body_returns()), collection="notes") == ("note.alpha",)
+
+
+def test_a_returned_text_is_cut_whatever_field_it_came_in_before_ids_are_read():
+    search = SearchResult(hits=(SearchHit(id="note.beta", hit_level="card", snippet=_BETA_SNIPPET, score=1.0),), next_steps=_NEXT)
+    rows = {"rows": [{"body": _ALPHA_BODY}], "note": None}
+
+    seen = seen_units(_run_code({"output": f"{_ALPHA_BODY}\n"}, ("search", search), ("run_sql", rows)), collection="notes")
+
+    assert seen == ()
 
 
 def test_a_claim_counts_when_the_result_carried_its_text():

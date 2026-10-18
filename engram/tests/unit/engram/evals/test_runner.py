@@ -1726,6 +1726,33 @@ class TestSeenRecall(_ResetsLogfire):
         _header, lines = _read_results(results)
         assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-alpha"], 0.5)
 
+    async def test_in_code_mode_a_printed_unit_whose_body_holds_quotes_is_cut_before_its_link_is_read(self, tmp_path: Path):
+        hits = SqlResult(
+            rows=(
+                {"id": "note.alpha", "hit_level": "card", "page_id": None, "snippet": "The chief spoke about growth.", "score": 1.0},
+                {"id": "note.beta", "hit_level": "card", "page_id": None, "snippet": "The spring forecast was set.", "score": 0.5},
+            ),
+            columns=("id", "hit_level", "page_id", "snippet", "score"),
+        )
+        body = 'The company\'s chief said "growth" would return by the spring. It follows up on [[note.beta]] from the café.'
+        fetched = SqlResult(rows=({"id": "note.alpha", "level": "card", "title": "Alpha", "body": body},), columns=("id", "level", "title", "body"))
+        gateway = FakeSqlGateway(routed={"api.search": hits, "api.fetch": fetched})
+        program = "found = await search(query='growth')\nunit = await fetch(unit_id='note.alpha')\nprint(unit)"
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", code_mode=True, hit_sources=_FakeHitSources(sources=_SEEN_SOURCES), results_path=results
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(handlers=_handlers_over(gateway)),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha", "src-beta"))),
+            model=_calls_then_answers(ToolCallPart("run_code", {"code": program})),
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-alpha"], 0.5)
+
     async def test_in_code_mode_a_hit_one_run_code_call_returned_counts_when_a_later_call_prints_it(self, tmp_path: Path):
         hits = SqlResult(
             rows=({"id": "note.alpha#s1", "hit_level": "section", "page_id": "note.alpha", "snippet": "Graph indexes speed up recall.", "score": 1.0},),

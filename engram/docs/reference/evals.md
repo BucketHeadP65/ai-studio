@@ -137,23 +137,34 @@ bare claim id or a provenance pointer never counts. The SQL side has two limits.
 selects `claim_id` and `page_id` without the claim's text still counts its page through `page_id`,
 which is the claim's own page and source. A row whose `id` column holds a claim with no `hit_level`
 or `level` beside it, such as `SELECT id, page_title FROM api.search(...)`, counts that claim as a
-bare id, because nothing in the row marks it as a claim.
+bare id, because nothing in the row marks it as a claim. A SQL row that carries a text excerpt but no
+unit column, such as `SELECT substr(body, 1200, 1800) AS excerpt FROM api.raw_chunks WHERE ...`,
+names no unit, so it never counts, though the model received that source's text.
 
 Under `--code-mode` seen recall reads the `run_code` output the model reads, never the program's
 own tool returns directly. The candidates are every unit that any tool call of any program in the
 case returned so far, as code mode records them on each call's return (`metadata["tool_returns"]`)
 and read by the same rules as a direct call, so a search in one call that a later call prints
-counts. A candidate counts when an output carries the first 60 characters of its body or snippet,
-whitespace collapsed on both sides and the escaped line breaks of a printed Python value read as
-spaces, or all of it when shorter. Every candidate text an output carries is then cut out of it, and
-a candidate also counts when what remains carries its id, its ref or its page id as a word, `=`
-splitting words like whitespace. So a program that prints a hit list counts its hits, a program that
-prints a fetched body counts that unit, and a link inside a printed body never counts, even when a
-search also returned the linked unit. A program that searches and prints only a count sees nothing,
-a body printed from its middle counts only by an id printed beside it, and a link inside such a
-fragment can count the linked unit when a tool call returned it. A program that prints and then
-raises reaches the model as a retry prompt that carries its printed output but no tool returns,
-because code mode records none for a failed call, so what such a program showed never counts. Every
+counts. A unit's text is a hit's snippet, a fetched unit's body, a leveled fetch's content, a
+child's summary, or a SQL row's `text`, `quote`, `snippet` or `body` (`api.claims` serves a claim's
+text and quote as `text` and `quote`). A candidate counts when an output carries the first 60 characters of its text, or all of it
+when shorter. Whitespace is collapsed on both sides, and the escapes a printed Python value or a
+JSON text writes are read first: `\'`, `\"`, `\\`, `\uXXXX` and a surrogate pair as the character
+they stand for, and `\n`, `\r` and `\t` as spaces, so `print(u)`, `print(json.dumps(u))` and
+`print(json.dumps(u['body']))` all match. Every text any tool call of the case returned that the
+output carries, in any of those fields and from a SQL row with or without a unit column, is then cut
+out of it, and a candidate also counts when what remains carries its id, its ref or its page id as a
+word, `=` splitting words like whitespace. So a program that prints a hit list counts its hits, a
+program that prints a fetched body counts that unit, and a link inside a returned text the output
+carries never counts, even when a search also returned the linked unit. A program that searches and
+prints only a count sees nothing. A body printed from its middle counts only by an id printed beside
+it, and a link inside such a fragment can count the linked unit when a tool call returned it. A body
+the program changes while it prints it, such as its quotes swapped or a prefix put on every line,
+matches only up to the first change, so the rest stays in the output where its links can count. A
+program that prints and then raises reaches the model as a retry prompt that carries its printed
+output but no tool returns, because code mode records none for a failed call. So what such a program
+showed never counts, and a unit it returned never becomes a candidate, so a later call that shows
+values the failed call assigned counts none of them. Every
 unit seen maps to its source the way the cited ids map, in the same one page lookup and one source
 lookup. Reading a tool result never raises, whatever its shape, so the measure never changes how a
 case ends or whether its failure is transient. A run without

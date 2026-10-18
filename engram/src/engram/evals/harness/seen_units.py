@@ -2,10 +2,11 @@
 
 A search names each hit, a fetch the unit it read, a leveled fetch its own unit and every child it lists, and a graph
 answer each node. A SQL row names the units in its `id`, `page_id`, `section_id`, `claim_id` and `source_id` columns,
-never a relation end such as `src_id`. A claim counts only with its text: a hit's snippet, a fetched body, or a SQL row's
-`text`, `quote`, `snippet` or `body`. In code mode a unit that any program tool call of the run returned counts when a
-`run_code` output carries the first 60 characters of its body or snippet, or, once those texts are taken out, its id,
-ref or page id as a word. Any other result names no unit. A tool return of any shape is read without raising.
+never a relation end such as `src_id`. A unit's text is a hit's snippet, a fetched body, a leveled fetch's content, a
+child's summary or a SQL row's `text`, `quote`, `snippet` or `body`, and a claim counts only with its text. In code mode
+a unit any program tool call of the case returned counts when a `run_code` output carries the first 60 characters of its
+text, or, once every returned text the output carries is cut out, its id, ref or page id as a word. Any other result
+names no unit, and a tool return of any shape is read without raising.
 """
 
 from __future__ import annotations
@@ -49,8 +50,9 @@ _LISTING_KINDS = frozenset({"collection", "group"})
 # How many leading characters of a unit's text, whitespace collapsed, an output must carry for the unit to count.
 _TEXT_KEY_CHARS = 60
 
-# The escaped whitespace a printed Python value shows in place of a line break or a tab.
-_ESCAPED_WHITESPACE = ("\\n", "\\r", "\\t")
+# The escapes a printed Python value or a JSON text shows in place of a character: a surrogate pair, a code point, a
+# quote mark or a backslash, then a line break or a tab, which reads as a space.
+_ESCAPE = re.compile(r"\\u(d[89ab][0-9a-f]{2})\\u(d[c-f][0-9a-f]{2})|\\u([0-9a-f]{4})|\\(['\"\\])|\\[nrt]", re.IGNORECASE)
 
 # A word of output text runs between whitespace and the marks that never sit inside an id or a ref.
 _WORD = re.compile(r"[^\s\[\](){}<>|,;'\"`=]+")
@@ -80,12 +82,15 @@ def seen_units(messages: Sequence[ModelMessage], *, collection: str) -> tuple[st
     """
     seen: dict[str, None] = {}
     program_received: list[_Received] = []
+    program_texts: list[str] = []
     for part in _tool_returns(messages):
         if part.tool_name != RUN_CODE:
             seen.update(dict.fromkeys(received.unit for received in _received(part.content, collection)))
             continue
-        program_received.extend(received for returned in _program_returns(part) for received in _received(returned.content, collection))
-        seen.update(dict.fromkeys(_carried(part.content, program_received, collection)))
+        for returned in _program_returns(part):
+            program_received.extend(_received(returned.content, collection))
+            program_texts.extend(_texts(returned.content))
+        seen.update(dict.fromkeys(_carried(part.content, program_received, program_texts, collection)))
     return tuple(seen)
 
 
@@ -175,13 +180,43 @@ def _row_received(value: ToolReturnContent) -> Iterator[_Received]:
             yield from _row_received(item)
 
 
-def _carried(output: ToolReturnContent, received: Sequence[_Received], collection: str) -> Iterator[str]:
-    """The received units a `run_code` output carries: by their text first, then by an id, ref or page id outside those texts."""
-    text = _normalized(" ".join(_strings(output)))
-    by_text = [unit for unit in received if (key := _text_key(unit.text)) and key in text]
-    texts = sorted({_normalized(unit.text) for unit in by_text if unit.text is not None}, key=len, reverse=True)
-    words = frozenset(_words(_without(text, texts), collection))
-    carried = {unit.unit for unit in by_text} | {unit.unit for unit in received if unit.unit in words or unit.page in words}
+def _texts(content: ToolReturnContent) -> Iterator[str]:
+    """Every text one tool's result returned, a SQL row's text columns included whether or not the row names a unit."""
+    if isinstance(content, SearchResult):
+        yield from (hit.snippet for hit in content.hits if hit.snippet is not None)
+    elif isinstance(content, FetchResult):
+        if content.body is not None:
+            yield content.body
+    elif isinstance(content, DisclosureEnvelope):
+        if content.content is not None:
+            yield content.content
+        yield from (child.summary for child in content.children)
+    elif not isinstance(content, GraphResult | GraphPathsResult):
+        yield from _row_texts(content)
+
+
+def _row_texts(value: ToolReturnContent) -> Iterator[str]:
+    """Every text column cell of a JSON value's rows, at any depth."""
+    if isinstance(value, str):
+        return
+    if isinstance(value, Mapping):
+        for key, cell in value.items():
+            if key in _TEXT_COLUMNS and isinstance(cell, str):
+                yield cell
+            else:
+                yield from _row_texts(cell)
+    elif isinstance(value, Sequence):
+        for item in value:
+            yield from _row_texts(item)
+
+
+def _carried(output: ToolReturnContent, received: Sequence[_Received], texts: Sequence[str], collection: str) -> Iterator[str]:
+    """The received units a `run_code` output carries: by their text, then by an id, ref or page id outside every returned text."""
+    text = _collapsed(" ".join(_ESCAPE.sub(_unescaped, string) for string in _strings(output)))
+    by_text = {unit.unit for unit in received if (key := _text_key(unit.text)) and key in text}
+    cut = sorted({whole for whole in map(_collapsed, texts) if whole and whole[:_TEXT_KEY_CHARS] in text}, key=len, reverse=True)
+    words = frozenset(_words(_without(text, cut), collection))
+    carried = by_text | {unit.unit for unit in received if unit.unit in words or unit.page in words}
     yield from (unit.unit for unit in received if unit.unit in carried)
 
 
@@ -198,16 +233,24 @@ def _strings(value: ToolReturnContent) -> Iterator[str]:
             yield from _strings(item)
 
 
-def _normalized(text: str) -> str:
-    """The text with escaped and real whitespace collapsed to single spaces."""
-    for escaped in _ESCAPED_WHITESPACE:
-        text = text.replace(escaped, " ")
+def _unescaped(escape: re.Match[str]) -> str:
+    """The character an escape stands for, a space for an escaped line break or tab."""
+    high, low, code_point, mark = escape.groups()
+    if high is not None and low is not None:
+        return chr(0x10000 + ((int(high, 16) - 0xD800) << 10) + (int(low, 16) - 0xDC00))
+    if code_point is not None:
+        return chr(int(code_point, 16))
+    return mark if mark is not None else " "
+
+
+def _collapsed(text: str) -> str:
+    """The text with every run of whitespace collapsed to one space."""
     return " ".join(text.split())
 
 
 def _text_key(text: str | None) -> str:
     """The leading characters of a unit's text an output must carry, empty when the unit came with no text."""
-    return _normalized(text)[:_TEXT_KEY_CHARS] if text is not None else ""
+    return _collapsed(text)[:_TEXT_KEY_CHARS] if text is not None else ""
 
 
 def _without(text: str, texts: Sequence[str]) -> str:
