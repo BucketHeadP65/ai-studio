@@ -133,10 +133,13 @@ def _settings(tmp_path: Path) -> ApplicationSettings:
 
 
 class _FakeCoverageReader:
-    """Answers a knowledge base fingerprint of `spec-hash:{collection}`, the shape the real reader reads."""
+    """Answers a knowledge base fingerprint of `spec-hash:{collection}`, the shape the real reader reads, and one index build."""
 
     async def knowledge_base_fingerprint(self, *, collection: str) -> str:
         return f"spec-hash:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        return "7+500-1000 test-embedding"
 
 
 class _FakeInventoryReaders:
@@ -148,10 +151,13 @@ class _FakeInventoryReaders:
 
 
 class _ReindexedCoverageReader:
-    """Answers the fingerprint of a knowledge base indexed again since the first run."""
+    """Answers the fingerprint of a knowledge base indexed again since the first run, on the same index build."""
 
     async def knowledge_base_fingerprint(self, *, collection: str) -> str:
         return f"reindexed-hash:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        return "7+500-1000 test-embedding"
 
 
 class _ReindexedInventoryReaders:

@@ -266,6 +266,10 @@ class FakeInventoryReader:
         del collection
         return self.fingerprint
 
+    async def index_build(self, *, collection: str) -> str:
+        del collection
+        return "7+500-1000 test-embedding"
+
     async def page_ids(self, *, collection: str) -> frozenset[str]:
         del collection
         return self.page_ids_value

@@ -31,6 +31,7 @@ from core.ai.evaluation.contracts import (
 )
 from core.ai.models import Thinking, chat_http_client
 from core.settings import AzureOpenAiSettings
+from pydantic_ai import capture_run_messages
 from pydantic_ai.exceptions import AgentRunError
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
@@ -41,6 +42,7 @@ from engram.evals.harness.domain.evaluators import AnswerAccuracy
 from engram.evals.harness.domain.experiments import ExperimentRun, expand_variants
 from engram.evals.harness.infrastructure.instrumentation import configure_logfire, enable_local_span_recording, resolve_logfire_settings
 from engram.evals.harness.infrastructure.results import ResultsHeader, dataset_sha256, read_results, results_lines, write_results
+from engram.evals.harness.seen_units import seen_units
 from engram.evals.harness.transient_failures import is_transient_failure
 from engram.evals.outcomes.contracts import GuardedTracingToolset, WithheldRefs, page_of
 from engram.evals.shared.contracts import (
@@ -112,15 +114,17 @@ class EvaluationRunConfig:
         max_tool_calls: The most tool calls one case may make. A case that asks for more fails.
             `None` sets no limit.
         pinned_search: Whether `search` reads only the knowledge base's own collection. It keeps its date range.
-        hit_sources: The page-to-source lookup that maps each case's citations to source ids for the results
-            file, or `None` to score the cited page ids. Read only when `results_path` is set.
+        hit_sources: The page-to-source lookup that maps each case's citations, and the units its tool results named,
+            to source ids for the results file, or `None` to score the cited page ids and no seen recall. Read only when
+            `results_path` is set.
         results_path: Where to write the results file, one line per case after a header line, or `None` for no file.
         thinking: The thinking level the model under test is built at, sent with every request, or `None` for the
             model's own default. The test model ignores it.
         resume: Whether to continue the results file at `results_path` when it exists. The run keeps every case line
             that did not fail transiently, runs only the cases the file lacks or that failed transiently, and rewrites
             the file under the earlier header. A file whose header differs from this run's settings in a field the paired
-            comparison holds is refused before any case runs. With no file there yet, the run runs every case.
+            comparison holds, or in the index build, is refused before any case runs. With no file there yet, the run
+            runs every case.
     """
 
     model_spec: str
@@ -329,12 +333,14 @@ async def run_traced_eval_on_dataset(
     With `config.delivered_evidence_root` set, each case runs as its own trial behind the guarded
     tracing toolset and a traced model, and its trace comes back in `traces`. Without it, `traces` is empty.
     When a case expects an answer, the run scores it with `AnswerAccuracy` too, once, and leaves `dataset` unchanged.
-    With `config.results_path` set, the knowledge base fingerprint is read before the first case, and the results file is
-    written after the last one, failed cases included, each failure marked transient or not. A failed source lookup is
-    noted in the file's header and leaves the sources and retrieval scores null. With `config.resume` set and the file
-    already there, its header is checked before any case runs, and the report covers only the cases run again. The file
-    keeps the earlier header and its kept lines exactly, whatever the fingerprint now reads. A failed source lookup then
-    leaves only the lines run now without sources and scores, and the run returns the error rather than writing it.
+    With `config.results_path` set, the knowledge base fingerprint and index build are read before the first case, and
+    the results file is written after the last one, failed cases included, each failure marked transient or not. With
+    `config.hit_sources` set too, each line carries its seen recall, from the units the tool results in the case's own
+    messages named. A failed source lookup is noted in the file's header and leaves the sources and retrieval scores
+    null. With `config.resume` set and the file already there, its header is checked before any case runs, the index
+    build included, and the report covers only the cases run again. The file keeps the earlier header and its kept lines
+    exactly, whatever the fingerprint now reads. A failed source lookup then leaves only the lines run now without
+    sources and scores, and the run returns the error rather than writing it.
 
     Args:
         container: The resolver the model, the retrieval handlers and the Logfire settings come from.
@@ -354,7 +360,7 @@ async def run_traced_eval_on_dataset(
             reference.
         UnnamedCaseError: When a guarded run reaches a case that carries no name.
         ResultsFileNotResumableError: With `config.resume` set, when the results file cannot be read or was written by
-            a run whose settings differ in a held field.
+            a run whose settings differ in a held field or whose index build differs.
     """
     started = datetime.now(tz=UTC)
     model = model if model is not None else await build_eval_model(container, config.model_spec, thinking=config.thinking)
@@ -363,9 +369,10 @@ async def run_traced_eval_on_dataset(
     # The schema's `retrieval.collection` scopes `search` to the knowledge base's own collection, as on the MCP server.
     schema = await container.get(KnowledgeBaseSchema)
     collection = schema.retrieval.collection
-    kept = _kept_results(config, dataset, _RunStamp(collection=collection, started=started, knowledge_base_fingerprint="")) if config.resume else None
     # Read before the first case, so the stamp is the index the run starts on and a failed read costs no case.
-    fingerprint = await _knowledge_base_fingerprint(container, collection) if config.results_path is not None else ""
+    identity = await _index_identity(container, collection) if config.results_path is not None else _IndexIdentity(fingerprint="", build="")
+    stamp = _RunStamp(collection=collection, started=started, knowledge_base_fingerprint=identity.fingerprint, index_build=identity.build)
+    kept = _kept_results(config, dataset, stamp) if config.resume else None
     envelope_handler = await container.get(EnvelopeHandler) if config.disclosure else None
     toolset: RetrievalToolset = build_retrieval_toolset(
         resolved_handlers,
@@ -386,6 +393,7 @@ async def run_traced_eval_on_dataset(
     usage_limits = _usage_limits(config.max_tool_calls)
     scored = _cases_to_run(_with_answer_accuracy(dataset), kept)
     transient: set[str] = set()
+    seen: dict[str, tuple[str, ...]] = {}
 
     # Local span recording follows the token rather than the return of `configure_logfire`, because
     # that return is `True` whenever an earlier call in the process configured Logfire.
@@ -400,7 +408,7 @@ async def run_traced_eval_on_dataset(
             model, instructions=config.instructions, toolset=toolset, code_mode=config.code_mode, extra_capabilities=extra_capabilities
         )
         report = await scored.evaluate(
-            _noting_transient_failures(make_task(agent, usage_limits=usage_limits), transient),
+            _noting_transient_failures(_noting_seen_units(make_task(agent, usage_limits=usage_limits), seen, collection), transient),
             progress=False,
             max_concurrency=config.max_concurrency,
             repeat=config.repeat,
@@ -419,7 +427,7 @@ async def run_traced_eval_on_dataset(
             usage_limits=usage_limits,
         )
         report = await scored.evaluate(
-            _noting_transient_failures(_traced_task(trial, traces), transient),
+            _noting_transient_failures(_noting_seen_units(_traced_task(trial, traces), seen, collection), transient),
             progress=False,
             max_concurrency=config.max_concurrency,
             repeat=config.repeat,
@@ -427,10 +435,9 @@ async def run_traced_eval_on_dataset(
         )
     lookup_error: str | None = None
     if config.results_path is not None:
-        stamp = _RunStamp(collection=collection, started=started, knowledge_base_fingerprint=fingerprint)
-        notes = _CaseNotes(collections_read=collections_read, transient=frozenset(transient))
+        notes = _CaseNotes(collections_read=collections_read, transient=frozenset(transient), seen_units=seen)
         lookup_error = await _write_run_results(config, config.results_path, report, dataset, stamp=stamp, notes=notes, kept=kept)
-    return TracedEvaluationRun(report=report, traces=traces, knowledge_base_fingerprint=fingerprint, source_lookup_error=lookup_error)
+    return TracedEvaluationRun(report=report, traces=traces, knowledge_base_fingerprint=identity.fingerprint, source_lookup_error=lookup_error)
 
 
 def _usage_limits(max_tool_calls: int | None) -> UsageLimits | None:
@@ -451,6 +458,23 @@ def _noting_transient_failures(
             if case is not None and is_transient_failure(error):
                 transient.add(case)
             raise
+
+    return run_case
+
+
+def _noting_seen_units(
+    task: Callable[[QaInput], Awaitable[RetrievalAnswer]], seen: dict[str, tuple[str, ...]], collection: str
+) -> Callable[[QaInput], Awaitable[RetrievalAnswer]]:
+    """The task, filing the units its run's tool results named under the running case's name, whether it answers or fails."""
+
+    async def run_case(inp: QaInput) -> RetrievalAnswer:
+        with capture_run_messages() as messages:
+            try:
+                return await task(inp)
+            finally:
+                case = _CURRENT_CASE_NAME.get()
+                if case is not None:
+                    seen[case] = seen_units(messages, collection=collection)
 
     return run_case
 
@@ -517,20 +541,30 @@ def _named_collections(rows: Sequence[Row]) -> Iterator[str]:
 
 
 @dataclass(frozen=True)
+class _IndexIdentity:
+    """The knowledge base's index fingerprint and index build, read together before the first case."""
+
+    fingerprint: str
+    build: str
+
+
+@dataclass(frozen=True)
 class _RunStamp:
-    """What the results header records about the run's start: the knowledge base, the time and the index fingerprint."""
+    """What the results header records about the run's start: the knowledge base, the time, the index fingerprint and the index build."""
 
     collection: str
     started: datetime
     knowledge_base_fingerprint: str
+    index_build: str
 
 
 @dataclass(frozen=True)
 class _CaseNotes:
-    """What the run noted per case while it ran: the collections its SQL rows named and the cases that failed transiently."""
+    """What the run noted per case while it ran: its SQL rows' collections, the transient failures and the units its tool results named."""
 
     collections_read: Mapping[str, Collection[str]]
     transient: frozenset[str]
+    seen_units: Mapping[str, Sequence[str]]
 
 
 @dataclass(frozen=True)
@@ -557,13 +591,14 @@ def _results_header(config: EvaluationRunConfig, dataset: EvaluationDataset, sta
         dataset_sha256=dataset_sha256(dataset),
         collection=stamp.collection,
         knowledge_base_fingerprint=stamp.knowledge_base_fingerprint,
+        index_build=stamp.index_build,
         started=stamp.started.isoformat(),
         source_lookup_error=source_lookup_error,
     )
 
 
 def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
-    """Each field the paired comparison holds on which the file's header and this run differ, with both values."""
+    """Each field the paired comparison holds, and the index build, on which the file's header and this run differ, with both values."""
     held: tuple[tuple[str, str | int | bool | None, str | int | bool | None], ...] = (
         ("strategy", written.strategy, run.strategy),
         ("sql", written.sql, run.sql),
@@ -576,8 +611,14 @@ def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
         ("search_date_range", written.search_date_range, run.search_date_range),
         ("dataset_sha256", written.dataset_sha256, run.dataset_sha256),
         ("collection", written.collection, run.collection),
+        ("index_build", _build_or_unknown(written.index_build), _build_or_unknown(run.index_build)),
     )
     return [f"{name} ({in_file} in the file, {now} now)" for name, in_file, now in held if in_file != now]
+
+
+def _build_or_unknown(index_build: str | None) -> str:
+    """The index build as a refusal names it, `unknown` for a header that did not record one."""
+    return index_build if index_build is not None else "unknown"
 
 
 def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp: _RunStamp) -> _KeptResults | None:
@@ -590,7 +631,6 @@ def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp
     except (OSError, ValueError) as error:
         msg = f"the results file {path} cannot be resumed: {error}"
         raise ResultsFileNotResumableError(msg) from error
-    # The stamp's fingerprint is left blank: the comparison reads only the held fields.
     differences = _held_differences(written, _results_header(config, dataset, stamp, source_lookup_error=None))
     if differences:
         msg = (
@@ -616,11 +656,11 @@ async def _write_run_results(  # noqa: PLR0913 (the run's settings, its file, it
 ) -> str | None:
     """Write the run's results file and return what the source lookup raised, noting it in a header the run wrote itself."""
     collection = stamp.collection
-    sources: dict[str, list[str]] | None = None
+    mapped: _CaseSources | None = None
     lookup_error: str | None = None
     if config.hit_sources is not None:
         try:
-            sources = await _cited_sources(report, config.hit_sources, collection)
+            mapped = await _case_sources(report, notes.seen_units, config.hit_sources, collection)
         except Exception as exc:  # noqa: BLE001 (any lookup failure is noted in the header so the run's results are still written)
             lookup_error = f"{type(exc).__name__}: {exc}"
     header = _results_header(config, dataset, stamp, source_lookup_error=lookup_error) if kept is None else kept.header
@@ -628,7 +668,8 @@ async def _write_run_results(  # noqa: PLR0913 (the run's settings, its file, it
     case_order = [case.name for case in dataset.cases if case.name is not None]
     lines = results_lines(
         report,
-        sources=sources,
+        sources=mapped.cited if mapped is not None else None,
+        seen=mapped.seen if mapped is not None else None,
         other_collection=other_collection,
         case_order=case_order,
         source_lookup_failed=lookup_error is not None,
@@ -639,32 +680,47 @@ async def _write_run_results(  # noqa: PLR0913 (the run's settings, its file, it
     return lookup_error
 
 
-async def _knowledge_base_fingerprint(container: Resolver, collection: str) -> str:
-    """The knowledge base's index fingerprint and name, read the way a dataset version's stamp reads it."""
+async def _index_identity(container: Resolver, collection: str) -> _IndexIdentity:
+    """The knowledge base's index fingerprint and name, read the way a dataset version's stamp reads it, and its index build."""
     from engram.evals.commands import InventoryReaderFactory  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.commands)
 
     make_reader = await container.get(InventoryReaderFactory)
     async with make_reader() as reader:
-        return await reader.knowledge_base_fingerprint(collection=collection)
+        return _IndexIdentity(
+            fingerprint=await reader.knowledge_base_fingerprint(collection=collection), build=await reader.index_build(collection=collection)
+        )
 
 
-async def _cited_sources(report: EvaluationRunReport, hit_sources: HitSources, collection: str) -> dict[str, list[str]]:
-    """The ranked source ids each answered case's citations map to, from one page lookup and one source lookup."""
+@dataclass(frozen=True)
+class _CaseSources:
+    """The ranked sources each answered case cited, and the sources each case's tool results named, keyed by case name."""
+
+    cited: Mapping[str, Sequence[str]]
+    seen: Mapping[str, frozenset[str]]
+
+
+async def _case_sources(
+    report: EvaluationRunReport, seen_units: Mapping[str, Sequence[str]], hit_sources: HitSources, collection: str
+) -> _CaseSources:
+    """The sources each case cited and each case's tool results named, from one page lookup and one source lookup."""
     from engram.evals.scoring.contracts import (  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.scoring)
         HitRef,
         ranked_sources,
     )
 
     def as_hit(ref: str, pages: Collection[str]) -> HitRef:
-        """A cited page, or an anchor on one, as a page hit, and any other id as a raw chunk hit."""
+        """A page, or an anchor on one, as a page hit, and any other id as a raw chunk hit."""
         page = page_of(ref)
         return HitRef(id=page, hit_level="page", page_id=page) if page in pages else HitRef(id=ref, hit_level="raw", page_id=None)
 
     cited = {case.name: case.output.cited_source_ids for case in report.cases}
-    candidates = list(dict.fromkeys(page_of(ref) for refs in cited.values() for ref in refs))
+    candidates = list(dict.fromkeys(page_of(ref) for refs in (*cited.values(), *seen_units.values()) for ref in refs))
     pages = await hit_sources.page_ids(collection, candidates) if candidates else frozenset[str]()
     page_sources = await hit_sources.source_ids(collection, sorted(pages)) if pages else {}
-    return {name: ranked_sources([as_hit(ref, pages) for ref in refs], page_sources)[0] for name, refs in cited.items()}
+    return _CaseSources(
+        cited={name: ranked_sources([as_hit(ref, pages) for ref in refs], page_sources)[0] for name, refs in cited.items()},
+        seen={name: frozenset(ranked_sources([as_hit(unit, pages) for unit in units], page_sources)[0]) for name, units in seen_units.items()},
+    )
 
 
 class ResultsFileNotResumableError(ValueError):

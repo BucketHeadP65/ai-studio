@@ -19,6 +19,10 @@ if TYPE_CHECKING:
     from engram.kb.contracts import KnowledgeBaseSchema
 
 
+_NOT_INDEXED = "not indexed"
+"""The index build of a knowledge base that holds no stored indexer version."""
+
+
 def _as_difficulty(value: str) -> QaDifficulty:
     """Narrow a band string from the SQL `CASE` to `QaDifficulty`, raising `ValueError` on any other value."""
     match value:
@@ -84,6 +88,21 @@ class StratumInventoryQueries:
         statement = select(IndexFingerprintORM.spec_hash).where(IndexFingerprintORM.collection == collection)
         spec_hash = (await self._session.execute(statement)).scalar_one_or_none()
         return f"{spec_hash or ''}:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        """The index build in `kb.index_fingerprint`: its `indexer_version`, which carries the chunk sizes, then its `embed_model`.
+
+        Args:
+            collection: The knowledge base whose index build is read.
+
+        Returns:
+            The two separated by a space, or `not indexed` when the knowledge base has no stored indexer version.
+        """
+        statement = select(IndexFingerprintORM.indexer_version, IndexFingerprintORM.embed_model).where(IndexFingerprintORM.collection == collection)
+        row = (await self._session.execute(statement)).one_or_none()
+        if row is None or not row.indexer_version:
+            return _NOT_INDEXED
+        return f"{row.indexer_version} {row.embed_model}".strip()
 
     async def page_ids(self, *, collection: str) -> frozenset[str]:
         """The ids of every page now in a knowledge base, which a top-up checks gold pages against.
