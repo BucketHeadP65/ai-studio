@@ -93,6 +93,9 @@ EXPECTED_READER_SCOPE_TABLES = frozenset({"reader_scopes"})
 # The table 0059 adds: the numbers api.search ranks with.
 EXPECTED_TUNING_TABLES = frozenset({"retrieval_tuning"})
 
+# The table 0069 adds: the cut plans a chunk planner chose.
+EXPECTED_CUT_PLAN_TABLES = frozenset({"cut_plans"})
+
 # Every `api` view + function the serving layer depends on (contract §Agent-facing surface).
 EXPECTED_API_VIEWS = frozenset(
     {
@@ -218,7 +221,7 @@ class TestBaseTables:
         assert (
             tables
             == EXPECTED_MEMORY_TABLES | EXPECTED_EVAL_TABLES | EXPECTED_COMPILE_STATE_TABLES | EXPECTED_UNIT_SUMMARY_TABLES
-            | EXPECTED_SPINE_MATURATION_TABLES | EXPECTED_READER_SCOPE_TABLES | EXPECTED_TUNING_TABLES
+            | EXPECTED_SPINE_MATURATION_TABLES | EXPECTED_READER_SCOPE_TABLES | EXPECTED_TUNING_TABLES | EXPECTED_CUT_PLAN_TABLES
         )
 
     async def test_pages_carries_halfvec_embedding(self, conn: asyncpg.Connection):
@@ -2006,3 +2009,39 @@ class TestRawChunkReadingOrderMigration:
         assert await _view_comment(target_url, "api.raw_chunks") == comment_before
         assert await _view_definition(target_url, "api.raw_chunks") == definition_before
         assert await _reader_may_select(target_url, "api.raw_chunks")
+
+
+class TestCutPlansMigration:
+    """Revision 0069: `kb.cut_plans` holds each cut plan by knowledge base, text hash and chunk planner, granted to no reader."""
+
+    def test_the_revision_sits_directly_on_0068(self) -> None:
+        module = _load_migration_module("0069")
+
+        assert module.revision == "0069"
+        assert module.down_revision == "0068"
+
+    async def test_the_table_is_keyed_by_collection_text_hash_and_planner_and_the_downgrade_drops_it(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0068")
+        assert not await _relation_exists(target_url, "kb.cut_plans")
+
+        run_upgrade(target_url, "0069")
+
+        assert await _column_names(target_url, "kb.cut_plans") == {"collection", "text_hash", "planner", "starts"}
+        key = await _rows(
+            target_url,
+            "SELECT a.attname FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+            "WHERE i.indrelid = 'kb.cut_plans'::regclass AND i.indisprimary ORDER BY array_position(i.indkey, a.attnum)",
+        )
+        assert key == [("collection",), ("text_hash",), ("planner",)]
+        assert await _rows(target_url, "SELECT format_type(atttypid, atttypmod) FROM pg_attribute WHERE attrelid = 'kb.cut_plans'::regclass AND attname = 'starts'") == [
+            ("integer[]",)
+        ]
+        comment = await _view_comment(target_url, "kb.cut_plans")
+        assert comment is not None
+        assert "chunk planner" in comment
+        assert not await _reader_may_select(target_url, "kb.cut_plans")
+
+        run_downgrade(target_url, "0068")
+
+        assert not await _relation_exists(target_url, "kb.cut_plans")

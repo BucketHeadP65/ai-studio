@@ -402,6 +402,23 @@ class PageTypeContractORM(KbBase):
     contract: Mapped[dict[str, JsonValue]] = mapped_column(JSONB, nullable=False)
 
 
+class CutPlanORM(KbBase):
+    """`kb.cut_plans`, one cut plan per text and chunk planner, composite PK `(collection, text_hash, planner)`.
+
+    `text_hash` is the sha256 of the run of mirror text the plan cuts, `planner` the chunk planner's model name and prompt
+    version, and `starts` the paragraph numbers where a new chunk starts, paragraph 1 left out. A plan is written once and
+    never changed. The table is ungranted.
+    """
+
+    __tablename__ = "cut_plans"
+    __table_args__ = _SCHEMA
+
+    collection: Mapped[str] = mapped_column(Text, primary_key=True)
+    text_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    planner: Mapped[str] = mapped_column(Text, primary_key=True)
+    starts: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False)
+
+
 class UnitSummaryORM(KbBase):
     """`kb.unit_summaries`, indexed disclosure summary for a page or section, composite PK `(collection, unit_id)`.
 
