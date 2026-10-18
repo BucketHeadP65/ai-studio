@@ -53,6 +53,7 @@ from engram.evals.shared.contracts import (
     RetrievalHandlers,
     RetrievalToolset,
     build_retrieval_toolset,
+    fetch_opens_map,
 )
 from engram.evals.tuning.contracts import DEFAULT_STRATEGY, resolve_strategy
 from engram.kb.contracts import KnowledgeBaseSchema
@@ -424,6 +425,7 @@ async def run_traced_eval_on_dataset(
             store=FileDeliveredEvidenceStore(config.delivered_evidence_root),
             withheld=WithheldRefs(collection, config.withheld_refs),
             search_hybrid=profile.search_hybrid,
+            browsable=fetch_opens_map(envelope_handler, profile.tools),
             usage_limits=usage_limits,
         )
         report = await scored.evaluate(
@@ -774,6 +776,7 @@ class _TrialWiring:
     store: DeliveredEvidenceStore
     withheld: WithheldRefs
     search_hybrid: bool | None
+    browsable: bool
     usage_limits: UsageLimits | None
 
 
@@ -790,6 +793,7 @@ def _traced_task(trial: _TrialWiring, traces: dict[str, ExecutionTrace]) -> Call
             trial_id=trial_id,
             withheld=trial.withheld,
             search_hybrid=trial.search_hybrid,
+            browsable=trial.browsable,
         )
         agent = build_agent(
             TracingModel(trial.model, recorder),
@@ -861,6 +865,7 @@ class BlindTrialRunner:
         withheld: The references each case withholds, keyed by case id. A case with no entry
             withholds nothing.
         search_hybrid: The leg this run fixed `search` to, or `None` when the model picks per call.
+        browsable: Whether the toolset's `fetch` opens a map, so a rebuilt `search` answer may offer it.
         capabilities: Capabilities appended to every trial's agent.
         max_tool_calls: The most tool calls one trial may make. A trial that asks for more fails
             recoverably. `None` sets no limit.
@@ -874,6 +879,7 @@ class BlindTrialRunner:
     traces: MutableMapping[str, ExecutionTrace]
     withheld: Mapping[str, frozenset[str]] = field(default_factory=dict)
     search_hybrid: bool | None = None
+    browsable: bool = False
     capabilities: list[AbstractCapability] | None = None
     max_tool_calls: int | None = None
 
@@ -908,6 +914,7 @@ class BlindTrialRunner:
                 trial_id=trial_id,
                 withheld=WithheldRefs(self.collection, self.withheld.get(case.case_id, frozenset())),
                 search_hybrid=self.search_hybrid,
+                browsable=self.browsable,
             ),
             extra_capabilities=self.capabilities,
         )

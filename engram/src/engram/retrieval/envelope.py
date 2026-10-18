@@ -74,7 +74,8 @@ def fetch_description(collection: str, *, mode: DisclosureMode = "strict", can_s
         )
         return (
             "Read a unit by id. Results are leveled: you get the unit's own content plus a one-line "
-            f"summary of everything directly inside it, each with the id to read next. {discovery} A small page "
+            f"summary of everything directly inside it, each with the id to read next. {discovery} "
+            f"{fetchable_forms(collection)} A small page "
             "arrives whole (its text in `content`). A larger one lists its sections to choose from. "
             "Read the summaries before going deeper. Every level costs tokens, and once you have "
             "chosen several sections, call fetch for each in the same message: they run together."
@@ -88,22 +89,27 @@ def fetch_description(collection: str, *, mode: DisclosureMode = "strict", can_s
         "Read a unit by id. Results are leveled: you get the unit's own content plus a one-line "
         "summary of everything directly inside it, each with the id to read next. Call it with no "
         f"arguments to open the '{collection}' map and see what this knowledge base contains{grounding}. "
-        "A small page arrives whole (its text in `content`). A larger one "
+        f"{fetchable_forms(collection)} A small page arrives whole (its text in `content`). A larger one "
         "lists its sections to choose from. Read the summaries before going deeper. Every level "
         "costs tokens, and once you have chosen several sections, call fetch for each in the same "
         "message: they run together."
     )
 
 
-def flat_fetch_description() -> str:
+def flat_fetch_description(collection: str | None = None) -> str:
     """The `fetch` tool's description when reads are flat: full text by id, no levels, no map.
+
+    Args:
+        collection: The one knowledge base the reads resolve within, named in the id forms. `None` names a
+            stand-in, for a reader over several knowledge bases.
 
     Returns:
         The full tool description text.
     """
     return (
         "Read a unit's full text by id. `unit_id` is an id from a `search` hit: a page id reads the "
-        "whole page, a section id (the ones with `#`) reads that section. There is no browsable map "
+        "whole page, a section id (the ones with `#`) reads that section. "
+        f"{fetchable_forms(collection)} There is no browsable map "
         "here: find units with `search` first, then fetch a hit's id."
     )
 
@@ -131,10 +137,27 @@ def library_fetch_description(names: Sequence[str], *, cross_search: bool = Fals
     return (
         "Read a unit by id. Results are leveled: you get the unit's own content plus a one-line "
         f"summary of everything directly inside it, each with the id to read next. {opening} "
-        "A small page arrives whole (its text in `content`). A larger "
+        f"{fetchable_forms()} A small page arrives whole (its text in `content`). A larger "
         "one lists its sections to choose from. Read the summaries before going deeper. Every level "
         "costs tokens, and once you have chosen several sections, call fetch for each in the same "
         "message: they run together."
+    )
+
+
+def fetchable_forms(collection: str | None = None) -> str:
+    """The sentence naming every id form `fetch` takes, for its descriptions and its not-found refusals.
+
+    Args:
+        collection: The knowledge base the qualified forms name. `None` names a stand-in, for a reader
+            over several knowledge bases.
+
+    Returns:
+        One sentence naming the `page:`, `section:` and `unit:` refs and the bare id.
+    """
+    owner = "<collection>" if collection is None else collection
+    return (
+        f"`unit_id` takes a `ref` exactly as another tool returned it, such as 'page:{owner}/<id>', "
+        f"'section:{owner}/<id>' or 'unit:{owner}/<id>', or the bare id after the slash."
     )
 
 

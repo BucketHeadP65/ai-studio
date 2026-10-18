@@ -43,7 +43,14 @@ from engram.retrieval.queries import (
 from engram.retrieval.reader_roles import private_reader_role
 from engram.retrieval.rerank import RerankedSearch, Reranking, reranking
 from engram.retrieval.search_dialect import SearchDialects, build_search_dialects
-from engram.retrieval.tools import FetchEnvelope, build_retrieval_toolset, envelope_next_steps, search_next_steps, search_result_status
+from engram.retrieval.tools import (
+    FetchEnvelope,
+    build_retrieval_toolset,
+    envelope_next_steps,
+    fetch_opens_map,
+    search_next_steps,
+    search_result_status,
+)
 
 __all__ = [
     "BadRefError",
@@ -89,6 +96,7 @@ __all__ = [
     "embedded_read_tools",
     "embedded_retrieval",
     "envelope_next_steps",
+    "fetch_opens_map",
     "graph_next_steps",
     "halfvec_literal",
     "list_decisions",

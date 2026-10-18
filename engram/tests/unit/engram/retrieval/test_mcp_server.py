@@ -879,16 +879,17 @@ class TestSingleSourceRetrievalTools:
         assert embedder.texts == []  # bm25_only → no embedding
         assert gateway.last.params["qvec"] is None  # the BM25-only RRF leg
 
-    async def test_search_collection_reaches_another_partition_than_this_doors_own(self):
+    async def test_search_refuses_another_partition_than_this_doors_own(self):
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _full_server(gateway)
 
         async with connect_in_memory(server) as client:
             await client.initialize()
-            await client.call_tool("search", {"query": "graph rag", "collection": "repo-docs"})
+            failed = await client.call_tool("search", {"query": "graph rag", "collection": "repo-docs"})
 
-        assert "api.search" in gateway.last.sql
-        assert gateway.last.params["collection"] == "repo-docs"
+        assert failed.isError is True
+        assert repr(_COLLECTION) in _text(failed)
+        assert all("api.search" not in call.sql for call in gateway.rows_calls)
 
     async def test_search_omitted_collection_keeps_this_doors_own_default(self):
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))

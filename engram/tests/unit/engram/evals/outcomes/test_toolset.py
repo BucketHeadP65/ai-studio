@@ -214,6 +214,7 @@ class Trial:
         withheld: frozenset[str] = frozenset(),
         *,
         search_hybrid: bool | None = None,
+        browsable: bool = False,
     ) -> None:
         self.tools = ScriptedTools()
         self.store = FileDeliveredEvidenceStore(root)
@@ -225,6 +226,7 @@ class Trial:
             trial_id=trial_id,
             withheld=WithheldRefs(_COLLECTION, withheld),
             search_hybrid=search_hybrid,
+            browsable=browsable,
         )
 
     async def call(self, name: str, **arguments: object) -> object:
@@ -443,6 +445,78 @@ class TestWithheldReferences:
 
         assert isinstance(value, SearchResult)
         assert [hit.ref for hit in value.hits] == [_SAFE, _WITHHELD]
+
+
+class TestAWithheldUnitIsRefusedUnderEverySpelling:
+    """A unit withheld under one spelling stays withheld under every spelling that reaches the same unit."""
+
+    _CLAIM_ID = "paper.x#c1"
+
+    @pytest.mark.parametrize(
+        "spelling",
+        [
+            "paper.x#c1",
+            "page:paper.x#c1",
+            "section:paper.x#c1",
+            "unit:paper.x#c1",
+            "page:research/paper.x#c1",
+            "section:research/paper.x#c1",
+            "unit:research/paper.x#c1",
+        ],
+    )
+    async def test_a_claim_withheld_as_a_unit_ref_is_refused_under_every_spelling(self, tmp_path: Path, spelling: str):
+        trial = Trial(tmp_path, withheld=frozenset({f"unit:{_COLLECTION}/{self._CLAIM_ID}"}))
+
+        value = await trial.call("fetch", unit_id=spelling)
+
+        assert trial.tools.calls == []
+        assert value == refusal_text(spelling)
+
+    async def test_the_same_id_in_another_collection_is_another_unit(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({f"unit:{_COLLECTION}/{self._CLAIM_ID}"}))
+
+        await trial.call("fetch", unit_id=f"unit:elsewhere/{self._CLAIM_ID}")
+
+        assert trial.tools.calls == ["fetch"]
+
+    async def test_a_result_spelling_the_withheld_unit_another_way_is_refused(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({f"unit:{_COLLECTION}/{self._CLAIM_ID}"}))
+        trial.tools.fetch_result = _fetch_result(f"section:{_COLLECTION}/{self._CLAIM_ID}", body="the withheld text")
+
+        value = await trial.call("fetch", unit_id="safe")
+
+        assert value == refusal_text(f"section:{_COLLECTION}/{self._CLAIM_ID}")
+        assert "the withheld text" not in await trial.stored()
+
+    def test_free_text_naming_the_unit_under_another_prefix_is_a_leak(self):
+        withheld = WithheldRefs(_COLLECTION, frozenset({f"unit:{_COLLECTION}/{self._CLAIM_ID}"}))
+
+        assert withheld.named_in(f"read section:{_COLLECTION}/{self._CLAIM_ID} next") is not None
+        assert withheld.named_in(f"read page:{_COLLECTION}/{self._CLAIM_ID} next") is not None
+        assert withheld.named_in(f"read page:{_COLLECTION}/{self._CLAIM_ID}2 next") is None
+
+
+class TestARebuiltSearchOffersAMapOnlyWhereFetchOpensOne:
+    """A search answer rebuilt after its withheld hits are removed offers the map only when the run's `fetch` opens one."""
+
+    async def test_a_run_whose_fetch_opens_no_map_is_offered_none(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))
+        trial.tools.search_result = _search_result((_WITHHELD,))
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, SearchResult)
+        assert value.hits == ()
+        assert "collection:" not in " ".join(value.next_steps.options)
+
+    async def test_a_run_whose_fetch_opens_a_map_is_still_offered_it(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}), browsable=True)
+        trial.tools.search_result = _search_result((_WITHHELD,))
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, SearchResult)
+        assert f"fetch(unit_id='collection:{_COLLECTION}')" in " ".join(value.next_steps.options)
 
 
 # -- nothing names a withheld reference --------------------------------------
