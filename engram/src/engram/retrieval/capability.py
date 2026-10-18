@@ -50,7 +50,6 @@ from .envelope import (
     BadRefError,
     WrongCollectionError,
     fetch_description,
-    fetchable_forms,
     flat_fetch_description,
     library_fetch_description,
     parse_ref,
@@ -68,6 +67,8 @@ from .tools import (
     declared_facets_clause,
     elide_k,
     leveled_fetch,
+    no_map_refusal,
+    no_unit_refusal,
     refuse_duplicate_collections,
     refuse_undeclared_facets,
     search_description,
@@ -128,9 +129,6 @@ _GRAPH_TOOL_NAMES = frozenset({GRAPH_EXPAND, FIND_PATHS})
 
 _READ_TOOL_NAMES = frozenset({SEARCH, FETCH, GRAPH_EXPAND, FIND_PATHS})
 """The tools a graph answer may name in its next move."""
-
-_NO_MAP = "There is no browsable map here: find units with `search`, then fetch a hit's ref."
-"""The refusal a map request gets under the flat dial, which has no level to list."""
 
 _UNNAMED = "\x00"
 """A collection name no knowledge base can declare, so `parse_ref` answering it means the ref named none."""
@@ -837,7 +835,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     async def _flat(self, unit_id: str) -> FetchResult:
         """One unit's full text under the flat dial, refusing a map request toward `search`."""
         if not unit_id or unit_id in {name for surface in self.surfaces for name in (surface.name, surface.collection)}:
-            raise ModelRetry(_NO_MAP)
+            raise ModelRetry(no_map_refusal())
         if (owner := _named_collection(unit_id)) is not None:
             return await self._flat_in(self._collection_surface(owner), unit_id)
         refused: RefRefusal | None = None
@@ -855,22 +853,18 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     async def _flat_in(self, surface: ReadSurface, unit_id: str) -> FetchResult:
         """One unit's full text, read from `surface` alone and stamped by it."""
         if not unit_id or unit_id in (surface.name, surface.collection):
-            raise ModelRetry(_NO_MAP)
+            raise ModelRetry(no_map_refusal())
         try:
             resolved = parse_ref(unit_id, surface.collection)
         except BadRefError as exc:
             raise RefRefusal(str(exc)) from None
         if resolved.kind in {"collection", "group"}:
-            raise ModelRetry(_NO_MAP)
+            raise ModelRetry(no_map_refusal())
         if resolved.collection != surface.collection:
             raise RefRefusal(str(WrongCollectionError(surface.collection, resolved.collection)))
         unit = await fetch_unit(surface.handlers, resolved.unit_id)
         if unit is None:
-            msg = (
-                f"No unit found with id {resolved.unit_id!r} in {surface.name!r}. {fetchable_forms(surface.collection)} "
-                "Re-ground the id with `search` and try again."
-            )
-            raise ModelRetry(msg)
+            raise ModelRetry(no_unit_refusal(resolved.unit_id, surface.collection, named=f" in {surface.name!r}"))
         stamp = await surface.stamp() if surface.stamp is not None else None
         return unit.model_copy(update={"ref": qualify_ref(f"unit:{unit.id}", surface.collection), "knowledge_base": stamp})
 
@@ -1060,16 +1054,11 @@ def _sole(surfaces: Sequence[ReadSurface]) -> str | None:
     return surfaces[0].collection if len(surfaces) == 1 else None
 
 
-def _no_unit(unit_id: str, collection: str | None) -> str:
-    """The refusal for a handle no knowledge base here recognized, naming the id forms in `collection` when only it was read."""
-    return f"No unit found with id {unit_id!r}. {fetchable_forms(collection)} Re-ground the id with `search` and try again."
-
-
 def _fan_out_refusal(unit_id: str, refused: RefRefusal | None, *, unknown: bool, collection: str | None) -> ModelRetry:
-    """The refusal for a read no knowledge base answered: not-found, unless every base refused the ref itself."""
+    """The refusal for a read no knowledge base answered: not-found naming the forms in `collection`, unless every base refused the ref itself."""
     if refused is not None and not unknown:
         return refused
-    return ModelRetry(_no_unit(unit_id, collection))
+    return ModelRetry(no_unit_refusal(unit_id, collection))
 
 
 def _date_range(since: str | None, until: str | None) -> tuple[date | None, date | None]:

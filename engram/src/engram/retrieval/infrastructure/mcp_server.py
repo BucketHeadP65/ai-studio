@@ -64,6 +64,7 @@ from engram.retrieval.tools import (
     graph_expand_description,
     register_mcp_tools,
     register_routed_mcp_tools,
+    reground_phrase,
     resolve_description,
 )
 
@@ -430,6 +431,7 @@ def create_mcp_server(
     _register_read_tools(
         server,
         handlers,
+        available=available,
         fetch_handler=fetch_handler,
         read_surfaces=read_surfaces,
         only=only,
@@ -488,6 +490,7 @@ def _register_read_tools(
     server: FastMCP,
     handlers: RetrievalHandlers[Search] | None,
     *,
+    available: frozenset[str],
     fetch_handler: FetchHandler | None,
     read_surfaces: tuple[ReadSurface, ...] | None,
     only: frozenset[str] | None,
@@ -500,7 +503,7 @@ def _register_read_tools(
     stamp: StampSource | None,
     facet_keys: tuple[str, ...] = (),
 ) -> None:
-    """Add `search` and `fetch`, routed over the registered knowledge bases or scoped to this one."""
+    """Add `search` and `fetch`, routed over the registered knowledge bases or scoped to this one, refusals naming `available`."""
     if not (only is None or SEARCH in only or FETCH in only):
         return
     if read_surfaces is not None:
@@ -515,7 +518,7 @@ def _register_read_tools(
         return
     if handlers is None:
         if fetch_handler is not None and _admits(FETCH, only):
-            _add_flat_fetch(server, fetch_handler, collection=collection, descriptions=descriptions, stamp=stamp, can_search=False)
+            _add_flat_fetch(server, fetch_handler, collection=collection, descriptions=descriptions, stamp=stamp, tools=available)
         return
     _register_single_source_tools(
         server,
@@ -730,12 +733,11 @@ def _add_flat_fetch(
     collection: str,
     descriptions: Mapping[str, str] | None = None,
     stamp: StampSource | None = None,
-    can_search: bool,
+    tools: frozenset[str],
 ) -> None:
-    """Register the flat `fetch` from one handler, reading every id form and failing the call on an unknown id."""
-    reground = "`search`" if can_search else "`graph_expand` or `find_paths`, or the ids supplied with the task"
-    fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground, refuse=ToolError)
-    description = fetch_description(can_search=can_search, collection=collection)
+    """Register the flat `fetch` from one handler, reading every id form, its refusals naming only `tools`."""
+    fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground_phrase(tools), refuse=ToolError)
+    description = fetch_description(can_search=SEARCH in tools, collection=collection)
     server.add_tool(fetch, name=FETCH, description=resolve_description(FETCH, description, descriptions))
 
 

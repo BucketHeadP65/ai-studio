@@ -154,7 +154,7 @@ def fetchable_forms(collection: str | None = None) -> str:
     Returns:
         One sentence naming the `page:`, `section:` and `unit:` refs and the bare id.
     """
-    owner = "<knowledge base>" if collection is None else collection
+    owner = "<collection>" if collection is None else collection
     return (
         f"`unit_id` takes a `ref` exactly as another tool returned it, such as 'page:{owner}/<id>', "
         f"'section:{owner}/<id>' or 'unit:{owner}/<id>', or the bare id after the slash."

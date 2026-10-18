@@ -406,7 +406,7 @@ class TestSearchTool:
 
 
 class TestSearchCollectionOverride:
-    """`search` takes an optional `collection`, reaching another partition than this door's own default."""
+    """`search` takes an optional `collection`, which on a single-source door names only its own partition."""
 
     async def test_omitted_collection_keeps_the_doors_own_default(self):
         search = FakeSearchHandler(result=_search_rows())
@@ -417,32 +417,23 @@ class TestSearchCollectionOverride:
         (message,) = search.calls
         assert message.collection == "workdocs"
 
-    async def test_a_given_collection_overrides_the_doors_own_default(self):
+    async def test_another_collection_is_refused_before_the_search_runs(self):
         search = FakeSearchHandler(result=_search_rows())
         toolset = build_retrieval_toolset(_handlers(search=search), collection="workdocs")
 
-        await _call(toolset, "search", {"query": "graph rag", "collection": "other-knowledge-base"})
+        with pytest.raises(ModelRetry, match="'workdocs'"):
+            await _call(toolset, "search", {"query": "graph rag", "collection": "other-knowledge-base"})
 
-        (message,) = search.calls
-        assert message.collection == "other-knowledge-base"
+        assert search.calls == []
 
-    async def test_a_given_collection_stamps_the_returned_hits(self):
+    async def test_the_doors_own_collection_given_by_name_is_searched(self):
         search = FakeSearchHandler(result=_search_rows())
         toolset = build_retrieval_toolset(_handlers(search=search), collection="workdocs")
 
-        result = await _call(toolset, "search", {"query": "graph rag", "collection": "other-knowledge-base"})
+        result = await _call(toolset, "search", {"query": "graph rag", "collection": "workdocs"})
 
         assert isinstance(result, SearchResult)
-        assert {hit.knowledge_base for hit in result.hits} == {"other-knowledge-base"}
-
-    async def test_a_given_collection_names_its_own_map_on_a_miss(self):
-        toolset = build_retrieval_toolset(_handlers(search=FakeSearchHandler(result=SqlResult())), collection="workdocs", envelope=_envelope("workdocs"))
-
-        result = await _call(toolset, "search", {"query": "no such thing anywhere", "collection": "other-knowledge-base"})
-
-        assert isinstance(result, SearchResult)
-        joined = " ".join(result.next_steps.options)
-        assert "fetch(unit_id='collection:other-knowledge-base')" in joined
+        assert {hit.knowledge_base for hit in result.hits} == {"workdocs"}
 
 
 _PERIOD_ARGUMENT = {"anyOf": [{"pattern": r"^\d{4}(-\d{2}(-\d{2})?)?$", "type": "string"}, {"type": "null"}], "default": None}
@@ -512,6 +503,18 @@ _PINNED_VARIANTS = [
 
 _SQL_SENTENCE_TAIL = ", and `api.about` (via `run_sql`) lists what is here and what each one covers."
 """How the collection sentence ends over a surface that also serves `run_sql`. Without `run_sql` it ends at the default."""
+
+_SHARED_SENTENCE = (
+    "This database is shared across more than one collection. Set `collection` to search a different one instead of this "
+    "knowledge base's own default"
+)
+"""The shipped collection sentence up to its ending, which a single-source door replaces."""
+
+
+def _served_by_one(description: str) -> str:
+    """A shipped search description as a single-source door publishes it: its collection sentence names the one it reads."""
+    served = f"This tool searches one collection, '{_COLLECTION}': leave `collection` out, since any other value is refused."
+    return description.replace(f"{_SHARED_SENTENCE}{_SQL_SENTENCE_TAIL}", served).replace(f"{_SHARED_SENTENCE}.", served)
 
 
 def _search_schema(arguments: tuple[str, ...]) -> dict[str, object]:
@@ -598,8 +601,9 @@ class TestPinnedSearch:
         tools = await toolset.get_tools(_ctx())
 
         published = tools["search"].tool_def
-        expected = description if can_sql else description.replace(_SQL_SENTENCE_TAIL, ".")
+        expected = _served_by_one(description if can_sql else description.replace(_SQL_SENTENCE_TAIL, "."))
         assert _SQL_SENTENCE_TAIL in description
+        assert _SHARED_SENTENCE not in expected
         assert toolset.tools["search"].prepare is None
         assert json.dumps(published.parameters_json_schema) == json.dumps(_search_schema(arguments))
         assert published.description == expected

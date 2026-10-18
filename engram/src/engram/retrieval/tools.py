@@ -56,7 +56,7 @@ from .budget import fits_budget, longest_fitting, with_fallback_steps
 from .domain import FetchResult, NextSteps, Period, Row, Search, SearchHit, SearchResult, period_end, period_start
 from .envelope import EnvelopeHandler, fetchable_forms, normalize_ref, parse_ref, qualify_ref
 from .envelope import fetch_description as leveled_fetch_description
-from .exceptions import BadRefError, RefRefusedError, WrongCollectionError
+from .exceptions import _REGROUND_WITH_SEARCH, BadRefError, RefRefusedError, WrongCollectionError
 from .infrastructure.gateway import read_snapshot
 
 # The search description takes its list of `hit_level` values from this schema.
@@ -102,14 +102,18 @@ __all__ = [
     "elide_k",
     "envelope_next_steps",
     "fetch_description",
+    "fetch_opens_map",
     "find_paths_description",
     "flat_fetch",
     "graph_expand_description",
     "leveled_fetch",
+    "no_map_refusal",
+    "no_unit_refusal",
     "refuse_duplicate_collections",
     "refuse_undeclared_facets",
     "register_mcp_tools",
     "register_routed_mcp_tools",
+    "reground_phrase",
     "resolve_description",
     "search_hits",
     "search_next_steps",
@@ -221,6 +225,19 @@ def declared_facets_clause(declared: Mapping[str, tuple[str, ...]], *, several_p
         else "A call may use only the keys of the knowledge base it searches."
     )
     return f"{_FACETS_MEANING} The facet keys each knowledge base declares: {_keys_by_base(declared)}. {usable} {_FACETS_VALUES}"
+
+
+def _served_clause(collection: str) -> str:
+    """The collection sentence of a search that reads one collection only, naming it."""
+    return f"This tool searches one collection, '{collection}': leave `collection` out, since any other value is refused."
+
+
+def _served_description(description: str, collection: str) -> str:
+    """A search description whose collection sentences say it reads `collection` alone."""
+    text = description
+    for clause in (_COLLECTION_CLAUSE, _COLLECTION_CLAUSE_NO_SQL):
+        text = text.replace(clause, _served_clause(collection))
+    return text
 
 
 def _without_sql_plane(description: str) -> str:
@@ -458,8 +475,9 @@ def _final_descriptions(
     pinned: bool = False,
     facets_clause: str | None = None,
     collection: str | None = None,
+    served: str | None = None,
 ) -> dict[str, str]:
-    """Each retrieval tool's description by tool name after any override, `facets_clause` `None` for a search without `facets`."""
+    """Each tool's description after any override: `facets_clause` `None` takes no `facets`, `served` names the one collection searched."""
     can_search = SEARCH in selected
     can_fetch = FETCH in selected
     if search_hybrid is None:
@@ -475,6 +493,8 @@ def _final_descriptions(
     search_text = resolve_description(SEARCH, search_default, descriptions)
     if pinned:
         search_text = _pinned_description(search_text)
+    elif served is not None:
+        search_text = _served_description(search_text, served)
     return {
         SEARCH: elide_k(search_text) if k_source is not None else search_text,
         FETCH: resolve_description(FETCH, fetch_description(can_search=can_search, collection=collection), descriptions),
@@ -495,11 +515,6 @@ def _switch_gated_selection(selected: frozenset[str], switches: RetrievalSwitche
     if switches is not None and not switches.graph:
         return selected - {GRAPH_EXPAND, FIND_PATHS}
     return selected
-
-
-def _delegated_only(selected: frozenset[str], only: frozenset[str] | None, *, withheld: set[str]) -> frozenset[str] | None:
-    """The tools the shared builder registers: `selected` minus `withheld`, or `only` when nothing is withheld."""
-    return frozenset(selected - withheld) if withheld else only
 
 
 SEARCH_RESULT_CHARS = 12_000
@@ -720,9 +735,10 @@ def search_next_steps(
     """The next-move block a `search` result carries: fetch a hit, or widen when there are none.
 
     The top hit is named by its exact fetchable `ref`, so the option always goes through `fetch`.
-    With no hits, the options are a different query and the knowledge base's map. Every summary ends
-    by naming which leg answered. When the semantic leg alone selected the hits, the summary says so
-    and offers saying the knowledge base has no support for the question.
+    With no hits, the options are a different query and, when `map_collection` names one, the
+    knowledge base's map. Every summary ends by naming which leg answered. When the semantic leg
+    alone selected the hits, the summary says so and offers saying the knowledge base has no support
+    for the question.
 
     Args:
         hits: The projected hits, in rank order.
@@ -731,8 +747,8 @@ def search_next_steps(
         hybrid: Whether the vector leg ran, named as the honesty line.
         status: What the search found, which decides whether the low-support wording applies.
         map_collection: The partition whose `collection:` map ref the browse option offers. `None`
-            when no single partition answered, which drops the option rather than naming a ref that
-            would not read back.
+            when no single partition answered or when the `fetch` beside this search opens no map,
+            which drops the option rather than naming a ref that would not read back.
         dated: Whether a date range narrowed the search. With no hits, the widen option then names
             the range as a lever.
         filtered: Whether `facets` narrowed the search. With no hits, the widen option then names them
@@ -856,12 +872,14 @@ async def _run_search(
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
 ) -> SearchResult:
-    """Run one search into a bounded result: `pinned` ignores a passed collection, `browsable` offers the map, `facet_owner` names whom a refusal blames."""
+    """Run one search into a bounded result: `pinned` ignores a passed collection, otherwise one unlike `default_collection` is refused."""
     if pinned:
         collection = None
+    if collection is not None and collection != default_collection:
+        raise refuse(_foreign_collection_refusal(default_collection))
     if facets:
         _refuse_undeclared_facets(facets, facet_keys, refuse, owner=facet_owner)
-    scoped = collection if collection is not None else default_collection
+    scoped = default_collection
     hybrid = not bm25_only
     message = search_type(
         query=query,
@@ -892,6 +910,11 @@ async def _run_search(
         ),
         knowledge_base=knowledge_base,
     )
+
+
+def _foreign_collection_refusal(collection: str) -> str:
+    """The refusal a single-source search gives a `collection` other than the one it reads."""
+    return f"This search reads only the {collection!r} knowledge base, so `collection` takes no other value. Search again without `collection`."
 
 
 def search_ref_type(hit_level: str) -> Literal["page", "section", "unit"]:
@@ -1181,14 +1204,48 @@ def _flat_fetch_next_steps(unit: FetchResult) -> NextSteps:
     )
 
 
-def _no_unit(unit_id: str, collection: str, *, named: str = "", reground: str) -> str:
-    """The refusal for an id that names no unit, naming every id form `fetch` takes."""
+def reground_phrase(tools: frozenset[str]) -> str:
+    """How a `fetch` refusal tells the agent to find a good id, naming only tools in `tools`.
+
+    Args:
+        tools: The read tools the surface registers.
+
+    Returns:
+        `search` when it is registered, else the graph tools and the task's ids when a graph tool is,
+        else the task's ids alone.
+    """
+    if SEARCH in tools:
+        return _REGROUND_WITH_SEARCH
+    if GRAPH_EXPAND in tools or FIND_PATHS in tools:
+        return "`graph_expand` or `find_paths`, or the ids supplied with the task"
+    return "the ids supplied with the task"
+
+
+def no_unit_refusal(unit_id: str, collection: str | None, *, named: str = "", reground: str = _REGROUND_WITH_SEARCH) -> str:
+    """The refusal for an id that names no unit, naming every id form `fetch` takes.
+
+    Args:
+        unit_id: The id that named nothing.
+        collection: The knowledge base the forms name. `None` names a stand-in, for a reader over several.
+        named: Text naming the knowledge base that was asked, such as ` in 'notes'`, or empty.
+        reground: How the refusal tells the agent to find a good id (`reground_phrase`).
+
+    Returns:
+        The refusal text.
+    """
     return f"No unit found with id {unit_id!r}{named}. {fetchable_forms(collection)} Re-ground the id with {reground} and try again."
 
 
-def _no_map(reground: str) -> str:
-    """The refusal a flat read gives a `collection:` or `group:` ref, which it has no level to list."""
-    return f"There is no browsable map here, so a `collection:` or `group:` ref reads nothing. Fetch a unit found with {reground} instead."
+def no_map_refusal(reground: str = _REGROUND_WITH_SEARCH) -> str:
+    """The refusal a flat read gives a map request, which it has no level to list.
+
+    Args:
+        reground: How the refusal tells the agent to find a unit instead (`reground_phrase`).
+
+    Returns:
+        The refusal text.
+    """
+    return f"There is no browsable map here: find units with {reground}, then fetch one by its ref."
 
 
 class RefRefusal(ModelRetry):
@@ -1203,7 +1260,7 @@ def flat_fetch(
     collection: str,
     *,
     stamp: StampSource | None = None,
-    reground: str = "`search`",
+    reground: str = _REGROUND_WITH_SEARCH,
     refuse: Refuse = ModelRetry,
 ) -> Callable[[str], Awaitable[FetchResult]]:
     """The flat `fetch` tool function: one unit's full text, read by any id form the other tools hand out.
@@ -1217,7 +1274,7 @@ def flat_fetch(
         collection: The knowledge base partition every ref resolves within.
         stamp: This knowledge base's own name and freshness, read once after a read succeeds. `None`
             leaves it unset.
-        reground: How every refusal tells the agent to find a good id.
+        reground: How every refusal tells the agent to find a good id (`reground_phrase`).
         refuse: Builds the error a refusal raises: `ModelRetry` in a toolset, `ToolError` on MCP.
 
     Returns:
@@ -1230,13 +1287,13 @@ def flat_fetch(
         except BadRefError as exc:
             raise refuse(str(exc)) from None
         if resolved.kind in {"collection", "group"}:
-            raise refuse(_no_map(reground))
+            raise refuse(no_map_refusal(reground))
         if resolved.collection != collection:
             raise refuse(str(WrongCollectionError(collection, resolved.collection, reground=reground)))
         async with read_snapshot():
             unit = await fetch_one(handler, resolved.unit_id)
             if unit is None:
-                raise refuse(_no_unit(resolved.unit_id, collection, reground=reground))
+                raise refuse(no_unit_refusal(resolved.unit_id, collection, reground=reground))
             return unit if stamp is None else unit.model_copy(update={"knowledge_base": await stamp()})
 
     return fetch
@@ -1249,7 +1306,7 @@ def leveled_fetch(
     *,
     stamp: StampSource | None = None,
     knowledge_base: str = "",
-    can_search: bool = True,
+    tools: frozenset[str] = TOOL_NAMES,
 ) -> Callable[[str], Awaitable[FetchEnvelope | FetchUnit]]:
     """The leveled `fetch` tool function: envelope-shaped reads with a legacy full-text fallback.
 
@@ -1270,22 +1327,21 @@ def leveled_fetch(
             carried on whichever of the two shapes the call resolves to. `None` leaves it unset.
         knowledge_base: What a caller calls this knowledge base, named in the not-found refusals so
             a reader over several knows which one was asked. `""` leaves them unqualified.
-        can_search: Whether the surface registering this `fetch` also registers `search`. `True`
-            (the default) makes every refusal send the agent to `search`. `False` sends it to the
-            ids the task supplies.
+        tools: The read tools the surface registers. Every refusal sends the agent only to those
+            (`reground_phrase`). The default is all four.
 
     Returns:
         The `fetch` callable for this one knowledge base.
     """
     default_ref = f"collection:{collection}"
     named = f" in {knowledge_base!r}" if knowledge_base else ""
-    reground = "`search`" if can_search else "the ids supplied with the task"
+    reground = reground_phrase(tools)
 
     async def flat(unit_id: str) -> FetchUnit:
         """The flat full-text read for an id with no leveled surface, returned as a `FetchUnit`."""
         unit = await legacy_fetch(handlers, unit_id)
         if unit is None:
-            raise ModelRetry(_no_unit(unit_id, collection, named=named, reground=reground))
+            raise ModelRetry(no_unit_refusal(unit_id, collection, named=named, reground=reground))
         qualified = unit.model_copy(update={"ref": qualify_ref(f"unit:{unit.id}", collection)})
         return FetchUnit(
             **qualified.model_dump(exclude={"knowledge_base"}),
@@ -1331,6 +1387,19 @@ def _in_one_snapshot(read: Callable[[str], Awaitable[FetchEnvelope | FetchUnit]]
     return fetch
 
 
+def fetch_opens_map(envelope: EnvelopeHandler | None, tools: frozenset[str]) -> bool:
+    """Whether the `fetch` a single-source surface registers opens a map, so its `search` may offer one.
+
+    Args:
+        envelope: The envelope handler the surface's `fetch` reads through, or `None` for the flat read.
+        tools: The read tools the surface registers.
+
+    Returns:
+        True when `fetch` is registered, reads leveled, and its knowledge base is not `search_only`.
+    """
+    return envelope is not None and FETCH in tools and envelope.mode != "search_only"
+
+
 def build_retrieval_toolset(
     handlers: RetrievalHandlers[Search],
     *,
@@ -1363,7 +1432,7 @@ def build_retrieval_toolset(
             gets the override in place of its default. `None` keeps every default.
         collection: The knowledge base partition the `search` tool scopes to, and the map the leveled
             `fetch` opens: the knowledge base's own `retrieval.collection`. Required, since there is no
-            default collection.
+            default collection. `search` refuses any other `collection` it is passed, naming this one.
         envelope: When given, `fetch` becomes the leveled read (`leveled_fetch`) over this
             handler. `None` keeps the flat full-text fetch (`flat_fetch`), and `search` then offers no map.
         k_source: The row cap when the host owns it rather than the agent, read on every call.
@@ -1376,7 +1445,8 @@ def build_retrieval_toolset(
             keeps the `search` text from sending the agent to a SQL read. `True` keeps that sentence.
         pinned: Whether every `search` reads `collection` alone. `True` drops `collection` from the
             tool's parameters and its sentences from the description, and a collection the model passes
-            anyway is ignored. `False` (the default) keeps it. `since`, `until` and `facets` stay either way.
+            anyway is ignored. `False` (the default) keeps it, and `search` refuses a value other than
+            `collection`. `since`, `until` and `facets` stay either way.
         facet_keys: The facet keys the knowledge base's schema declares. `search` takes `facets` over
             these keys only and refuses any other key with a `ModelRetry` naming them. Its shipped
             description names them, and a `descriptions` override replaces that sentence with the rest.
@@ -1400,6 +1470,7 @@ def build_retrieval_toolset(
         pinned=pinned,
         facets_clause=_facets_clause(facet_keys),
         collection=collection,
+        served=collection,
     )
     # `SEARCH` and `FETCH` are always withheld from the shared builder. engram registers them below, so
     # every search result carries `next_steps` and `fetch` reads every id form the other tools hand out.
@@ -1407,7 +1478,7 @@ def build_retrieval_toolset(
         handlers,
         available=selected,
         descriptions=final,
-        only=_delegated_only(selected, only, withheld={SEARCH, FETCH}),
+        only=selected - {SEARCH, FETCH},
         search_hybrid=resolved_hybrid,
         search_type=search_type,
         stamp=stamp,
@@ -1424,20 +1495,19 @@ def build_retrieval_toolset(
             stamp=stamp,
             pinned=pinned,
             facet_keys=facet_keys,
-            browsable=leveled,
+            browsable=fetch_opens_map(envelope, selected),
         )
     if leveled and envelope is not None:
         toolset.add_function(
-            leveled_fetch(handlers, envelope, collection, stamp=stamp, can_search=SEARCH in selected),
+            leveled_fetch(handlers, envelope, collection, stamp=stamp, tools=selected),
             takes_ctx=False,
             name=FETCH,
             description=leveled_fetch_description(collection, mode=envelope.mode, can_search=SEARCH in selected),
             retries=TOOL_MAX_RETRIES,
         )
     elif FETCH in selected:
-        reground = "`search`" if SEARCH in selected else "the ids supplied with the task"
         toolset.add_function(
-            flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground),
+            flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected)),
             takes_ctx=False,
             name=FETCH,
             description=final[FETCH],
@@ -1478,7 +1548,7 @@ def register_mcp_tools(
             every default.
         collection: The knowledge base partition the `search` tool scopes to, and the map the leveled
             `fetch` opens: the knowledge base's own `retrieval.collection`. Required, since there is no
-            default collection.
+            default collection. `search` refuses any other `collection` it is passed, naming this one.
         envelope: When given, `fetch` becomes the leveled read (`leveled_fetch`) over this
             handler. `None` keeps the flat full-text fetch (`flat_fetch`), and `search` then offers no map.
         k_source: The row cap when the host owns it rather than the agent, read on every call.
@@ -1503,6 +1573,7 @@ def register_mcp_tools(
         selected=selected,
         facets_clause=_facets_clause(facet_keys),
         collection=collection,
+        served=collection,
     )
     # `SEARCH` and `FETCH` are always withheld from the shared builder, as in `build_retrieval_toolset`.
     _register_mcp_tools(
@@ -1510,7 +1581,7 @@ def register_mcp_tools(
         handlers,
         available=selected,
         descriptions=final,
-        only=_delegated_only(selected, only, withheld={SEARCH, FETCH}),
+        only=selected - {SEARCH, FETCH},
         search_hybrid=resolved_hybrid,
         search_type=search_type,
         stamp=stamp,
@@ -1526,13 +1597,13 @@ def register_mcp_tools(
             default_collection=collection,
             stamp=stamp,
             facet_keys=facet_keys,
-            browsable=leveled,
+            browsable=fetch_opens_map(envelope, selected),
         )
     if not leveled and FETCH in selected:
-        reground = "`search`" if SEARCH in selected else "the ids supplied with the task"
-        server.add_tool(flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground, refuse=ToolError), name=FETCH, description=final[FETCH])
+        flat = flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), refuse=ToolError)
+        server.add_tool(flat, name=FETCH, description=final[FETCH])
     if leveled and envelope is not None:
-        inner = leveled_fetch(handlers, envelope, collection, stamp=stamp, can_search=SEARCH in selected)
+        inner = leveled_fetch(handlers, envelope, collection, stamp=stamp, tools=selected)
 
         async def fetch(unit_id: str = f"collection:{collection}") -> FetchEnvelope | FetchUnit:
             try:
@@ -1589,7 +1660,7 @@ def register_routed_mcp_tools(
         server.add_tool(_routed_search(surfaces, home, k_source=k_source, refuse=ToolError), name=SEARCH, description=searching)
     if only is None or FETCH in only:
         server.add_tool(
-            _routed_fetch(surfaces, home, refuse=ToolError, can_search=can_search), name=FETCH, description=reading
+            _routed_fetch(surfaces, home, refuse=ToolError, tools=TOOL_NAMES if only is None else only), name=FETCH, description=reading
         )
 
 
@@ -1753,14 +1824,14 @@ def _routed_search(
 
 
 def _routed_fetch(
-    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, refuse: Refuse, can_search: bool = True
+    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, refuse: Refuse, tools: frozenset[str] = TOOL_NAMES
 ) -> Callable[[str], Awaitable[FetchEnvelope | FetchUnit]]:
-    """The routed `fetch`: the collection a ref names picks the knowledge base that reads it."""
+    """The routed `fetch`: the collection a ref names picks the knowledge base that reads it, refusals naming only `tools`."""
     by_collection = {surface.collection: surface for surface in surfaces}
-    reground = "`search`" if can_search else "the ids supplied with the task"
+    reground = reground_phrase(tools)
     reads = {
         surface.collection: leveled_fetch(
-            surface.handlers, surface.envelope, surface.collection, stamp=surface.stamp, knowledge_base=surface.collection, can_search=can_search
+            surface.handlers, surface.envelope, surface.collection, stamp=surface.stamp, knowledge_base=surface.collection, tools=tools
         )
         for surface in surfaces
     }

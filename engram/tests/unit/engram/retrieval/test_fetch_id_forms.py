@@ -92,7 +92,7 @@ def _graph_rows() -> tuple[Row, ...]:
 
 
 @dataclass
-class UnitGateway:
+class FakeUnitGateway:
     """A reader gateway over one knowledge base that answers only the ids it holds.
 
     `api.fetch` answers the unit bound as `unit_id`, the page and section envelopes answer the page or
@@ -129,8 +129,8 @@ class UnitGateway:
         return SchemaDescription(objects=())
 
 
-def _gateway(collection: str = _HOME) -> UnitGateway:
-    return UnitGateway(
+def _gateway(collection: str = _HOME) -> FakeUnitGateway:
+    return FakeUnitGateway(
         collection=collection,
         units=_units(),
         pages={_PAGE: _page_rows()},
@@ -140,7 +140,7 @@ def _gateway(collection: str = _HOME) -> UnitGateway:
 
 
 @dataclass
-class OneHitSearch:
+class FakeOneHitSearch:
     """A search handler that ranks one hit at one level, for whichever collection the call scopes."""
 
     hit_level: str = "card"
@@ -160,7 +160,7 @@ class OneHitSearch:
 
 
 @dataclass
-class NoHitSearch:
+class FakeNoHitSearch:
     """A search handler that ranks nothing."""
 
     async def __call__(self, query: Search) -> SqlResult:
@@ -168,9 +168,9 @@ class NoHitSearch:
         return SqlResult()
 
 
-def _handlers(gateway: UnitGateway, search: OneHitSearch | NoHitSearch | None = None) -> RetrievalHandlers:
+def _handlers(gateway: FakeUnitGateway, search: FakeOneHitSearch | FakeNoHitSearch | None = None) -> RetrievalHandlers:
     return RetrievalHandlers(
-        search=search or OneHitSearch(),
+        search=search or FakeOneHitSearch(),
         fetch=FetchHandler(gateway, gateway.collection),
         graph_expand=GraphExpandHandler(gateway, gateway.collection),
         find_paths=GraphPathsHandler(gateway, gateway.collection),
@@ -213,7 +213,7 @@ class TestTheFlatToolsetReadsWhatSearchNames:
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_the_next_step_names_reads_the_hit(self, hit_level: str, unit_id: str):
         gateway = _gateway()
-        toolset = build_retrieval_toolset(_handlers(gateway, OneHitSearch(hit_level, unit_id)), collection=_HOME)
+        toolset = build_retrieval_toolset(_handlers(gateway, FakeOneHitSearch(hit_level, unit_id)), collection=_HOME)
 
         found = await _call(toolset, "search", {"query": "alpha"})
         assert isinstance(found, SearchResult)
@@ -229,20 +229,12 @@ class TestTheFlatToolsetReadsWhatSearchNames:
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_bare_id_still_reads_the_hit(self, hit_level: str, unit_id: str):
         gateway = _gateway()
-        toolset = build_retrieval_toolset(_handlers(gateway, OneHitSearch(hit_level, unit_id)), collection=_HOME)
+        toolset = build_retrieval_toolset(_handlers(gateway, FakeOneHitSearch(hit_level, unit_id)), collection=_HOME)
 
         unit = await _call(toolset, "fetch", {"unit_id": unit_id})
 
         assert isinstance(unit, FetchResult)
         assert unit.id == unit_id
-
-    async def test_a_ref_without_its_collection_reads_the_same_unit(self):
-        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME)
-
-        unit = await _call(toolset, "fetch", {"unit_id": f"section:{_SECTION}"})
-
-        assert isinstance(unit, FetchResult)
-        assert unit.id == _SECTION
 
     async def test_the_database_is_asked_for_the_bare_id(self):
         gateway = _gateway()
@@ -290,8 +282,20 @@ class TestTheFlatToolsetReadsWhatSearchNames:
         with pytest.raises(ModelRetry, match="no browsable map"):
             await _call(toolset, "fetch", {"unit_id": f"collection:{_HOME}"})
 
+    async def test_the_map_refusal_is_the_one_the_flat_dial_gives(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME)
+        dials = ReadDials(fetch="flat")
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME),), dials_source=lambda: dials)
+
+        with pytest.raises(ModelRetry) as from_toolset:
+            await _call(toolset, "fetch", {"unit_id": f"collection:{_HOME}"})
+        with pytest.raises(ModelRetry) as from_dial:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": f"collection:{_HOME}"})
+
+        assert str(from_toolset.value) == str(from_dial.value)
+
     async def test_a_search_with_no_hits_never_offers_a_map_the_flat_fetch_cannot_open(self):
-        toolset = build_retrieval_toolset(_handlers(_gateway(), NoHitSearch()), collection=_HOME)
+        toolset = build_retrieval_toolset(_handlers(_gateway(), FakeNoHitSearch()), collection=_HOME)
 
         found = await _call(toolset, "search", {"query": "nothing"})
 
@@ -312,7 +316,7 @@ class TestTheFlatMcpFetchReadsWhatSearchNames:
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_the_next_step_names_reads_the_hit(self, hit_level: str, unit_id: str):
         server = FastMCP("fetch-forms")
-        register_mcp_tools(server, _handlers(_gateway(), OneHitSearch(hit_level, unit_id)), collection=_HOME)
+        register_mcp_tools(server, _handlers(_gateway(), FakeOneHitSearch(hit_level, unit_id)), collection=_HOME)
 
         async with connect_in_memory(server) as client:
             await client.initialize()
@@ -378,13 +382,13 @@ class TestTheGraphOnlyMcpFetchReadsWhatTheGraphNames:
 class TestTheLeveledToolsetReadsWhatSearchNames:
     """The toolset with an envelope: pages and sections open leveled, claims and raw chunks read flat."""
 
-    def _toolset(self, search: OneHitSearch) -> FunctionToolset[object]:
+    def _toolset(self, search: FakeOneHitSearch) -> FunctionToolset[object]:
         gateway = _gateway()
         return build_retrieval_toolset(_handlers(gateway, search), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
 
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_the_next_step_names_reads_the_hit(self, hit_level: str, unit_id: str):
-        toolset = self._toolset(OneHitSearch(hit_level, unit_id))
+        toolset = self._toolset(FakeOneHitSearch(hit_level, unit_id))
 
         found = await _call(toolset, "search", {"query": "alpha"})
         assert isinstance(found, SearchResult)
@@ -392,12 +396,13 @@ class TestTheLeveledToolsetReadsWhatSearchNames:
         read = await _call(toolset, "fetch", {"unit_id": named})
         bare = await _call(toolset, "fetch", {"unit_id": unit_id})
 
+        assert named.endswith(f":{_HOME}/{unit_id}")
         assert isinstance(read, (DisclosureEnvelope, FetchResult))
         assert isinstance(bare, (DisclosureEnvelope, FetchResult))
         assert read.ref == bare.ref == named
 
     async def test_an_unknown_id_is_refused_naming_the_forms(self):
-        toolset = self._toolset(OneHitSearch())
+        toolset = self._toolset(FakeOneHitSearch())
 
         with pytest.raises(ModelRetry) as refused:
             await _call(toolset, "fetch", {"unit_id": "note.missing"})
@@ -406,14 +411,14 @@ class TestTheLeveledToolsetReadsWhatSearchNames:
         _assert_names_the_forms(str(refused.value), _HOME)
 
     async def test_the_description_names_both_forms(self):
-        toolset = self._toolset(OneHitSearch())
+        toolset = self._toolset(FakeOneHitSearch())
 
         description = toolset.tools["fetch"].description or ""
 
         _assert_names_the_forms(description, _HOME)
 
 
-def _surface(name: str, search: OneHitSearch | NoHitSearch | None = None) -> ReadSurface:
+def _surface(name: str, search: FakeOneHitSearch | FakeNoHitSearch | None = None) -> ReadSurface:
     gateway = _gateway(name)
     return ReadSurface(
         name=name,
@@ -427,14 +432,14 @@ def _surface(name: str, search: OneHitSearch | NoHitSearch | None = None) -> Rea
 class TestTheRoutedFetchReadsWhatSearchNames:
     """The routed pair: a ref naming a registered knowledge base opens in that one."""
 
-    def _toolset(self, search: OneHitSearch) -> FunctionToolset[object]:
+    def _toolset(self, search: FakeOneHitSearch) -> FunctionToolset[object]:
         toolset = FunctionToolset[object]()
         add_routed_read_tools(toolset, (_surface(_HOME), _surface(_OTHER, search)), default_knowledge_base=_HOME)
         return toolset
 
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_from_another_knowledge_base_reads_there(self, hit_level: str, unit_id: str):
-        toolset = self._toolset(OneHitSearch(hit_level, unit_id))
+        toolset = self._toolset(FakeOneHitSearch(hit_level, unit_id))
 
         found = await _call(toolset, "search", {"query": "alpha", "collection": _OTHER})
         assert isinstance(found, SearchResult)
@@ -446,7 +451,7 @@ class TestTheRoutedFetchReadsWhatSearchNames:
         assert read.ref == named
 
     async def test_a_bare_id_reads_the_default_knowledge_base(self):
-        toolset = self._toolset(OneHitSearch())
+        toolset = self._toolset(FakeOneHitSearch())
 
         read = await _call(toolset, "fetch", {"unit_id": _CLAIM})
 
@@ -454,7 +459,7 @@ class TestTheRoutedFetchReadsWhatSearchNames:
         assert read.ref == f"unit:{_HOME}/{_CLAIM}"
 
     async def test_an_unknown_id_is_refused_naming_the_forms_of_the_base_it_asked(self):
-        toolset = self._toolset(OneHitSearch())
+        toolset = self._toolset(FakeOneHitSearch())
 
         with pytest.raises(ModelRetry) as refused:
             await _call(toolset, "fetch", {"unit_id": f"unit:{_OTHER}/note.missing"})
@@ -463,7 +468,7 @@ class TestTheRoutedFetchReadsWhatSearchNames:
         _assert_names_the_forms(str(refused.value), _OTHER)
 
     async def test_a_ref_naming_an_unregistered_knowledge_base_is_refused_naming_the_registered_ones(self):
-        toolset = self._toolset(OneHitSearch())
+        toolset = self._toolset(FakeOneHitSearch())
 
         with pytest.raises(ModelRetry, match="Registered: field-notes, bench-log"):
             await _call(toolset, "fetch", {"unit_id": f"page:elsewhere/{_PAGE}"})
@@ -476,7 +481,7 @@ class TestTheCapabilityReadsWhatSearchNames:
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_the_next_step_names_reads_the_hit(self, hit_level: str, unit_id: str, dial: str):
         dials = ReadDials(fetch="flat") if dial == "flat" else ReadDials()
-        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, OneHitSearch(hit_level, unit_id)),), dials_source=lambda: dials)
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, FakeOneHitSearch(hit_level, unit_id)),), dials_source=lambda: dials)
 
         found = await knowledge_base.direct_call_tool("search", {"query": "alpha"})
         assert isinstance(found, SearchResult)
@@ -487,10 +492,12 @@ class TestTheCapabilityReadsWhatSearchNames:
         assert isinstance(read, (DisclosureEnvelope, FetchResult))
         assert isinstance(bare, (DisclosureEnvelope, FetchResult))
         assert read.ref == bare.ref
+        assert read.ref is not None
+        assert read.ref.endswith(f":{_HOME}/{unit_id}")
 
     async def test_a_flat_dial_search_with_no_hits_never_offers_a_map(self):
         dials = ReadDials(fetch="flat")
-        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, NoHitSearch()),), dials_source=lambda: dials)
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME, FakeNoHitSearch()),), dials_source=lambda: dials)
 
         found = await knowledge_base.direct_call_tool("search", {"query": "nothing"})
 
@@ -516,4 +523,106 @@ class TestTheCapabilityReadsWhatSearchNames:
 
         message = str(refused.value)
         assert "No unit found with id 'note.missing'" in message
-        _assert_names_the_forms(message, "<knowledge base>")
+        _assert_names_the_forms(message, "<collection>")
+
+
+class TestRefusalsNameTheToolsTheSurfaceServes:
+    """A refusal sends the agent only to tools the surface registers, as its description does."""
+
+    _GRAPH_ONLY = frozenset({"fetch", "graph_expand", "find_paths"})
+
+    async def test_a_graph_only_flat_fetch_re_grounds_with_the_graph_tools(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), only=self._GRAPH_ONLY, collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "note.missing"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with `graph_expand` or `find_paths`, or the ids supplied with the task" in message
+        assert "search" not in message
+
+    async def test_a_graph_only_leveled_fetch_re_grounds_with_the_graph_tools(self):
+        gateway = _gateway()
+        toolset = build_retrieval_toolset(
+            _handlers(gateway), only=self._GRAPH_ONLY, collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME)
+        )
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": f"unit:{_HOME}/note.missing"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with `graph_expand` or `find_paths`, or the ids supplied with the task" in message
+        assert "search" not in message
+
+    async def test_a_fetch_alone_re_grounds_with_the_ids_supplied_with_the_task(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), only=frozenset({"fetch"}), collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "note.missing"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with the ids supplied with the task" in message
+        assert "graph_expand" not in message
+
+
+class TestASearchOnlySurfaceOffersNoMap:
+    """A `search_only` knowledge base withholds its map, so its `search` never offers one."""
+
+    async def test_a_search_with_no_hits_offers_no_map(self):
+        gateway = _gateway()
+        envelope = EnvelopeHandler(gateway, mode="search_only", collection=_HOME)
+        toolset = build_retrieval_toolset(_handlers(gateway, FakeNoHitSearch()), collection=_HOME, envelope=envelope)
+
+        found = await _call(toolset, "search", {"query": "nothing"})
+
+        assert isinstance(found, SearchResult)
+        assert "collection:" not in " ".join(found.next_steps.options)
+
+    async def test_a_strict_surface_still_offers_its_map(self):
+        gateway = _gateway()
+        envelope = EnvelopeHandler(gateway, collection=_HOME)
+        toolset = build_retrieval_toolset(_handlers(gateway, FakeNoHitSearch()), collection=_HOME, envelope=envelope)
+
+        found = await _call(toolset, "search", {"query": "nothing"})
+
+        assert isinstance(found, SearchResult)
+        assert f"fetch(unit_id='collection:{_HOME}')" in " ".join(found.next_steps.options)
+
+
+class TestASingleSourceSearchReadsOnlyItsOwnCollection:
+    """A single-source `search` refuses another collection, so it never hands out a ref its own `fetch` refuses."""
+
+    async def test_another_collection_is_refused_naming_the_one_it_serves(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "search", {"query": "alpha", "collection": _OTHER})
+
+        assert f"{_HOME!r}" in str(refused.value)
+
+    async def test_its_own_collection_is_searched(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME)
+
+        found = await _call(toolset, "search", {"query": "alpha", "collection": _HOME})
+
+        assert isinstance(found, SearchResult)
+        assert found.hits[0].ref == f"page:{_HOME}/{_PAGE}"
+
+    async def test_the_mcp_search_fails_the_call_naming_the_one_it_serves(self):
+        server = FastMCP("fetch-forms")
+        register_mcp_tools(server, _handlers(_gateway()), collection=_HOME)
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            failed = await client.call_tool("search", {"query": "alpha", "collection": _OTHER})
+
+        assert failed.isError is True
+        assert f"{_HOME!r}" in _text(failed)
+
+    async def test_the_description_offers_no_other_collection(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME)
+
+        description = toolset.tools["search"].description or ""
+
+        assert "search a different one" not in description
+        assert f"'{_HOME}'" in description
