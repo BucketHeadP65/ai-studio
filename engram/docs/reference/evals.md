@@ -114,22 +114,26 @@ source ids. The cited ids map to sources through `kb.pages.source_id` for a page
 one, and to the id before the last `:` for anything else, so a raw chunk maps to the source it was
 cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
 those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
-gold sources that any tool result the model received during the case named, and `seen_gold`, those
+gold sources that any tool result the agent received during the case named, and `seen_gold`, those
 gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
 and did not cite it. A case with a seen recall of 0 never received it, which is a retrieval miss.
 
 The units seen are read from the run's own messages, never from Logfire
 (`engram.evals.harness.seen_units`, filled per case by `capture_run_messages`, so a failed case
-keeps what it saw before it failed). A `search` names each hit's `id`, a `fetch` the unit it read,
-a leveled `fetch` its own unit and every child it lists, `graph_expand` and `find_paths` each node
-and each provenance claim, and a `run_sql` row every column named `id` or ending in `_id`: `id`,
-`page_id`, `section_id`, `claim_id`, `source_id`, `src_id`, `dst_id` and `subject_id` among the
-`api` views. Any other column, a title or a body for example, never counts, even when it mentions
-an id. Under `--code-mode` the model reads only the `run_code` output, so that output is read
-whole: every value under a key named `id` or ending in `_id`, and every word of any other text that
-carries a `.`, a `:` or a `#`, which every page, section, claim and chunk id carries. A search that
-a program runs counts only for what the program returns or prints. Every unit seen maps to its
-source the way the cited ids map, in the same one page lookup and one source lookup. A run without
+keeps what it saw before it failed). A unit counts only when a result carries something of it,
+never when it carries a bare id that points at it. A `search` names each hit's `id`, a `fetch` the
+unit it read, a leveled `fetch` its own unit and every child it lists, and `graph_expand` and
+`find_paths` each node, never an edge's provenance claim. A `run_sql` row names the units in its
+`id`, `page_id`, `section_id`, `claim_id` and `source_id` columns, the row's own unit or the unit
+that holds it. The other end of a relation, such as `src_id`, `dst_id` or `subject_id`, never
+counts, and nor does any other column, a title or a body for example, even when it mentions an id.
+Under `--code-mode` a `run_code` call names what its program's own tool calls returned, which code
+mode records on the call's return (`metadata["tool_returns"]`), read by the same rules as a direct
+call. What the program prints or returns is never read, so an id a fetched body links to does not
+count however the program passes it on. A unit whose content a program receives counts even when the
+program prints nothing of it. Every unit seen maps to its source the way the cited ids map, in the
+same one page lookup and one source lookup. Reading a tool result never raises, whatever its shape,
+so the measure never changes how a case ends or whether its failure is transient. A run without
 `--source-level`, or whose source lookup failed, writes null for both keys.
 
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen

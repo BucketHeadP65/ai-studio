@@ -1501,7 +1501,7 @@ class TestSourceLevelRetrieval(_ResetsLogfire):
         assert [collection for collection, _ids in hit_sources.source_lookups] == ["research"]
 
 
-# -- seen recall: which gold sources the tool results the model received named ----------
+# -- seen recall: which gold sources the tool results the agent received named ----------
 
 
 def _handlers_over(gateway: FakeSqlGateway) -> RetrievalHandlers:
@@ -1592,6 +1592,31 @@ class TestSeenRecall(_ResetsLogfire):
         assert lines["case-a"]["seen_gold"] == ["src-alpha", "src-beta"]
         assert lines["case-a"]["seen_recall"] == pytest.approx(2 / 3)
 
+    async def test_sql_rows_that_name_a_gold_source_only_as_a_relation_end_do_not_count(self, tmp_path: Path):
+        edges = SqlResult(
+            rows=({"src_id": "note.alpha", "rel": "cites", "dst_id": "note.beta", "subject_id": "note.alpha"},),
+            columns=("src_id", "rel", "dst_id", "subject_id"),
+        )
+        gateway = FakeSqlGateway(routed={"api.edges": edges})
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model",
+            instructions="Cite.",
+            sql=_sql_knowledge_base(gateway),
+            hit_sources=_FakeHitSources(sources=_SEEN_SOURCES),
+            results_path=results,
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha",))),
+            model=_calls_then_answers(ToolCallPart("run_sql", {"sql": "SELECT src_id, rel, dst_id, subject_id FROM api.edges"})),
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["seen_recall"], lines["case-a"]["seen_gold"]) == (0.0, [])
+
     async def test_a_fetched_unit_counts(self, tmp_path: Path):
         fetched = SqlResult(rows=({"id": "src-alpha:3", "level": "raw", "title": "Alpha", "body": "The chunk."},), columns=("id", "level", "title", "body"))
         gateway = FakeSqlGateway(routed={"api.fetch": fetched})
@@ -1626,7 +1651,7 @@ class TestSeenRecall(_ResetsLogfire):
         _header, lines = _read_results(results)
         assert (lines["case-a"]["failed"], lines["case-a"]["seen_recall"], lines["case-a"]["recall@4"]) == (True, 1.0, 0.0)
 
-    async def test_in_code_mode_only_the_run_code_output_the_model_reads_counts(self, tmp_path: Path):
+    async def test_in_code_mode_what_the_program_s_own_tool_calls_returned_counts_whatever_it_prints(self, tmp_path: Path):
         gateway = FakeSqlGateway(routed={"api.search": _search_hits(("note.alpha#s1", "section", "note.alpha"))})
         programs = {
             "question case-a": "found = await search(query='alpha')\nlen(found['hits'])",
@@ -1651,8 +1676,57 @@ class TestSeenRecall(_ResetsLogfire):
         )
 
         _header, lines = _read_results(results)
-        assert lines["case-a"]["seen_recall"] == 0.0
+        assert lines["case-a"]["seen_recall"] == 1.0
         assert lines["case-b"]["seen_recall"] == 1.0
+
+    async def test_in_code_mode_a_gold_id_that_a_fetched_body_links_to_is_not_seen(self, tmp_path: Path):
+        fetched = SqlResult(
+            rows=({"id": "note.beta", "level": "card", "title": "Beta", "body": "Builds on [[note.alpha]]."},), columns=("id", "level", "title", "body")
+        )
+        gateway = FakeSqlGateway(routed={"api.fetch": fetched})
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", code_mode=True, hit_sources=_FakeHitSources(sources=_SEEN_SOURCES), results_path=results
+        )
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(handlers=_handlers_over(gateway)),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha", "src-beta"))),
+            model=_calls_then_answers(ToolCallPart("run_code", {"code": "unit = await fetch(unit_id='note.beta')\nunit['body']"})),
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["seen_gold"], lines["case-a"]["seen_recall"]) == (["src-beta"], 0.5)
+
+    async def test_a_program_result_keyed_by_a_number_leaves_an_answered_case_answered_and_a_transient_failure_transient(self, tmp_path: Path):
+        gateway = FakeSqlGateway(routed={"api.search": _search_hits(("note.alpha#s1", "section", "note.alpha"))})
+        program = "found = await search(query='alpha')\n{1: found['hits'][0]['id']}"
+        dropped = ModelAPIError("deployment-a", "Connection error.")
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            if _tool_calls_made(messages) == 0:
+                return ModelResponse(parts=[ToolCallPart("run_code", {"code": program})])
+            if _prompt_text(messages) == "question case-b":
+                raise dropped
+            return _answer_part(info, "yes", [])
+
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", code_mode=True, hit_sources=_FakeHitSources(sources=_SEEN_SOURCES), results_path=results
+        )
+
+        run = await run_traced_eval_on_dataset(
+            FakeContainer(handlers=_handlers_over(gateway)),
+            config=config,
+            dataset=_named_dataset(("case-a", "yes", ("src-alpha",)), ("case-b", "yes", ("src-alpha",))),
+            model=FunctionModel(respond),
+        )
+
+        assert [case.name for case in run.report.cases] == ["case-a"]
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["failed"], lines["case-a"]["seen_recall"]) == (False, 1.0)
+        assert (lines["case-b"]["failed"], lines["case-b"]["transient"], lines["case-b"]["error"]) == (True, True, "ModelAPIError: Connection error.")
 
     async def test_the_seen_units_map_to_sources_in_the_one_lookup_the_citations_use(self, tmp_path: Path):
         gateway = FakeSqlGateway(routed={"api.search": _search_hits(("note.beta#s1", "section", "note.beta"))})

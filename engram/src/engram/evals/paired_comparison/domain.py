@@ -430,7 +430,7 @@ def paired_comparison_markdown(comparisons: Sequence[PairedComparison]) -> str:
             "The retrieval table gives each run's mean source-level recall@4, recall@10 and MRR over the cases it scored: those "
             "whose citations it mapped to sources and that have gold source ids, a failed case scoring 0. None means the run "
             "scored no case there. The seen recall table gives each run's mean share of the gold sources that any tool result "
-            "the model received named, a failed case counting what it saw before it failed, and the mean per-case difference "
+            "the agent received named, a failed case counting what it saw before it failed, and the mean per-case difference "
             "over the cases both runs scored. Missing means the run's results file holds no seen recall there, as a file "
             "written before it was recorded does, never that the run saw nothing. Each run's index build is shown beside "
             "its knowledge base fingerprint, unknown for a results file written before it was recorded."

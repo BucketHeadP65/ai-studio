@@ -390,7 +390,7 @@ class TestEvalsRun:
             "source-level retrieval over 1 case(s) with gold ids: recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
             "  no query type: 1 case(s), recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
         ) in result.stdout
-        assert "Seen recall is the share of each case's gold sources that any tool result the model received named, cited or not.\n" in result.stdout
+        assert "Seen recall is the share of each case's gold sources that any tool result the agent received named, cited or not.\n" in result.stdout
         assert (
             "The recall, precision and mrr in the table above compare cited page ids with the gold ids, "
             "so they do not apply when the gold ids are source ids.\n"
@@ -580,7 +580,6 @@ class TestEvalsRunResume:
         assert "max_tool_calls (4 in the file, 6 now)" in " ".join(result.stdout.split())
         assert results.read_text(encoding="utf-8") == written
 
-
     def test_resume_refuses_a_results_file_from_another_index_build_naming_it(self, tmp_path: Path):
         dataset_path = _write_three_cases(tmp_path)
         results = tmp_path / "results.jsonl"
@@ -597,6 +596,7 @@ class TestEvalsRunResume:
         assert result.exit_code == 1
         assert "index_build (7+300-600 test-embedding in the file, 7+500-1000 test-embedding now)" in " ".join(result.stdout.split())
         assert results.read_text(encoding="utf-8") == written
+
 
 class _UnreachableHitSources:
     """A page-to-source lookup whose database cannot be reached."""
