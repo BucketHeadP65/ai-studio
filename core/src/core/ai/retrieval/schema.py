@@ -97,6 +97,9 @@ class SearchSurface:
         group_expr: The group a hit counts against for the tuned cap on rows per group, an
             expression over the surface. Empty groups a hit by `parent_id_expr`, and a NULL group
             by the hit's own key.
+        document_expr: The document a hit counts against for the tuned cap on hits per document,
+            an expression over the surface. Empty documents a hit by its group, and a NULL
+            document by the hit's own key. Read only when the tuning caps hits per document.
     """
 
     name: str
@@ -116,6 +119,7 @@ class SearchSurface:
     vector_filters: tuple[str, ...] = ()
     title_pin: bool = False
     group_expr: str = ""
+    document_expr: str = ""
 
     def __post_init__(self) -> None:
         """Validate the identifier fields are present and `hit_level` is quote-safe.
@@ -230,6 +234,10 @@ class SearchTuning:
             page's parts never fill the result. Bound to 1..50.
         weights: A weight per surface and leg, keyed `<surface>:<lexical|semantic>`, 1 when not named. Each is bound
             to 0..10. A row's `weights` replaces these whole, so it names every weight it wants other than 1.
+        max_hits_per_document: The most hits one document keeps after the cap on rows per group, its best first and a
+            pinned title its best. Its next `FOLDED_UNITS_PER_HIT` hits are listed under its best hit as folded units,
+            in a `folded_units` jsonb column returned last. Bound to 0..50, and 0 or a null in the row keeps every hit.
+            `None` generates neither the cap nor the column.
     """
 
     relation: str = ""
@@ -239,6 +247,7 @@ class SearchTuning:
     snippet_chars: int = 480
     rows_per_group: int = 3
     weights: tuple[tuple[str, float], ...] = ()
+    max_hits_per_document: int | None = None
 
 
 @dataclass(frozen=True)
@@ -272,8 +281,9 @@ class SearchSchema:
             an argument cannot share one. Empty for an unpartitioned schema, whose hits are keyed by
             id alone.
         tuning: The numbers the search reads when it runs. Set, every leg stops at a budget, the semantic leg
-            ranks its nearest rows by exact distance, the fusion weighs each leg, a lone exact title goes first
-            and each group keeps at most `rows_per_group` hits. Unset, the search renders
+            ranks its nearest rows by exact distance, the fusion weighs each leg, a lone exact title goes first,
+            each group keeps at most `rows_per_group` hits and, when the tuning sets `max_hits_per_document`, each
+            document keeps at most that many and folds the rest under its best hit. Unset, the search renders
             its fixed constants, unchanged from before tuning existed. Every surface name must then be a plain
             identifier, since it names a weight.
     """
@@ -327,7 +337,7 @@ class SearchSchema:
         if unknown:
             msg = f"SearchSchema.tuning weighs no surface and leg of this schema: {', '.join(unknown)}"
             raise ValueError(msg)
-        declared = {"tuning", "capped_k", "leg_budget", "rrf_constant", "snippet_chars", "rows_per_group"}
+        declared = {"tuning", "capped_k", "leg_budget", "rrf_constant", "snippet_chars", "rows_per_group", "max_hits_per_document"}
         declared |= {f"weight_{surface.name}_{leg}" for surface in self.surfaces for leg in SEARCH_LEGS}
         taken = sorted(facet.name for facet in self.facets if facet.name in declared)
         if taken:

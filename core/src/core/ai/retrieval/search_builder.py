@@ -37,6 +37,7 @@ _BUDGET = "{leg_budget}"
 _RRF_CONSTANT = "{rrf_constant}"
 _SNIPPET_CHARS = "{snippet_chars}"
 _ROWS_PER_GROUP = "{rows_per_group}"
+_MAX_HITS = "{max_hits_per_document}"
 
 # The bounds generated into a tuned search, which hold whatever its tuning row says.
 _BUDGET_BOUND = 200
@@ -45,6 +46,10 @@ _RRF_BOUNDS = (1, 1000)
 _SNIPPET_BOUNDS = (80, 2000)
 _WEIGHT_BOUNDS = (0, 10)
 _ROWS_PER_GROUP_BOUND = 50
+_MAX_HITS_BOUND = 50
+
+FOLDED_UNITS_PER_HIT = 3
+"""The most folded units a capped search lists under one hit, best first."""
 
 SEARCH_SNIPPET_CHARS = 480
 """The longest snippet a generated body returns per hit, in characters.
@@ -83,11 +88,17 @@ def _weight(surface: SearchSurface, leg: str) -> str:
     return f"weight_{surface.name}_{leg}"
 
 
+def _capped(schema: SearchSchema) -> bool:
+    """Whether the search caps the hits of one document and returns the folded units."""
+    return schema.tuning is not None and schema.tuning.max_hits_per_document is not None
+
+
 def _tuned_names(schema: SearchSchema) -> tuple[str, ...]:
     """Every variable a tuned search declares for its query, in binding order, or none for an untuned one."""
     if schema.tuning is None:
         return ()
-    return (*_TUNED_NUMBERS, *(_weight(surface, leg) for surface in schema.surfaces for leg in SEARCH_LEGS))
+    capped = ("max_hits_per_document",) if _capped(schema) else ()
+    return (*_TUNED_NUMBERS, *(_weight(surface, leg) for surface in schema.surfaces for leg in SEARCH_LEGS), *capped)
 
 
 def _declarations(schema: SearchSchema) -> str:
@@ -109,12 +120,16 @@ def _declarations(schema: SearchSchema) -> str:
         for surface in schema.surfaces
         for leg in SEARCH_LEGS
     )
+    if _capped(schema):
+        lines.append(
+            f"  max_hits_per_document int := least(greatest(coalesce((tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), {_MAX_HITS_BOUND});"
+        )
     return "\n".join(lines)
 
 
 def _tuning_source(tuning: SearchTuning) -> str:
     """The defaults as a jsonb literal, overridden by key by the tuning row when the tuning names one."""
-    defaults = {
+    defaults: dict[str, int | float | dict[str, float]] = {
         "budget": tuning.budget,
         "rrf_constant": float(tuning.rrf_constant),
         "k_ceiling": tuning.k_ceiling,
@@ -122,6 +137,8 @@ def _tuning_source(tuning: SearchTuning) -> str:
         "rows_per_group": tuning.rows_per_group,
         "weights": dict(tuning.weights),
     }
+    if tuning.max_hits_per_document is not None:
+        defaults["max_hits_per_document"] = tuning.max_hits_per_document
     literal = "'" + json.dumps(defaults).replace("'", "''") + "'::jsonb"
     if not tuning.relation:
         return literal
@@ -167,9 +184,10 @@ def _search_path_schemas(schema: SearchSchema) -> str:
 
 
 def _returns_columns(schema: SearchSchema) -> str:
-    """The `RETURNS TABLE` column list: `id`, the partition column when the schema has one, then the shared columns."""
+    """The `RETURNS TABLE` column list: `id`, any partition column, the shared columns, then any folded units."""
     partition = f"{schema.partition_result_col} text, " if schema.partition_result_col else ""
-    return f"id text, {partition}{_RETURNS_COLUMNS}"
+    folded = ", folded_units jsonb" if _capped(schema) else ""
+    return f"id text, {partition}{_RETURNS_COLUMNS}{folded}"
 
 
 def _level_predicate(schema: SearchSchema, surface: SearchSurface) -> str | None:
@@ -295,7 +313,7 @@ class BaseHybridSearchBuilder(abc.ABC):
             f"         (min(legs.r) FILTER (WHERE legs.leg = '{_LEXICAL_LEG}'))::int AS lexical_rank,\n"
             f"         (min(legs.r) FILTER (WHERE legs.leg = '{_SEMANTIC_LEG}'))::int AS vector_rank,\n"
             "         min(legs.vector_distance)::float8 AS vector_distance, bool_or(legs.snippet_truncated) AS snippet_truncated,\n"
-            "         max(legs.grp) AS grp, bool_or(legs.pin) AS pin\n"
+            f"         max(legs.grp) AS grp, bool_or(legs.pin) AS pin{', max(legs.document_key) AS document_key' if _capped(schema) else ''}\n"
             "  FROM legs\n"
             f"  GROUP BY {group_key}\n"
             ")"
@@ -313,10 +331,38 @@ class BaseHybridSearchBuilder(abc.ABC):
             "  FROM fused\n"
             ")"
         )
-        return [fused, alone, ruled]
+        if not _capped(schema):
+            return [fused, alone, ruled]
+        return [fused, alone, ruled, *self._document_ctes(schema)]
+
+    def _document_ctes(self, schema: SearchSchema) -> list[str]:
+        """Each kept candidate's place within its document, and the hits past the cap folded per document."""
+        partitioned = bool(schema.partition_result_col)
+        documents = f"ruled.{_PARTITION_KEY}, ruled.document_key" if partitioned else "ruled.document_key"
+        documented = (
+            "documented AS (\n"
+            f"  SELECT ruled.*, row_number() OVER (PARTITION BY {documents} ORDER BY ruled.pin_alone DESC, ruled.rrf DESC, ruled.id) AS in_document\n"
+            "  FROM ruled\n"
+            f"  WHERE ruled.pin_alone OR ruled.in_group <= {_ROWS_PER_GROUP}\n"
+            ")"
+        )
+        keys = f"documented.{_PARTITION_KEY}, documented.document_key" if partitioned else "documented.document_key"
+        folded = (
+            "folded AS (\n"
+            f"  SELECT {keys},\n"
+            "         jsonb_agg(jsonb_build_object('id', documented.id, 'hit_level', documented.lvl) ORDER BY documented.in_document) AS units\n"
+            "  FROM documented\n"
+            f"  WHERE {_MAX_HITS} > 0 AND documented.in_document > {_MAX_HITS}\n"
+            f"    AND documented.in_document <= {_MAX_HITS} + {FOLDED_UNITS_PER_HIT}\n"
+            f"  GROUP BY {keys}\n"
+            ")"
+        )
+        return [documented, folded]
 
     def _policy_select(self, schema: SearchSchema) -> str:
         """The result after the policies: a lone exact title first, at most `rows_per_group` hits a group, cut to `k`."""
+        if _capped(schema):
+            return self._capped_select(schema)
         partition = f"ruled.{_PARTITION_KEY}, " if schema.partition_result_col else ""
         return (
             f"SELECT ruled.id, {partition}ruled.lvl, ruled.page_id, ruled.page_title, ruled.snippet, ruled.rrf, ruled.lexical_rank,\n"
@@ -327,11 +373,31 @@ class BaseHybridSearchBuilder(abc.ABC):
             f"LIMIT {_CAPPED_K}"
         )
 
-    def _policy_columns(self, surface: SearchSurface) -> list[str]:
-        """The two columns a tuned leg adds for the policies: whether its title pins, and the group it counts against."""
+    def _capped_select(self, schema: SearchSchema) -> str:
+        """The result of a capped search: at most `max_hits_per_document` hits a document, the next ones folded under its best."""
+        partitioned = bool(schema.partition_result_col)
+        partition = f"documented.{_PARTITION_KEY}, " if partitioned else ""
+        same_partition = f"folded.{_PARTITION_KEY} = documented.{_PARTITION_KEY} AND " if partitioned else ""
+        return (
+            f"SELECT documented.id, {partition}documented.lvl, documented.page_id, documented.page_title, documented.snippet, documented.rrf,\n"
+            "       documented.lexical_rank, documented.vector_rank, documented.vector_distance, documented.snippet_truncated,\n"
+            "       coalesce(folded.units, '[]'::jsonb)\n"
+            "FROM documented\n"
+            f"LEFT JOIN folded ON {same_partition}folded.document_key = documented.document_key AND documented.in_document = 1\n"
+            f"WHERE {_MAX_HITS} = 0 OR documented.in_document <= {_MAX_HITS}\n"
+            "ORDER BY documented.pin_alone DESC, documented.rrf DESC, documented.id\n"
+            f"LIMIT {_CAPPED_K}"
+        )
+
+    def _policy_columns(self, schema: SearchSchema, surface: SearchSurface) -> list[str]:
+        """The columns a tuned leg adds for the policies: whether its title pins, its group and, when capped, its document."""
         title = f"lower(btrim({surface.title_expr})) = lower(btrim({_QUERY}))" if surface.title_pin else "false"
         group = surface.group_expr or surface.parent_id_expr
-        return [f"{title} AS pin", f"coalesce({group}, {surface.alias}.{surface.key_col})::text AS grp"]
+        columns = [f"{title} AS pin", f"coalesce({group}, {surface.alias}.{surface.key_col})::text AS grp"]
+        if _capped(schema):
+            document = surface.document_expr or group
+            columns.append(f"coalesce({document}, {surface.alias}.{surface.key_col})::text AS document_key")
+        return columns
 
     def _pool_cte(self, pool: FacetPool) -> str:
         """Build one facet-pre-filter CTE from a `FacetPool`."""
@@ -345,7 +411,11 @@ class BaseHybridSearchBuilder(abc.ABC):
         """Build a surface's keyword leg: the shared projection, tagged `lexical`, ranked by the backend's BM25 order."""
         where = " AND ".join([*self._base_predicates(schema, surface), self._bm25_match_predicate(surface)])
         tuned = schema.tuning is not None
-        weight = [f"         {{{_weight(surface, _LEXICAL_LEG)}}}::float8 AS w,", *(f"         {column}," for column in self._policy_columns(surface))] if tuned else []
+        weight = (
+            [f"         {{{_weight(surface, _LEXICAL_LEG)}}}::float8 AS w,", *(f"         {column}," for column in self._policy_columns(schema, surface))]
+            if tuned
+            else []
+        )
         lines = [
             f"{surface.name}_bm25 AS {self._materialized()}(",
             f"  SELECT {self._projection(surface, tuned=tuned)},",
@@ -369,7 +439,7 @@ class BaseHybridSearchBuilder(abc.ABC):
             [f"{_QUERY_VEC} IS NOT NULL", *self._base_predicates(schema, surface), f"{embedding} IS NOT NULL", *surface.vector_filters],
         )
         if schema.tuning is not None:
-            return self._budgeted_vector_leg(surface, embedding, where)
+            return self._budgeted_vector_leg(schema, surface, embedding, where)
         lines = [
             f"{surface.name}_vec AS {self._materialized()}(",
             f"  SELECT {self._projection(surface, tuned=False)},",
@@ -382,7 +452,7 @@ class BaseHybridSearchBuilder(abc.ABC):
         ]
         return "\n".join(lines)
 
-    def _budgeted_vector_leg(self, surface: SearchSurface, embedding: str, where: str) -> str:
+    def _budgeted_vector_leg(self, schema: SearchSchema, surface: SearchSurface, embedding: str, where: str) -> str:
         """A tuned vector leg: the budget's nearest rows by exact distance, never by an approximate index, ranked by it."""
         lines = [
             f"{surface.name}_vec AS {self._materialized()}(",
@@ -391,7 +461,7 @@ class BaseHybridSearchBuilder(abc.ABC):
             f"    SELECT {self._projection(surface, tuned=True)},",
             f"           '{_SEMANTIC_LEG}'::text AS leg,",
             f"           {{{_weight(surface, _SEMANTIC_LEG)}}}::float8 AS w,",
-            *(f"           {column}," for column in self._policy_columns(surface)),
+            *(f"           {column}," for column in self._policy_columns(schema, surface)),
             f"           ({embedding} <=> {_QUERY_VEC})::float8 AS vector_distance",
             f"    FROM {self._from_clause(surface)}",
             f"    WHERE {where}",
@@ -413,10 +483,12 @@ class BaseHybridSearchBuilder(abc.ABC):
         """Union every surface's keyword and vector legs into the `legs` CTE the fusion aggregates."""
         names = [f"{surface.name}_{leg}" for surface in schema.surfaces for leg in ("bm25", "vec")]
         weight = schema.tuning is not None
+        capped = _capped(schema)
         selects = [
             f"  {'' if index == 0 else 'UNION ALL '}SELECT {name}.id, {self._legs_partition(schema, name)}{name}.lvl, "
             f"{name}.page_id, {name}.page_title, {name}.snippet, {name}.snippet_truncated, {name}.leg, "
-            f"{f'{name}.w, {name}.pin, {name}.grp, ' if weight else ''}{name}.vector_distance, {name}.r FROM {name}"
+            f"{f'{name}.w, {name}.pin, {name}.grp, ' if weight else ''}{f'{name}.document_key, ' if capped else ''}"
+            f"{name}.vector_distance, {name}.r FROM {name}"
             for index, name in enumerate(names)
         ]
         return "legs AS (\n" + "\n".join(selects) + "\n)"

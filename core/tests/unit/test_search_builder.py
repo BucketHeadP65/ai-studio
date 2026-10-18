@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.retrieval.contracts import (
+    FOLDED_UNITS_PER_HIT,
     Facet,
     FacetPool,
     ParadeDBHybridSearchBuilder,
@@ -666,3 +667,103 @@ def test_an_untuned_search_applies_no_policy() -> None:
 
     assert "pin_alone" not in body
     assert "AS grp" not in body
+
+
+# -- documents ---------------------------------------------------------------------
+
+
+def _documented_corpus(*, partitioned: bool = False) -> SearchSchema:
+    """`_pinned_corpus()` keeping the best hit of each doc, a chunk counting against its doc, or the partitioned corpus capped alike."""
+    schema = _partitioned_corpus() if partitioned else _pinned_corpus()
+    doc, chunk = schema.surfaces
+    return replace(
+        schema,
+        surfaces=(doc, replace(chunk, document_expr="'doc:' || c.doc_id")),
+        tuning=SearchTuning(relation="kb.search_tuning", max_hits_per_document=1),
+    )
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_a_capped_search_reads_its_cap_from_the_tuning_row_with_no_cap_below_one(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_documented_corpus())
+
+    assert '"max_hits_per_document": 1' in body
+    assert "max_hits_per_document int := least(greatest(coalesce((tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), 50);" in body
+
+
+def test_each_leg_names_its_document_by_its_own_expression_or_its_group() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert body.count("coalesce(d.id, d.id)::text AS document_key") == 2
+    assert body.count("coalesce('doc:' || c.doc_id, c.id)::text AS document_key") == 2
+    assert "doc_bm25.document_key, " in body
+
+
+def test_each_document_ranks_the_hits_the_group_rule_kept_a_lone_title_first() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert "max(legs.document_key) AS document_key" in body
+    assert (
+        "row_number() OVER (PARTITION BY ruled.document_key ORDER BY ruled.pin_alone DESC, ruled.rrf DESC, ruled.id) AS in_document"
+    ) in body
+    assert "WHERE ruled.pin_alone OR ruled.in_group <= rows_per_group" in body
+
+
+def test_a_document_keeps_its_best_hits_up_to_the_cap_and_a_cap_of_zero_keeps_every_hit() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert "WHERE max_hits_per_document = 0 OR documented.in_document <= max_hits_per_document" in body
+    assert "ORDER BY documented.pin_alone DESC, documented.rrf DESC, documented.id\nLIMIT capped_k" in body
+
+
+def test_the_hits_past_the_cap_fold_under_the_best_hit_of_their_document() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert "jsonb_agg(jsonb_build_object('id', documented.id, 'hit_level', documented.lvl) ORDER BY documented.in_document) AS units" in body
+    assert "WHERE max_hits_per_document > 0 AND documented.in_document > max_hits_per_document" in body
+    assert f"documented.in_document <= max_hits_per_document + {FOLDED_UNITS_PER_HIT}" in body
+    assert "LEFT JOIN folded ON folded.document_key = documented.document_key AND documented.in_document = 1" in body
+    assert "coalesce(folded.units, '[]'::jsonb)" in body
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_a_capped_search_returns_the_folded_units_last(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_documented_corpus())
+
+    assert "vector_distance float8, snippet_truncated boolean, folded_units jsonb)" in body
+
+
+def test_a_partitioned_capped_search_keys_each_document_by_its_partition() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus(partitioned=True))
+
+    assert "PARTITION BY ruled.partition_key, ruled.document_key ORDER BY" in body
+    assert "GROUP BY documented.partition_key, documented.document_key" in body
+    assert "folded.partition_key = documented.partition_key AND folded.document_key = documented.document_key" in body
+
+
+def test_paradedb_binds_the_cap_by_position() -> None:
+    body = ParadeDBHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert "weight_chunk_lexical, weight_chunk_semantic, max_hits_per_document;" in body
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_no_placeholder_leaks_into_a_capped_body(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_documented_corpus())
+    inner = body[body.index("BEGIN") :]
+
+    assert "{" not in inner.replace("'{}'::jsonb", "")
+
+
+def test_a_tuned_search_without_a_cap_keeps_every_document_hit_and_folds_none() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_pinned_corpus())
+
+    assert "max_hits_per_document" not in body
+    assert "document_key" not in body
+    assert "folded_units" not in body
+
+
+def test_a_facet_named_like_the_cap_is_refused() -> None:
+    schema = _corpus()
+    with pytest.raises(ValueError, match="max_hits_per_document"):
+        replace(schema, facets=(*schema.facets, Facet("max_hits_per_document", "int")), tuning=SearchTuning(max_hits_per_document=1))

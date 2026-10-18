@@ -10,6 +10,7 @@ from core.ai.retrieval import names
 from core.ai.retrieval.contracts import (
     Fetch,
     FetchResult,
+    FoldedUnit,
     GraphEdge,
     GraphExpand,
     GraphNode,
@@ -84,6 +85,24 @@ def test_search_hit_still_validates_a_row_with_no_answered_by_key() -> None:
     hit = SearchHit.model_validate(row)
     assert hit.answered_by is None
     assert hit.knowledge_base is None
+
+
+def test_a_search_hit_folds_no_units_unless_its_row_lists_some() -> None:
+    assert SearchHit(id="p1", hit_level="card", score=1.5).folded_units == ()
+
+
+def test_a_search_hit_reads_its_folded_units_best_first_from_its_row() -> None:
+    row = {
+        "id": "p1",
+        "hit_level": "card",
+        "score": 1.5,
+        "folded_units": [{"id": "p1#s2", "hit_level": "section"}, {"id": "src.a:3", "hit_level": "raw"}],
+    }
+
+    hit = SearchHit.model_validate(row)
+
+    assert hit.folded_units == (FoldedUnit(id="p1#s2", hit_level="section"), FoldedUnit(id="src.a:3", hit_level="raw"))
+    assert hit.folded_units[0].ref is None
 
 
 def test_search_hit_carries_which_knowledge_base_it_came_from() -> None:
