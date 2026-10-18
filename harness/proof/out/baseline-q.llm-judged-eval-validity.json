@@ -1,0 +1,36 @@
+{
+  "question_id": "q.llm-judged-eval-validity",
+  "path": "baseline",
+  "surfaced": [
+    "ent.graph-enhanced-rag",
+    "ent.graphrag",
+    "ent.lightrag",
+    "ent.llm-judged-win-rate",
+    "paper.graphrag-2024",
+    "paper.leanrag-2025",
+    "paper.lightrag-2025",
+    "paper.x"
+  ],
+  "recall": 0.3076923076923077,
+  "missed": [
+    "paper.agents-k1-2026",
+    "paper.cuprate-expert-eval-2025",
+    "paper.gsw-2025",
+    "paper.hipporag2-2025",
+    "paper.hirag-2025",
+    "paper.hmem-2026",
+    "paper.memgraphrag-2026",
+    "paper.msrs-2025",
+    "paper.simgrag-2024"
+  ],
+  "requests": 7,
+  "input_tokens": 58099,
+  "output_tokens": 971,
+  "seconds": 32.56,
+  "contaminated": false,
+  "failed": false,
+  "answer": "LLM-judged *win rates* only weakly track *factual* quality in many RAG comparisons, because they primarily measure **a judge model’s preference** (often for style attributes like “comprehensiveness”/“diversity”) rather than correctness/grounding.\n\nEvidence from the corpus points to three main takeaways:\n\n1) **They can align with a proxy for “supported content,” but not perfectly.**  \n   In GraphRAG’s evaluation, aggregated LLM-judge pairwise labels agreed with a “claim-based” (count/proxy) label **78%** of the time for *comprehensiveness* and **69–70%** for *diversity* (excluding ties), described as only a *partial* validation of LLM-judged outcomes against a non-LLM proxy. (paper.graphrag-2024#c10)\n\n2) **Many RAG papers reporting win rates don’t also report factual-accuracy/grounding—so “tracking factual quality” often isn’t even testable within those studies.**  \n   LightRAG’s results are reported as GPT-4o-mini-judged pairwise win rates, with **no factual-accuracy or groundedness metric**; additionally, the judge model is also used as the generator for the systems being compared, increasing the risk that the metric reflects judge/model preference rather than truth. (paper.lightrag-2025#c10)  \n   LeanRAG similarly reports that DeepSeek-V3 both generates and judges, and **no ground-truth factual-accuracy or retrieval-precision** metric is provided. (paper.leanrag-2025#c13)\n\n3) **Across the “graph-enhanced RAG” line, win-rate wins on sensemaking don’t reliably imply better gold-anchored factoid accuracy.**  \n   The corpus synthesis for graph-enhanced RAG notes a recurring pattern: these systems often **win LLM-judged sensemaking evaluations** yet **tie or lose** to vanilla RAG on evaluations anchored to gold/factoid accuracy. (ent.graph-enhanced-rag)  \n   More generally, the metric writeup emphasizes win rate “says nothing about factual grounding” and inherits judge biases. (ent.llm-judged-win-rate#tl_dr, ent.llm-judged-win-rate)\n\n**Bottom line:** LLM-judged win rates are useful for *preference-style* comparisons and may moderately track certain coverage proxies, but they are not a reliable stand-in for factual correctness unless the study explicitly validates them against grounded accuracy metrics—and many RAG comparisons that rely on win rates don’t.  \n\nCited pages/ids: ent.llm-judged-win-rate, ent.llm-judged-win-rate#tl_dr, paper.graphrag-2024#c10, paper.lightrag-2025#c10, paper.leanrag-2025#c13, ent.graph-enhanced-rag.",
+  "workflow_id": null,
+  "hit_rank": null,
+  "drift": null
+}

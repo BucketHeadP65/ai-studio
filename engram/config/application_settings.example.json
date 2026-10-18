@@ -1,0 +1,62 @@
+{
+  "knowledge_bases": {},
+  "retrieval": {
+    "dialect": "pg_textsearch",
+    "graph_backend": "age"
+  },
+  "ingestion": {
+    "embedding_deployment": "",
+    "embedding_dimensions": 1024,
+    "embedding_batch_size": 64,
+    "embedding_batch_tokens": 50000,
+    "embedding_concurrency": 4,
+    "chunk_target_tokens": 400,
+    "chunk_max_tokens": 800
+  },
+  "sources": {
+    "zotero": {
+      "collection": ""
+    }
+  },
+  "evals": {
+    "autogen": "queue",
+    "datasets_dir": "evals/datasets",
+    "rca_queries_path": "evals/rca/queries.sql"
+  },
+  "infrastructure": {
+    "database": {
+      "url": "postgresql+asyncpg://wiki:wiki@localhost:5434/knowledge_bases?sslmode=disable",
+      "reader_url": "postgresql+asyncpg://kb_reader:kb_reader_dev@localhost:5434/knowledge_bases?sslmode=disable",
+      "reader_secret": ""
+    },
+    "azure_openai": {
+      "endpoint": ""
+    },
+    "document_intelligence": {
+      "endpoint": ""
+    },
+    "logfire": {
+      "write_token": "",
+      "read_token": "",
+      "base_url": "https://logfire-eu.pydantic.dev"
+    },
+    "gateway": {
+      "api_key": "",
+      "base_url": "https://gateway-eu.pydantic.dev/proxy"
+    },
+    "openrouter": {
+      "api_key": "",
+      "base_url": "https://openrouter.ai/api/v1"
+    },
+    "harness": {
+      "base_url": "http://127.0.0.1:8770",
+      "timeout_seconds": 10.0
+    },
+    "embeddings": "azure_openai"
+  },
+  "logging": {
+    "service_name": "studio",
+    "level": "INFO",
+    "console": false
+  }
+}

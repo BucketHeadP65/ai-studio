@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Resolve the studio CLI: $STUDIO_BIN if set, else `studio` on PATH. Configure-only — never installs.
+exec "${STUDIO_BIN:-studio}" "$@"

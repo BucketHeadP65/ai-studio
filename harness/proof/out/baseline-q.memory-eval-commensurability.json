@@ -1,0 +1,33 @@
+{
+  "question_id": "q.memory-eval-commensurability",
+  "path": "baseline",
+  "surfaced": [
+    "ent.graphrag",
+    "ent.graphrag-bench",
+    "ent.horma",
+    "ent.lightrag",
+    "ent.llm-judged-win-rate",
+    "ent.self-harness",
+    "paper.ahe-2026",
+    "paper.hmem-2026",
+    "paper.horma-2026",
+    "paper.lightrag-2025",
+    "paper.terminal-bench-2026",
+    "paper.x"
+  ],
+  "recall": 0.5,
+  "missed": [
+    "paper.evermemos-2026",
+    "paper.zep-2025"
+  ],
+  "requests": 4,
+  "input_tokens": 29247,
+  "output_tokens": 1043,
+  "seconds": 25.59,
+  "contaminated": false,
+  "failed": false,
+  "answer": "To make *agent-memory* leaderboards commensurable across **budget**, **judge**, and **backbone**, you need to turn “a score” into “a score under an explicitly fixed harness,” and then report *frontier curves* rather than single numbers.\n\n### 1) Fix (and publish) one evaluation harness per benchmark\nA core failure mode in memory leaderboards is that rankings flip when papers change the **embedder, reranker, judge model/prompt, or whether baselines are re-run**; the corpus flags this as “eval-config, not architecture” (cmp.agent-memory-systems#analysis). H‑Mem’s re-eval is considered *more comparable* precisely because it forces systems to share key components (paper.hmem-2026#c14), even if it’s not a neutral third party (cmp.agent-memory-systems#verdict).\n\n**Protocol requirement:** for any leaderboard row, the harness must pin and disclose:\n- judge model + prompt (and parsing), and any answer “simplification” before scoring (paper.hmem-2026#c14)\n- embedder/reranker + retrieval settings\n- whether each baseline was **re-run in the same harness** vs copied from other papers (cmp.agent-memory-systems#analysis)\n\n### 2) Normalize across budget by reporting a budget–quality Pareto (not one scalar)\nToken budget changes the objective: HORMA explicitly warns its scores are **budget-bounded** (10K/50K) and *not commensurable* with unconstrained leaderboards that also change judges/backbones (paper.horma-2026#limitations). Its evaluation setup makes budget a first-class independent variable and pairs accuracy with token-cost (paper.horma-2026#evaluation_setup).\n\n**Protocol requirement:** report performance as a function of:\n- **prompt/context budget** (hard caps, not “no limit” reference rows)\n- **#retrieval calls / token-cost**\nso comparisons become “who’s better at the same budget” or “who has a better Pareto curve,” not “who has the highest single number.”\n\n### 3) Control backbone effects via stratified leaderboards (or paired deltas)\nBackbone changes (manager/agent LLM, retriever LLM) can dominate results; HORMA specifies different roles (manager/agent vs lightweight retriever) and shows capacity constraints matter (paper.horma-2026#evaluation_setup; paper.horma-2026#limitations). So a single mixed-backbone leaderboard is not interpretable.\n\n**Protocol requirement:** either\n- run all systems under the **same backbone** (as much as possible), *or*\n- publish **paired deltas**: each system’s gain over a shared baseline *within the same backbone tier and budget*.\n\n### 4) Don’t mix judge types; if you must, dual-report\nWithin one harness, even metric choice can flip winners (noted in the comparison) (cmp.agent-memory-systems#analysis). H‑Mem uses an LLM-judge prompt and also computes F1 after LLM-based simplification (paper.hmem-2026#c14), implying “judge regime” is part of the experimental condition.\n\n**Protocol requirement:** keep one primary judge regime per leaderboard; if reporting multiple (LLM-judge, F1), present them as separate panels, not a merged rank.\n\nOverall: commensurability comes from **(a) one fixed harness**, **(b) budget-indexed reporting (Pareto curves)**, and **(c) backbone/judge stratification**—otherwise you’re comparing different experiments under the same benchmark name (cmp.agent-memory-systems#verdict; paper.horma-2026#limitations).",
+  "workflow_id": null,
+  "hit_rank": null,
+  "drift": null
+}

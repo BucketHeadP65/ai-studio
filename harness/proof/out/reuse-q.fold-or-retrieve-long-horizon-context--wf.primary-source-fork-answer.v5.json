@@ -1,0 +1,33 @@
+{
+  "question_id": "q.fold-or-retrieve-long-horizon-context",
+  "path": "reuse",
+  "surfaced": [
+    "ent.evermemos",
+    "ent.grpo",
+    "ent.hipif",
+    "ent.horma",
+    "ent.local-progress",
+    "ent.step-hrl",
+    "paper.hiper-2026",
+    "paper.hipif-2026",
+    "paper.horma-2026",
+    "paper.step-hrl-2026",
+    "paper.terminal-bench-2026"
+  ],
+  "recall": 0.6,
+  "missed": [
+    "ent.long-context-degradation",
+    "ent.long-horizon-agent-task"
+  ],
+  "requests": 2,
+  "input_tokens": 8026,
+  "output_tokens": 1276,
+  "seconds": 21.54,
+  "contaminated": false,
+  "failed": false,
+  "failure": null,
+  "answer": "\"cited_page_ids=['paper.hipif-2026', 'paper.step-hrl-2026', 'paper.horma-2026', 'ent.hipif', 'ent.horma'] answer_markdown='## 1) Direct answer (explicit insufficiency)\\\\nThe provided corpus evidence supports **both** design directions\\u2014**lossy folding/compression** (HIPIF, STEP\\u2011HRL-style bounded summaries) and **lossless navigate\\u2011and\\u2011retrieve** (HORMA\\u2019s hierarchical external memory)\\u2014but it does **not** contain enough quote-supported *arguments/limitations* on each side to answer the fork decisively without extrapolation. What\\u2019s missing are explicit, quoted pro/con claims such as (a) when folding\\u2019s lossy nature is acceptable or harmful beyond token savings, and (b) when retrieval\\u2019s \\u201clossless\\u201d approach is necessary or where it fails/has costs (e.g., navigation errors, organization overhead) compared to folding.\\\\n\\\\n## 2) Evidence for side A: Fold/compress history (lossy folding)\\\\n- Defines the mechanism: HIPIF \\u201c**folds completed-subgoal histories to reduce long-context interference**\\u201d and \\u201corganizes execution around explicit subgoals\\u201d (ent.hipif#definition).\\\\n- Motivates why: degradation comes from \\u201c**long-context interference**: accumulated redundant history weakens awareness of the current task stage and degrades reasoning\\u201d (paper.hipif-2026#context).\\\\n- Claims effectiveness under budgets: HIPIF folds each completed subgoal \\u201cinto a compact record,\\u201d and \\u201cposts the best success rates\\u2026 while using fewer steps and tokens,\\u201d with \\u201c**subgoal-level context folding\\u2026 the load-bearing component**\\u201d (paper.hipif-2026#tl_dr).\\\\n- Practical guidance + open-fork framing: \\u201cif context growth is the bottleneck, **subgoal folding buys both accuracy and token savings** \\u2026 and is the highest-leverage single component\\u201d while noting \\u201c**The lossy-fold-vs-lossless-retrieve question \\u2026 is the open design fork to watch**\\u201d (paper.hipif-2026#practical_notes).\\\\n- Related constant-size alternative: STEP\\u2011HRL argues per-step context \\u201c**can be bounded by a learned within-unit progress summary plus a list of completed units** \\u2014 a constant-size alternative to growing-history conditioning\\u201d (paper.step-hrl-2026#practical_notes).\\\\n\\\\n## 3) Evidence for side B: Navigate-and-retrieve (lossless retrieval)\\\\n- Frames the alternative to folding: long-horizon agents \\u201ceither hoard full history\\u2026 or **lossily compress it**,\\u201d and HORMA instead \\u201cexternalizes working memory into a file-system-like hierarchy\\u201d (paper.horma-2026#tl_dr).\\\\n- Describes the approach: HORMA \\u201cdecouples\\u201d a memory \\u201cmanager\\u201d that organizes trajectories into \\u201clinked structured notes\\u201d and a retrieval \\u201cnavigator\\u201d that \\u201ctraverses the hierarchy with Bash tools\\u201d and is \\u201ctrained\\u2026 under an evidence-overlap reward\\u201d (paper.horma-2026#tl_dr).\\\\n- Claims efficiency/performance: HORMA \\u201cimproves task performance under strict context budgets while using as little as **1.24%\\u201322.17% of baseline tokens**\\u201d (paper.horma-2026#tl_dr).\\\\n- Mechanism summary: retrieval \\u201cnavigates the hierarchy\\u2026 to assemble minimal-yet-sufficient context,\\u201d trained with an \\u201cevidence-grounded reward\\u2026 (sidestepping the long-horizon credit-assignment gap)\\u201d (ent.horma#mechanism).\\\\n\\\\n## 4) Conditions / when each side applies (only what\\u2019s supported)\\\\n- Folding is presented as appropriate when the primary issue is **growing-history interference / context growth bottleneck**: \\u201cif context growth is the bottleneck, subgoal folding buys both accuracy and token savings\\u201d (paper.hipif-2026#practical_notes) and addresses \\u201clong-context interference\\u201d (paper.hipif-2026#context).\\\\n- Navigate-and-retrieve is presented as appropriate when you want to avoid both \\u201choard[ing] full history\\u201d and \\u201clossily compress[ing] it,\\u201d using a structured external memory plus trained navigation to meet \\u201cstrict context budgets\\u201d (paper.horma-2026#tl_dr).\\\\n- The literature here explicitly treats the choice as **unsettled**: \\u201cThe lossy-fold-vs-lossless-retrieve question\\u2026 is the open design fork to watch\\u201d (paper.hipif-2026#practical_notes), echoed as a \\u201clossy-summary-vs-lossless-history tension\\u2026 the open fork to watch\\u201d (paper.step-hrl-2026#practical_notes).\\\\n\\\\n## 5) Page ids relied on (paper.* / ent.* only)\\\\n- paper.hipif-2026\\\\n- ent.hipif\\\\n- paper.step-hrl-2026\\\\n- paper.horma-2026\\\\n- ent.horma'\"",
+  "workflow_id": "wf.primary-source-fork-answer.v5",
+  "hit_rank": 2,
+  "drift": []
+}

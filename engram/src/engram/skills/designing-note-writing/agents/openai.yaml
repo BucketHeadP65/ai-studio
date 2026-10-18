@@ -1,0 +1,5 @@
+interface:
+  display_name: "Design Note Writing"
+  short_description: "Design a note-writing workflow for this knowledge base."
+policy:
+  allow_implicit_invocation: false

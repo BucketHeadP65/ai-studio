@@ -1,0 +1,19 @@
+{
+  "version": "0.1",
+  "slug": "agent-memory",
+  "purpose": "The agent's semantic memory: one distilled belief per note, written by the agent, read every turn.",
+  "page_types": [
+    {
+      "page_type": "memory",
+      "id_prefix": "mem.",
+      "frontmatter_fields": [
+        {"name": "category", "type": "scalar", "required": true, "choices": ["world", "project", "reference"]},
+        {"name": "source", "type": "scalar", "required": false, "choices": ["owner-note", "session", "dream"]}
+      ],
+      "status_values": ["live", "retired"],
+      "canonical_sections": ["note"],
+      "claims_enabled": false
+    }
+  ],
+  "retrieval": {"collection": "agent-memory"}
+}

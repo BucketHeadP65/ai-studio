@@ -1,0 +1,29 @@
+{
+  "question_id": "q.when-to-skip-retrieval",
+  "path": "baseline",
+  "surfaced": [
+    "ent.graphrag",
+    "ent.lightrag",
+    "ent.naive-rag",
+    "paper.cag-2024",
+    "paper.lightrag-2025",
+    "paper.x"
+  ],
+  "recall": 0.3333333333333333,
+  "missed": [
+    "ent.cache-augmented-generation",
+    "paper.comorag-2025",
+    "paper.gsw-2025",
+    "paper.msrs-2025"
+  ],
+  "requests": 8,
+  "input_tokens": 42022,
+  "output_tokens": 613,
+  "seconds": 30.98,
+  "contaminated": false,
+  "failed": false,
+  "answer": "From the evidence in this corpus, retrieval starts to “pay again” once the *preloaded* reference corpus is much above roughly **50k tokens**, and by **~85k tokens** sparse retrieval clearly wins.\n\n- In **Cache-Augmented Generation (CAG)** (“preload the whole corpus into the model’s KV cache; no retrieval”), CAG beats both BM25-sparse and dense top‑k RAG baselines in **5 of 6** tested SQuAD/HotPotQA *small-corpus* configurations spanning about **21k–85k tokens** (with most wins in the **21k–50k token** range).  \n  Source: `paper.cag-2024#c1` (and page summary `paper.cag-2024`).\n\n- But at the *largest* tested setting—**HotPotQA-Large: 64 documents, ~85k tokens**—**BM25 sparse RAG** (top‑5/top‑3) beats CAG on BERTScore (**0.7535/0.7463 vs 0.7407**).  \n  Source: `paper.cag-2024#c2`.\n\n- The same paper’s synthesized observation frames the crossover: pro‑CAG results are at “toy corpus scale” (**~21k–50k tokens**); above ~32k effective context, CAG’s advantage shrinks and then reverses by **85k**.  \n  Source: `paper.cag-2024#c9`.\n\n**Synthesis (rule of thumb from this corpus):**\n- **Below ~50k tokens**: preloading / CAG can outperform retrieval and be simpler/faster.  \n- **Around ~80–85k tokens**: retrieval (at least BM25 sparse RAG) overtakes preloading.  \n\nCited pages/claims: `paper.cag-2024`, `paper.cag-2024#c1`, `paper.cag-2024#c2`, `paper.cag-2024#c9`.",
+  "workflow_id": null,
+  "hit_rank": null,
+  "drift": null
+}

@@ -1,0 +1,17 @@
+{
+  "name": "knowledge-base",
+  "description": "Retrieval and note-writing tools over a markdown knowledge base indexed into Postgres: an MCP server, setup commands and authoring skills.",
+  "version": "0.0.1",
+  "author": {
+    "name": "BucketHeadP65",
+    "email": "104688161+BucketHeadP65@users.noreply.github.com"
+  },
+  "mcpServers": {
+    "knowledge-base": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/knowledge-base-mcp",
+      "args": [
+        "${CLAUDE_PROJECT_DIR}"
+      ]
+    }
+  }
+}

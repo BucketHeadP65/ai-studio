@@ -1,0 +1,23 @@
+{
+  "page_type": "question",
+  "universal_fields": {
+    "id": "q.llm-judged-eval-validity",
+    "type": "question",
+    "title": "How well do LLM-judged win rates track factual quality in RAG comparisons?",
+    "status": "draft",
+    "tasks": [
+      "sensemaking-qa",
+      "fact-verification"
+    ],
+    "domains": [],
+    "stages": [
+      "evaluation"
+    ],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": [
+      "LLM judge validity"
+    ]
+  },
+  "edge_set": []
+}

@@ -1,0 +1,228 @@
+name: engram-retrieval-golden
+cases:
+- name: coldstart.judges-decisions-0
+  inputs:
+    question: >-
+      What did the judges/operators thread decide about the tool environments its golden-set suite
+      runs against, and on what date?
+    task: null
+  metadata:
+    anchor_page_id: bs.judges-operators-telemetry
+    kind: coldstart
+    difficulty: medium
+  expected_output:
+    answer: >-
+      Tiered, decided 2026-08-08 — frozen fakes and recorded fixtures for the regression suite
+      (comparable baselines, reusing the fakes-over-mocks infrastructure), plus a small live-tool
+      canary on top whose distinct purpose is measuring the fidelity gap between frozen and live
+      environments rather than agent regression, so environment drift becomes an operator metric
+      and a stale fixture set becomes detectable instead of silently misleading.
+    cited_source_ids:
+    - hub.judges-thread
+    - bs.judges-operators-telemetry
+  evaluators: []
+- name: coldstart.memory-decisions-0
+  inputs:
+    question: >-
+      What did the memory-engineering thread decide the unit of memory should be, when, and which
+      alternatives did it consider and set aside?
+    task: null
+  metadata:
+    anchor_page_id: hub.memory-thread
+    kind: coldstart
+    difficulty: medium
+  expected_output:
+    answer: >-
+      Decided 2026-08-08 (fork 2) — the unit of memory is the note layer, piloted on the two live
+      brainstorm threads (judges/operators and memory engineering), whose findings are factored
+      into memory units so the live threads are the test corpus for the whole thesis. Two
+      alternatives were considered and set aside. Compiling the existing documents as-is gave quick
+      retrieval but no shared-memory factoring. Shared-doctrine notes only was deferred, subsumed
+      by the pilot.
+    cited_source_ids:
+    - hub.memory-thread
+    - bs.memory-engineering-lifecycle
+  evaluators: []
+- name: coldstart.memory-open-forks-0
+  inputs:
+    question: >-
+      Which forks of the memory-engineering thread are still open rather than decided?
+    task: null
+  metadata:
+    anchor_page_id: hub.memory-thread
+    kind: coldstart
+    difficulty: hard
+  expected_output:
+    answer: >-
+      Still open — where units live and what is gitignored versus committed; the write policy (live
+      during the session versus batched at doc promotion); the retrieval interface (an engram MCP
+      query at session start versus a SessionStart hook versus an explicit skill); the contradiction
+      and supersession policy for reversed decisions; and who owns the disclosure logic. Whether
+      this thread's provenance-carrying units and the judges thread's verdicts are literally one
+      doctrine with two surfaces is also still an open fork.
+    cited_source_ids:
+    - hub.memory-thread
+    - bs.memory-engineering-lifecycle
+  evaluators: []
+- name: coldstart.judges-open-forks-0
+  inputs:
+    question: >-
+      After its 2026-08-08 session, which questions did the judges-and-operators thread leave open?
+    task: null
+  metadata:
+    anchor_page_id: hub.judges-thread
+    kind: coldstart
+    difficulty: hard
+  expected_output:
+    answer: >-
+      Still open — auditing what engram/workflows spans actually carry today before defining the
+      emission contract per aspect; verdict storage, meaning trace annotations where verdicts live
+      with the evidence versus an app table where they are queryable and governable; judge
+      calibration, that is who judges the judges (anchor-set size, human-label cadence, drift
+      tolerance before a rubric is stale); authority policy per verdict kind, which verdict kinds
+      may gate what; and the record-plane redaction policy, separate from in-band guardrail
+      scrubbing.
+    cited_source_ids:
+    - hub.judges-thread
+    - bs.judges-operators-telemetry
+  evaluators: []
+- name: coldstart.disclosure-envelope-0
+  inputs:
+    question: >-
+      How is progressive disclosure split across provider, spec, and consumer runtime, when was
+      that decided, and which alternatives were parked?
+    task: null
+  metadata:
+    anchor_page_id: mu.disclosure-envelope
+    kind: coldstart
+    difficulty: medium
+  expected_output:
+    answer: >-
+      Decided 2026-08-08, three roles. The provider is anyone with a database and a retrieval tool
+      (engram first) — it owns the data, the compiled summaries and any maintenance hooks, keeps
+      its existing tools, and is conformant when its results follow the spec. The spec defines only
+      the format of a conformant tool result — a thin envelope carrying the disclosed node, its
+      children as summaries, opaque refs and the presentation mode — plus one behavioral
+      requirement, the descent convention, that the provider's tool accepts a ref and returns that
+      node's envelope; the spec defines no tools. The consumer runtime is a generic
+      ProgressiveDisclosure pydantic-ai capability, a thin protocol handler that recognizes
+      conformant envelopes, governs context injection, offers descent, tracks the cursor and
+      enforces budgets, shipping no content of its own. Two alternatives are parked for
+      post-slice-1 revisit — type-level disclosure binding via pydantic's native ConfigDict, and
+      who owns the threshold logic.
+    cited_source_ids:
+    - mu.disclosure-envelope
+  evaluators: []
+- name: coldstart.disclosure-depends-0
+  inputs:
+    question: >-
+      Which model does the progressive-disclosure envelope decision depend on, and how does that
+      model justify making the envelope thin?
+    task: null
+  metadata:
+    anchor_page_id: mu.disclosure-envelope
+    kind: coldstart
+    difficulty: hard
+  expected_output:
+    answer: >-
+      It depends on the three-honesty-tiers model of disclosure enforcement — guaranteed (engram's
+      own pydantic-ai agents), offered (MCP, where the server enforces shape but client behavior
+      stays uncontrollable), and conventional (direct filesystem, unenforceable). Thin envelopes
+      buy server-enforced leveling, so even uncontrolled MCP clients in the offered tier get
+      progressive disclosure with no capability installed, while the capability adds owned-runtime
+      discipline — cursor, budgets, traces — on top in the guaranteed tier.
+    cited_source_ids:
+    - mu.disclosure-envelope
+    - mu.enforcement-tiers
+  evaluators: []
+- name: coldstart.higram-adoption-0
+  inputs:
+    question: >-
+      What did the memory-engineering thread adopt from its reading of the HiGram paper?
+    task: null
+  metadata:
+    anchor_page_id: bs.memory-engineering-lifecycle
+    kind: coldstart
+    difficulty: hard
+  expected_output:
+    answer: >-
+      Findings carried in the brainstorming document rather than compressed into any unit. The
+      four-state status vocabulary (active, superseded, outdated, pending), whose quarantine state
+      matches the agent-proposes/human-reviews pilot policy. Dependency-aware invalidation, that is
+      typed dependency edges between units plus coordinated rewrite over a localized region, so a
+      reversed decision makes its downstream conclusions findable and markable outdated
+      mechanically. And splitting conflict into three kinds rather than one — temporal (was true,
+      superseded), adversarial or static (an incorrect overwrite to resist), and conditional (true
+      only under a scope). The reading also argued the corpus wants a hub abstraction layer over
+      claim-level units rather than a flat corpus.
+    cited_source_ids:
+    - hub.memory-thread
+    - bs.memory-engineering-lifecycle
+  evaluators: []
+- name: coldstart.pageindex-rungs-0
+  inputs:
+    question: >-
+      After the PageIndex reading, how many access rungs does the corpus escalation ladder have and
+      in what order?
+    task: null
+  metadata:
+    anchor_page_id: bs.memory-engineering-lifecycle
+    kind: coldstart
+    difficulty: medium
+  expected_output:
+    answer: >-
+      Three rungs — deterministic walk, then reasoning-guided tree search, then associative search
+      (vector, BM25, graph). PageIndex supplied the middle rung: with summaries on every spine node
+      an LLM can reason its way down the tree even when it does not know where the answer lives.
+      Vectors drop to the last rung, so the default flips to structure and reasoning first with
+      embeddings as escalation — vectorless-first, not vector-never.
+    cited_source_ids:
+    - hub.memory-thread
+    - bs.memory-engineering-lifecycle
+  evaluators: []
+- name: coldstart.three-planes-0
+  inputs:
+    question: >-
+      How does the agent-telemetry model split observability into planes, and what power does each
+      plane hold?
+    task: null
+  metadata:
+    anchor_page_id: mu.three-planes-model
+    kind: coldstart
+    difficulty: easy
+  expected_output:
+    answer: >-
+      Three planes separated by tense and by power. The run plane is the agent plus its in-band
+      capabilities (guardrails, advisor, reminders) — present tense, and it may intervene: block,
+      rewrite, retry. The record plane is the OTel/Logfire span stream, the trajectory as
+      append-only data — past tense, no powers, the immutable fact base. The judgment plane holds
+      consumers of the record (operators, monitors, judges) — future tense, and it may only
+      influence: alert, gate, recalibrate. A judge is therefore not a capability of the agent but a
+      consumer of its evidence, and fidelity of emission bounds quality of judgment.
+    cited_source_ids:
+    - mu.three-planes-model
+  evaluators: []
+- name: coldstart.binding-algebra-0
+  inputs:
+    question: >-
+      In the judge algebra, what four components make up a binding, and which binding turns the
+      judge function into a guardrail?
+    task: null
+  metadata:
+    anchor_page_id: mu.verdict-binding-algebra
+    kind: coldstart
+    difficulty: medium
+  expected_output:
+    answer: >-
+      A judge is the pure function from a trajectory and a rubric to a verdict, and a binding is the
+      four-tuple of trigger, input source, scope, and authority. The guardrail is that function
+      bound in-band over one run with authority to block — the degenerate judge whose verdict has
+      immediate power, and the only binding that is legitimately a capability. The same function
+      bound on-event over live traces with authority to alert is a monitor, and bound on-schedule
+      over a golden suite with authority to gate or report is an eval judge.
+    cited_source_ids:
+    - mu.verdict-binding-algebra
+  evaluators: []
+evaluators:
+- RetrievalMetrics
+report_evaluators: []

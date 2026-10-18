@@ -1,0 +1,373 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The tree ships exactly one top-level package rooted at ``src/``: ``harness`` — the coding
+# agent, the workflow runtime on :8770, the self-authoring harness, and the terminal bridge.
+# ``sources`` strips the ``src/`` prefix so the console script's ``harness.cli:app`` imports at
+# top level in the installed env.
+only-include = ["src/harness"]
+sources      = ["src"]
+
+[project]
+name = "harness"
+description = "The coding agent and workflow runtime: environment composition over engram's doors, self-authoring under owner evidence, runs, gates, ACP."
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+maintainers = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+readme = "README.md"
+# Exactly what the app imports (plus uvicorn, invoked as the server command). Everything the
+# engram library needs for itself (azure converters, pgvector, tiktoken, pypandoc, ...) arrives
+# through the `engram` path dep and is deliberately NOT restated here.
+dependencies = [
+    "asyncpg>=0.31.0",
+    # The engine plus its Temporal adapter, through the shared library's extras.
+    "core[workflows-temporal]",
+    # `web_search`'s two providers (`harness.adapters.websearch`): both of pydantic-ai's own
+    # `common_tools` wrappers ship in the meta distribution, but the vendor SDKs behind them
+    # (`pydantic-ai-slim[tavily]`/`[duckduckgo]`) do not, so both are declared here directly —
+    # `ddgs` is always the keyless fallback, `tavily-python` the keyed path when it is exported.
+    "ddgs>=9.0.0",
+    "tavily-python>=0.5.0",
+    "engram",
+    # The registered `Connector`s: `request_source`/`source_type_of` (authoring.py) classify
+    # a pasted URL through `engram.sources.registry`, and this process needs the real classes
+    # installed to get real recognition rather than an unclassified article fallback.
+    "engram-connectors[conversion,source-queue,x,youtube,zotero]",
+    "fastapi>=0.141.1",
+    # `fastmcp` and `pydantic-monty` are imported directly by the environment/settings modules —
+    # declared even though pydantic-ai / the harness already carry them, so the manifest names
+    # what the code uses.
+    "fastmcp-slim>=2.14.2",
+    # `digest_now`'s one HTTP caller of studio's API (`harness.adapters.studio_http`) — declared
+    # here even though the test group already carries it for ASGI-transport route tests, so the
+    # manifest names the runtime use too.
+    "httpx>=0.28.1",
+    "logfire[fastapi,variables]>=4.39.0",
+    # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
+    "pydantic-ai>=2.20.0",
+    # ``acp`` rides along for ``harness.acp`` — the studio served to ACP clients (Zed et al.)
+    # with the save gesture as a protocol-level permission request; experimental upstream.
+    "pydantic-ai-harness[code-mode,acp]>=0.54.0",
+    # `from acp import ...` in harness.features.running.infrastructure.acp_gate — the dist behind the
+    # harness's `acp` extra, declared for the same direct-import reason as fastmcp/monty.
+    "agent-client-protocol>=0.11",
+    "pydantic-evals>=2.0.0",
+    "pydantic-monty>=1.0.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.13.1",
+    "pyyaml>=6.0.3",
+    # Direct import in harness.features.running.infrastructure.durable (and its tests) — declared here even
+    # though core[workflows-temporal] already carries it, so the manifest names what the code uses.
+    "temporalio>=1.31.0",
+    "typer>=0.20.0",
+    "uvicorn>=0.52.0",
+    # The container: `harness.container` builds it, the wiring modules list what goes in it, and the
+    # FastAPI integration mounts the controllers on it.
+    "wireup>=2.9.0",
+    "croniter>=6.2.4",
+]
+
+[tool.uv.sources]
+engram = { path = "../engram", editable = true }
+engram-connectors = { path = "../connectors", editable = true }
+core = { path = "../core", editable = true }
+
+[project.scripts]
+harness = "harness.cli:app"
+
+[dependency-groups]
+dev = [
+    "pyright (>=1.1.411,<2.0.0)",
+    # Pinned to the same minor as every other project in the monorepo so ``select = ["ALL"]``
+    # resolves to the same rule set everywhere.
+    "ruff (>=0.16.0,<0.17.0)",
+    "types-pyyaml>=6.0.12.20260724",
+]
+test = [
+    # The library's test toolkit (fakes, factories, knowledge base builders, the containerized-DB
+    # plugin) — carries polyfactory/pytest/testcontainers. httpx (route tests call the app over
+    # ASGI) is a main dependency now (`digest_now`'s own HTTP client), not restated here.
+    "engram[testing]",
+    "pytest (>=9.1.1,<10.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    # Bounds the pty session's close()-ordering race test: a reintroduced deadlock in that
+    # ordering must fail the test, not hang the whole gate run indefinitely.
+    "pytest-timeout (>=2.3.1,<3.0.0)",
+]
+
+[tool.uv]
+# The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``;
+# install both tooling groups by default so the gate is self-contained.
+default-groups = ["dev", "test"]
+
+[tool.pytest.ini_options]
+pythonpath       = [".", "src"]
+python_files     = ["test_*.py"]
+testpaths        = ["tests"]
+python_classes   = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode     = "auto"
+addopts          = ["--verbose", "--tb=short"]
+filterwarnings = [
+    "module::DeprecationWarning",
+    # Importing the app installs HTTP instrumentation before anything configures the
+    # SDK, on purpose (middleware must exist before serving). Expected on import, not a bug.
+    "ignore:Instrumentation will have no effect",
+    # A deprecated pydantic-ai-harness API fails the suite, so a migration never waits for its removal.
+    "error::pydantic_ai_harness.HarnessDeprecationWarning",
+]
+
+[tool.ruff]
+src            = ["src"]
+# ``vendor`` holds third-party source taken verbatim from an unmerged upstream PR. It is
+# excluded from both format and validation so it stays byte-identical to what upstream has: the
+# whole point of vendoring it is to run THEIR code and be able to diff it, and a formatter
+# that reflows it turns "we tested the PR" into "we tested our edit of the PR".
+extend-exclude = [".venv", "src/harness/vendor"]
+line-length    = 140
+indent-width   = 4
+fix            = false
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style                = "double"
+line-ending                = "auto"
+skip-magic-trailing-comma  = true
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+preview                    = false
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY001", # Missing copyright notice at top of file -- this repo carries no copyright headers
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on line following TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "COM812", # Trailing comma missing
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN204", # Missing return type annotation for special method
+    "S104",   # Possible binding to all interfaces
+    "E501",   # Line too long
+    "RET504", # Unnecessary assignment before return statement
+    "RUF001", # String contains ambiguous unicode character
+    "RUF002", # Docstring contains ambiguous unicode character
+    "RUF003", # Comment contains ambiguous unicode character
+]
+fixable = ["ALL"]
+preview = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Runnable demos, not a package: they print their narration and live outside any import tree.
+"examples/**" = ["INP001", "T201", "PLR2004"]
+# TC001/TC002: the tool function's annotations are evaluated at mount time (pydantic-ai builds the
+# tool schema via get_type_hints), so RunContext and Runtime must be importable at runtime here.
+"src/harness/features/authoring/digest_now.py" = ["TC001", "TC002"]
+# BLE001/S112: boot-time resume is a deliberately forgiving boundary — an odd yesterday-log must
+# never refuse boot.
+"src/harness/session.py" = ["BLE001", "S112"]
+# BLE001: starting a local Temporal server fails in as many ways as a machine can lack network, a
+# cached binary, or a free port taken between the probe and the bind. Every one of them serves no
+# durable runs rather than failing to boot, the same boundary tests/integration/conftest.py's own
+# BLE001 ignore already covers on the test side.
+"src/harness/adapters/temporal_server.py" = ["BLE001"]
+# BLE001/S112: snapshot/load are the crash-survival boundary — an unserialisable value or a
+# damaged run-log line is skipped (the node re-runs), never fatal.
+"src/harness/features/running/infrastructure/run_log.py" = ["BLE001", "S112"]
+# BLE001: the logged background runner records any failure in the evidence log and
+# must not die with the run.
+"src/harness/features/running/service.py" = ["BLE001"]
+# TC001/TC002: `run_workflow` is registered via `agent.tool(...)`, and pydantic-ai resolves its
+# annotations with `get_type_hints` at registration — `RunContext` and `Session` must exist at
+# runtime. BLE001: the same boundary as service.py — a failed chat run is attested and relayed as
+# a ModelRetry the model must explain, never a raw exception that kills the turn.
+"src/harness/features/running/tools.py" = ["TC001", "TC002", "BLE001"]
+# TC001: the workflow process's `schedule_workflow_tool`/`update_schedule_tool` closures are
+# registered via `FunctionToolset.add_function`, the same runtime-resolution boundary as
+# running/tools.py above -- `GateMode` must exist at runtime for their `gate_mode` parameter, not
+# only under `TYPE_CHECKING`.
+"src/harness/features/authoring/process.py" = ["TC001"]
+# TC002: the console acts are registered via `FunctionToolset.add_function`, the same
+# runtime-resolution boundary as running/tools.py above -- `Tier` must exist at runtime for
+# `set_model`'s default-tier parameter, not only under `TYPE_CHECKING`.
+"src/harness/features/followme/acts.py" = ["TC002"]
+# TC001/TC002: `NoteToolset`'s tool methods are registered via `FunctionToolset.add_function`, the
+# same runtime-resolution boundary as running/tools.py above -- `RunContext` and `Runtime` must
+# exist at runtime, not only under `TYPE_CHECKING`. PLR0913: `write_memory`'s keyword-only arity
+# (content, category, slug, path, old_text) IS the tool's surface -- a note is named one of two
+# ways (category+slug, or the relative path a listing or search already gave back) and written one
+# of two ways (append, or replace `old_text`); narrowing it would just move the same fields into a
+# bag argument the model would have to build by hand. `search`'s five bounds on `_NoteIndexStore`
+# mirror `SearchableMemoryStore`'s own protocol signature verbatim.
+"src/harness/features/projects/memory.py" = ["TC001", "TC002", "PLR0913"]
+# S608: every `_COLUMNS` interpolation is the same module-level literal column list, never user
+# input -- the four call sites are naming the same columns once, not stitching a query together
+# from untrusted parts.
+"src/harness/features/scheduling/infrastructure/postgres.py" = ["S608"]
+# BLE001: the same background-runner boundary as service.py, three times over — a durable run's
+# failure is attested rather than raised, and an unanswered progress or evidence query (a closed
+# workflow, a worker between restarts) must degrade the panel, never kill the follower.
+"src/harness/features/running/infrastructure/durable.py" = ["BLE001"]
+# N818: `TelemetryUnreachable` names the condition a caller checks for, not a failure class, and
+# every caller across the telemetry port and the report scopes that consume it spells it this way.
+"src/harness/adapters/logfire_query.py" = ["N818"]
+# N818: `MigrationConflict` names the condition the migration script checks for, not a failure
+# class -- one caller distinguishes a refusal from an ordinary migrated/already-turns outcome.
+"src/harness/features/authoring/turns_migration.py" = ["N818"]
+# S608: `sql_for` and `_narrowing` interpolate `subject` and `since_hours` only after `sql_for`
+# validates both against a fixed pattern and a fixed band. Every reachable interpolation is a
+# checked value, never a caller's raw string.
+"src/harness/features/running/spend_report.py" = ["S608"]
+# PLR0913: `BudgetedModel.__init__`'s keyword-only args are the five seams one budgeted role has --
+# the record it asks, the scope it spends in, the role it is, the resolver that prices its responses
+# and the clock it stamps with. A holder object would rename the arity, not reduce it.
+"src/harness/features/evals/infrastructure/budgeted_model.py" = ["PLR0913"]
+# ANN401: `KnowledgeBaseSurface.direct_call_tool`'s `args`/`Any` mirror the installed
+# `pydantic_ai.mcp.MCPToolset.direct_call_tool` signature verbatim, which is what lets
+# `MCPToolset` satisfy the Protocol structurally with no change of its own.
+"src/harness/domain/ports.py" = ["ANN401"]
+# PLR0913: `build_agent`'s keyword-only arity IS the composition surface — port, research,
+# durability, output shape, and the disclosure bundle are the five seams a door may vary.
+"src/harness/features/authoring/agent.py" = ["PLR0913"]
+# ANN401: `_GuardedToolset.call_tool`'s `Any`s mirror the installed
+# `pydantic_ai.toolsets.WrapperToolset.call_tool` signature verbatim, and
+# `GuardedKnowledgeBase.direct_call_tool`'s mirror `harness.domain.ports.KnowledgeBaseSurface.direct_call_tool`
+# (in turn `MCPToolset.direct_call_tool`) verbatim -- the same rule as environment.py above, one layer up.
+"proof/knowledge_base.py" = ["ANN401"]
+# PLR0913: `build_record`'s keyword-only arity is the one assembly signature both experiment
+# paths call through -- narrowing it would just move the same fields into a bag object.
+"proof/records.py" = ["PLR0913"]
+# BLE001: `run_question` catches any failure as a row (spec §5, no retries) rather than let one
+# question's failure kill the whole baseline sweep. S608: `_known_ids` inlines cited page ids
+# into one SELECT — every id came out of the bundle's own link regex, and run_sql is a
+# single-statement read-only door; there is no user input anywhere in the string. T201: the
+# sweep prints one line of CLI feedback per record, the same ruling as report.py's `main`.
+"proof/baseline.py" = ["BLE001", "S608", "T201"]
+# BLE001: `collective_step_budget` degrades to `None` on any store-fetch failure — unreachable
+# DB, missing settings, an unknown workflow id — rather than let a report generated mid-experiment
+# crash on a check that is only ever a bonus verification. T201: `main`'s one line of CLI feedback.
+"proof/report.py" = ["BLE001", "T201"]
+# PLR0913: `run_reuse`'s keyword-only arity is the one search->fetch->drift->run->attest->grade
+# signature the reuse path calls through -- narrowing it would just move the same fields into a
+# bag object, exactly the `proof/records.py` ruling. BLE001: reaching a gate or any other failure
+# inside the indexed graph is a failed row, never a retry -- the same no-retry rule as baseline.py.
+# T201: the sweep prints one line of CLI feedback per record, the same ruling as baseline.py.
+"proof/reuse.py" = ["PLR0913", "BLE001", "T201"]
+# INP001: a standalone operator script, not a package. T201: the migration prints one line of
+# feedback per store page -- the operator's own record of what it touched, run by hand.
+"scripts/migrate_map_turns.py" = ["INP001", "T201"]
+# PLR0913/PLR0917: `attribute_lead_handler` and `scan_run_handler` take the inspector's whole
+# composition surface -- the tier ladder's dependencies, the conversation port, and the transcript
+# and parameters ports the run is recorded through. Narrowing it would only move the same fields
+# into a bag object built at this call site alone.
+"src/harness/features/inspection/wiring.py" = ["PLR0913", "PLR0917"]
+# PLR0913/PLR0917: the controller's constructor takes the inspection's tables, how a source opens,
+# the record's conversations, the commands, the watches, and what answers a follow-up -- six
+# collaborators, each its own port, already the narrowest split.
+"src/harness/features/inspection/controller.py" = ["PLR0913", "PLR0917"]
+# Wireup and FastAPI read these modules' annotations at runtime, so nothing here moves under TYPE_CHECKING.
+"src/harness/adapters/wiring.py"           = ["TC001", "TC002", "TC003"]
+"src/harness/features/*/wiring.py"         = ["TC001", "TC002", "TC003"]
+"src/harness/features/*/controller.py"     = ["TC001", "TC002", "TC003"]
+"tests/**/*.py" = [
+    "D101",    # Docstring not required for test classes
+    "D102",    # Docstring not required for test methods
+    "D103",    # Docstring not required for test functions
+    "ANN201",  # Return type annotation not required for test functions
+    "ANN202",  # Return type annotation not required for test methods
+    "PLC0415", # Import on top not required for test files
+    "ASYNC240", # Test coroutines read the tiny artifacts their code-under-test just wrote; a blocking read in a test is fine
+    "PLR0911", # A fake's type-dispatch helper returns one branch per provided type
+    "PLR0913", # Fake constructors take many scriptable knobs by design
+    "PLR0917", # Same — those knobs are positional in the fakes' call sites
+    "S101",    # asserts allowed in tests...
+    "S105",    # Test fixtures use literal strings that resemble secrets
+    "S106",    # Same — kwarg passes test-only string values
+    "S107",    # Same — function-default variant
+    "SLF001",  # Tests may peek at module-private constants for drift guards
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+]
+# ANN401: `FakeSurface.direct_call_tool` mirrors `harness.domain.ports.KnowledgeBaseSurface` — and, through
+# it, `pydantic_ai.mcp.MCPToolset.direct_call_tool` — verbatim, which is the point of the fake.
+# TC002: the owner-door fakes are handed straight to `FunctionToolset`, the same
+# runtime-resolution boundary as running/tools.py above — `IntakeDecision` must exist at runtime,
+# not only under `TYPE_CHECKING`.
+"tests/support/environment.py" = ["ANN401", "TC002"]
+# BLE001: starting the Temporal dev server fails in as many ways as a machine can lack network,
+# a cached binary, or a free port, and every one of them is a skip rather than a suite failure.
+"tests/integration/conftest.py" = ["BLE001"]
+# BLE001: same boundary as tests/integration/conftest.py's temporal_env fixture. Starting the
+# local Temporal dev server fails in as many ways as a machine can lack network, a cached
+# binary, or a free port, and every one of them is a skip rather than a suite failure.
+"tests/integration/test_temporal_durability.py" = ["BLE001"]
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+detect-same-package = true
+lines-between-types = 1
+# Pairs with ``format.skip-magic-trailing-comma = true`` so isort and the formatter agree.
+split-on-trailing-comma = false
+known-first-party = ["harness", "tests", "examples", "proof"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+order-by-type = true
+
+[tool.ruff.lint.flake8-type-checking]
+# Wireup resolves an injectable's annotations against the module globals, and FastAPI resolves a
+# route's return annotation at decoration time, so a name used only in one of those annotations must
+# stay importable at module scope rather than moving under TYPE_CHECKING (TC00X).
+runtime-evaluated-decorators = [
+    "wireup.injectable",
+    # A pydantic dataclass validates against its own annotations at runtime, so every type one names
+    # has to be importable at module scope.
+    "pydantic.dataclasses.dataclass",
+    "fastapi.APIRouter.get",
+    "fastapi.APIRouter.post",
+    "fastapi.APIRouter.put",
+    "fastapi.APIRouter.patch",
+    "fastapi.APIRouter.delete",
+    "fastapi.APIRouter.websocket",
+]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+    # `EvaluationModel` and its own subclasses are pydantic models like any other: an evaluation
+    # subclass's field annotations resolve when the class body runs, so the names they use stay
+    # importable at module scope.
+    "core.ai.evaluation.contracts.EvaluationModel",
+    "core.ai.evaluation.contracts.TaskExecution",
+]
+
+[tool.pyright]
+include = ["src", "tests", "examples", "proof"]
+venvPath = "."
+venv = ".venv"
+# A deprecated API fails the type check, so a deprecation is fixed when it lands, not when its removal breaks the build.
+reportDeprecated = "error"

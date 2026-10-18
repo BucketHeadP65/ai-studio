@@ -1,0 +1,342 @@
+@import "tailwindcss";
+/* Syntax colours for fenced code blocks rendered through react-markdown + rehype-highlight. */
+@import "highlight.js/styles/github.css";
+/* Enter/exit animation utilities (animate-in, fade-out-0, …) used by the shadcn-derived
+   components under components/ui and components/ai-elements. */
+@import "tw-animate-css";
+
+/* The `dark:` variant follows the app's own theme choice, not the OS: shadcn-derived
+   components (and shiki's dual-theme tokens) key their dark styles on it. */
+@custom-variant dark (&:where([data-theme="factory"], [data-theme="factory"] *, [data-theme="graphite"], [data-theme="graphite"] *));
+
+/* client-core ships raw TSX into node_modules (copy-install, ADR-0004). Tailwind v4
+   skips node_modules during auto-detection, so its UI primitives' classes (e.g. the
+   Button's `bg-accent text-ground`) get purged and render unstyled. Register it
+   explicitly so those classes are generated. */
+@source "../../node_modules/client-core/src/**/*.{ts,tsx}";
+/* streamdown (the chat's markdown renderer) ships Tailwind classes in its dist bundle;
+   node_modules is skipped by auto-detection, so register it or its blocks render bare. */
+@source "../../node_modules/streamdown/dist/*.js";
+
+/* ── The dashboard's two-tier color system ────────────────────────────────────────────
+   Tier 1 (here): semantic aliases as custom properties — the ONLY place literal colors
+   may appear. Tier 2 (below, @theme inline): each alias registered as a Tailwind color
+   so feature code writes `bg-surface`, `text-label-2`, `border-line` … and never a
+   literal palette name.
+
+   Themes are presets keyed by `data-theme` on <html>, chosen on the Settings screen
+   (components/settings/appearance-section.tsx) and stamped pre-paint from localStorage.
+   `wire` is the default and lives on bare :root so an unstamped page is never unstyled
+   (its stored value stays "paper" so an already-persisted choice keeps resolving). Adding
+   a theme = one block here plus one entry in appearance-section.tsx's preset list. */
+:root {
+  /* wire — the light default: warm neutral ramp, ink text, two signal hues
+     (vermilion means "needs a person", cobalt means "in flight"). Meaning is
+     never carried by hue alone — shape and words do that; these are washes
+     and inks behind them. */
+  --ground: #efede8;
+  --surface: #ffffff;
+  --well: #f6f4f0;
+  --line: #dbd6cd;
+  --line-strong: #b9b2a6;
+  --label-1: #17181a;
+  --label-2: #4a453d;
+  /* The ramp's own third step (#7C766C) measures 3.9-4.1:1 on ground/well,
+     under the 4.5:1 floor; darkened to clear it on every background this
+     token sits on. */
+  --label-3: #6e6357;
+  --accent: #2a4fe0;
+  --accent-soft: #edf0fd;
+  /* The cobalt that reads as text on the cobalt wash; `accent` itself is the
+     border, mark, and fill strength. */
+  --accent-ink: #2440b5;
+  /* Completed work is unremarkable in this language: neutral wash, ink text.
+     The word says done; no hue celebrates it. */
+  --ok-soft: #f4f2ee;
+  --ok-ink: #17181a;
+  /* Warn and danger share the vermilion family on purpose — both mean "a
+     person should look here"; the icon and the words tell them apart.
+     `warn` is the vermilion for borders, marks, and fills; `warn-ink` the
+     darker step that reads as text on the wash. */
+  --warn: #db4a24;
+  --warn-soft: #fdf0ec;
+  --warn-ink: #b03a1b;
+  --danger-soft: #fdf0ec;
+  --danger-ink: #b03a1b;
+  --muted-soft: #f6f4f0;
+  --muted-ink: #6e6357;
+
+  /* Elevation: hard offset shadows, never a soft blur — except the one step
+     for things that genuinely float above the page. Dark themes re-tune
+     below (a dark surface needs a darker, more opaque shadow to read as
+     raised). */
+  --elevation-sm: 0 3px 0 rgb(23 24 26 / 0.05);
+  --elevation-md: 0 4px 0 rgb(23 24 26 / 0.08);
+  --elevation-lg: 0 12px 28px rgb(23 24 26 / 0.14);
+}
+
+/* factory — the dark industrial floor: slate depth, hairline steel, one cyan
+   glow. Ground/surface/well/line/label-1 evolve toward the slate scale
+   (Tailwind's slate-900/800/700/600/50); label-2/3 and muted-ink land on
+   slate-400/~455 so every text tier still clears 4.5:1 on ground, surface,
+   AND well (the tightest of the three, being the lightest background). */
+[data-theme="factory"] {
+  --ground: oklch(0.208 0.042 265.755);
+  --surface: oklch(0.279 0.041 260.031);
+  --well: oklch(0.235 0.042 263);
+  --line: oklch(0.372 0.044 257.287);
+  --line-strong: oklch(0.446 0.043 257.281);
+  --label-1: oklch(0.984 0.003 247.858);
+  --label-2: oklch(0.704 0.04 256.788);
+  --label-3: oklch(0.66 0.025 257);
+  --accent: oklch(0.8 0.125 215);
+  --accent-soft: oklch(0.29 0.045 220);
+  --accent-ink: oklch(0.8 0.125 215);
+  /* Completed work stays unremarkable here too: the surface tone and the
+     brightest label, no hue. */
+  --ok-soft: oklch(0.279 0.041 260.031);
+  --ok-ink: oklch(0.984 0.003 247.858);
+  --warn: oklch(0.84 0.115 90);
+  --warn-soft: oklch(0.3 0.05 95);
+  --warn-ink: oklch(0.84 0.115 90);
+  --danger-soft: oklch(0.29 0.05 20);
+  --danger-ink: oklch(0.79 0.115 20);
+  --muted-soft: oklch(0.245 0.03 261);
+  --muted-ink: oklch(0.704 0.04 256.788);
+
+  /* Dark surfaces need a darker, more opaque shadow than light ones to read
+     as raised at all. */
+  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.4);
+  --elevation-md: 0 6px 16px oklch(0 0 0 / 0.5), 0 2px 6px oklch(0 0 0 / 0.35);
+  --elevation-lg: 0 20px 40px oklch(0 0 0 / 0.6), 0 8px 16px oklch(0 0 0 / 0.4);
+}
+
+/* graphite — the restrained professional dark: neutral warm grays, calm blue accent */
+[data-theme="graphite"] {
+  --ground: oklch(0.235 0.008 275);
+  --surface: oklch(0.275 0.009 275);
+  --well: oklch(0.255 0.008 275);
+  --line: oklch(0.34 0.01 275);
+  --line-strong: oklch(0.44 0.012 275);
+  --label-1: oklch(0.95 0.004 275);
+  --label-2: oklch(0.79 0.008 275);
+  --label-3: oklch(0.63 0.012 275);
+  --accent: oklch(0.74 0.105 255);
+  --accent-soft: oklch(0.33 0.04 255);
+  --accent-ink: oklch(0.74 0.105 255);
+  --ok-soft: oklch(0.275 0.009 275);
+  --ok-ink: oklch(0.95 0.004 275);
+  --warn: oklch(0.84 0.11 90);
+  --warn-soft: oklch(0.32 0.045 95);
+  --warn-ink: oklch(0.84 0.11 90);
+  --danger-soft: oklch(0.31 0.045 20);
+  --danger-ink: oklch(0.79 0.11 20);
+  --muted-soft: oklch(0.31 0.009 275);
+  --muted-ink: oklch(0.73 0.01 275);
+
+  /* Dark, same as factory: this theme was not asked to evolve its palette,
+     but a new shadow scale still needs dark-tuned values here, not the
+     light @theme default it would otherwise inherit. */
+  --elevation-sm: 0 1px 2px oklch(0 0 0 / 0.4);
+  --elevation-md: 0 6px 16px oklch(0 0 0 / 0.5), 0 2px 6px oklch(0 0 0 / 0.35);
+  --elevation-lg: 0 20px 40px oklch(0 0 0 / 0.6), 0 8px 16px oklch(0 0 0 / 0.4);
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-well: var(--well);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-label-1: var(--label-1);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-ok-soft: var(--ok-soft);
+  --color-ok-ink: var(--ok-ink);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-warn-ink: var(--warn-ink);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-ink: var(--danger-ink);
+  --color-muted-soft: var(--muted-soft);
+  --color-muted-ink: var(--muted-ink);
+  /* shadcn's token names, aliased onto the same tier-1 variables so the vendored
+     components under components/ui and components/ai-elements pick up every theme
+     without edits. `accent` is shared: shadcn's hover wash resolves to the app's
+     signal hue, with `surface` as its readable ink on every theme. */
+  --color-background: var(--surface);
+  --color-foreground: var(--label-1);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--label-1);
+  --color-popover: var(--surface);
+  --color-popover-foreground: var(--label-1);
+  --color-primary: var(--label-1);
+  --color-primary-foreground: var(--surface);
+  --color-secondary: var(--well);
+  --color-secondary-foreground: var(--label-2);
+  --color-muted: var(--well);
+  --color-muted-foreground: var(--label-3);
+  --color-accent-foreground: var(--surface);
+  --color-destructive: var(--warn);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--accent);
+  /* streamdown paints its code-block and table chrome with shadcn's sidebar token. */
+  --color-sidebar: var(--well);
+  --color-sidebar-foreground: var(--label-2);
+  --color-sidebar-border: var(--line);
+  --shadow-sm: var(--elevation-sm);
+  --shadow-md: var(--elevation-md);
+  --shadow-lg: var(--elevation-lg);
+  /* DM Mono, self-hosted via next/font in the root layout; --font-mono-app
+     is that binding, kept off the reserved `--font-mono` name so this
+     indirection (not Next's element-scoped variable) is the one thing that
+     decides what `font-mono` resolves to. */
+  --font-mono: var(--font-mono-app, ui-monospace), SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/* ── The dashboard's type scale ───────────────────────────────────────────────────────
+   Five named steps; feature code writes `text-body`, `text-caption` … and never an
+   arbitrary `text-[13.5px]`. micro: dense metadata and column heads; caption:
+   secondary labels and controls; body: reading text and messages; subtitle: object
+   names and card titles; title: the station h1. Titles track tight — the display
+   face asks for it. */
+@theme {
+  --text-micro: 10px;
+  --text-micro--line-height: 1.4;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.45;
+  --text-body: 14.5px;
+  --text-body--line-height: 1.55;
+  --text-subtitle: 17px;
+  --text-subtitle--line-height: 1.45;
+  --text-title: 22px;
+  --text-title--line-height: 1.3;
+  --text-title--letter-spacing: -0.02em;
+  /* Column heads and section labels: small caps set wide. */
+  --tracking-caps: 0.16em;
+
+  /* Radius scale: 10 for controls, 13/16/18 for cards — the corners the whole
+     drawing language is built on (pills take rounded-full). */
+  --radius-md: 10px;
+  --radius-lg: 13px;
+  --radius-xl: 16px;
+  --radius-2xl: 18px;
+}
+
+/* Tailwind's preflight leaves border-color at currentColor; the vendored shadcn-derived
+   components use bare `border` and expect the ecosystem default of the border token. App
+   code always names its border color, so this only ever colors a bare border. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--line);
+  }
+}
+
+html,
+body {
+  height: 100%;
+}
+
+/* The face the person chose on /settings, stamped pre-paint beside the theme. --font-app is
+   the ACTIVE face; the default binds it to Space Grotesk, and each stamped choice rebinds it.
+   The per-face variables stay stable, which is what lets the Type picker preview every face
+   while another one is active. */
+html {
+  --font-app: var(--font-grotesk);
+}
+html[data-font="inter"] {
+  --font-app: var(--font-inter);
+}
+html[data-font="manrope"] {
+  --font-app: var(--font-manrope);
+}
+html[data-font="plex"] {
+  --font-app: var(--font-plex);
+}
+html[data-font="outfit"] {
+  --font-app: var(--font-outfit);
+}
+html[data-font="dm-sans"] {
+  --font-app: var(--font-dm-sans);
+}
+html[data-font="geist"] {
+  --font-app: var(--font-geist);
+}
+html[data-font="sora"] {
+  --font-app: var(--font-sora);
+}
+html[data-font="jakarta"] {
+  --font-app: var(--font-jakarta);
+}
+html[data-font="work-sans"] {
+  --font-app: var(--font-work-sans);
+}
+html[data-font="figtree"] {
+  --font-app: var(--font-figtree);
+}
+html[data-font="hanken"] {
+  --font-app: var(--font-hanken);
+}
+html[data-font="instrument"] {
+  --font-app: var(--font-instrument);
+}
+html[data-font="lexend"] {
+  --font-app: var(--font-lexend);
+}
+html[data-font="archivo"] {
+  --font-app: var(--font-archivo);
+}
+
+body {
+  font-family: var(--font-app, ui-sans-serif), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  /* Body copy sits at medium, not regular: Space Grotesk's 400 reads too thin
+     at UI sizes. Bold tiers (600/700) keep their contrast against it. */
+  font-weight: 500;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  color-scheme: light;
+}
+
+[data-theme="factory"] body,
+[data-theme="graphite"] body {
+  color-scheme: dark;
+}
+
+/* The factory pulse: the brand dot and any element that wears .glow-accent breathes. */
+.glow-accent {
+  box-shadow: 0 0 6px 1px color-mix(in oklch, var(--accent) 55%, transparent);
+}
+
+/* Marks the element a companion verb just pointed at; fades on its own a moment later. */
+.followme-pointed {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  transition: outline-color 300ms;
+}
+
+/* A viewer who asked the OS for reduced motion gets every transition and
+   animation collapsed to effectively instant, everywhere in the app — the
+   sidebar's width/collapse transition included — except an element marked
+   `data-motion="essential"`: a live turn's spinner and moving verb, and a
+   running tool card's clock, the only sign on screen that work is still
+   happening. */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-motion="essential"]),
+  *:not([data-motion="essential"])::before,
+  *:not([data-motion="essential"])::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

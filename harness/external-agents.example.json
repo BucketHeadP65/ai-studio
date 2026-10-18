@@ -1,0 +1,23 @@
+{
+  "claude-code": {
+    "command": "npx",
+    "args": ["-y", "@agentclientprotocol/claude-agent-acp"],
+    "env": {"ANTHROPIC_API_KEY": "set-me"},
+    "permission": "gate",
+    "timeout_seconds": 600.0
+  },
+  "codex": {
+    "command": "npx",
+    "args": ["-y", "@agentclientprotocol/codex-acp"],
+    "env": {"OPENAI_API_KEY": "set-me"},
+    "permission": "gate",
+    "timeout_seconds": 600.0
+  },
+  "pi": {
+    "command": "npx",
+    "args": ["-y", "pi-acp"],
+    "env": {},
+    "permission": "gate",
+    "timeout_seconds": 600.0
+  }
+}

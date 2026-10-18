@@ -1,0 +1,78 @@
+cases:
+  - name: sound draft, a real decision
+    inputs:
+      drafts:
+        - design_id: docs/initiatives/2026-08-29-agentic-workflow-contract/design.md
+          slug: a-step-ships-its-examples
+          title: A step ships its examples
+          summary: A step's dataset lives beside its own block, one file per step, run through the same executor a workflow uses.
+          sections:
+            - heading: Context
+              body: >-
+                A step's judgment is only as good as the cases it has been checked against. Nothing today runs a step's
+                own examples through the step itself, so a step's grading logic drifts from its instructions with no
+                way to notice.
+            - heading: Decision
+              body: >-
+                A step ships a pydantic_evals dataset beside its block, one YAML file named after the step, in
+                Dataset.from_file form. harness evals run <step id> resolves the step off the shelf, performs every
+                case through the same perform callable a workflow run calls, and prints the report.
+            - heading: Consequences
+              body: >-
+                A step's examples run through the real executor, never a parallel one, so a passing case is evidence
+                about the step as it actually runs. A step with no dataset file simply has no evals yet, which is
+                visible rather than silent.
+      collection: repo-docs
+    expected_output:
+      outcome: approve
+
+  - name: restates the design, decides nothing
+    inputs:
+      drafts:
+        - design_id: docs/initiatives/2026-08-29-agentic-workflow-contract/design.md
+          slug: step-examples-notes
+          title: Step examples notes
+          summary: Notes on giving a step its examples.
+          sections:
+            - heading: Context
+              body: >-
+                A step's judgment is only as good as the cases it has been checked against. Today nothing runs a
+                step's own examples through the step itself.
+            - heading: Decision
+              body: >-
+                We should think about how a step's examples might work, and look at pydantic_evals and how other
+                projects check their own steps against sample cases.
+            - heading: Consequences
+              body: >-
+                More clarity on step evaluation once this is worked out.
+      collection: repo-docs
+    expected_output:
+      outcome: reject
+
+  - name: wrong sections, Summary and Notes
+    inputs:
+      drafts:
+        - design_id: docs/initiatives/2026-08-29-agentic-workflow-contract/design.md
+          slug: step-examples-summary
+          title: Step examples summary
+          summary: A step's dataset lives beside its own block.
+          sections:
+            - heading: Summary
+              body: >-
+                A step ships a pydantic_evals dataset beside its block, run through the same executor a workflow uses.
+            - heading: Notes
+              body: >-
+                harness evals run resolves the step off the shelf and prints the report.
+      collection: repo-docs
+    expected_output:
+      outcome: reject
+
+  - name: empty drafts list
+    inputs:
+      drafts: []
+      collection: repo-docs
+    expected_output:
+      outcome: cannot_judge
+
+evaluators:
+  - OutcomeMatches

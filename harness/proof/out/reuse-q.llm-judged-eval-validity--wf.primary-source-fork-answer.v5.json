@@ -1,0 +1,40 @@
+{
+  "question_id": "q.llm-judged-eval-validity",
+  "path": "reuse",
+  "surfaced": [
+    "ent.gpt-4o-mini",
+    "ent.graph-enhanced-rag",
+    "ent.graphrag",
+    "ent.llm-judged-win-rate",
+    "ent.pathrag",
+    "paper.ace-2025",
+    "paper.agents-k1-2026",
+    "paper.cuprate-expert-eval-2025",
+    "paper.eigen1-2025",
+    "paper.graphrag-2024",
+    "paper.hirag-2025",
+    "paper.leanrag-2025",
+    "paper.lightrag-2025",
+    "paper.pathrag-2025"
+  ],
+  "recall": 0.5384615384615384,
+  "missed": [
+    "paper.gsw-2025",
+    "paper.hipporag2-2025",
+    "paper.hmem-2026",
+    "paper.memgraphrag-2026",
+    "paper.msrs-2025",
+    "paper.simgrag-2024"
+  ],
+  "requests": 2,
+  "input_tokens": 21102,
+  "output_tokens": 1475,
+  "seconds": 21.51,
+  "contaminated": false,
+  "failed": false,
+  "failure": null,
+  "answer": "\"cited_page_ids=['paper.graphrag-2024', 'paper.lightrag-2025', 'paper.leanrag-2025', 'paper.cuprate-expert-eval-2025', 'ent.llm-judged-win-rate'] answer_markdown='## 1) Direct answer\\\\nLLM-judged win rates provide, at best, a **partial and task-/metric-dependent proxy** for factual quality in RAG comparisons: there is some evidence they correlate with *count-based* proxies for \\u201ccomprehensiveness/diversity\\u201d in one setting, but multiple sources caution that these evaluations are **not grounded in factual-accuracy metrics**, can be **structurally biased toward certain answer styles**, and can **change system orderings** when you switch evaluation metrics or protocols.\\\\n\\\\n## 2) Evidence for side A (they track factual quality reasonably / have some validity)\\\\n- GraphRAG reports a measurable (though imperfect) agreement between LLM-judge labels and a claim-count proxy: \\\\n  - Quote: \\u201cthe aggregated LLM label matched the claim-based label in **78%** of pairwise comparisons for comprehensiveness and **69-70%** for diversity\\u201d (paper.graphrag-2024#findings, ^c10).\\\\n\\\\n## 3) Evidence for side B (they do *not* reliably track factual quality / are weakly validated)\\\\n- LightRAG\\u2019s evaluation is explicitly judge-preference without factual grounding:\\\\n  - Quote: \\u201cEvidence caveat: all results are **LLM-judged win rates** on LLM-generated questions; **no factual-accuracy metric**.\\u201d (paper.lightrag-2025#tl_dr).\\\\n  - Quote: \\u201cWe employ a robust LLM, specifically **GPT-4o-mini, to rank** each baseline against our LightRAG\\u201d and \\u201cno factual-accuracy or groundedness metric is reported.\\u201d (paper.lightrag-2025#findings, ^c10).\\\\n- GraphRAG\\u2019s own limitations emphasize that its evaluation does not establish factual correctness and is narrow in task coverage:\\\\n  - Quote: \\u201cevaluation covers **only global sensemaking questions**\\u2026; **no fabrication-rate comparison**\\u2026 Local/factoid QA is never evaluated\\u201d (paper.graphrag-2024#limitations).\\\\n  - Quote: \\u201cwinning criteria (comprehensiveness, diversity) structurally favor **long, many-claim answers**\\u2026 but doesn\\u2019t measure **correctness**\\u201d (paper.graphrag-2024#limitations).\\\\n- LeanRAG likewise uses LLMs as judges and provides no factual-accuracy calibration:\\\\n  - Quote: \\u201cwe use **DeepSeek-V3 \\u2026 as our evaluators**\\u2026 and each query and answer is scored 5 times\\u201d and \\u201cno ground-truth **factual-accuracy**\\u2026 metric is reported.\\u201d (paper.leanrag-2025#findings, ^c13).\\\\n- The \\u201cLLM-judged win rate\\u201d entry explicitly warns that metric/protocol choice can flip conclusions:\\\\n  - Quote: \\u201cswitching from win-rate to extractive token-F1 **inverts system orderings**\\u2026 Metric choice is outcome-determining.\\u201d (ent.llm-judged-win-rate#evidence).\\\\n  - Quote: \\u201cPairwise protocol separates systems that pointwise 1-10 scoring calls equal\\u2026 protocol choice changes apparent margins on identical answers.\\u201d (ent.llm-judged-win-rate#evidence).\\\\n- Expert evaluation is positioned as a contrasting \\u201cground truth\\u201d precisely because LLM-judged RAG evals don\\u2019t provide that level of factual vetting:\\\\n  - Quote: \\u201cTrustworthy answers\\u2026 must be grounded in vetted experiments\\u2026 The study is positioned as uniquely expensive **ground truth**: only world experts can grade answers at this level, unlike **LLM-judged RAG evals**\\u201d (paper.cuprate-expert-eval-2025#context).\\\\n\\\\n## 4) Conditions / when each side applies (if supported)\\\\n- **More defensible as a proxy** when your target dimensions resemble *comprehensiveness/diversity* and you can tolerate proxy validation rather than truth: GraphRAG\\u2019s agreement with claim-count labels is reported specifically for those dimensions (paper.graphrag-2024#findings, ^c10).\\\\n- **Less defensible for factual quality** when (a) the study reports \\u201cno factual-accuracy metric\\u201d (paper.lightrag-2025#tl_dr; paper.lightrag-2025#findings, ^c10; paper.leanrag-2025#findings, ^c13), (b) tasks are limited to \\u201cglobal sensemaking\\u201d rather than \\u201clocal/factoid QA\\u201d (paper.graphrag-2024#limitations), or (c) different evaluation metrics/protocols might change ordering (\\u201cinverts system orderings\\u201d; \\u201cprotocol choice changes apparent margins\\u201d) (ent.llm-judged-win-rate#evidence).\\\\n\\\\n## 5) Page ids relied on (paper.* / ent.* only)\\\\n- paper.graphrag-2024\\\\n- paper.lightrag-2025\\\\n- paper.leanrag-2025\\\\n- ent.llm-judged-win-rate\\\\n- paper.cuprate-expert-eval-2025'\"",
+  "workflow_id": "wf.primary-source-fork-answer.v5",
+  "hit_rank": null,
+  "drift": []
+}

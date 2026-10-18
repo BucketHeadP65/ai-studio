@@ -1,0 +1,52 @@
+{
+  "name": "knowledge-base",
+  "version": "0.0.1",
+  "description": "Search and maintain markdown knowledge bases indexed into Postgres, with MCP tools and authoring skills.",
+  "author": {
+    "name": "BucketHeadP65"
+  },
+  "skills": "./skills/",
+  "mcpServers": {
+    "knowledge-base": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "set -euo pipefail\nknowledge_base=\"$PWD\"\nfor candidate in \"$PWD\" \"$PWD/docs\" \"$PWD/knowledge-base\"; do\n  if [ -f \"$candidate/knowledge-base-schema.json\" ]; then\n    knowledge_base=\"$candidate\"\n    break\n  fi\ndone\nexec \"${STUDIO_BIN:-studio}\" mcp --knowledge-base \"$knowledge_base\""
+      ],
+      "env_vars": [
+        "STUDIO_BIN",
+        "APP_INFRASTRUCTURE",
+        "APP_INFRASTRUCTURE__DATABASE__URL",
+        "APP_INFRASTRUCTURE__DATABASE__READER_URL",
+        "APP_INFRASTRUCTURE__AZURE_OPENAI__ENDPOINT",
+        "APP_INGESTION__EMBEDDING_DEPLOYMENT",
+        "APP_RETRIEVAL",
+        "APP_RETRIEVAL__DIALECT",
+        "APP_RETRIEVAL__GRAPH_BACKEND",
+        "APP_RETRIEVAL__RETRIEVAL_PROFILE",
+        "APP_INGESTION",
+        "APP_INGESTION__EMBEDDING_DIMENSIONS",
+        "AZURE_CLIENT_ID",
+        "AZURE_TENANT_ID",
+        "AZURE_CLIENT_SECRET"
+      ],
+      "startup_timeout_sec": 60
+    }
+  },
+  "interface": {
+    "displayName": "Knowledge Base",
+    "shortDescription": "Search and maintain your markdown knowledge bases.",
+    "longDescription": "Indexes markdown into Postgres and provides retrieval, knowledge-base setup, note authoring, and comment-thread workflows.",
+    "developerName": "BucketHeadP65",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Search this knowledge base.",
+      "Set up this knowledge base with Studio.",
+      "Read the open note threads."
+    ]
+  }
+}

@@ -1,0 +1,270 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/core"]
+sources  = ["src"]
+
+[project]
+name = "core"
+description = "Shared, app-agnostic building blocks for the apps in this repo."
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+authors = [{ name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" }]
+maintainers = [{ name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" }]
+readme = "README.md"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "azure-identity>=1.19.0",
+    # `core.net` fetches a URL an outsider chose, one checked hop at a time.
+    "httpx>=0.28.1",
+    # `core.ai.workflows` admits a run's arguments against each parameter's own JSON Schema.
+    "jsonschema>=4.26.0",
+    "logfire>=4.32.1",
+    # `core.ai.format_maps` outlines a Markdown document by its headings.
+    "markdown-it-py>=4.0",
+    # The reference machinery under jsonschema: `Unresolvable` is the error a schema that reaches
+    # outside itself raises, and the admission catches it by name.
+    "referencing>=0.37.0",
+    "openai>=1.60.0",
+    # `core.column_types` binds a `HalfVector` for the asyncpg pgvector codec.
+    "pgvector>=0.3.6",
+    "pydantic>=2.13.4",
+    "pydantic-ai[retries]>=2.20.0",
+    "pydantic-ai-harness>=0.54.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.0.49",
+    # `core.ai.retrieval.statement` reads a model's SQL by its tokens before it reaches the database.
+    "sqlparse>=0.6.0",
+    # `core.markdown.heading_slug` transliterates a heading to ASCII.
+    "text-unidecode>=1.3",
+    "wireup>=2.9.0",
+]
+
+[project.optional-dependencies]
+# `core.ai.workflows` ships behind these extras. What they actually gate for consumers is
+# temporalio and pydantic-handlebars — pydantic-graph is a hard dependency of pydantic-ai and is
+# present in every consumer venv regardless; it is declared here because the engine imports it
+# directly. `core.ai`'s package init never imports `workflows` (consumers reach it by explicit
+# submodule import).
+# pydantic-handlebars: `AgentSpec.model_validate` (the authoring path) triggers pydantic-ai's
+# `TemplateStr` validator on `{{...}}` instructions, which imports it — without it the engine
+# raises ImportError instead of refusing the artifact.
+workflows          = ["pydantic-graph>=2.49.0", "pydantic-handlebars>=0.2.1"]
+# `core.ai.workflows.infrastructure.temporal` additionally needs the Temporal SDK; pydantic-ai's shipped
+# integration (payload converter, workflow-sandbox configuration) rides the base pydantic-ai dep.
+workflows-temporal = ["pydantic-graph>=2.49.0", "pydantic-handlebars>=0.2.1", "temporalio>=1.31.0"]
+
+[dependency-groups]
+dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.16.0,<0.17.0)"]
+test = [
+    "aiosqlite (>=0.22.1,<1.0.0)",
+    "polyfactory (>=3.2.0,<4.0.0)",
+    # Mirrors [project.optional-dependencies] workflows-temporal (uv has no default-extras):
+    # the bare-`uv sync` gate must collect and run the engine suite under tests/unit/workflows.
+    # PEP 735 groups are never inherited by consumers, so engram stays engine-free.
+    "pydantic-graph>=2.49.0",
+    "pydantic-handlebars>=0.2.1",
+    "pytest (>=9.0.2,<10.0.0)",
+    "pytest-asyncio (>=1.3.0,<2.0.0)",
+    "temporalio>=1.31.0",
+]
+
+[tool.uv]
+# The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``;
+# install both tooling groups by default so the gate is self-contained.
+default-groups = ["dev", "test"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = ["--verbose", "--tb=short"]
+filterwarnings = ["module::DeprecationWarning"]
+
+[tool.ruff]
+src = ["src"]
+extend-exclude = [".venv"]
+line-length = 140
+indent-width = 4
+fix = false
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style                = "double"
+line-ending                = "auto"
+skip-magic-trailing-comma  = true
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+preview                    = false
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on line following TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "COM812", # Trailing comma missing
+    "CPY001", # Missing copyright notice at top of file -- this repo carries no copyright headers
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN204", # Missing return type annotation for special method
+    "S104",   # Possible binding to all interfaces
+    "E501",   # Line too long
+    "RET504", # Unnecessary assignment before return statement
+    "RUF001", # String contains ambiguous unicode character
+    "RUF002", # Docstring contains ambiguous unicode character
+    "RUF003", # Comment contains ambiguous unicode character
+]
+fixable = ["ALL"]
+preview = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+# `register_mcp_tools` is a registration function that fans out a server plus the handler bundle plus
+# the tuning knobs (descriptions, only, search_hybrid, search_type); the arg count is the surface.
+# FBT001/FBT002: pydantic-ai derives each tool's JSON schema from the function signature, so a boolean
+# positional param (the keyword-only search flag) is the tool's arg surface rather than a smell.
+"src/core/ai/retrieval/toolset.py" = ["PLR0913", "FBT001", "FBT002"]
+# The whole module constructs SQL DDL from trusted, build-time `SearchSchema` descriptors a consumer
+# authors in code, never runtime or user-supplied input; S608's string-interpolation heuristic is a
+# false positive for a SQL generator.
+"src/core/ai/retrieval/search_builder.py" = ["S608"]
+# Same as search_builder: the module constructs traversal DDL from trusted, build-time `GraphSchema`
+# descriptors, so S608's string-interpolation heuristic is a false positive for the SQL generator.
+"src/core/ai/retrieval/graph_builder.py" = ["S608"]
+# The rewrite tests build statements a model would write, to check how the rewrite reads them. Nothing runs them.
+"tests/unit/test_vector_query_rewrite.py" = ["S608"]
+# ANN401: `_annotation`/`_resolve` return type *constructs* (`Literal[...]`, `list[X]`, a built
+# model) consumed by pydantic — Python has no stdlib static type for type expressions, and the
+# registry's refusal of Any-annotated leaves is the check that actually matters.
+# PLR0913: `WorkflowBuilder.map`'s keyword-only args are `MapNode`'s own field surface — the
+# fluent pen's contract is "same fields, same spec" (see its module docstring), not fewer of them.
+"src/core/ai/workflows/authoring.py" = ["ANN401", "PLR0913"]
+# BLE001: `replay_birth` must convert any replay failure into a finding — that is its contract.
+"src/core/ai/workflows/birth.py" = ["BLE001"]
+# PLR0913/PLR0917: `run_workflow` is the keyword-only public convenience API; `_emit_edges` and
+# `_build_map_steps` thread the step tables compilation just produced — a holder object would be
+# indirection for one call site each. C901/PLR0915: `_build_map_steps` builds one node kind's
+# whole closure set in one function, same as every other `_build_*_step` here — `then` chaining
+# and the `max_parallel` semaphore are two more branches in that one place, not a second
+# responsibility to split out. BLE001: `_run_item` must catch any leaf failure to honour
+# `on_error: skip` — the map's own leaf declares no exception vocabulary to narrow to, and
+# `BaseException` still propagates unchanged.
+"src/core/ai/workflows/graph_builder.py" = ["PLR0913", "PLR0917", "C901", "PLR0915", "BLE001"]
+# BLE001: `_type_stamp` must stamp any annotation a leaf can declare without crashing
+# fingerprinting; the stamped name still catches type swaps.
+"src/core/ai/workflows/domain/fingerprint.py" = ["BLE001"]
+# C901/PLR0912/PLR0915: `adapt` dispatches over the edit-op verbs — the branch per verb IS the
+# surface, exactly like a validator's dispatch over the grammar.
+"src/core/ai/workflows/domain/lineage.py" = ["C901", "PLR0912", "PLR0915"]
+# PLR0913: `StepRegistry.__init__`'s keyword-only args ARE the host's whole authoring-terms
+# surface (`perform`, `run_code`, `run_agent`, `resolve_agent`, `decide_gate`, `grants`,
+# `capability_grants`) — splitting them into a holder object would just move the arity, not reduce it.
+"src/core/ai/workflows/registry.py" = ["PLR0913"]
+# PLR0913: `put` and `save` are keyword-only card/provenance surfaces — the arity is the
+# documented contract of the library seam.
+"src/core/ai/workflows/internal_contracts.py" = ["PLR0913"]
+"src/core/ai/workflows/service.py" = ["PLR0913"]
+# C901/PLR0912: `_check_map_types` checks a map's shared inputs, its `over`/`each` pairing, and
+# its `then_inputs` by the same rules a `run` node's inputs get — one function per node kind,
+# same as the rest of this module, so a rule per field is a branch, not a second responsibility.
+"src/core/ai/workflows/domain/validator.py" = ["C901", "PLR0912"]
+# PLR0913/PLR0917: `_adapt`'s arity is the published tool schema the model sees, and
+# `_verified_write`'s is the artifact's card fields on the single shared write path. TC001:
+# `Workflow` must stay a runtime import — FunctionToolset.add_function resolves tool
+# signatures at runtime to build the tool schema, and a TYPE_CHECKING import raises NameError there.
+"src/core/ai/workflows/contract_port.py" = ["PLR0913", "PLR0917", "TC001"]
+# PLR0913/PLR0917: `put` implements the library protocol's signature; `write_file`'s signature is
+# the published host-tool schema — bundling either into one object would change a public surface.
+"src/core/ai/workflows/infrastructure/folder.py" = ["PLR0913", "PLR0917"]
+# PLR0913/PLR0917: same put/write-tool rationale as folder.py. BLE001: `_supersede` is a
+# deliberate record-everything boundary — the child is already stored, so a link-write failure
+# must degrade to a SupersessionIncompleteWarning rather than fail the save, and the injected
+# `Ingest` callable declares no exception vocabulary to narrow to.
+"src/core/ai/workflows/infrastructure/library_collection.py" = ["PLR0913", "PLR0917", "BLE001"]
+# PLR0913: `Worker.__init__`'s keyword-only args are the coordination ports and identity every
+# consumer wires explicitly (jobs, outbox, bus, wake, name, clock, observer, poll_seconds) — the
+# arity is the worker's whole wiring surface, not a bundle waiting to be split out.
+"src/core/cqrs/worker.py" = ["PLR0913"]
+# TC001: `Transcript` must stay a runtime import — pydantic_evals resolves `Inspected`'s dataclass
+# fields when building `Dataset[str, Inspected, None]`, and a TYPE_CHECKING-only import leaves it
+# unresolved there.
+"src/core/ai/inspection/detectors.py" = ["TC001"]
+# PLR0913: `attribute`'s keyword-only args are the recorded-conversation contract in one call —
+# `deps` opens the run, `conversation_id` is the conversation the caller records the question
+# under, `taxonomy` and `refusal` are the resolve/retry knobs. A holder object would only rename
+# the arity, not reduce it.
+"src/core/ai/inspection/inspector.py" = ["PLR0913"]
+# PLR0913: read exposes the selected step, message range, resource and continuation offset.
+"src/core/ai/inspection/views.py" = ["PLR0913"]
+# PLR0913: `add_finding`'s keyword-only args are the finding row's own stored fields (source,
+# lead_id, found_by, model, question_id); `add_question`'s are the question row's own fields
+# (kind, conversation_id, source, watch, lead_id, tier, model). Each arity is the row's contract,
+# not a bundle waiting to be split out.
+"src/core/ai/inspection/infrastructure/postgres.py" = ["PLR0913"]
+"src/core/ai/inspection/internal_contracts.py" = ["PLR0913"]
+# PLR0913: `create_gateway_model`'s keyword-only args are the gateway model's whole surface (key, base URL,
+# route, wire, profile, settings). A holder object would only rename the arity.
+"src/core/ai/models.py" = ["PLR0913"]
+# S310: the managed-prompt check's URL comes from the host's own credentials file, and the scheme is
+# checked before urlopen.
+"src/core/observability.py" = ["S310"]
+# The Any annotation is the subject under test: the registry must refuse Any-annotated leaves.
+"tests/unit/workflows/test_registry.py" = ["ANN401"]
+# One fixture of nine one-line fake leaves; the complexity count is per-def, with zero branching.
+"tests/unit/workflows/test_map_and_judge.py" = ["C901"]
+"tests/**/*.py" = [
+    "D101",    # Docstring not required for test classes
+    "D102",    # Docstring not required for test methods
+    "D103",    # Docstring not required for test functions
+    "ANN201",  # Return type annotation not required for test functions
+    "ANN202",  # Return type annotation not required for test methods
+    "PLC0415", # Import on top not required for test files
+    "PLR0913", # Fake constructors take many scriptable knobs by design
+    "PLR0917", # Same — those knobs are positional in the fakes' call sites
+    "S101",    # asserts allowed in tests...
+    "S105",    # Test fixtures use literal strings that resemble secrets
+    "S106",    # Same — kwarg passes test-only string values
+    "S107",    # Same — function-default variant
+    "SLF001",  # Tests may peek at module-private constants for drift guards
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+]
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+detect-same-package = true
+lines-between-types = 1
+# Pairs with ``format.skip-magic-trailing-comma = true`` so isort and the formatter agree.
+split-on-trailing-comma = false
+known-first-party = ["core", "tests"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+order-by-type = true
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "core.ai.evaluation.domain.models.EvaluationModel",
+    "core.ai.evaluation.contracts.EvaluationModel",
+]
+
+[tool.pyright]
+# A deprecated API fails the type check, so a deprecation is fixed when it lands, not when its removal breaks the build.
+reportDeprecated = "error"

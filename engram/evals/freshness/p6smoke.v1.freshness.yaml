@@ -1,0 +1,47 @@
+collection: research
+dataset_version: p6smoke.v1.yaml
+verdicts:
+- case_name: pinpoint:paper.graphrag-2024#c3#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: pinpoint:paper.graphrag-2024#c3#1
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: pinpoint:paper.graphrag-2024#c3#2
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: pinpoint:paper.graphrag-2024#c5#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: pinpoint:paper.graphrag-2024#c5#1
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: survey:applies_to:ent.domain-qa#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: survey:composes_with:paper.ahe-2026#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: synthesis:synthesizes:cmp.self-improving-harness#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+- case_name: trace:cmp.agent-memory-systems>paper.memtree-2024>ent.multihop-rag#0
+  era: mirror_anchored
+  verdict: fresh
+  moved_page_ids: []
+counts:
+  fresh: 9
+  page_drifted: 0
+  mirror_stale: 0
+  gold_gone: 0
+  unanchored: 0
+staleness_fraction: 0.0
+stale_by_page: {}

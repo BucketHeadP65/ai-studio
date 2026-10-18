@@ -1,0 +1,624 @@
+{
+  "version": "0.1",
+  "slug": "repo-docs",
+  "purpose": "The repo's knowledge estate: governed docs, lifecycle docs, memory units, and the code plane, indexed as one knowledge base.",
+  "slug_conventions": "Governed page types use free-form ids and are detected by frontmatter type. Prefixed page types: mu. hub. bs. mod.",
+  "page_types": [
+    {
+      "id_prefix": "",
+      "folders": [
+        "adr",
+        "../engram/docs/adr",
+        "../studio/docs/adr",
+        "../core/docs/adr",
+        "../studio-client/docs/adr",
+        "../client-core/docs/adr",
+        "../harness/docs/adr"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        },
+        {
+          "name": "absorbs",
+          "type": "link-list",
+          "required": false
+        }
+      ],
+      "edge_fields": [
+        "absorbs"
+      ],
+      "status_values": [
+        "proposed",
+        "accepted",
+        "deprecated",
+        "superseded"
+      ],
+      "canonical_sections": [
+        "context",
+        "decision",
+        "consequences"
+      ],
+      "page_type": "adr"
+    },
+    {
+      "id_prefix": "",
+      "folders": [
+        "architecture",
+        "../engram/docs/architecture",
+        "../studio/docs/architecture",
+        "../core/docs/architecture"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        }
+      ],
+      "status_values": [
+        "draft",
+        "current",
+        "superseded"
+      ],
+      "page_type": "architecture"
+    },
+    {
+      "id_prefix": "",
+      "folders": [
+        "reference",
+        "../engram/docs/reference",
+        "../studio/docs/reference",
+        "../harness/docs/reference",
+        "../core/docs/reference",
+        "../client-core/docs/reference"
+      ],
+      "files": [
+        "../engram/docs/known-issues.md"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        }
+      ],
+      "status_values": [
+        "draft",
+        "current",
+        "superseded"
+      ],
+      "page_type": "reference"
+    },
+    {
+      "id_prefix": "",
+      "folders": [
+        "explanation",
+        "../engram/docs/explanation",
+        "../studio/docs/explanation"
+      ],
+      "files": [
+        "README.md",
+        "../engram/docs/retrieval-concepts.md"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        }
+      ],
+      "status_values": [
+        "draft",
+        "current",
+        "superseded"
+      ],
+      "page_type": "explanation"
+    },
+    {
+      "id_prefix": "",
+      "folders": [
+        "how-to",
+        "../engram/docs/how-to"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        }
+      ],
+      "status_values": [
+        "draft",
+        "current",
+        "superseded"
+      ],
+      "page_type": "how-to"
+    },
+    {
+      "id_prefix": "",
+      "files": [
+        "../CONTEXT-MAP.md",
+        "../engram/CONTEXT.md",
+        "../studio/CONTEXT.md",
+        "../harness/CONTEXT.md"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "app",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "root",
+            "core",
+            "engram",
+            "studio",
+            "studio-client",
+            "client-core",
+            "harness"
+          ]
+        }
+      ],
+      "status_values": [
+        "draft",
+        "current",
+        "superseded"
+      ],
+      "page_type": "glossary"
+    },
+    {
+      "id_prefix": "",
+      "folder": "specs",
+      "frontmatter_fields": [
+        {
+          "name": "emits",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "owner",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "ticket",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "branch",
+          "type": "scalar",
+          "required": false
+        }
+      ],
+      "edge_fields": [
+        "emits"
+      ],
+      "status_values": [
+        "draft",
+        "approved",
+        "executed",
+        "superseded"
+      ],
+      "folders": [
+        "initiatives"
+      ],
+      "canonical_sections": [
+        "problem",
+        "user_stories",
+        "acceptance_criteria",
+        "constraints",
+        "decisions",
+        {
+          "slug": "out_of_scope",
+          "heading": "Out of Scope"
+        }
+      ],
+      "page_type": "spec-doc"
+    },
+    {
+      "id_prefix": "",
+      "folder": "plans",
+      "status_values": [
+        "draft",
+        "approved",
+        "executed",
+        "superseded"
+      ],
+      "folders": [
+        "initiatives"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "owner",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "ticket",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "branch",
+          "type": "scalar",
+          "required": false
+        }
+      ],
+      "canonical_sections": [
+        "goal",
+        "global_constraints",
+        "tasks"
+      ],
+      "page_type": "plan-doc"
+    },
+    {
+      "id_prefix": "",
+      "folders": [
+        "initiatives"
+      ],
+      "frontmatter_fields": [
+        {
+          "name": "owner",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "ticket",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "branch",
+          "type": "scalar",
+          "required": false
+        }
+      ],
+      "status_values": [
+        "draft",
+        "approved",
+        "executed",
+        "superseded"
+      ],
+      "canonical_sections": [
+        "scope",
+        "modified_files",
+        "component_design",
+        "integration_points",
+        "decisions"
+      ],
+      "page_type": "architecture-doc"
+    },
+    {
+      "id_prefix": "bs.",
+      "folder": "brainstorming",
+      "frontmatter_fields": [
+        {
+          "name": "scope",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "emits",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "owner",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "date",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "ticket",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "branch",
+          "type": "scalar",
+          "required": false
+        }
+      ],
+      "edge_fields": [
+        "emits"
+      ],
+      "status_values": [
+        "active",
+        "superseded",
+        "outdated",
+        "pending"
+      ],
+      "folders": [
+        "initiatives"
+      ],
+      "canonical_sections": [
+        "context",
+        "findings",
+        "options",
+        {
+          "slug": "risks_and_open_questions",
+          "heading": "Risks and Open Questions"
+        },
+        {
+          "slug": "out_of_scope",
+          "heading": "Out of Scope"
+        }
+      ],
+      "page_type": "brainstorming-doc"
+    },
+    {
+      "id_prefix": "mu.",
+      "folder": "memory/Units",
+      "frontmatter_fields": [
+        {
+          "name": "scope",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "depends_on",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "absorbed_by",
+          "type": "link-list",
+          "required": false
+        }
+      ],
+      "canonical_sections": [
+        "statement",
+        "provenance"
+      ],
+      "edge_fields": [
+        "depends_on",
+        "absorbed_by"
+      ],
+      "status_values": [
+        "active",
+        "superseded",
+        "outdated",
+        "pending"
+      ],
+      "page_type": "memory-unit"
+    },
+    {
+      "id_prefix": "hub.",
+      "folder": "memory/Units",
+      "frontmatter_fields": [
+        {
+          "name": "scope",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "members",
+          "type": "link-list",
+          "required": true
+        }
+      ],
+      "canonical_sections": [
+        "overview"
+      ],
+      "edge_fields": [
+        "members"
+      ],
+      "status_values": [
+        "active",
+        "superseded",
+        "outdated",
+        "pending"
+      ],
+      "page_type": "hub"
+    },
+    {
+      "id_prefix": "mod.",
+      "folder": "memory/Modules",
+      "frontmatter_fields": [
+        {
+          "name": "path",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "governed_by",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "applies",
+          "type": "link-list",
+          "required": false
+        }
+      ],
+      "edge_fields": [
+        "governed_by",
+        "applies"
+      ],
+      "path_fields": [
+        "path"
+      ],
+      "status_values": [
+        "active",
+        "superseded",
+        "outdated",
+        "pending"
+      ],
+      "page_type": "module"
+    }
+  ],
+  "relations": [
+    {
+      "slug": "depends_on",
+      "domain": "memory-unit",
+      "range": "memory-unit",
+      "description": "invalidation edge: if target falls, source needs review"
+    },
+    {
+      "slug": "refines",
+      "domain": "memory-unit",
+      "range": "hub",
+      "description": "unit refines a hub topic"
+    },
+    {
+      "slug": "members",
+      "domain": "hub",
+      "range": "memory-unit",
+      "description": "hub groups these units"
+    },
+    {
+      "slug": "emits",
+      "domain": "brainstorming-doc | spec-doc",
+      "range": "memory-unit",
+      "description": "doc factored this unit out"
+    },
+    {
+      "slug": "absorbed_by",
+      "domain": "memory-unit",
+      "range": "adr",
+      "description": "promotion: the governed doc that absorbed this unit"
+    },
+    {
+      "slug": "absorbs",
+      "domain": "adr",
+      "range": "memory-unit",
+      "description": "The ADR carries the durable decisions of the page it absorbs, an executed design in the common case."
+    },
+    {
+      "slug": "governed_by",
+      "domain": "module",
+      "range": "adr",
+      "description": "the decisions this package is built under"
+    },
+    {
+      "slug": "applies",
+      "domain": "module",
+      "range": "memory-unit",
+      "description": "doctrine/patterns this package applies"
+    }
+  ],
+  "entity_types": [
+    {
+      "value": "doctrine",
+      "definition": "A standing rule or policy the project has adopted."
+    },
+    {
+      "value": "model",
+      "definition": "A conceptual model or framing."
+    },
+    {
+      "value": "decision",
+      "definition": "A dated decision with alternatives considered."
+    }
+  ],
+  "claim_types": [],
+  "facets": [],
+  "sources": {
+    "enabled": false
+  },
+  "compounding": {
+    "entries": [
+      {
+        "name": "notes-to-analysis",
+        "from": {
+          "plane": "notes",
+          "folder": "initiatives"
+        },
+        "to": [
+          "brainstorming-doc"
+        ],
+        "cap_per_run": 5,
+        "gate": "none"
+      },
+      {
+        "name": "promote-initiative",
+        "from": {
+          "plane": "pages",
+          "status": "executed",
+          "page_types": [
+            "spec-doc"
+          ]
+        },
+        "to": [
+          "adr"
+        ],
+        "cap_per_run": 3,
+        "gate": "owner"
+      }
+    ]
+  },
+  "retrieval": {
+    "profile": "full",
+    "collection": "repo-docs",
+    "disclosure_mode": "strict",
+    "group_by": "app",
+    "doc_authoring": true
+  }
+}

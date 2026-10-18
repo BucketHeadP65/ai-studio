@@ -1,0 +1,6014 @@
+dataset: scifact-generated.v2.yaml
+collection: scifact
+setup: hybrid-card
+cases:
+- name: passage:dg.extra-centrosomes-and-or-chromosomes-prolong-mitosis-in-huma#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29183629'
+  - '7211056'
+  - '25041967'
+  - '26182390'
+  - '7622767'
+  - '22186938'
+  - '3400973'
+  - '27587267'
+  - '4407318'
+  - '28271439'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.extra-centrosomes-and-or-chromosomes-prolong-mitosis-in-huma#findings#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29183629'
+  - '41256402'
+  - '9038803'
+  - '7560876'
+  - '4364884'
+  - '21250322'
+  - '17601006'
+  - '20054396'
+  - '11200685'
+  - '38127792'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.extra-centrosomes-and-or-chromosomes-prolong-mitosis-in-huma#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29183629'
+  - '4364884'
+  - '9038803'
+  - '30658796'
+  - '41256402'
+  - '7560876'
+  - '38127792'
+  - '17601006'
+  - '3400973'
+  - '2033917'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.claspin-a-chk1-regulatory-protein-monitors-dna-replication-o#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34105878'
+  - '27274441'
+  - '11922370'
+  - '8331432'
+  - '9732010'
+  - '2991954'
+  - '21557055'
+  - '90064424'
+  - '1684489'
+  - '25682129'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.claspin-a-chk1-regulatory-protein-monitors-dna-replication-o#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34105878'
+  - '14145440'
+  - '4926049'
+  - '24998637'
+  - '12909503'
+  - '29148743'
+  - '33507866'
+  - '11568270'
+  - '11922370'
+  - '42267740'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.claspin-a-chk1-regulatory-protein-monitors-dna-replication-o#tl_dr#2
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '19165076'
+  - '34105878'
+  - '12892137'
+  - '12909503'
+  - '29851836'
+  - '19356271'
+  - '11922370'
+  - '17939443'
+  - '34198365'
+  - '13907427'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.neutrophil-extracellular-traps-enriched-in-oxidized-mitochon#tl_dr#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.045454545454545456
+  ranked:
+  - '9878167'
+  - '28149602'
+  - '17741440'
+  - '43054703'
+  - '29399239'
+  - '14853989'
+  - '28015516'
+  - '17967608'
+  - '2236768'
+  - '1800734'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.neutrophil-extracellular-traps-enriched-in-oxidized-mitochon#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1049501'
+  - '20459964'
+  - '13106686'
+  - '3107733'
+  - '14496749'
+  - '35962023'
+  - '9878167'
+  - '15836115'
+  - '6259170'
+  - '24338780'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.neutrophil-extracellular-traps-enriched-in-oxidized-mitochon#tl_dr#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1049501'
+  - '16966326'
+  - '4399311'
+  - '3619931'
+  - '24632480'
+  - '44693226'
+  - '54562433'
+  - '5765455'
+  - '36838958'
+  - '22517564'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.treatment-of-antidepressant-associated-sexual-dysfunction-wi#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39281140'
+  - '5691302'
+  - '6191684'
+  - '11614737'
+  - '24494539'
+  - '26199970'
+  - '40817021'
+  - '3981244'
+  - '57762078'
+  - '308862'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.treatment-of-antidepressant-associated-sexual-dysfunction-wi#findings#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39281140'
+  - '3654468'
+  - '7150238'
+  - '26720366'
+  - '6158879'
+  - '20454006'
+  - '4506702'
+  - '42800527'
+  - '39892135'
+  - '24494539'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.treatment-of-antidepressant-associated-sexual-dysfunction-wi#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39281140'
+  - '14606752'
+  - '57762078'
+  - '5691302'
+  - '1495563'
+  - '17482507'
+  - '5885376'
+  - '26199970'
+  - '24770122'
+  - '19994006'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.decreased-neurogenesis-after-cholinergic-forebrain-lesion-in#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22549449'
+  - '24652030'
+  - '5395426'
+  - '7157436'
+  - '14192687'
+  - '23869951'
+  - '10605189'
+  - '22545779'
+  - '3140772'
+  - '14782049'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.decreased-neurogenesis-after-cholinergic-forebrain-lesion-in#findings#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22549449'
+  - '30468386'
+  - '10765888'
+  - '5395426'
+  - '19489351'
+  - '8318286'
+  - '24652030'
+  - '28530299'
+  - '7492250'
+  - '19970015'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.decreased-neurogenesis-after-cholinergic-forebrain-lesion-in#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22549449'
+  - '30468386'
+  - '7157436'
+  - '28530299'
+  - '24652030'
+  - '16999023'
+  - '14460402'
+  - '3140772'
+  - '46193388'
+  - '7039855'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.malaria-biology-and-disease-pathogenesis-insights-for-new-tr#findings#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '3929361'
+  - '6503185'
+  - '17925632'
+  - '1173667'
+  - '18074797'
+  - '22401061'
+  - '12409683'
+  - '5710820'
+  - '40900567'
+  - '15237660'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.malaria-biology-and-disease-pathogenesis-insights-for-new-tr#findings#1
+  ndcg_at_10: 0.5
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - '2526777'
+  - '13948920'
+  - '6503185'
+  - '10617916'
+  - '3929361'
+  - '12409683'
+  - '18153456'
+  - '1805641'
+  - '8665891'
+  - '27841037'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.malaria-biology-and-disease-pathogenesis-insights-for-new-tr#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '6503185'
+  - '40900567'
+  - '24721347'
+  - '25938221'
+  - '26474812'
+  - '25420421'
+  - '45218443'
+  - '17168045'
+  - '18174210'
+  - '6250701'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.preventing-deaths-by-drowning-in-children-in-the-united-king#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '42291761'
+  - '11748341'
+  - '45548062'
+  - '3716075'
+  - '25649714'
+  - '22467585'
+  - '4791384'
+  - '22057077'
+  - '7662395'
+  - '1263446'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.preventing-deaths-by-drowning-in-children-in-the-united-king#tl_dr#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '37156349'
+  - '42291761'
+  - '21790313'
+  - '33135135'
+  - '13441037'
+  - '36124058'
+  - '4449524'
+  - '9167230'
+  - '2659805'
+  - '20697217'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.preventing-deaths-by-drowning-in-children-in-the-united-king#tl_dr#2
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.08333333333333333
+  ranked:
+  - '21377587'
+  - '45457778'
+  - '15953181'
+  - '20008796'
+  - '15856466'
+  - '4833016'
+  - '15135001'
+  - '13770184'
+  - '25536577'
+  - '16929739'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.new-guidelines-to-evaluate-the-response-to-treatment-in-soli#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '15541119'
+  - '26231129'
+  - '14118484'
+  - '3471191'
+  - '24916604'
+  - '6137330'
+  - '32969964'
+  - '1900152'
+  - '1921218'
+  - '29495185'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.new-guidelines-to-evaluate-the-response-to-treatment-in-soli#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '15541119'
+  - '6137330'
+  - '13870943'
+  - '2844897'
+  - '52887689'
+  - '14118484'
+  - '28017005'
+  - '32969964'
+  - '17779800'
+  - '22309946'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.identification-of-short-lived-long-non-coding-rnas-as-surrog#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21093407'
+  - '45143088'
+  - '7225911'
+  - '3321943'
+  - '1667063'
+  - '2062382'
+  - '16806763'
+  - '9655347'
+  - '3730196'
+  - '3583084'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.identification-of-short-lived-long-non-coding-rnas-as-surrog#findings#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21093407'
+  - '45143088'
+  - '12014458'
+  - '4422868'
+  - '38502066'
+  - '4411760'
+  - '18924534'
+  - '6112053'
+  - '16855829'
+  - '40254495'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.identification-of-short-lived-long-non-coding-rnas-as-surrog#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21093407'
+  - '12014458'
+  - '11484808'
+  - '2062382'
+  - '4422868'
+  - '18924534'
+  - '38502066'
+  - '6112053'
+  - '5519177'
+  - '34228604'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.inhibition-of-receptor-mediated-calcium-influx-in-t-cells-by#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29362104'
+  - '23388442'
+  - '3866315'
+  - '33912748'
+  - '18375089'
+  - '2030623'
+  - '24269361'
+  - '22442133'
+  - '35962023'
+  - '18546584'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.inhibition-of-receptor-mediated-calcium-influx-in-t-cells-by#findings#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '36464673'
+  - '29362104'
+  - '6923795'
+  - '14767844'
+  - '24185667'
+  - '24349430'
+  - '21931005'
+  - '19205437'
+  - '10562341'
+  - '37964706'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.inhibition-of-receptor-mediated-calcium-influx-in-t-cells-by#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29362104'
+  - '27907205'
+  - '2053540'
+  - '8025177'
+  - '20646904'
+  - '16546131'
+  - '24552097'
+  - '9142761'
+  - '5867846'
+  - '23388442'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.innate-immune-and-chemically-triggered-oxidative-stress-modi#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1748921'
+  - '41781905'
+  - '13106686'
+  - '36654066'
+  - '9159125'
+  - '12225214'
+  - '22505190'
+  - '14362780'
+  - '20960682'
+  - '18358026'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.innate-immune-and-chemically-triggered-oxidative-stress-modi#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1748921'
+  - '16242975'
+  - '16605494'
+  - '45218443'
+  - '2251426'
+  - '28264919'
+  - '16644043'
+  - '27438378'
+  - '4231060'
+  - '44408494'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.innate-immune-and-chemically-triggered-oxidative-stress-modi#tl_dr#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1748921'
+  - '24863571'
+  - '4313478'
+  - '13763195'
+  - '16242975'
+  - '14874811'
+  - '13552682'
+  - '27438378'
+  - '18987782'
+  - '6209599'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.carvedilol-for-children-and-adolescents-with-heart-failure-a#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34139429'
+  - '9622258'
+  - '40817021'
+  - '24408040'
+  - '11953232'
+  - '20945963'
+  - '37029185'
+  - '9904546'
+  - '22530842'
+  - '13481731'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.carvedilol-for-children-and-adolescents-with-heart-failure-a#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34139429'
+  - '24150328'
+  - '40790033'
+  - '33409100'
+  - '25816994'
+  - '20544428'
+  - '15041758'
+  - '3654468'
+  - '11939159'
+  - '24278870'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.carvedilol-for-children-and-adolescents-with-heart-failure-a#tl_dr#2
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '10749308'
+  - '427865'
+  - '6477536'
+  - '86704258'
+  - '34139429'
+  - '34208005'
+  - '16979690'
+  - '9056874'
+  - '31902335'
+  - '2739854'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.autoimmune-t-cell-responses-in-the-central-nervous-system#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22647695'
+  - '24879055'
+  - '991137'
+  - '13798951'
+  - '8354687'
+  - '22791348'
+  - '21878751'
+  - '3835423'
+  - '52095986'
+  - '39084565'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.autoimmune-t-cell-responses-in-the-central-nervous-system#findings#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22647695'
+  - '3835423'
+  - '13798951'
+  - '991137'
+  - '10450300'
+  - '8300657'
+  - '14644164'
+  - '24879055'
+  - '10648422'
+  - '35987381'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.autoimmune-t-cell-responses-in-the-central-nervous-system#findings#2
+  ndcg_at_10: 0.43067655807339306
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.25
+  ranked:
+  - '14657344'
+  - '5483793'
+  - '8325952'
+  - '22647695'
+  - '18834078'
+  - '35987381'
+  - '21878751'
+  - '14934137'
+  - '991137'
+  - '2601324'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.the-wuschel-related-homeobox-gene-wox11-is-required-to-activ#tl_dr#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20402596'
+  - '19950357'
+  - '8352137'
+  - '7506409'
+  - '32598644'
+  - '38675228'
+  - '4422723'
+  - '7717468'
+  - '6828370'
+  - '5254463'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.the-wuschel-related-homeobox-gene-wox11-is-required-to-activ#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20402596'
+  - '32598644'
+  - '19950357'
+  - '8352137'
+  - '41644178'
+  - '38675228'
+  - '7165938'
+  - '27247460'
+  - '3514072'
+  - '24349430'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.the-wuschel-related-homeobox-gene-wox11-is-required-to-activ#tl_dr#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20402596'
+  - '22843616'
+  - '6455142'
+  - '17945638'
+  - '9199796'
+  - '4455466'
+  - '7225911'
+  - '16550075'
+  - '21363424'
+  - '46305977'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.rodent-models-of-depression-neurotrophic-and-neuroinflammato#findings#0
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '6123521'
+  - '12903921'
+  - '41707539'
+  - '7997337'
+  - '17506075'
+  - '8002529'
+  - '57574395'
+  - '25315295'
+  - '20302714'
+  - '22551259'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.rodent-models-of-depression-neurotrophic-and-neuroinflammato#findings#1
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '4506702'
+  - '2762601'
+  - '8042158'
+  - '6876224'
+  - '20419913'
+  - '7547329'
+  - '33169058'
+  - '27150276'
+  - '2739854'
+  - '16979690'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.rodent-models-of-depression-neurotrophic-and-neuroinflammato#findings#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '17506075'
+  - '1887056'
+  - '12903921'
+  - '27150276'
+  - '6123521'
+  - '41707539'
+  - '3943235'
+  - '25315295'
+  - '1068106'
+  - '1495563'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.gitr-a-member-of-the-tnf-receptor-superfamily-is-costimulato#findings#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29288582'
+  - '24069089'
+  - '21185923'
+  - '8038329'
+  - '36642096'
+  - '13636631'
+  - '20457190'
+  - '40473317'
+  - '4468861'
+  - '3835423'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.gitr-a-member-of-the-tnf-receptor-superfamily-is-costimulato#findings#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '24069089'
+  - '29288582'
+  - '39539647'
+  - '40632104'
+  - '36642096'
+  - '10359591'
+  - '21185923'
+  - '40608679'
+  - '38502066'
+  - '21878751'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.gitr-a-member-of-the-tnf-receptor-superfamily-is-costimulato#findings#2
+  ndcg_at_10: 0.5
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - '24069089'
+  - '21185923'
+  - '29288582'
+  - '33499189'
+  - '2417551'
+  - '36642096'
+  - '27403802'
+  - '19603353'
+  - '13902570'
+  - '2462673'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.update-on-technical-issues-concerning-complementary-feeding#tl_dr#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '13338820'
+  - '36124058'
+  - '30786800'
+  - '37424881'
+  - '23245050'
+  - '11705328'
+  - '36558211'
+  - '13782317'
+  - '21623140'
+  - '8529693'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.update-on-technical-issues-concerning-complementary-feeding#tl_dr#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '36124058'
+  - '13338820'
+  - '70455704'
+  - '36960449'
+  - '9796495'
+  - '23369842'
+  - '2295434'
+  - '13870943'
+  - '49429882'
+  - '6137330'
+  unmapped_hits: 0
+  hits: 50
+- name: passage:dg.update-on-technical-issues-concerning-complementary-feeding#tl_dr#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '36124058'
+  - '13338820'
+  - '11748341'
+  - '8529693'
+  - '49429882'
+  - '22446093'
+  - '11360768'
+  - '28633594'
+  - '15670968'
+  - '13031967'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.translocation-of-sickle-cell-erythrocyte-micrornas-into-plas#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '2460304'
+  - '28704738'
+  - '23913146'
+  - '13763195'
+  - '4411760'
+  - '9539248'
+  - '86602746'
+  - '4467129'
+  - '5867846'
+  - '13868795'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.translocation-of-sickle-cell-erythrocyte-micrornas-into-plas#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '2460304'
+  - '18174210'
+  - '23727313'
+  - '5271210'
+  - '6913227'
+  - '6404801'
+  - '5253987'
+  - '8247469'
+  - '37438296'
+  - '15593561'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.cancer-risks-attributable-to-low-doses-of-ionizing-radiation#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13025574'
+  - '31293581'
+  - '14700857'
+  - '17450673'
+  - '6504953'
+  - '10982689'
+  - '11569583'
+  - '16422880'
+  - '23557241'
+  - '12145359'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.cancer-risks-attributable-to-low-doses-of-ionizing-radiation#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13025574'
+  - '16495649'
+  - '37912677'
+  - '15678772'
+  - '16979690'
+  - '202259'
+  - '14700857'
+  - '44264297'
+  - '6504953'
+  - '9973014'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stages-of-the-pathologic-process-in-alzheimer-disease-age-ca#c7#0
+  ndcg_at_10: 0.3333333333333333
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - '29231620'
+  - '3202143'
+  - '18104691'
+  - '23017040'
+  - '313394'
+  - '22038539'
+  - '739734'
+  - '15833835'
+  - '23704559'
+  - '22107641'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stages-of-the-pathologic-process-in-alzheimer-disease-age-ca#c7#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '803312'
+  - '739734'
+  - '39390206'
+  - '4430962'
+  - '86211914'
+  - '8672737'
+  - '3099497'
+  - '8446324'
+  - '15669393'
+  - '36708463'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stages-of-the-pathologic-process-in-alzheimer-disease-age-ca#c7#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '739734'
+  - '15347087'
+  - '32922179'
+  - '31347396'
+  - '17438862'
+  - '4459491'
+  - '37450671'
+  - '4446814'
+  - '23203102'
+  - '20937018'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.inflammatory-biomarkers-and-exacerbations-in-chronic-obstruc#c3#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '18988265'
+  - '29564505'
+  - '19464037'
+  - '40935722'
+  - '21287352'
+  - '3801693'
+  - '602760'
+  - '13497630'
+  - '17324544'
+  - '13959707'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.inflammatory-biomarkers-and-exacerbations-in-chronic-obstruc#c3#1
+  ndcg_at_10: 0.3333333333333333
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - '18988265'
+  - '19464037'
+  - '6070278'
+  - '16760369'
+  - '21287352'
+  - '3801693'
+  - '29564505'
+  - '40935722'
+  - '602760'
+  - '38630735'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.inflammatory-biomarkers-and-exacerbations-in-chronic-obstruc#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '29564505'
+  - '18988265'
+  - '40935722'
+  - '25319221'
+  - '21287352'
+  - '2032877'
+  - '19464037'
+  - '17324544'
+  - '7285256'
+  - '3580005'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.impact-of-the-ku80-pathway-on-nhej-induced-genome-rearrangem#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41022628'
+  - '14446279'
+  - '21561474'
+  - '12892137'
+  - '12086599'
+  - '72159'
+  - '20821402'
+  - '41403996'
+  - '38793927'
+  - '38477436'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.impact-of-the-ku80-pathway-on-nhej-induced-genome-rearrangem#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41022628'
+  - '36713289'
+  - '20585600'
+  - '27306942'
+  - '4391817'
+  - '28592273'
+  - '198133135'
+  - '45200347'
+  - '26079071'
+  - '1944452'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.activator-protein-1-ap-1-dna-binding-activity-is-induced-by#c3#0
+  ndcg_at_10: 0.43067655807339306
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.25
+  ranked:
+  - '20977638'
+  - '25488034'
+  - '14972169'
+  - '16546131'
+  - '39558597'
+  - '27665523'
+  - '25293721'
+  - '12903921'
+  - '18358026'
+  - '1360607'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.activator-protein-1-ap-1-dna-binding-activity-is-induced-by#c3#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '20977638'
+  - '16546131'
+  - '14972169'
+  - '27665523'
+  - '25488034'
+  - '12903921'
+  - '28164534'
+  - '13380011'
+  - '1360607'
+  - '18358026'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.activator-protein-1-ap-1-dna-binding-activity-is-induced-by#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '16546131'
+  - '20977638'
+  - '14972169'
+  - '3840043'
+  - '4392608'
+  - '13441537'
+  - '13450938'
+  - '10247314'
+  - '8331432'
+  - '25830701'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.antihypertensive-classes-cognitive-decline-and-incidence-of#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '32463364'
+  - '14121786'
+  - '18025240'
+  - '10072941'
+  - '43417006'
+  - '1642727'
+  - '202259'
+  - '32969964'
+  - '50670403'
+  - '26199970'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.antihypertensive-classes-cognitive-decline-and-incidence-of#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '32463364'
+  - '1642727'
+  - '10190462'
+  - '14121786'
+  - '17691617'
+  - '5912283'
+  - '24285403'
+  - '50670403'
+  - '5151024'
+  - '32743723'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.antihypertensive-classes-cognitive-decline-and-incidence-of#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '32463364'
+  - '43417006'
+  - '10072941'
+  - '14121786'
+  - '5114940'
+  - '14606752'
+  - '1759213'
+  - '5402581'
+  - '26199970'
+  - '44264297'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.functions-of-dna-methylation-islands-start-sites-gene-bodies#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3346812'
+  - '4679264'
+  - '14475235'
+  - '11935250'
+  - '39801095'
+  - '16016673'
+  - '29190724'
+  - '7808055'
+  - '12324049'
+  - '22551259'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.functions-of-dna-methylation-islands-start-sites-gene-bodies#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3346812'
+  - '39801095'
+  - '3174305'
+  - '13955536'
+  - '2754534'
+  - '4679264'
+  - '22551259'
+  - '4392608'
+  - '13906892'
+  - '9291668'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.efficient-generation-of-fully-reprogrammed-human-ips-cells-v#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '6477740'
+  - '1709625'
+  - '18998807'
+  - '31882215'
+  - '12100854'
+  - '24512417'
+  - '14555750'
+  - '3669694'
+  - '7426741'
+  - '16375102'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.efficient-generation-of-fully-reprogrammed-human-ips-cells-v#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '6477740'
+  - '6544701'
+  - '4380451'
+  - '24512417'
+  - '21601459'
+  - '7581911'
+  - '6054657'
+  - '86129154'
+  - '9634465'
+  - '35777860'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.role-for-c-myc-in-activation-induced-apoptotic-cell-death-in#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34436231'
+  - '9169645'
+  - '28697248'
+  - '40323148'
+  - '22703082'
+  - '9225850'
+  - '238409'
+  - '28249680'
+  - '7029990'
+  - '7465900'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.role-for-c-myc-in-activation-induced-apoptotic-cell-death-in#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34436231'
+  - '26071782'
+  - '21487212'
+  - '18987782'
+  - '45414636'
+  - '23887844'
+  - '22843616'
+  - '28249680'
+  - '29689140'
+  - '7399084'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.role-for-c-myc-in-activation-induced-apoptotic-cell-death-in#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34436231'
+  - '45414636'
+  - '22843616'
+  - '21487212'
+  - '14311986'
+  - '26071782'
+  - '20388894'
+  - '7399084'
+  - '3173489'
+  - '19979816'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.novel-functional-sets-of-lipid-derived-mediators-with-antiin#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3866315'
+  - '4454788'
+  - '2344892'
+  - '33569870'
+  - '4361990'
+  - '16319097'
+  - '23913146'
+  - '13794374'
+  - '23100220'
+  - '13373629'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.novel-functional-sets-of-lipid-derived-mediators-with-antiin#c6#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '29634262'
+  - '3866315'
+  - '4795303'
+  - '42489926'
+  - '2824347'
+  - '39532074'
+  - '54482327'
+  - '9272598'
+  - '31851367'
+  - '15615957'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.novel-functional-sets-of-lipid-derived-mediators-with-antiin#c6#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3866315'
+  - '4454788'
+  - '46926352'
+  - '2344892'
+  - '1871230'
+  - '1933281'
+  - '27602752'
+  - '24315156'
+  - '19843244'
+  - '12197393'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.model-based-geostatistics#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '10743131'
+  - '19293654'
+  - '15327601'
+  - '7074001'
+  - '13966946'
+  - '23851261'
+  - '20931483'
+  - '39334724'
+  - '18074797'
+  - '25404036'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.model-based-geostatistics#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '10743131'
+  - '26611094'
+  - '84580585'
+  - '25404036'
+  - '27162821'
+  - '27550580'
+  - '26026009'
+  - '17676273'
+  - '61050894'
+  - '19293654'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ethical-dilemmas-in-a-randomized-trial-of-asthma-treatment-c#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34208005'
+  - '14361849'
+  - '409280'
+  - '6085365'
+  - '38180456'
+  - '40867854'
+  - '41329906'
+  - '474325'
+  - '38735355'
+  - '14500725'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.telomere-bound-trf1-and-trf2-stall-the-replication-fork-at-t#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7848113'
+  - '18639989'
+  - '2758012'
+  - '4319844'
+  - '4899981'
+  - '10335603'
+  - '16644043'
+  - '25175223'
+  - '11401602'
+  - '2679511'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.construction-of-an-antisense-cyp86mf-gene-plasmid-vector-and#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '87337034'
+  - '46305977'
+  - '18321590'
+  - '39048693'
+  - '40429879'
+  - '102662'
+  - '40234452'
+  - '9539753'
+  - '410286'
+  - '32023005'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.wnt-signaling-establishes-anteroposterior-neuronal-polarity#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7093809'
+  - '15983148'
+  - '22281684'
+  - '11902109'
+  - '4320111'
+  - '12030318'
+  - '18575183'
+  - '12932176'
+  - '1701063'
+  - '9197786'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.wnt-signaling-establishes-anteroposterior-neuronal-polarity#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7093809'
+  - '18575183'
+  - '1616661'
+  - '23702805'
+  - '15868816'
+  - '27569370'
+  - '28369117'
+  - '16128711'
+  - '13867350'
+  - '39763465'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.wnt-signaling-establishes-anteroposterior-neuronal-polarity#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7093809'
+  - '11414664'
+  - '1281769'
+  - '1576955'
+  - '13072113'
+  - '11738716'
+  - '3202143'
+  - '22362025'
+  - '15983148'
+  - '600437'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pf4-cre-transgenic-mice-allow-the-generation-of-lineage-rest#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '15981174'
+  - '22241778'
+  - '368506'
+  - '39048693'
+  - '22972632'
+  - '4816339'
+  - '23190392'
+  - '40087494'
+  - '23918031'
+  - '10530014'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pf4-cre-transgenic-mice-allow-the-generation-of-lineage-rest#c3#1
+  ndcg_at_10: 0.43067655807339306
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.25
+  ranked:
+  - '22241778'
+  - '19482914'
+  - '21164071'
+  - '15981174'
+  - '25001628'
+  - '22972632'
+  - '35660758'
+  - '24335068'
+  - '21931005'
+  - '10530014'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pf4-cre-transgenic-mice-allow-the-generation-of-lineage-rest#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '15981174'
+  - '39048693'
+  - '18064113'
+  - '18600579'
+  - '25516011'
+  - '11674288'
+  - '3619372'
+  - '4037034'
+  - '4254064'
+  - '14333540'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-exercise-induced-ischemia-on-qt-interval-dispersio#c2#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '60515890'
+  - '59453688'
+  - '13780287'
+  - '86211914'
+  - '3099497'
+  - '2665425'
+  - '10937190'
+  - '4857085'
+  - '15588516'
+  - '7840442'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-exercise-induced-ischemia-on-qt-interval-dispersio#c2#1
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '41233511'
+  - '24443043'
+  - '38882175'
+  - '2820454'
+  - '21789744'
+  - '16488405'
+  - '40631095'
+  - '2028532'
+  - '323335'
+  - '25301182'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-exercise-induced-ischemia-on-qt-interval-dispersio#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21789744'
+  - '28894097'
+  - '15194125'
+  - '52175065'
+  - '40817021'
+  - '43417006'
+  - '43483151'
+  - '9047718'
+  - '24586989'
+  - '24443043'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.in-hospital-switching-between-adenosine-diphosphate-receptor#c6#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '19308127'
+  - '44384384'
+  - '23783727'
+  - '6158879'
+  - '44827480'
+  - '16760369'
+  - '5262240'
+  - '26341063'
+  - '29253460'
+  - '16180601'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.in-hospital-switching-between-adenosine-diphosphate-receptor#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '44384384'
+  - '19308127'
+  - '7873737'
+  - '17897801'
+  - '29253460'
+  - '6158879'
+  - '24150328'
+  - '32159283'
+  - '2842550'
+  - '5884524'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.subcellular-steroid-nuclear-receptor-dynamics#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '40667066'
+  - '3203590'
+  - '18414462'
+  - '11557602'
+  - '11738716'
+  - '20028729'
+  - '29467201'
+  - '40760684'
+  - '31851367'
+  - '38037690'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.subcellular-steroid-nuclear-receptor-dynamics#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '40667066'
+  - '30208015'
+  - '23938319'
+  - '11774598'
+  - '40760684'
+  - '30184745'
+  - '20028729'
+  - '8458567'
+  - '34066665'
+  - '38143689'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.aberrant-luminal-progenitors-as-the-candidate-target-populat#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1866911'
+  - '3285322'
+  - '17088791'
+  - '16472469'
+  - '43385013'
+  - '9394119'
+  - '22509015'
+  - '26887439'
+  - '12762485'
+  - '13791206'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integrin-v-3-c-src-oncogenic-unit-promotes-anchorage-indepen#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1782201'
+  - '381602'
+  - '4702639'
+  - '6807122'
+  - '25950264'
+  - '22972632'
+  - '22401720'
+  - '13779605'
+  - '46193388'
+  - '15832146'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integrin-v-3-c-src-oncogenic-unit-promotes-anchorage-indepen#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1782201'
+  - '15832146'
+  - '35993767'
+  - '22972632'
+  - '1791714'
+  - '4702639'
+  - '52824661'
+  - '20333864'
+  - '381602'
+  - '12650610'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integrin-v-3-c-src-oncogenic-unit-promotes-anchorage-indepen#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1782201'
+  - '9063688'
+  - '52824661'
+  - '825728'
+  - '20183360'
+  - '1976183'
+  - '13329980'
+  - '7795952'
+  - '7736860'
+  - '22317868'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.fatty-acids-as-modulators-of-the-immune-response#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '23388442'
+  - '3866315'
+  - '33912748'
+  - '18375089'
+  - '24269361'
+  - '45770026'
+  - '22442133'
+  - '2030623'
+  - '20764484'
+  - '19185192'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.fatty-acids-as-modulators-of-the-immune-response#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '23388442'
+  - '24269361'
+  - '18375089'
+  - '22442133'
+  - '33912748'
+  - '19185192'
+  - '3866315'
+  - '37207226'
+  - '27150276'
+  - '11705328'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-effects-of-continuing-adjuvant-tamoxifen-to-10-yea#c9#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12438901'
+  - '13069283'
+  - '20454006'
+  - '24341590'
+  - '25175997'
+  - '31311495'
+  - '15512462'
+  - '30058568'
+  - '9056874'
+  - '3329824'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-effects-of-continuing-adjuvant-tamoxifen-to-10-yea#c9#1
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.022222222222222223
+  ranked:
+  - '12869200'
+  - '1428840'
+  - '3514540'
+  - '23577867'
+  - '18734652'
+  - '45015767'
+  - '15512462'
+  - '27123743'
+  - '9239963'
+  - '32534305'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-effects-of-continuing-adjuvant-tamoxifen-to-10-yea#c9#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12438901'
+  - '24341590'
+  - '43629704'
+  - '20454006'
+  - '19675911'
+  - '13069283'
+  - '9056874'
+  - '44624045'
+  - '6945285'
+  - '12810152'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.whole-genome-fingerprint-of-the-dna-methylome-during-human-b#c2#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.041666666666666664
+  ranked:
+  - '2494748'
+  - '18670'
+  - '41496215'
+  - '10165723'
+  - '17587795'
+  - '38076716'
+  - '3098821'
+  - '18358026'
+  - '13955536'
+  - '4679264'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.heterogeneity-underlies-the-emergence-of-egfrt790-wild-type#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9498458'
+  - '18682109'
+  - '15541119'
+  - '3471191'
+  - '40710501'
+  - '21033230'
+  - '19673227'
+  - '18062308'
+  - '25732836'
+  - '38243984'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.heterogeneity-underlies-the-emergence-of-egfrt790-wild-type#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9498458'
+  - '9505402'
+  - '29124963'
+  - '18682109'
+  - '9929089'
+  - '2272614'
+  - '4961038'
+  - '14819804'
+  - '22975806'
+  - '26973393'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-erk-inhibition-in-kras-mutant-pancreatic-cancer-is#c1#0
+  ndcg_at_10: 0.3010299956639812
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.1111111111111111
+  ranked:
+  - '4961038'
+  - '4396105'
+  - '85665741'
+  - '2272614'
+  - '4320424'
+  - '28651643'
+  - '14819804'
+  - '7821634'
+  - '4920376'
+  - '1227277'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-erk-inhibition-in-kras-mutant-pancreatic-cancer-is#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4920376'
+  - '28651643'
+  - '7317051'
+  - '4320424'
+  - '4961038'
+  - '3831884'
+  - '36310858'
+  - '27270151'
+  - '2272614'
+  - '24190159'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-erk-inhibition-in-kras-mutant-pancreatic-cancer-is#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4920376'
+  - '7317051'
+  - '28651643'
+  - '4961038'
+  - '4320424'
+  - '36310858'
+  - '3831884'
+  - '3210545'
+  - '2272614'
+  - '27270151'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ketamine-reduces-lps-induced-hmgb1-via-activation-of-the-nrf#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '27093166'
+  - '9159125'
+  - '25388309'
+  - '13823200'
+  - '9614443'
+  - '5798227'
+  - '23148978'
+  - '29362104'
+  - '9956893'
+  - '2436602'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ketamine-reduces-lps-induced-hmgb1-via-activation-of-the-nrf#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '27093166'
+  - '364522'
+  - '35395662'
+  - '26688294'
+  - '25606339'
+  - '17997584'
+  - '14644164'
+  - '54482327'
+  - '6625693'
+  - '2405259'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-role-of-prevention-in-oncology-practice-results-from-a-2#c1#0
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '45908102'
+  - '27391365'
+  - '24510595'
+  - '12087063'
+  - '28931537'
+  - '3413083'
+  - '427865'
+  - '36211049'
+  - '5586392'
+  - '7547329'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-role-of-prevention-in-oncology-practice-results-from-a-2#c1#1
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '45908102'
+  - '27391365'
+  - '24510595'
+  - '3413083'
+  - '28931537'
+  - '14843502'
+  - '12087063'
+  - '140907540'
+  - '7766808'
+  - '28633594'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-role-of-prevention-in-oncology-practice-results-from-a-2#c1#2
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '24273592'
+  - '42373087'
+  - '24555878'
+  - '20326526'
+  - '27527854'
+  - '34258065'
+  - '69045262'
+  - '456304'
+  - '5850219'
+  - '45027320'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.bitter-taste-receptors-and-gustducin-regulate-the-secretion#c6#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '4474874'
+  - '12943966'
+  - '15535511'
+  - '2225918'
+  - '23601616'
+  - '25050364'
+  - '10017612'
+  - '4611267'
+  - '33918970'
+  - '32611468'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.bitter-taste-receptors-and-gustducin-regulate-the-secretion#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12943966'
+  - '23929297'
+  - '4474874'
+  - '31564409'
+  - '32611468'
+  - '20829129'
+  - '2225918'
+  - '26652147'
+  - '4469125'
+  - '33918970'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.bitter-taste-receptors-and-gustducin-regulate-the-secretion#c6#2
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '25050364'
+  - '21257564'
+  - '4463811'
+  - '2225918'
+  - '12943966'
+  - '4611267'
+  - '12224536'
+  - '10017612'
+  - '12994780'
+  - '21046889'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stable-partnership-and-progression-to-aids-or-death-in-hiv-i#c3#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '57762078'
+  - '12584053'
+  - '13619127'
+  - '37029185'
+  - '25816994'
+  - '14290854'
+  - '409280'
+  - '5824985'
+  - '5691302'
+  - '13906581'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stable-partnership-and-progression-to-aids-or-death-in-hiv-i#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '17077004'
+  - '15319019'
+  - '8300657'
+  - '44737533'
+  - '5633957'
+  - '5867846'
+  - '25606339'
+  - '2947124'
+  - '15593561'
+  - '8858602'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stable-partnership-and-progression-to-aids-or-death-in-hiv-i#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '17077004'
+  - '7111021'
+  - '14319754'
+  - '22227889'
+  - '35087728'
+  - '28806780'
+  - '57121667'
+  - '24596228'
+  - '23304931'
+  - '22194407'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.polymorphism-and-ligand-dependent-changes-in-human-glucagon#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3127341'
+  - '11090688'
+  - '1388704'
+  - '9650982'
+  - '20829129'
+  - '12956194'
+  - '15570962'
+  - '16734530'
+  - '21754541'
+  - '3610282'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.polymorphism-and-ligand-dependent-changes-in-human-glucagon#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3127341'
+  - '11090688'
+  - '3610282'
+  - '12956194'
+  - '21754541'
+  - '38143689'
+  - '6363093'
+  - '718601'
+  - '20829129'
+  - '14328288'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.polymorphism-and-ligand-dependent-changes-in-human-glucagon#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3127341'
+  - '11090688'
+  - '3610282'
+  - '12956194'
+  - '20829129'
+  - '23342845'
+  - '21754541'
+  - '6061927'
+  - '34025053'
+  - '12280462'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.folate-affects-apoptosis-in-human-trophoblastic-cells#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41646286'
+  - '1797622'
+  - '13441537'
+  - '17231273'
+  - '238409'
+  - '15248287'
+  - '30580263'
+  - '46346525'
+  - '7875158'
+  - '24557631'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.folate-affects-apoptosis-in-human-trophoblastic-cells#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41646286'
+  - '1797622'
+  - '13441537'
+  - '4325137'
+  - '17231273'
+  - '23887844'
+  - '24466904'
+  - '6121555'
+  - '23403754'
+  - '46346525'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-bile-acid-chenodeoxycholic-acid-increases-human-brown-ad#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1568684'
+  - '26902591'
+  - '23369842'
+  - '14865329'
+  - '25050364'
+  - '24917562'
+  - '12994780'
+  - '13001323'
+  - '11615242'
+  - '4463588'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-bile-acid-chenodeoxycholic-acid-increases-human-brown-ad#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1568684'
+  - '29691654'
+  - '11615242'
+  - '20363389'
+  - '36838958'
+  - '13902570'
+  - '1907601'
+  - '17973161'
+  - '32955023'
+  - '31564409'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-bile-acid-chenodeoxycholic-acid-increases-human-brown-ad#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1568684'
+  - '29381091'
+  - '38023457'
+  - '40232172'
+  - '11615242'
+  - '36838958'
+  - '34582256'
+  - '20532591'
+  - '14865329'
+  - '26902591'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.macrophages-facilitate-electrical-conduction-in-the-heart#c3#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.07692307692307693
+  ranked:
+  - '3435889'
+  - '20672596'
+  - '1905095'
+  - '29509926'
+  - '2559303'
+  - '23148978'
+  - '24282306'
+  - '16905344'
+  - '24721866'
+  - '1122198'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.macrophages-facilitate-electrical-conduction-in-the-heart#c3#1
+  ndcg_at_10: 0.43067655807339306
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.25
+  ranked:
+  - '3435889'
+  - '1905095'
+  - '2559303'
+  - '4928057'
+  - '22621251'
+  - '16905344'
+  - '29509926'
+  - '5085118'
+  - '24721866'
+  - '12827098'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.macrophages-facilitate-electrical-conduction-in-the-heart#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4928057'
+  - '3984231'
+  - '4460880'
+  - '4319174'
+  - '2291922'
+  - '5511240'
+  - '24282306'
+  - '13108582'
+  - '27567994'
+  - '12827098'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.histone-acetylation-and-dna-demethylation-of-t-cells-result#c1#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '31439189'
+  - '10273147'
+  - '44674301'
+  - '16732790'
+  - '4457834'
+  - '3360421'
+  - '19770974'
+  - '43385013'
+  - '30369606'
+  - '33390472'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.histone-acetylation-and-dna-demethylation-of-t-cells-result#c1#1
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.07142857142857142
+  ranked:
+  - '3230361'
+  - '42009630'
+  - '18841257'
+  - '27134931'
+  - '2613813'
+  - '23195302'
+  - '31141365'
+  - '8548635'
+  - '116075383'
+  - '52868579'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.histone-acetylation-and-dna-demethylation-of-t-cells-result#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1243475'
+  - '1032372'
+  - '601033'
+  - '10542877'
+  - '5409905'
+  - '17682477'
+  - '39481265'
+  - '4547102'
+  - '40127292'
+  - '28334217'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.comparison-of-the-intrinsic-kinase-activity-and-substrate-sp#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '30379039'
+  - '30224907'
+  - '30861948'
+  - '35884026'
+  - '36464673'
+  - '25515662'
+  - '8417211'
+  - '3973445'
+  - '38528892'
+  - '22185730'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.comparison-of-the-intrinsic-kinase-activity-and-substrate-sp#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '30379039'
+  - '20649327'
+  - '25483562'
+  - '26108767'
+  - '30861948'
+  - '30224907'
+  - '24042363'
+  - '8219248'
+  - '8305686'
+  - '23342845'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.developmental-racgap-2-chimaerin-signaling-is-a-determinant#c9#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '23863576'
+  - '3840043'
+  - '16790253'
+  - '18038250'
+  - '9754833'
+  - '7552147'
+  - '17123316'
+  - '26851674'
+  - '23237995'
+  - '18231257'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.developmental-racgap-2-chimaerin-signaling-is-a-determinant#c9#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '23863576'
+  - '12932176'
+  - '14188138'
+  - '18231257'
+  - '3825472'
+  - '4456756'
+  - '5700349'
+  - '1964163'
+  - '24881307'
+  - '15491404'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.developmental-racgap-2-chimaerin-signaling-is-a-determinant#c9#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '23863576'
+  - '10765888'
+  - '3202143'
+  - '11992632'
+  - '10790846'
+  - '16284655'
+  - '36178047'
+  - '26688294'
+  - '11250124'
+  - '11414664'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.noise-and-interlocking-signaling-pathways-promote-distinct-t#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '18264714'
+  - '42855554'
+  - '82665667'
+  - '22948960'
+  - '40558887'
+  - '24512417'
+  - '16962732'
+  - '6863070'
+  - '9724974'
+  - '24742375'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.noise-and-interlocking-signaling-pathways-promote-distinct-t#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '18264714'
+  - '680949'
+  - '5116145'
+  - '36904081'
+  - '32638085'
+  - '16237005'
+  - '9724974'
+  - '3367829'
+  - '15778034'
+  - '41811327'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mri-in-the-diagnosis-of-ms-a-prospective-study-with-comparis#c9#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12122482'
+  - '52176296'
+  - '23816832'
+  - '44586415'
+  - '16737163'
+  - '13870943'
+  - '10831818'
+  - '13938878'
+  - '25515907'
+  - '22843838'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mri-in-the-diagnosis-of-ms-a-prospective-study-with-comparis#c9#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12122482'
+  - '52176296'
+  - '13870943'
+  - '23816832'
+  - '24557631'
+  - '32263707'
+  - '45449835'
+  - '10831818'
+  - '12471115'
+  - '21060008'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nrage-promotes-the-malignant-phenotype-of-hepatocellular-car#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22521091'
+  - '26848994'
+  - '3899896'
+  - '39580129'
+  - '8677721'
+  - '313403'
+  - '16882895'
+  - '22123421'
+  - '2931832'
+  - '24205118'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nrage-promotes-the-malignant-phenotype-of-hepatocellular-car#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22521091'
+  - '39580129'
+  - '19368793'
+  - '8677721'
+  - '16882895'
+  - '26848994'
+  - '35329820'
+  - '3701541'
+  - '17021845'
+  - '515489'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nrage-promotes-the-malignant-phenotype-of-hepatocellular-car#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22521091'
+  - '31591262'
+  - '3572885'
+  - '23830488'
+  - '32787042'
+  - '26848994'
+  - '22123421'
+  - '3899896'
+  - '27437459'
+  - '20645538'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.serum-exosome-microrna-as-a-minimally-invasive-early-biomark#c7#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38745690'
+  - '654735'
+  - '53211308'
+  - '19368793'
+  - '23727313'
+  - '9095943'
+  - '18207615'
+  - '19510470'
+  - '9478135'
+  - '6913227'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.schedule-dependent-interaction-between-anticancer-treatments#c1#0
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '470625'
+  - '7898952'
+  - '31624828'
+  - '1982286'
+  - '28107602'
+  - '29366489'
+  - '8133180'
+  - '11255504'
+  - '28651643'
+  - '5836'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.schedule-dependent-interaction-between-anticancer-treatments#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '28107602'
+  - '5641851'
+  - '5492542'
+  - '14973286'
+  - '14471161'
+  - '20428155'
+  - '15997009'
+  - '11968641'
+  - '7852582'
+  - '23763738'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-development-of-autoimmune-myocarditis-in-mice-by-an#c3#0
+  ndcg_at_10: 0.5
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - '40632104'
+  - '39084565'
+  - '8246922'
+  - '883747'
+  - '21258863'
+  - '1855679'
+  - '22800314'
+  - '7115651'
+  - '26068103'
+  - '36242796'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mechanisms-of-renal-cell-apoptosis-induced-by-cyclosporine-a#c2#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.08333333333333333
+  ranked:
+  - '39381118'
+  - '4323425'
+  - '34439544'
+  - '37549932'
+  - '22890091'
+  - '11900630'
+  - '30580263'
+  - '8496132'
+  - '16550075'
+  - '14863011'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mechanisms-of-renal-cell-apoptosis-induced-by-cyclosporine-a#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '238409'
+  - '10162553'
+  - '8839502'
+  - '33667484'
+  - '28207326'
+  - '24278870'
+  - '2533768'
+  - '8446259'
+  - '9225850'
+  - '24640046'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.transglutaminase-2-undergoes-a-large-conformational-change-u#c8#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13578199'
+  - '26008462'
+  - '33499189'
+  - '2617858'
+  - '18810195'
+  - '19651306'
+  - '10669582'
+  - '3823862'
+  - '17695748'
+  - '44420873'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.transglutaminase-2-undergoes-a-large-conformational-change-u#c8#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13578199'
+  - '3610282'
+  - '3441524'
+  - '25483562'
+  - '39389082'
+  - '31387717'
+  - '19313533'
+  - '46816158'
+  - '26011884'
+  - '2617858'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.transglutaminase-2-undergoes-a-large-conformational-change-u#c8#2
+  ndcg_at_10: 0.43067655807339306
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.25
+  ranked:
+  - '21425864'
+  - '41852733'
+  - '36082224'
+  - '13578199'
+  - '27373088'
+  - '31564409'
+  - '11603066'
+  - '34498325'
+  - '26652147'
+  - '25373397'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.in-vitro-characterization-of-the-anti-pd-1-antibody-nivoluma#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1454773'
+  - '9909405'
+  - '36216395'
+  - '1225513'
+  - '3471191'
+  - '15128866'
+  - '17338543'
+  - '1900152'
+  - '8219248'
+  - '52180874'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.in-vitro-characterization-of-the-anti-pd-1-antibody-nivoluma#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1454773'
+  - '3559136'
+  - '1900152'
+  - '12622860'
+  - '22405338'
+  - '4468861'
+  - '3471191'
+  - '4700428'
+  - '41354899'
+  - '52180874'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.in-vitro-characterization-of-the-anti-pd-1-antibody-nivoluma#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1454773'
+  - '22635278'
+  - '2492146'
+  - '6407356'
+  - '9142761'
+  - '195317463'
+  - '3471191'
+  - '10982689'
+  - '79696454'
+  - '13514898'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.overweight-in-celiac-disease-prevalence-clinical-characteris#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3828508'
+  - '1471041'
+  - '27772649'
+  - '21060008'
+  - '14340571'
+  - '25571386'
+  - '11415809'
+  - '6503534'
+  - '38040186'
+  - '21323758'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.overweight-in-celiac-disease-prevalence-clinical-characteris#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3828508'
+  - '27772649'
+  - '31942055'
+  - '6876224'
+  - '439670'
+  - '21060008'
+  - '1471041'
+  - '1831916'
+  - '25571386'
+  - '6207111'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.overweight-in-celiac-disease-prevalence-clinical-characteris#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3828508'
+  - '43220289'
+  - '35495268'
+  - '71341302'
+  - '31942055'
+  - '12994780'
+  - '28845338'
+  - '6876224'
+  - '11360768'
+  - '7098463'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mechanistic-fracture-criteria-for-the-failure-of-human-corti#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '14103509'
+  - '6153754'
+  - '30919024'
+  - '40212412'
+  - '32532238'
+  - '27123743'
+  - '20999249'
+  - '4346436'
+  - '30500829'
+  - '18691097'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.mechanistic-fracture-criteria-for-the-failure-of-human-corti#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '14103509'
+  - '35621259'
+  - '40212412'
+  - '24724242'
+  - '18691097'
+  - '33458992'
+  - '19205326'
+  - '198133135'
+  - '24356383'
+  - '5700349'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.lin28-regulates-stem-cell-metabolism-and-conversion-to-prime#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3882374'
+  - '3270834'
+  - '14541844'
+  - '35543846'
+  - '36653415'
+  - '22712546'
+  - '26735905'
+  - '3468459'
+  - '8724666'
+  - '7488455'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.lin28-regulates-stem-cell-metabolism-and-conversion-to-prime#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3882374'
+  - '4462419'
+  - '11390393'
+  - '12100854'
+  - '16287725'
+  - '3583084'
+  - '14191255'
+  - '6441369'
+  - '4452318'
+  - '16375102'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.characterization-of-serotonin-5-ht2c-receptor-signaling-to-e#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38143689'
+  - '5573975'
+  - '13329980'
+  - '22025252'
+  - '14657344'
+  - '4702639'
+  - '34016944'
+  - '14819804'
+  - '6121555'
+  - '1044552'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.direct-visualization-of-the-endomitotic-cell-cycle-in-living#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22948960'
+  - '16686383'
+  - '4398832'
+  - '33076846'
+  - '37297740'
+  - '1641873'
+  - '8747771'
+  - '4421746'
+  - '12871002'
+  - '31166180'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.direct-visualization-of-the-endomitotic-cell-cycle-in-living#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22948960'
+  - '7142113'
+  - '33076846'
+  - '4816339'
+  - '25670099'
+  - '23918031'
+  - '19510470'
+  - '2212067'
+  - '19522248'
+  - '7492420'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.direct-visualization-of-the-endomitotic-cell-cycle-in-living#c6#2
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '1102268'
+  - '74701974'
+  - '13949015'
+  - '3903084'
+  - '15274349'
+  - '19307912'
+  - '881332'
+  - '16855829'
+  - '43329366'
+  - '6917133'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.genotoxic-stress-abrogates-renewal-of-melanocyte-stem-cells#c5#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '31293581'
+  - '16630060'
+  - '10015292'
+  - '13025574'
+  - '15678772'
+  - '5572127'
+  - '28441310'
+  - '16627684'
+  - '10704438'
+  - '5765455'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.genotoxic-stress-abrogates-renewal-of-melanocyte-stem-cells#c5#1
+  ndcg_at_10: 0.3562071871080222
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - '31293581'
+  - '5572127'
+  - '4391817'
+  - '11569583'
+  - '24705390'
+  - '16630060'
+  - '43014661'
+  - '14332945'
+  - '5765455'
+  - '10704438'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.genotoxic-stress-abrogates-renewal-of-melanocyte-stem-cells#c5#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '16630060'
+  - '30353437'
+  - '14863011'
+  - '5572127'
+  - '21295300'
+  - '12909503'
+  - '24144677'
+  - '15728433'
+  - '10145528'
+  - '3113630'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.over-expression-of-rcan1-causes-down-syndrome-like-hippocamp#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '11992632'
+  - '14434123'
+  - '4407385'
+  - '3202143'
+  - '9748934'
+  - '980008'
+  - '14188138'
+  - '11250124'
+  - '649951'
+  - '31884697'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.over-expression-of-rcan1-causes-down-syndrome-like-hippocamp#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '11992632'
+  - '14434123'
+  - '4407385'
+  - '9748934'
+  - '9638032'
+  - '23601616'
+  - '31884697'
+  - '980008'
+  - '25597580'
+  - '35520219'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.new-developments-in-the-atsas-program-package-for-small-angl#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1322614'
+  - '16427454'
+  - '25186412'
+  - '2107238'
+  - '17447653'
+  - '13283919'
+  - '15795880'
+  - '23664875'
+  - '8202880'
+  - '40935722'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.new-developments-in-the-atsas-program-package-for-small-angl#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1322614'
+  - '15966318'
+  - '20422174'
+  - '44672703'
+  - '39728826'
+  - '21382907'
+  - '11016788'
+  - '15795880'
+  - '1102268'
+  - '3935126'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.class-iii-pi3k-vps34-plays-an-essential-role-in-autophagy-an#c9#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33507866'
+  - '28138927'
+  - '1605196'
+  - '26952804'
+  - '25576204'
+  - '11903247'
+  - '22159299'
+  - '10463997'
+  - '40987633'
+  - '31882215'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.class-iii-pi3k-vps34-plays-an-essential-role-in-autophagy-an#c9#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33507866'
+  - '28138927'
+  - '317204'
+  - '2033917'
+  - '16562534'
+  - '35760786'
+  - '5254741'
+  - '1669173'
+  - '33569870'
+  - '24998764'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.class-iii-pi3k-vps34-plays-an-essential-role-in-autophagy-an#c9#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33507866'
+  - '28138927'
+  - '6492658'
+  - '33796570'
+  - '29689140'
+  - '40349336'
+  - '368506'
+  - '10463997'
+  - '37205759'
+  - '8083310'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.isolation-of-a-gene-encoding-a-functional-zinc-finger-protei#c10#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21108759'
+  - '25994317'
+  - '11011905'
+  - '4363526'
+  - '8331432'
+  - '41024260'
+  - '3052213'
+  - '3981729'
+  - '4392608'
+  - '13450938'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.isolation-of-a-gene-encoding-a-functional-zinc-finger-protei#c10#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21108759'
+  - '23985464'
+  - '25263810'
+  - '20179918'
+  - '11615242'
+  - '18447487'
+  - '25994317'
+  - '44387884'
+  - '19688024'
+  - '22997657'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nc-100717-a-versatile-rgd-peptide-scaffold-for-angiogenesis#c1#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '9600826'
+  - '40145839'
+  - '24974080'
+  - '10669939'
+  - '2056197'
+  - '4418878'
+  - '13329980'
+  - '6673421'
+  - '13070316'
+  - '37578311'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nc-100717-a-versatile-rgd-peptide-scaffold-for-angiogenesis#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '40145839'
+  - '8219248'
+  - '22972632'
+  - '37578311'
+  - '8290953'
+  - '9600826'
+  - '20279166'
+  - '28086354'
+  - '20646904'
+  - '24042363'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nc-100717-a-versatile-rgd-peptide-scaffold-for-angiogenesis#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '40145839'
+  - '38808600'
+  - '1285713'
+  - '45408403'
+  - '17676273'
+  - '21219071'
+  - '41976370'
+  - '30221601'
+  - '23618826'
+  - '7142113'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integration-of-mental-health-into-primary-healthcare-in-low#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '24318630'
+  - '19071857'
+  - '29845974'
+  - '31612088'
+  - '6129301'
+  - '6490571'
+  - '73473433'
+  - '35022568'
+  - '25649714'
+  - '45548062'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integration-of-mental-health-into-primary-healthcare-in-low#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '24318630'
+  - '6129301'
+  - '29845974'
+  - '6490571'
+  - '31612088'
+  - '19071857'
+  - '35022568'
+  - '73473433'
+  - '26199970'
+  - '37248570'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.integration-of-mental-health-into-primary-healthcare-in-low#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '24318630'
+  - '29845974'
+  - '19071857'
+  - '10893238'
+  - '6129301'
+  - '31612088'
+  - '15041758'
+  - '1338283'
+  - '10374686'
+  - '73473433'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.microfluidic-platform-to-evaluate-migration-of-cells-from-pa#c4#0
+  ndcg_at_10: 0.3562071871080222
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - '10628767'
+  - '9580772'
+  - '6863070'
+  - '25404036'
+  - '25950264'
+  - '3770726'
+  - '82665667'
+  - '2665425'
+  - '38037690'
+  - '20279166'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.microfluidic-platform-to-evaluate-migration-of-cells-from-pa#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '3770726'
+  - '13969173'
+  - '469066'
+  - '16853734'
+  - '2121272'
+  - '10029891'
+  - '45651303'
+  - '9217800'
+  - '39390206'
+  - '15335331'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.time-from-finding-abnormality-on-mass-screening-to-final-dia#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '32084655'
+  - '22942787'
+  - '10699587'
+  - '756887'
+  - '21479231'
+  - '13256155'
+  - '26341063'
+  - '18062308'
+  - '11880289'
+  - '39264456'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.transcriptome-analysis-reveals-human-cytomegalovirus-reprogr#c7#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '34016987'
+  - '12966719'
+  - '7281161'
+  - '8477699'
+  - '164985'
+  - '43192375'
+  - '22621251'
+  - '9784254'
+  - '21626639'
+  - '8712839'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.swi1timeless-prevents-repeat-instability-at-fission-yeast-te#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '18639989'
+  - '7915836'
+  - '7848113'
+  - '4899981'
+  - '2679511'
+  - '16644043'
+  - '4319844'
+  - '2758012'
+  - '36066871'
+  - '4411655'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.swi1timeless-prevents-repeat-instability-at-fission-yeast-te#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '18639989'
+  - '7915836'
+  - '7848113'
+  - '36066871'
+  - '2679511'
+  - '16644043'
+  - '4899981'
+  - '2758012'
+  - '213017'
+  - '4411655'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.swi1timeless-prevents-repeat-instability-at-fission-yeast-te#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '18639989'
+  - '36066871'
+  - '4411655'
+  - '31166180'
+  - '14446279'
+  - '615047'
+  - '7915836'
+  - '43156471'
+  - '4429668'
+  - '335029'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stathmin-overexpression-identifies-high-risk-patients-and-ly#c2#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '16201748'
+  - '2389574'
+  - '45015767'
+  - '25263942'
+  - '36399107'
+  - '32177659'
+  - '25175997'
+  - '20221907'
+  - '26462632'
+  - '28598374'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stathmin-overexpression-identifies-high-risk-patients-and-ly#c2#1
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.058823529411764705
+  ranked:
+  - '21323758'
+  - '31616203'
+  - '16980892'
+  - '44827480'
+  - '14726759'
+  - '43329366'
+  - '57762078'
+  - '25806385'
+  - '3935126'
+  - '6549091'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.stathmin-overexpression-identifies-high-risk-patients-and-ly#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '2389574'
+  - '15113221'
+  - '14672919'
+  - '31591262'
+  - '6121668'
+  - '313403'
+  - '24834968'
+  - '38355793'
+  - '20887554'
+  - '29473081'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-mcm8-mcm9-complex-promotes-rad51-recruitment-at-dna-dama#c5#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '5339554'
+  - '2328272'
+  - '15135001'
+  - '2714623'
+  - '7751726'
+  - '719812'
+  - '31543713'
+  - '25098790'
+  - '45408403'
+  - '32023005'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-mcm8-mcm9-complex-promotes-rad51-recruitment-at-dna-dama#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38252314'
+  - '12892137'
+  - '5389523'
+  - '20420780'
+  - '43602749'
+  - '6812319'
+  - '6536598'
+  - '6710699'
+  - '4407318'
+  - '40901687'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relationship-of-physical-activity-and-television-watching-wi#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '8428935'
+  - '10692948'
+  - '45548062'
+  - '8582337'
+  - '2659805'
+  - '4449524'
+  - '33135135'
+  - '9538708'
+  - '6876224'
+  - '17591478'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relationship-of-physical-activity-and-television-watching-wi#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '8428935'
+  - '45548062'
+  - '1263446'
+  - '10827901'
+  - '75636923'
+  - '12224536'
+  - '13083189'
+  - '8582337'
+  - '29460384'
+  - '21377587'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relationship-of-physical-activity-and-television-watching-wi#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '8428935'
+  - '10692948'
+  - '38873881'
+  - '9538708'
+  - '19804204'
+  - '45548062'
+  - '2424794'
+  - '42913391'
+  - '11953232'
+  - '3770750'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-clinical-approach-to-circadian-rhythm-sleep-disorders#c4#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '23816832'
+  - '13870943'
+  - '44586415'
+  - '34873974'
+  - '26462632'
+  - '70490'
+  - '13938878'
+  - '20221907'
+  - '5558754'
+  - '36721932'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-clinical-approach-to-circadian-rhythm-sleep-disorders#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '31554917'
+  - '8868863'
+  - '4587978'
+  - '25183830'
+  - '20602517'
+  - '21373821'
+  - '11913139'
+  - '3805841'
+  - '5035851'
+  - '4385779'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.deficiency-and-pharmacological-stabilization-of-mast-cells-r#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '597790'
+  - '25050364'
+  - '712078'
+  - '1365188'
+  - '52865789'
+  - '8816869'
+  - '13573143'
+  - '6227220'
+  - '13283919'
+  - '4680262'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.deficiency-and-pharmacological-stabilization-of-mast-cells-r#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '597790'
+  - '3680979'
+  - '21366394'
+  - '13283919'
+  - '7735859'
+  - '12058271'
+  - '37964706'
+  - '20388894'
+  - '39851630'
+  - '28712203'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.deficiency-and-pharmacological-stabilization-of-mast-cells-r#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '597790'
+  - '3680979'
+  - '13283919'
+  - '10029891'
+  - '21366394'
+  - '22852120'
+  - '11233339'
+  - '4928282'
+  - '37964706'
+  - '1855679'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.expression-of-the-norrie-disease-gene-ndp-in-developing-and#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '30297355'
+  - '26990001'
+  - '317204'
+  - '26501027'
+  - '4409524'
+  - '6776834'
+  - '30468386'
+  - '1616661'
+  - '9239963'
+  - '7492250'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.body-mass-index-and-mortality-in-korean-men-and-women#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '11630388'
+  - '13831842'
+  - '3514540'
+  - '25837950'
+  - '4828631'
+  - '3903084'
+  - '195689316'
+  - '12770738'
+  - '9171913'
+  - '23967973'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.body-mass-index-and-mortality-in-korean-men-and-women#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '11630388'
+  - '18084826'
+  - '756887'
+  - '25837950'
+  - '12770738'
+  - '3514540'
+  - '3903084'
+  - '13831842'
+  - '1456068'
+  - '195689316'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.body-mass-index-and-mortality-in-korean-men-and-women#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '11630388'
+  - '195689316'
+  - '25599283'
+  - '18084826'
+  - '23967973'
+  - '24918110'
+  - '1456068'
+  - '10209731'
+  - '12709184'
+  - '4828631'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-survival-quality-of-life-and-quality-adjusted-life#c1#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '2492146'
+  - '20606520'
+  - '22730024'
+  - '1358909'
+  - '42404093'
+  - '54490092'
+  - '21323758'
+  - '38040186'
+  - '15476777'
+  - '13934676'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-survival-quality-of-life-and-quality-adjusted-life#c1#1
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.08333333333333333
+  ranked:
+  - '10577574'
+  - '39059143'
+  - '40867854'
+  - '21323587'
+  - '26611094'
+  - '8190282'
+  - '19464037'
+  - '40905302'
+  - '1522647'
+  - '12258338'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.long-term-survival-quality-of-life-and-quality-adjusted-life#c1#2
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '24159217'
+  - '38799797'
+  - '22446093'
+  - '39300105'
+  - '22467585'
+  - '7751726'
+  - '25938251'
+  - '51972698'
+  - '35495268'
+  - '704526'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.il-2-receptor-signaling-is-essential-for-the-development-of#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38502066'
+  - '38830961'
+  - '24069089'
+  - '991137'
+  - '18834078'
+  - '4418070'
+  - '9500590'
+  - '3835423'
+  - '22968257'
+  - '5483793'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.il-2-receptor-signaling-is-essential-for-the-development-of#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38502066'
+  - '4418070'
+  - '13878643'
+  - '16790253'
+  - '22210434'
+  - '20344442'
+  - '17997584'
+  - '7399084'
+  - '9283422'
+  - '18348376'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.il-2-receptor-signaling-is-essential-for-the-development-of#c5#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38502066'
+  - '38830961'
+  - '4418070'
+  - '22968257'
+  - '5406411'
+  - '41877386'
+  - '4434951'
+  - '18348376'
+  - '266641'
+  - '11899391'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.spare-respiratory-capacity-rather-than-oxidative-stress-regu#c4#0
+  ndcg_at_10: 0.3562071871080222
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - '37608303'
+  - '13458119'
+  - '16398827'
+  - '2039912'
+  - '6565037'
+  - '13380011'
+  - '3085264'
+  - '35543846'
+  - '4414481'
+  - '39187170'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.spare-respiratory-capacity-rather-than-oxidative-stress-regu#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13380011'
+  - '2039912'
+  - '16966326'
+  - '5395426'
+  - '9194077'
+  - '11886686'
+  - '13458119'
+  - '27022864'
+  - '13172737'
+  - '24632480'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.gapdh-mediates-nitrosylation-of-nuclear-proteins#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20381484'
+  - '25748308'
+  - '14972169'
+  - '32985041'
+  - '32638085'
+  - '29148743'
+  - '2831620'
+  - '28937856'
+  - '22036571'
+  - '26008462'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.capsaicin-sensitive-sensory-nerve-fibers-contribute-to-the-g#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '19529370'
+  - '36178047'
+  - '11246427'
+  - '27686445'
+  - '14103509'
+  - '46182525'
+  - '23017040'
+  - '19878070'
+  - '34753204'
+  - '44048701'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.capsaicin-sensitive-sensory-nerve-fibers-contribute-to-the-g#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '19529370'
+  - '37562370'
+  - '1701063'
+  - '32927401'
+  - '4394525'
+  - '5586392'
+  - '58006489'
+  - '12130690'
+  - '10474873'
+  - '13027590'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.an-excitatory-loop-with-astrocytes-contributes-to-drive-neur#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1410197'
+  - '13458119'
+  - '16398827'
+  - '17101262'
+  - '23746332'
+  - '13780287'
+  - '14767844'
+  - '15215393'
+  - '16964262'
+  - '8122346'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.an-excitatory-loop-with-astrocytes-contributes-to-drive-neur#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1410197'
+  - '13458119'
+  - '16398827'
+  - '13780287'
+  - '6559201'
+  - '23509593'
+  - '16964262'
+  - '17101262'
+  - '14767844'
+  - '28530299'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.an-excitatory-loop-with-astrocytes-contributes-to-drive-neur#c5#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1410197'
+  - '15889329'
+  - '14924526'
+  - '29723642'
+  - '37592824'
+  - '21578627'
+  - '25416944'
+  - '13757347'
+  - '3400973'
+  - '16839245'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.accelerating-policy-decisions-to-adopt-haemophilus-influenza#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12428497'
+  - '33723822'
+  - '6748318'
+  - '3112885'
+  - '9161988'
+  - '2264455'
+  - '25897733'
+  - '27527854'
+  - '33397197'
+  - '1287809'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.accelerating-policy-decisions-to-adopt-haemophilus-influenza#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12428497'
+  - '33723822'
+  - '44629665'
+  - '6748318'
+  - '2264455'
+  - '27527854'
+  - '9161988'
+  - '11939159'
+  - '39984099'
+  - '25897733'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.accelerating-policy-decisions-to-adopt-haemophilus-influenza#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '12428497'
+  - '33723822'
+  - '8906858'
+  - '27527854'
+  - '44629665'
+  - '25897733'
+  - '11939159'
+  - '9161988'
+  - '6748318'
+  - '12442311'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nitrite-protects-against-morbidity-and-mortality-associated#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13823200'
+  - '14615911'
+  - '25079962'
+  - '28910120'
+  - '24338780'
+  - '38023457'
+  - '35766603'
+  - '16066726'
+  - '36386637'
+  - '46112052'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nitrite-protects-against-morbidity-and-mortality-associated#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13823200'
+  - '24338780'
+  - '8536018'
+  - '38830961'
+  - '9159125'
+  - '25079962'
+  - '41913714'
+  - '9752604'
+  - '4324278'
+  - '15381976'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.nitrite-protects-against-morbidity-and-mortality-associated#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13823200'
+  - '25079962'
+  - '37912677'
+  - '29148743'
+  - '46328296'
+  - '10538985'
+  - '11868606'
+  - '11705328'
+  - '28910120'
+  - '27093166'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.divergent-reprogramming-routes-lead-to-alternative-stem-cell#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4452318'
+  - '29641682'
+  - '7640058'
+  - '86129154'
+  - '6054657'
+  - '31882215'
+  - '2608447'
+  - '14225271'
+  - '4380451'
+  - '7426741'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.divergent-reprogramming-routes-lead-to-alternative-stem-cell#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4452318'
+  - '6826100'
+  - '16375102'
+  - '8290760'
+  - '3669694'
+  - '6054657'
+  - '14555750'
+  - '54561384'
+  - '20033112'
+  - '18998807'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.short-term-medical-service-trips-a-systematic-review-of-the#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38180456'
+  - '11884867'
+  - '6477536'
+  - '13205803'
+  - '8042158'
+  - '4688277'
+  - '70516463'
+  - '14496749'
+  - '11254040'
+  - '126549848'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.short-term-medical-service-trips-a-systematic-review-of-the#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38180456'
+  - '16204011'
+  - '13515165'
+  - '11254040'
+  - '8042158'
+  - '18025240'
+  - '17626822'
+  - '26016929'
+  - '25515907'
+  - '24077493'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-women-s-nutrition-before-and-during-early-pregnanc#c4#0
+  ndcg_at_10: 0.31546487678572877
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.125
+  ranked:
+  - '439670'
+  - '23557241'
+  - '26611834'
+  - '37480103'
+  - '16322674'
+  - '2425364'
+  - '17450673'
+  - '33740844'
+  - '30786800'
+  - '68317730'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-women-s-nutrition-before-and-during-early-pregnanc#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33740844'
+  - '2425364'
+  - '17450673'
+  - '20645335'
+  - '23557241'
+  - '24269361'
+  - '6793674'
+  - '18104691'
+  - '19278208'
+  - '12145359'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-women-s-nutrition-before-and-during-early-pregnanc#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33740844'
+  - '49429882'
+  - '24269361'
+  - '11748341'
+  - '2425364'
+  - '17450673'
+  - '23557241'
+  - '11360768'
+  - '12672066'
+  - '18025240'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-neural-basis-for-melanocortin-4-receptor-regulated-appetit#c1#0
+  ndcg_at_10: 0.5
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - '22545779'
+  - '10534299'
+  - '1070920'
+  - '25007443'
+  - '4469125'
+  - '15535511'
+  - '4474874'
+  - '17150648'
+  - '2225918'
+  - '14782049'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-neural-basis-for-melanocortin-4-receptor-regulated-appetit#c1#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '25007443'
+  - '1070920'
+  - '22545779'
+  - '17150648'
+  - '15535511'
+  - '2225918'
+  - '9194077'
+  - '45154987'
+  - '4469125'
+  - '29429111'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-neural-basis-for-melanocortin-4-receptor-regulated-appetit#c1#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1070920'
+  - '45154987'
+  - '4469125'
+  - '22545779'
+  - '23869951'
+  - '2225918'
+  - '25969485'
+  - '4611267'
+  - '2481032'
+  - '17150648'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-hydroxyethyl-starch-on-bleeding-after-cardiopulmon#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '36288526'
+  - '13514898'
+  - '8814634'
+  - '23013317'
+  - '2391552'
+  - '10072941'
+  - '202259'
+  - '41298619'
+  - '34338075'
+  - '13464392'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-hydroxyethyl-starch-on-bleeding-after-cardiopulmon#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '36288526'
+  - '13514898'
+  - '8814634'
+  - '202259'
+  - '2391552'
+  - '37424881'
+  - '41298619'
+  - '15948830'
+  - '34338075'
+  - '24155601'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.effect-of-hydroxyethyl-starch-on-bleeding-after-cardiopulmon#c1#2
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.09090909090909091
+  ranked:
+  - '18872233'
+  - '5402581'
+  - '13514898'
+  - '34338075'
+  - '11254040'
+  - '31229233'
+  - '4883040'
+  - '32463364'
+  - '76463821'
+  - '14361849'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.lumi-a-pipeline-for-processing-illumina-microarray#c3#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.05555555555555555
+  ranked:
+  - '8202880'
+  - '8670178'
+  - '1322614'
+  - '51972698'
+  - '17676273'
+  - '16510361'
+  - '2107238'
+  - '15795880'
+  - '15286783'
+  - '7766808'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.lumi-a-pipeline-for-processing-illumina-microarray#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '24234341'
+  - '834336'
+  - '36180468'
+  - '95102458'
+  - '712320'
+  - '34439544'
+  - '4939312'
+  - '7838799'
+  - '70516463'
+  - '35448676'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.lumi-a-pipeline-for-processing-illumina-microarray#c3#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '24234341'
+  - '14717213'
+  - '31200375'
+  - '13042119'
+  - '24873253'
+  - '17422777'
+  - '24979644'
+  - '31543713'
+  - '3845894'
+  - '41159361'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.reprogramming-fibroblasts-into-bipotential-hepatic-stem-cell#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20033112'
+  - '3847200'
+  - '54561384'
+  - '39465575'
+  - '6054657'
+  - '4380451'
+  - '4405194'
+  - '16541762'
+  - '86129154'
+  - '1630949'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.reprogramming-fibroblasts-into-bipotential-hepatic-stem-cell#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '20033112'
+  - '3847200'
+  - '6054657'
+  - '37699461'
+  - '39465575'
+  - '3619372'
+  - '4452318'
+  - '54561384'
+  - '1630949'
+  - '17119869'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.complementary-foods-for-infant-feeding-in-developing-countri#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13338820'
+  - '36124058'
+  - '4695107'
+  - '29460384'
+  - '2659805'
+  - '36960449'
+  - '11748341'
+  - '10557471'
+  - '4424888'
+  - '27527854'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.complementary-foods-for-infant-feeding-in-developing-countri#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13338820'
+  - '29460384'
+  - '36124058'
+  - '21623140'
+  - '2659805'
+  - '30786800'
+  - '10557471'
+  - '36960449'
+  - '23245050'
+  - '13782317'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.drosophila-cpeb-orb2a-mediates-memory-independent-of-its-rna#c4#0
+  ndcg_at_10: 0.3562071871080222
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - '15590539'
+  - '12486491'
+  - '13763195'
+  - '6828370'
+  - '12014458'
+  - '15655418'
+  - '11420613'
+  - '86602746'
+  - '24998637'
+  - '40721190'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.drosophila-cpeb-orb2a-mediates-memory-independent-of-its-rna#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '15655418'
+  - '4462155'
+  - '4407385'
+  - '15635366'
+  - '21257564'
+  - '3202143'
+  - '464511'
+  - '21320417'
+  - '991137'
+  - '15879544'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ablation-of-nf1-function-in-neurons-induces-abnormal-develop#c6#0
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - '2242416'
+  - '14471161'
+  - '3419802'
+  - '1507222'
+  - '1921218'
+  - '21891856'
+  - '38243984'
+  - '11915280'
+  - '22889972'
+  - '219475'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ablation-of-nf1-function-in-neurons-induces-abnormal-develop#c6#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33796570'
+  - '4679264'
+  - '6492658'
+  - '10605189'
+  - '4394817'
+  - '803312'
+  - '5503194'
+  - '30221601'
+  - '29429111'
+  - '9194077'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.ablation-of-nf1-function-in-neurons-induces-abnormal-develop#c6#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33796570'
+  - '14192687'
+  - '22545779'
+  - '2481032'
+  - '2272614'
+  - '1964163'
+  - '4303075'
+  - '29429111'
+  - '8698208'
+  - '4405194'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.familial-gastroesophageal-reflux-and-development-of-barrett#c1#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '37405449'
+  - '20767776'
+  - '39661951'
+  - '1398021'
+  - '19307912'
+  - '29185044'
+  - '12428137'
+  - '31834381'
+  - '1153655'
+  - '30813140'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.familial-gastroesophageal-reflux-and-development-of-barrett#c1#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '37405449'
+  - '28338268'
+  - '30813140'
+  - '3315558'
+  - '19307912'
+  - '24521894'
+  - '20321154'
+  - '5278233'
+  - '1398021'
+  - '6710699'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.penile-curvature-incidence-in-hypospadias-can-be-determin#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '17625068'
+  - '13445579'
+  - '14726759'
+  - '6767133'
+  - '23908217'
+  - '13580614'
+  - '21373821'
+  - '21301090'
+  - '21323758'
+  - '10072941'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.role-of-tumor-associated-macrophages-in-tumor-angiogenesis-a#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '13070316'
+  - '15727984'
+  - '8671456'
+  - '20501163'
+  - '164985'
+  - '4429932'
+  - '32852283'
+  - '14615911'
+  - '20568364'
+  - '3981033'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.role-of-tumor-associated-macrophages-in-tumor-angiogenesis-a#c6#1
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - '22180793'
+  - '26038789'
+  - '3559136'
+  - '27907205'
+  - '13070316'
+  - '21141798'
+  - '42465769'
+  - '7986878'
+  - '4373433'
+  - '7735859'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-research-agenda-for-public-health-workforce-development#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '10509344'
+  - '13205803'
+  - '39593548'
+  - '5855168'
+  - '126549848'
+  - '26532518'
+  - '31019903'
+  - '33135135'
+  - '146653163'
+  - '37248570'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.a-research-agenda-for-public-health-workforce-development#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '10509344'
+  - '4246523'
+  - '13870943'
+  - '6319826'
+  - '92499'
+  - '23117378'
+  - '471921'
+  - '1338283'
+  - '26491450'
+  - '9754530'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.expression-of-a-human-cytomegalovirus-latency-associated-hom#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '25141908'
+  - '26133404'
+  - '40254495'
+  - '8979167'
+  - '5372773'
+  - '26873988'
+  - '10450300'
+  - '37762357'
+  - '854417'
+  - '15425958'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relative-roles-of-direct-regeneration-versus-paracrine-effec#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9122283'
+  - '17682477'
+  - '3435889'
+  - '27602752'
+  - '6723450'
+  - '24101431'
+  - '6588614'
+  - '27995781'
+  - '4856149'
+  - '23397658'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relative-roles-of-direct-regeneration-versus-paracrine-effec#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9122283'
+  - '2437807'
+  - '12742164'
+  - '5633876'
+  - '21387297'
+  - '106301'
+  - '4417177'
+  - '8790729'
+  - '4427392'
+  - '17682477'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.relative-roles-of-direct-regeneration-versus-paracrine-effec#c5#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9122283'
+  - '54561384'
+  - '106301'
+  - '991137'
+  - '4427392'
+  - '4421787'
+  - '2437807'
+  - '32797183'
+  - '22791348'
+  - '16287725'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pcna-functions-as-a-molecular-platform-to-trigger-cdt1-destr#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1635872'
+  - '16745747'
+  - '8417211'
+  - '4926049'
+  - '15926408'
+  - '12922760'
+  - '31514338'
+  - '4429388'
+  - '19522248'
+  - '9889151'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pcna-functions-as-a-molecular-platform-to-trigger-cdt1-destr#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '1635872'
+  - '20231138'
+  - '4407318'
+  - '11922370'
+  - '5389523'
+  - '19165076'
+  - '15248287'
+  - '9379687'
+  - '18037805'
+  - '11568270'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.subunit-arrangement-and-phenylethanolamine-binding-in-glun1#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4425507'
+  - '612002'
+  - '26011884'
+  - '31387717'
+  - '19571273'
+  - '15548965'
+  - '35520219'
+  - '12800122'
+  - '7729656'
+  - '18346333'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.subunit-arrangement-and-phenylethanolamine-binding-in-glun1#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4425507'
+  - '26011884'
+  - '612002'
+  - '31387717'
+  - '33499189'
+  - '19571273'
+  - '15426878'
+  - '3441524'
+  - '13578199'
+  - '15548965'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.hiv-1-infects-multipotent-progenitor-cells-causing-cell-deat#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7224723'
+  - '37444589'
+  - '35987381'
+  - '10648422'
+  - '20261352'
+  - '5752492'
+  - '2603304'
+  - '5398179'
+  - '20996244'
+  - '44562058'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.hiv-1-infects-multipotent-progenitor-cells-causing-cell-deat#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '7224723'
+  - '9021186'
+  - '35987381'
+  - '6559701'
+  - '37444589'
+  - '20996244'
+  - '26873988'
+  - '10648422'
+  - '21932050'
+  - '46202852'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.radioiodine-treatment-of-multinodular-non-toxic-goitre#c6#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9745001'
+  - '18734652'
+  - '43122426'
+  - '6917133'
+  - '21616324'
+  - '25853741'
+  - '4506414'
+  - '5433667'
+  - '8082528'
+  - '6751418'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.radioiodine-treatment-of-multinodular-non-toxic-goitre#c6#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '43122426'
+  - '9745001'
+  - '36642096'
+  - '21323758'
+  - '14938990'
+  - '37912677'
+  - '3099497'
+  - '13938878'
+  - '6751418'
+  - '42873134'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.radioiodine-treatment-of-multinodular-non-toxic-goitre#c6#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '9745001'
+  - '37912677'
+  - '6751418'
+  - '26026009'
+  - '43122426'
+  - '18414462'
+  - '3619931'
+  - '20554003'
+  - '34025053'
+  - '7852582'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.young-adolescents-nutrition-assessment-on-computer-yana-c#c5#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '19315511'
+  - '4857093'
+  - '2844897'
+  - '7766808'
+  - '2659805'
+  - '2295434'
+  - '4506702'
+  - '55128127'
+  - '21377587'
+  - '143868995'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.young-adolescents-nutrition-assessment-on-computer-yana-c#c5#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4857093'
+  - '20048431'
+  - '23245050'
+  - '5775033'
+  - '13338820'
+  - '21623140'
+  - '2659805'
+  - '16422880'
+  - '9244474'
+  - '36558211'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.young-adolescents-nutrition-assessment-on-computer-yana-c#c5#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '4857093'
+  - '20048431'
+  - '2295434'
+  - '23245050'
+  - '9244474'
+  - '21623140'
+  - '13338820'
+  - '756887'
+  - '2659805'
+  - '17779800'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.genetic-diagnosis-and-prognosis-of-alzheimer-s-disease-chall#c3#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41782935'
+  - '6917133'
+  - '45200347'
+  - '45457778'
+  - '6040392'
+  - '39326723'
+  - '5260382'
+  - '20008796'
+  - '1967410'
+  - '4505748'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.genetic-diagnosis-and-prognosis-of-alzheimer-s-disease-chall#c3#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '41782935'
+  - '14717213'
+  - '2722988'
+  - '5855168'
+  - '3981613'
+  - '36713289'
+  - '24790460'
+  - '18494847'
+  - '13205803'
+  - '3446400'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.how-can-health-care-organizations-be-reliably-compared-lesso#c4#0
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '841371'
+  - '21377587'
+  - '21260231'
+  - '27391365'
+  - '22707413'
+  - '143381103'
+  - '20326526'
+  - '144801076'
+  - '42373087'
+  - '2338488'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.how-can-health-care-organizations-be-reliably-compared-lesso#c4#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21377587'
+  - '841371'
+  - '9274291'
+  - '27391365'
+  - '72580164'
+  - '21260231'
+  - '77971703'
+  - '20606520'
+  - '13515165'
+  - '39059143'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.how-can-health-care-organizations-be-reliably-compared-lesso#c4#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '21377587'
+  - '841371'
+  - '19945096'
+  - '6421734'
+  - '3272084'
+  - '15048300'
+  - '17693849'
+  - '3610080'
+  - '21884449'
+  - '45027320'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.enhanced-pathological-angiogenesis-in-mice-lacking-3-integri#c5#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '22972632'
+  - '3896759'
+  - '24974080'
+  - '9600826'
+  - '40145839'
+  - '1782201'
+  - '19482914'
+  - '6673421'
+  - '2682997'
+  - '11716783'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.enhanced-pathological-angiogenesis-in-mice-lacking-3-integri#c5#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '38808600'
+  - '22972632'
+  - '4820792'
+  - '4702639'
+  - '8219248'
+  - '6129301'
+  - '23420807'
+  - '44562904'
+  - '7986878'
+  - '22401061'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.the-complete-primary-structure-of-the-spermadhesin-awn-a-zon#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '33720691'
+  - '29134911'
+  - '7717468'
+  - '14926162'
+  - '8563659'
+  - '22036571'
+  - '10852047'
+  - '24221369'
+  - '27274441'
+  - '24311787'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.competition-between-target-sites-of-regulators-shapes-post-t#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '32324430'
+  - '885056'
+  - '778436'
+  - '34604584'
+  - '39281166'
+  - '10247314'
+  - '22623275'
+  - '16691520'
+  - '21093407'
+  - '4313478'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.competition-between-target-sites-of-regulators-shapes-post-t#c2#1
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - '5253987'
+  - '32324430'
+  - '42662816'
+  - '8006440'
+  - '17544977'
+  - '2000038'
+  - '18421962'
+  - '2251426'
+  - '15590539'
+  - '12652963'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.assessment-for-selection-for-the-health-care-professions-and#c2#0
+  ndcg_at_10: 0.31546487678572877
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.125
+  ranked:
+  - '1542437'
+  - '7074001'
+  - '142562844'
+  - '16855829'
+  - '4688277'
+  - '20491205'
+  - '27240699'
+  - '28017005'
+  - '11016410'
+  - '37895688'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.assessment-for-selection-for-the-health-care-professions-and#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '28017005'
+  - '1542437'
+  - '3707035'
+  - '16625620'
+  - '21050357'
+  - '2665675'
+  - '32023005'
+  - '26067999'
+  - '10893238'
+  - '52827184'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.assessment-for-selection-for-the-health-care-professions-and#c2#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '28017005'
+  - '2665675'
+  - '13870943'
+  - '21050357'
+  - '26067999'
+  - '32328114'
+  - '29022271'
+  - '16625620'
+  - '4432763'
+  - '2844897'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.three-dimensional-chemical-imaging-of-skin-using-stimulated#c4#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '38037690'
+  - '12489130'
+  - '15907458'
+  - '26461066'
+  - '19343151'
+  - '8290953'
+  - '15176526'
+  - '44420873'
+  - '45276789'
+  - '3930020'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.fibrosis-and-adipogenesis-originate-from-a-common-mesenchyma#c8#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39164524'
+  - '12411274'
+  - '7583161'
+  - '3619372'
+  - '15833835'
+  - '39426225'
+  - '9122283'
+  - '11674288'
+  - '10078024'
+  - '106301'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.fibrosis-and-adipogenesis-originate-from-a-common-mesenchyma#c8#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39164524'
+  - '9122283'
+  - '3619372'
+  - '12411274'
+  - '2559303'
+  - '4427392'
+  - '25516011'
+  - '2828460'
+  - '15322518'
+  - '3090454'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.fibrosis-and-adipogenesis-originate-from-a-common-mesenchyma#c8#2
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '39164524'
+  - '17933691'
+  - '19204979'
+  - '19912367'
+  - '12411274'
+  - '10078024'
+  - '8771704'
+  - '18064113'
+  - '4164929'
+  - '20418809'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pharmacodynamics-and-pharmacokinetics-of-eptifibatide-in-pat#c2#0
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '2842550'
+  - '17897801'
+  - '23195674'
+  - '12039953'
+  - '44387884'
+  - '25001628'
+  - '35660758'
+  - '34544514'
+  - '6158879'
+  - '19482914'
+  unmapped_hits: 0
+  hits: 50
+- name: pinpoint:dg.pharmacodynamics-and-pharmacokinetics-of-eptifibatide-in-pat#c2#1
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - '2842550'
+  - '17897801'
+  - '25001628'
+  - '44387884'
+  - '24670522'
+  - '12039953'
+  - '23195674'
+  - '27550580'
+  - '11459139'
+  - '35660758'
+  unmapped_hits: 0
+  hits: 50
+means:
+  ndcg@10: 0.8505070499704985
+  recall@1: 0.77
+  recall@5: 0.9
+  recall@10: 0.93
+  mrr: 0.827366028851323
+unmapped_hits: 0
+unmappable_gold: 0
+cases_without_gold: 0
+cases_without_hits: 0

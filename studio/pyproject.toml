@@ -1,0 +1,250 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The tree ships exactly one top-level package rooted at ``src/``: ``studio``, the knowledge base
+# application (the knowledge base CLI + the dashboard ``/api`` on :8100; the coding agent lives in the
+# sibling ``harness`` project). ``sources`` strips the ``src/`` prefix so the console script's
+# ``studio.knowledge_base.cli:app`` imports at top level in the installed env.
+only-include = ["src/studio"]
+sources      = ["src"]
+
+[project]
+name = "studio"
+description = "AI Factory Studio, the knowledge base half: the knowledge base ops CLI and the dashboard API on :8100 over the engram library."
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+maintainers = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+readme = "README.md"
+# Exactly what the app imports (plus uvicorn, invoked as the server command). Everything the
+# engram library needs for itself (azure converters, pgvector, tiktoken, pypandoc, ...) arrives
+# through the `engram` path dep and is deliberately NOT restated here.
+dependencies = [
+    "core",
+    "engram",
+    # Every connector extra: this app is the one place a knowledge base's declared connectors must all be
+    # available to resolve, whichever names a schema declares. `testing` (fakes/factories) rides
+    # the test dependency group instead, alongside `engram[testing]` below.
+    "engram-connectors[conversion,source-queue,x,youtube,zotero]",
+    "fastapi>=0.141.1",
+    # The app's own HTTP client. It reads one first-party endpoint at a configured, trusted base
+    # URL: the harness's artifact resolver, which a retained note's origin is fetched from.
+    "httpx>=0.28.1",
+    # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
+    "pydantic-ai>=2.20.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.13.1",
+    "sqlalchemy[asyncio]>=2.0.49",
+    "typer>=0.20.0",
+    "uvicorn>=0.52.0",
+    "wireup>=2.9.0",
+]
+
+[tool.uv.sources]
+engram = { path = "../engram", editable = true }
+engram-connectors = { path = "../connectors", editable = true }
+core = { path = "../core", editable = true }
+
+[project.scripts]
+studio = "studio.knowledge_base.cli:app"
+
+[dependency-groups]
+dev = [
+    "pyright (>=1.1.411,<2.0.0)",
+    # Pinned to the same minor as every other project in the monorepo so ``select = ["ALL"]``
+    # resolves to the same rule set everywhere.
+    "ruff (>=0.16.0,<0.17.0)",
+    "types-pyyaml>=6.0.12.20260724",
+]
+test = [
+    # The library's test toolkit (fakes, factories, knowledge base builders, the containerized-DB
+    # plugin), carrying polyfactory/pytest/testcontainers.
+    "engram[testing]",
+    # The connectors' own fakes and factories (FakeResolver, FakeTranscriptFetcher, ...) this app's
+    # wiring and integration tests import, carrying polyfactory only.
+    "engram-connectors[testing]",
+    "pytest (>=9.1.1,<10.0.0)",
+    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    # Bounds the pty session's close()-ordering race test: a reintroduced deadlock in that
+    # ordering must fail the test, not hang the whole gate run indefinitely.
+    "pytest-timeout (>=2.3.1,<3.0.0)",
+]
+
+[tool.uv]
+# The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``;
+# install both tooling groups by default so the gate is self-contained.
+default-groups = ["dev", "test"]
+
+[tool.pytest.ini_options]
+pythonpath       = [".", "src"]
+python_files     = ["test_*.py"]
+testpaths        = ["tests"]
+python_classes   = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode     = "auto"
+addopts          = ["--verbose", "--tb=short"]
+filterwarnings = [
+    "module::DeprecationWarning",
+]
+
+[tool.ruff]
+src            = ["src"]
+extend-exclude = [".venv"]
+line-length    = 140
+indent-width   = 4
+fix            = false
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style                = "double"
+line-ending                = "auto"
+skip-magic-trailing-comma  = true
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+preview                    = false
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on line following TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "COM812", # Trailing comma missing
+    "CPY001", # Missing copyright notice at top of file -- this repo carries no copyright headers
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN204", # Missing return type annotation for special method
+    "S104",   # Possible binding to all interfaces
+    "E501",   # Line too long
+    "RET504", # Unnecessary assignment before return statement
+    "RUF001", # String contains ambiguous unicode character
+    "RUF002", # Docstring contains ambiguous unicode character
+    "RUF003", # Comment contains ambiguous unicode character
+]
+fixable = ["ALL"]
+preview = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+# Typer subcommands take boolean flags as defaulted kwargs (--no-embed, --bm25-only,
+# --verify-quotes) — the canonical CLI shape, not a smell worth restructuring around;
+# `search` likewise exposes the schema's facet flags (-k/--level/--task/--stage/--domain/
+# --collection) as one parameter each, so its arity is the CLI surface, not a refactor. The
+# evals (`run`), note (`build`), and init (`all`) command groups, split into sibling modules,
+# carry the same CLI-flag-arity shape, so the exemption applies to them identically.
+"src/studio/knowledge_base/cli.py"       = ["FBT002", "PLR0913", "PLR0917"]
+"src/studio/knowledge_base/cli_evals.py" = ["FBT002", "PLR0913"]
+"src/studio/knowledge_base/cli_init.py"  = ["FBT002", "PLR0913"]
+"src/studio/knowledge_base/cli_note.py"  = ["FBT002", "PLR0913", "PLR0917"]
+# PLR0913 on `create_app`: the settings plus the five things an application is assembled over (a
+# pre-built container, the settings file, the job store, the worker and the broadcaster) are the
+# composition root's own arity, not a smell worth restructuring around.
+# TC002 on `fastapi.responses.JSONResponse`: it is the return annotation of the three exception
+# handlers this module registers, and it stays beside the other FastAPI imports the application is
+# built from rather than split under a type-checking block.
+# LOG004 on `_catch_all`: it is a FastAPI exception handler, registered via
+# `@app.exception_handler(Exception)` and called with the exception as its `exc` argument rather
+# than from inside a lexical `except` block.
+"src/studio/knowledge_base/http/api.py" = ["LOG004", "PLR0913", "TC002"]
+# PLR0913 on `KnowledgeBaseRegistry.__init__`, which takes the two ports, the database resource and
+# the six collaborators the container provides, and on `knowledge_base_identity`, which takes the
+# knowledge base it reads plus the admin gateway and the database resource. That is the service's
+# own arity, not a smell worth restructuring around.
+"src/studio/knowledge_base/http/service.py" = ["PLR0913"]
+# bus_provider injects the five command handlers plus the QA-generation subscriber to assemble the
+# single MessageBus at construction — that six-collaborator arity is the composition root's bus
+# surface, the same DI rationale as http/api.py, not a smell.
+"src/studio/knowledge_base/container.py" = ["PLR0913", "PLR0917"]
+# tune_handler_provider injects the objective plus five per-command factories (proposer /
+# evaluator / run-repo / freshness-reader / reflector) — the tune path's DI composition
+# surface, the same constructor-injection rationale as container.py.
+# TC002 on `core.resolver.Resolver`: it annotates the constructor of a class registered under a
+# port, and wireup resolves a registered class's `__init__` annotations at registration time.
+# `runtime-evaluated-decorators` only holds a decorated function's annotations, and a class
+# registration carries no decorator, so the import has to stay at module scope by hand.
+"src/studio/knowledge_base/wiring/evals.py" = ["PLR0913", "PLR0917", "TC002"]
+# knowledge_base_registry_provider injects the settings file, the database resource and the six
+# collaborators the registry of knowledge bases is built over. That is the DI composition surface,
+# the same constructor-injection rationale as container.py.
+"src/studio/knowledge_base/wiring/serve.py" = ["PLR0913", "PLR0917"]
+# Runnable demos, not a package: they print their narration and live outside any import tree.
+"examples/**" = ["INP001", "T201", "PLR2004"]
+"tests/**/*.py" = [
+    "D101",    # Docstring not required for test classes
+    "D102",    # Docstring not required for test methods
+    "D103",    # Docstring not required for test functions
+    "ANN201",  # Return type annotation not required for test functions
+    "ANN202",  # Return type annotation not required for test methods
+    "PLC0415", # Import on top not required for test files
+    "ASYNC240", # Test coroutines read the tiny artifacts their code-under-test just wrote; a blocking read in a test is fine
+    "PLR0911", # A fake's type-dispatch helper returns one branch per provided type
+    "PLR0913", # Fake constructors take many scriptable knobs by design
+    "S101",    # asserts allowed in tests...
+    "S105",    # Test fixtures use literal strings that resemble secrets
+    "S106",    # Same — kwarg passes test-only string values
+    "S107",    # Same — function-default variant
+    "SLF001",  # Tests may peek at module-private constants for drift guards
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+]
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+detect-same-package = true
+lines-between-types = 1
+# Pairs with ``format.skip-magic-trailing-comma = true`` so isort and the formatter agree.
+split-on-trailing-comma = false
+known-first-party = ["studio", "tests", "examples", "scripts"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+order-by-type = true
+
+[tool.ruff.lint.flake8-type-checking]
+# FastAPI resolves route return annotations at decoration time, so response models referenced
+# only in annotations must stay importable at module scope.
+runtime-evaluated-decorators = [
+    "wireup.injectable",
+    "fastapi.APIRouter.get",
+    "fastapi.APIRouter.post",
+    "fastapi.APIRouter.put",
+    "fastapi.APIRouter.patch",
+    "fastapi.APIRouter.delete",
+]
+# pydantic resolves field annotations at runtime, so names used only inside them must stay
+# importable at module scope — not moved under TYPE_CHECKING (TC00X). KbBase (a SQLAlchemy
+# DeclarativeBase) resolves its ``Mapped[...]`` annotations at mapper-configuration time, the
+# same rule.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+    "engram.db.contracts.KbBase",
+]
+
+[tool.pyright]
+include = ["src", "tests", "examples", "scripts"]
+venvPath = "."
+venv = ".venv"
+# A deprecated API fails the type check, so a deprecation is fixed when it lands, not when its removal breaks the build.
+reportDeprecated = "error"

@@ -1,0 +1,325 @@
+{
+  "version": "1",
+  "slug": "news-benchmark",
+  "purpose": "The MultiHop-RAG benchmark's news articles, stored filter-first so an agent answers multi-article questions with SQL, search and the graph.",
+  "page_types": [
+    {
+      "page_type": "digest",
+      "id_prefix": "dg.",
+      "folder": "Wiki/Digests",
+      "frontmatter_fields": [
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "source_key",
+          "type": "scalar"
+        },
+        {
+          "name": "source_hash",
+          "type": "scalar"
+        },
+        {
+          "name": "outlet",
+          "type": "scalar"
+        },
+        {
+          "name": "author",
+          "type": "scalar"
+        },
+        {
+          "name": "published_at",
+          "type": "scalar"
+        },
+        {
+          "name": "published_on",
+          "type": "scalar"
+        },
+        {
+          "name": "category",
+          "type": "scalar"
+        },
+        {
+          "name": "url",
+          "type": "scalar"
+        },
+        {
+          "name": "mentions",
+          "type": "link-list"
+        },
+        {
+          "name": "follows_up",
+          "type": "link-list"
+        }
+      ],
+      "status_values": [
+        "active",
+        "skipped"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        {
+          "slug": "findings"
+        }
+      ],
+      "edge_fields": [
+        "mentions",
+        "follows_up"
+      ],
+      "claims_enabled": true
+    },
+    {
+      "page_type": "entity",
+      "id_prefix": "ent.",
+      "folder": "Wiki/Entities",
+      "frontmatter_fields": [
+        {
+          "name": "entity_type",
+          "type": "scalar",
+          "required": true
+        }
+      ],
+      "status_values": [
+        "active"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        }
+      ],
+      "claims_enabled": false
+    }
+  ],
+  "relations": [
+    {
+      "slug": "mentions",
+      "domain": "digest",
+      "range": "entity",
+      "description": "The digest's article names this entity."
+    },
+    {
+      "slug": "follows_up",
+      "domain": "digest",
+      "range": "digest",
+      "description": "The linked digest's article reports an earlier stage of the same story. The link points from the later digest to the earlier one, judged by the publication date each digest's card prints."
+    }
+  ],
+  "entity_types": [
+    {
+      "value": "person",
+      "definition": "A named human being"
+    },
+    {
+      "value": "organization",
+      "definition": "A named company, agency, team, league, party or other group"
+    },
+    {
+      "value": "product",
+      "definition": "A named product, service, app, device or model that an organization offers"
+    },
+    {
+      "value": "event",
+      "definition": "A named occurrence at a time, such as a trial, a match, a launch or a conference"
+    },
+    {
+      "value": "place",
+      "definition": "A named country, city, region, venue or other location"
+    },
+    {
+      "value": "work",
+      "definition": "A named creative or published work, such as a film, a game, a book, a song or a show"
+    }
+  ],
+  "claim_types": [
+    {
+      "value": "action",
+      "definition": "Something a person, an organization or a product did, does or will do, as the article reports it"
+    },
+    {
+      "value": "statement",
+      "definition": "Something a named speaker said, quoted or reported by the article, with the speaker in speaker"
+    },
+    {
+      "value": "measurement",
+      "definition": "A number the article reports, with its value and unit in figure"
+    }
+  ],
+  "facets": [
+    {
+      "key": "outlet",
+      "scope": [
+        "digest"
+      ],
+      "seed": [
+        "Advanced Science News",
+        "BBC News - Entertainment & Arts",
+        "BBC News - Technology",
+        "Business Line",
+        "Business Today | Latest Stock Market And Economy News India",
+        "Business World",
+        "CBSSports.com",
+        "Cnbc | World Business News Leader",
+        "Engadget",
+        "Eos: Earth And Space Science News",
+        "Essentially Sports",
+        "FOX News - Entertainment",
+        "FOX News - Health",
+        "FOX News - Lifestyle",
+        "Financial Times",
+        "Fortune",
+        "Globes English | Israel Business Arena",
+        "Hacker News",
+        "Insidesport",
+        "Iot Business News",
+        "Live Science: The Most Interesting Articles",
+        "Mashable",
+        "Music Business Worldwide",
+        "Polygon",
+        "Revyuh Media",
+        "Rivals",
+        "Science News For Students",
+        "Scitechdaily | Science Space And Technology News 2017",
+        "Seeking Alpha",
+        "Sky Sports",
+        "Sport Grill",
+        "Sporting News",
+        "Sportskeeda",
+        "TalkSport",
+        "TechCrunch",
+        "The Age",
+        "The Guardian",
+        "The Independent - Life and Style",
+        "The Independent - Sports",
+        "The Independent - Travel",
+        "The New York Times",
+        "The Roar | Sports Writers Blog",
+        "The Sydney Morning Herald",
+        "The Verge",
+        "Wide World Of Sports",
+        "Wired",
+        "Yahoo News",
+        "Yardbarker",
+        "Zee Business"
+      ],
+      "card": true
+    },
+    {
+      "key": "category",
+      "scope": [
+        "digest"
+      ],
+      "seed": [
+        "business",
+        "entertainment",
+        "health",
+        "science",
+        "sports",
+        "technology"
+      ],
+      "card": true
+    },
+    {
+      "key": "published_on",
+      "scope": [
+        "digest"
+      ],
+      "card": true
+    }
+  ],
+  "claims": {
+    "section": "findings",
+    "edge_relations": [],
+    "multilink_fields": [],
+    "link_scalar_fields": [
+      "subject",
+      "speaker"
+    ],
+    "text_scalar_fields": [
+      "when",
+      "figure"
+    ],
+    "plain_fields": [
+      "loc",
+      "quote",
+      "kind"
+    ],
+    "comparative_relations": [],
+    "quote_required_types": [
+      "action",
+      "statement",
+      "measurement"
+    ]
+  },
+  "sources": {
+    "enabled": true,
+    "quote_verify": true,
+    "connectors": [
+      "multihop_rag"
+    ],
+    "key_field": "source_key",
+    "digest_link_field": "digest_of",
+    "hash_field": "source_hash",
+    "digest_types": {
+      "article": "digest"
+    },
+    "digest_fields": {
+      "outlet": "outlet",
+      "author": "author",
+      "published_at": "published_at",
+      "published_on": "published_on",
+      "category": "category",
+      "url": "url"
+    },
+    "digest_claim_text_fields": true,
+    "librarian": false,
+    "digest_workflow": "news-digest",
+    "source_queue": {
+      "source_types": [
+        "article"
+      ],
+      "max_age_years": null,
+      "hop_depth": 0,
+      "per_source_cap": 1,
+      "per_pass_cap": null,
+      "never": [
+        "profile",
+        "encyclopedia",
+        "homepage",
+        "social-post",
+        "repository"
+      ]
+    }
+  },
+  "entities": {
+    "page_type": "entity"
+  },
+  "compounding": {
+    "entries": [
+      {
+        "name": "digest-sources",
+        "from": {
+          "plane": "sources",
+          "selector": "undigested"
+        },
+        "to": [
+          "digest"
+        ],
+        "cap_per_run": 50,
+        "gate": "none"
+      }
+    ]
+  },
+  "retrieval": {
+    "profile": "full",
+    "collection": "news-benchmark",
+    "doc_authoring": true,
+    "date_field": "published_on"
+  },
+  "run_indexing": "once_per_run"
+}

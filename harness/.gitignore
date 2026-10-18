@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Durable run state: the step log, its snapshots, and spilled tool output.
+# Local by definition -- it is this machine's conversation, not the project's.
+.state/
+
+# Local credentials -- never commit
+creds.json

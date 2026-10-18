@@ -1,0 +1,6147 @@
+dataset: nfcorpus.yaml
+collection: nfcorpus
+cases:
+- name: PLAIN-2
+  ndcg_at_10: 0.7841568027568651
+  recall:
+    '1': 0.041666666666666664
+    '5': 0.20833333333333334
+    '10': 0.3333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-14
+  - MED-2429
+  - MED-10
+  - MED-2431
+  - MED-2428
+  - MED-1193
+  - MED-4827
+  - MED-2439
+  - MED-4830
+  - MED-2434
+  unmapped_hits: 0
+- name: PLAIN-12
+  ndcg_at_10: 0.285194220291772
+  recall:
+    '1': 0.03333333333333333
+    '5': 0.03333333333333333
+    '10': 0.06666666666666667
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2519
+  - MED-4698
+  - MED-3270
+  - MED-2512
+  - MED-4711
+  - MED-2501
+  - MED-2514
+  - MED-2498
+  - MED-5042
+  - MED-4699
+  unmapped_hits: 0
+- name: PLAIN-23
+  ndcg_at_10: 0.341061594097566
+  recall:
+    '1': 0.011111111111111112
+    '5': 0.022222222222222223
+    '10': 0.03333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2661
+  - MED-1164
+  - MED-999
+  - MED-1961
+  - MED-2658
+  - MED-2644
+  - MED-1172
+  - MED-2494
+  - MED-1169
+  - MED-4168
+  unmapped_hits: 0
+- name: PLAIN-33
+  ndcg_at_10: 0.17367702095139773
+  recall:
+    '1': 0.0
+    '5': 0.03125
+    '10': 0.0625
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-1707
+  - MED-1468
+  - MED-1334
+  - MED-2715
+  - MED-1674
+  - MED-4100
+  - MED-2717
+  - MED-4202
+  - MED-5006
+  - MED-1328
+  unmapped_hits: 0
+- name: PLAIN-44
+  ndcg_at_10: 0.17897489594999488
+  recall:
+    '1': 0.0
+    '5': 0.034482758620689655
+    '10': 0.034482758620689655
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2831
+  - MED-2791
+  - MED-2246
+  - MED-1939
+  - MED-2810
+  - MED-1811
+  - MED-2782
+  - MED-2826
+  - MED-2785
+  - MED-2786
+  unmapped_hits: 0
+- name: PLAIN-56
+  ndcg_at_10: 0.773469728972309
+  recall:
+    '1': 0.02
+    '5': 0.1
+    '10': 0.14
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2900
+  - MED-4384
+  - MED-2896
+  - MED-2901
+  - MED-2894
+  - MED-5247
+  - MED-5246
+  - MED-2886
+  - MED-2888
+  - MED-2069
+  unmapped_hits: 0
+- name: PLAIN-68
+  ndcg_at_10: 0.4745921515613674
+  recall:
+    '1': 0.01818181818181818
+    '5': 0.03636363636363636
+    '10': 0.03636363636363636
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2991
+  - MED-3089
+  - MED-2745
+  - MED-1801
+  - MED-2492
+  - MED-2339
+  - MED-1797
+  - MED-4800
+  - MED-4626
+  - MED-1960
+  unmapped_hits: 0
+- name: PLAIN-78
+  ndcg_at_10: 0.24300161680601334
+  recall:
+    '1': 0.0
+    '5': 0.016129032258064516
+    '10': 0.06451612903225806
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3585
+  - MED-4318
+  - MED-4834
+  - MED-1601
+  - MED-2341
+  - MED-5326
+  - MED-3499
+  - MED-335
+  - MED-4493
+  - MED-3096
+  unmapped_hits: 0
+- name: PLAIN-91
+  ndcg_at_10: 0.6097957299744226
+  recall:
+    '1': 0.015625
+    '5': 0.078125
+    '10': 0.09375
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3175
+  - MED-3169
+  - MED-3171
+  - MED-3177
+  - MED-3288
+  - MED-4963
+  - MED-2346
+  - MED-4818
+  - MED-3172
+  - MED-4814
+  unmapped_hits: 0
+- name: PLAIN-102
+  ndcg_at_10: 0.3707294307815434
+  recall:
+    '1': 0.041666666666666664
+    '5': 0.041666666666666664
+    '10': 0.08333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3253
+  - MED-3954
+  - MED-4255
+  - MED-4613
+  - MED-1932
+  - MED-1991
+  - MED-1548
+  - MED-2590
+  - MED-3013
+  - MED-3255
+  unmapped_hits: 0
+- name: PLAIN-112
+  ndcg_at_10: 0.5014505893948701
+  recall:
+    '1': 0.017857142857142856
+    '5': 0.03571428571428571
+    '10': 0.05357142857142857
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3380
+  - MED-3382
+  - MED-2618
+  - MED-906
+  - MED-1153
+  - MED-4604
+  - MED-4655
+  - MED-2619
+  - MED-3381
+  - MED-3085
+  unmapped_hits: 0
+- name: PLAIN-123
+  ndcg_at_10: 0.36856789666378503
+  recall:
+    '1': 0.0196078431372549
+    '5': 0.0196078431372549
+    '10': 0.0784313725490196
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3483
+  - MED-4392
+  - MED-5319
+  - MED-2083
+  - MED-2707
+  - MED-3479
+  - MED-2265
+  - MED-2713
+  - MED-3477
+  - MED-3474
+  unmapped_hits: 0
+- name: PLAIN-133
+  ndcg_at_10: 0.1731971734574855
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.05555555555555555
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-4690
+  - MED-2513
+  - MED-3277
+  - MED-2604
+  - MED-4116
+  - MED-1666
+  - MED-3550
+  - MED-3554
+  - MED-4627
+  - MED-4423
+  unmapped_hits: 0
+- name: PLAIN-143
+  ndcg_at_10: 0.6092584262921852
+  recall:
+    '1': 0.0196078431372549
+    '5': 0.058823529411764705
+    '10': 0.058823529411764705
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3621
+  - MED-3618
+  - MED-3619
+  - MED-872
+  - MED-2093
+  - MED-4028
+  - MED-4036
+  - MED-4019
+  - MED-4026
+  - MED-5097
+  unmapped_hits: 0
+- name: PLAIN-153
+  ndcg_at_10: 0.9334235959390282
+  recall:
+    '1': 0.02127659574468085
+    '5': 0.10638297872340426
+    '10': 0.2127659574468085
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3692
+  - MED-3679
+  - MED-3688
+  - MED-3680
+  - MED-3695
+  - MED-3675
+  - MED-3683
+  - MED-3690
+  - MED-3677
+  - MED-3693
+  unmapped_hits: 0
+- name: PLAIN-165
+  ndcg_at_10: 0.5578088469314855
+  recall:
+    '1': 0.027777777777777776
+    '5': 0.1111111111111111
+    '10': 0.19444444444444445
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3766
+  - MED-4445
+  - MED-3762
+  - MED-3696
+  - MED-3767
+  - MED-1564
+  - MED-2437
+  - MED-3768
+  - MED-3765
+  - MED-3697
+  unmapped_hits: 0
+- name: PLAIN-175
+  ndcg_at_10: 0.46544692337701965
+  recall:
+    '1': 0.02702702702702703
+    '5': 0.08108108108108109
+    '10': 0.10810810810810811
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3816
+  - MED-3818
+  - MED-3822
+  - MED-1419
+  - MED-4848
+  - MED-5341
+  - MED-2117
+  - MED-825
+  - MED-5107
+  - MED-5267
+  unmapped_hits: 0
+- name: PLAIN-186
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.041666666666666664
+    '5': 0.041666666666666664
+    '10': 0.041666666666666664
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3904
+  - MED-2203
+  - MED-2057
+  - MED-5005
+  - MED-2054
+  - MED-2059
+  - MED-949
+  - MED-2053
+  - MED-1016
+  - MED-2061
+  unmapped_hits: 0
+- name: PLAIN-196
+  ndcg_at_10: 0.7788065869851872
+  recall:
+    '1': 0.014492753623188406
+    '5': 0.07246376811594203
+    '10': 0.10144927536231885
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3969
+  - MED-3970
+  - MED-3963
+  - MED-3960
+  - MED-5326
+  - MED-2036
+  - MED-2618
+  - MED-5059
+  - MED-3964
+  - MED-3966
+  unmapped_hits: 0
+- name: PLAIN-207
+  ndcg_at_10: 0.6156886473955917
+  recall:
+    '1': 0.0
+    '5': 0.05454545454545454
+    '10': 0.12727272727272726
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4451
+  - MED-5197
+  - MED-4972
+  - MED-3000
+  - MED-5326
+  - MED-4068
+  - MED-4057
+  - MED-4482
+  - MED-4060
+  - MED-4053
+  unmapped_hits: 0
+- name: PLAIN-217
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0625
+  ranked:
+  - MED-4831
+  - MED-4515
+  - MED-1489
+  - MED-4389
+  - MED-3931
+  - MED-4613
+  - MED-4255
+  - MED-4349
+  - MED-1991
+  - MED-4984
+  unmapped_hits: 0
+- name: PLAIN-227
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.025
+    '5': 0.025
+    '10': 0.025
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4150
+  - MED-3534
+  - MED-3220
+  - MED-3235
+  - MED-1520
+  - MED-4829
+  - MED-1618
+  - MED-3466
+  - MED-3869
+  - MED-1507
+  unmapped_hits: 0
+- name: PLAIN-238
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.09090909090909091
+  ranked:
+  - MED-2391
+  - MED-2494
+  - MED-4205
+  - MED-4653
+  - MED-1171
+  - MED-4934
+  - MED-3027
+  - MED-1774
+  - MED-1958
+  - MED-3000
+  unmapped_hits: 0
+- name: PLAIN-248
+  ndcg_at_10: 0.28997736516021183
+  recall:
+    '1': 0.0
+    '5': 0.0967741935483871
+    '10': 0.0967741935483871
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-4886
+  - MED-3877
+  - MED-4233
+  - MED-4234
+  - MED-4236
+  - MED-4890
+  - MED-3243
+  - MED-3924
+  - MED-3874
+  - MED-4885
+  unmapped_hits: 0
+- name: PLAIN-259
+  ndcg_at_10: 0.4440973278132557
+  recall:
+    '1': 0.07142857142857142
+    '5': 0.21428571428571427
+    '10': 0.21428571428571427
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4296
+  - MED-4295
+  - MED-2430
+  - MED-5095
+  - MED-4298
+  - MED-3471
+  - MED-4570
+  - MED-1258
+  - MED-4471
+  - MED-2439
+  unmapped_hits: 0
+- name: PLAIN-270
+  ndcg_at_10: 0.13886244387355454
+  recall:
+    '1': 0.0
+    '5': 0.019230769230769232
+    '10': 0.019230769230769232
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-5245
+  - MED-4331
+  - MED-2167
+  - MED-1645
+  - MED-1637
+  - MED-3772
+  - MED-3773
+  - MED-4776
+  - MED-3930
+  - MED-4774
+  unmapped_hits: 0
+- name: PLAIN-280
+  ndcg_at_10: 0.5365535816822092
+  recall:
+    '1': 0.05
+    '5': 0.1
+    '10': 0.25
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4376
+  - MED-3595
+  - MED-5097
+  - MED-2904
+  - MED-3026
+  - MED-3023
+  - MED-4739
+  - MED-4946
+  - MED-3034
+  - MED-4531
+  unmapped_hits: 0
+- name: PLAIN-291
+  ndcg_at_10: 0.3589542101716347
+  recall:
+    '1': 0.07692307692307693
+    '5': 0.15384615384615385
+    '10': 0.15384615384615385
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4517
+  - MED-4639
+  - MED-3858
+  - MED-5195
+  - MED-3860
+  - MED-5351
+  - MED-2424
+  - MED-2417
+  - MED-2437
+  - MED-1564
+  unmapped_hits: 0
+- name: PLAIN-307
+  ndcg_at_10: 0.6978817289434457
+  recall:
+    '1': 0.0
+    '5': 0.6666666666666666
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4575
+  - MED-919
+  - MED-714
+  - MED-921
+  - MED-4573
+  - MED-716
+  - MED-3990
+  - MED-4872
+  - MED-920
+  - MED-3991
+  unmapped_hits: 0
+- name: PLAIN-320
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.029411764705882353
+  ranked:
+  - MED-2437
+  - MED-4450
+  - MED-3862
+  - MED-2424
+  - MED-3791
+  - MED-2417
+  - MED-5066
+  - MED-3551
+  - MED-3123
+  - MED-3799
+  unmapped_hits: 0
+- name: PLAIN-332
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-5265
+  - MED-760
+  - MED-2970
+  - MED-5271
+  - MED-5263
+  - MED-3451
+  - MED-2951
+  - MED-4689
+  - MED-3820
+  - MED-2972
+  unmapped_hits: 0
+- name: PLAIN-344
+  ndcg_at_10: 0.41687198733273895
+  recall:
+    '1': 0.01639344262295082
+    '5': 0.04918032786885246
+    '10': 0.04918032786885246
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2388
+  - MED-2394
+  - MED-2405
+  - MED-2395
+  - MED-1961
+  - MED-2495
+  - MED-1681
+  - MED-1062
+  - MED-2850
+  - MED-1063
+  unmapped_hits: 0
+- name: PLAIN-358
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3788
+  - MED-5231
+  - MED-1254
+  - MED-1399
+  - MED-1470
+  - MED-1693
+  - MED-5333
+  - MED-1366
+  - MED-4281
+  - MED-5165
+  unmapped_hits: 0
+- name: PLAIN-371
+  ndcg_at_10: 0.3667838179869168
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 1.0
+  reciprocal_rank: 0.2
+  ranked:
+  - MED-4619
+  - MED-4620
+  - MED-5010
+  - MED-5011
+  - MED-4618
+  - MED-5115
+  - MED-4303
+  - MED-4914
+  - MED-4621
+  - MED-861
+  unmapped_hits: 0
+- name: PLAIN-383
+  ndcg_at_10: 0.16958010263680806
+  recall:
+    '1': 0.0
+    '5': 0.2
+    '10': 0.2
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-1479
+  - MED-4469
+  - MED-4299
+  - MED-1874
+  - MED-2432
+  - MED-4600
+  - MED-1478
+  - MED-1712
+  - MED-3283
+  - MED-2502
+  unmapped_hits: 0
+- name: PLAIN-395
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.038461538461538464
+  ranked:
+  - MED-2816
+  - MED-2926
+  - MED-2825
+  - MED-2783
+  - MED-2794
+  - MED-5137
+  - MED-2813
+  - MED-2606
+  - MED-3476
+  - MED-5000
+  unmapped_hits: 0
+- name: PLAIN-407
+  ndcg_at_10: 0.6387878864795979
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-906
+  - MED-2618
+  - MED-2994
+  - MED-3381
+  - MED-2725
+  - MED-4604
+  - MED-3969
+  - MED-1140
+  - MED-5139
+  - MED-2490
+  unmapped_hits: 0
+- name: PLAIN-418
+  ndcg_at_10: 0.8670870086853021
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.6666666666666666
+    '10': 0.6666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-917
+  - MED-3714
+  - MED-2285
+  - MED-2068
+  - MED-2074
+  - MED-3734
+  - MED-2453
+  - MED-3738
+  - MED-4859
+  - MED-1182
+  unmapped_hits: 0
+- name: PLAIN-430
+  ndcg_at_10: 0.6174886499090687
+  recall:
+    '1': 0.125
+    '5': 0.375
+    '10': 0.375
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-928
+  - MED-4936
+  - MED-927
+  - MED-1620
+  - MED-5095
+  - MED-4943
+  - MED-1831
+  - MED-4731
+  - MED-839
+  - MED-4631
+  unmapped_hits: 0
+- name: PLAIN-441
+  ndcg_at_10: 0.777747077360283
+  recall:
+    '1': 0.2
+    '5': 0.8
+    '10': 0.8
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-942
+  - MED-4701
+  - MED-4702
+  - MED-4703
+  - MED-5019
+  - MED-1792
+  - MED-5082
+  - MED-4089
+  - MED-4580
+  - MED-3908
+  unmapped_hits: 0
+- name: PLAIN-457
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4602
+  - MED-1751
+  - MED-1754
+  - MED-2716
+  - MED-2710
+  - MED-1777
+  - MED-2522
+  - MED-2765
+  - MED-4156
+  - MED-745
+  unmapped_hits: 0
+- name: PLAIN-468
+  ndcg_at_10: 0.43929373490672136
+  recall:
+    '1': 0.1
+    '5': 0.1
+    '10': 0.2
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-961
+  - MED-3987
+  - MED-3991
+  - MED-4573
+  - MED-3988
+  - MED-962
+  - MED-3990
+  - MED-4566
+  - MED-3989
+  - MED-3986
+  unmapped_hits: 0
+- name: PLAIN-478
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2400
+  - MED-3636
+  - MED-2309
+  - MED-3567
+  - MED-3622
+  - MED-3939
+  - MED-1144
+  - MED-3937
+  - MED-3379
+  - MED-3385
+  unmapped_hits: 0
+- name: PLAIN-488
+  ndcg_at_10: 0.9305687780632227
+  recall:
+    '1': 0.06666666666666667
+    '5': 0.3333333333333333
+    '10': 0.6
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1798
+  - MED-1804
+  - MED-4769
+  - MED-1808
+  - MED-1796
+  - MED-4767
+  - MED-1810
+  - MED-4766
+  - MED-1799
+  - MED-1800
+  unmapped_hits: 0
+- name: PLAIN-499
+  ndcg_at_10: 0.4729327934832575
+  recall:
+    '1': 0.029411764705882353
+    '5': 0.058823529411764705
+    '10': 0.11764705882352941
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4095
+  - MED-1747
+  - MED-2213
+  - MED-5198
+  - MED-1417
+  - MED-1475
+  - MED-1115
+  - MED-2900
+  - MED-1190
+  - MED-5208
+  unmapped_hits: 0
+- name: PLAIN-510
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.027777777777777776
+  ranked:
+  - MED-5313
+  - MED-4884
+  - MED-3627
+  - MED-2947
+  - MED-5320
+  - MED-4980
+  - MED-2940
+  - MED-3278
+  - MED-958
+  - MED-4747
+  unmapped_hits: 0
+- name: PLAIN-520
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3492
+  - MED-5249
+  - MED-1293
+  - MED-3481
+  - MED-1327
+  - MED-4251
+  - MED-1471
+  - MED-3397
+  - MED-3489
+  - MED-1868
+  unmapped_hits: 0
+- name: PLAIN-531
+  ndcg_at_10: 0.6468562235661908
+  recall:
+    '1': 0.0
+    '5': 0.012987012987012988
+    '10': 0.022727272727272728
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-1017
+  - MED-4374
+  - MED-4531
+  - MED-4371
+  - MED-4529
+  - MED-2322
+  - MED-4157
+  - MED-743
+  - MED-3750
+  - MED-3113
+  unmapped_hits: 0
+- name: PLAIN-541
+  ndcg_at_10: 0.3266516701661092
+  recall:
+    '1': 0.0
+    '5': 0.16666666666666666
+    '10': 0.5
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-872
+  - MED-4036
+  - MED-4028
+  - MED-3618
+  - MED-2093
+  - MED-4027
+  - MED-3619
+  - MED-3621
+  - MED-4034
+  - MED-1858
+  unmapped_hits: 0
+- name: PLAIN-551
+  ndcg_at_10: 0.6131471927654584
+  recall:
+    '1': 0.5
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4381
+  - MED-3537
+  - MED-4860
+  - MED-5002
+  - MED-982
+  - MED-1497
+  - MED-3179
+  - MED-3025
+  - MED-991
+  - MED-2215
+  unmapped_hits: 0
+- name: PLAIN-561
+  ndcg_at_10: 0.3589542101716347
+  recall:
+    '1': 0.04
+    '5': 0.08
+    '10': 0.08
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3180
+  - MED-4555
+  - MED-4423
+  - MED-4427
+  - MED-1663
+  - MED-3438
+  - MED-1207
+  - MED-1657
+  - MED-1204
+  - MED-4424
+  unmapped_hits: 0
+- name: PLAIN-571
+  ndcg_at_10: 0.2247194739855928
+  recall:
+    '1': 0.0
+    '5': 0.2857142857142857
+    '10': 0.2857142857142857
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-2346
+  - MED-2339
+  - MED-2345
+  - MED-4742
+  - MED-2338
+  - MED-4963
+  - MED-5094
+  - MED-4960
+  - MED-4811
+  - MED-4874
+  unmapped_hits: 0
+- name: PLAIN-583
+  ndcg_at_10: 0.5513310624619329
+  recall:
+    '1': 0.022727272727272728
+    '5': 0.045454545454545456
+    '10': 0.11363636363636363
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2988
+  - MED-897
+  - MED-2544
+  - MED-1789
+  - MED-5080
+  - MED-2983
+  - MED-2578
+  - MED-2985
+  - MED-4518
+  - MED-5083
+  unmapped_hits: 0
+- name: PLAIN-593
+  ndcg_at_10: 0.46927872602275644
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4402
+  - MED-2110
+  - MED-957
+  - MED-1032
+  - MED-3537
+  - MED-5030
+  - MED-3708
+  - MED-2109
+  - MED-4427
+  - MED-1241
+  unmapped_hits: 0
+- name: PLAIN-603
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1957
+  - MED-1960
+  - MED-3769
+  - MED-2492
+  - MED-2088
+  - MED-1956
+  - MED-4803
+  - MED-4911
+  - MED-2743
+  - MED-1959
+  unmapped_hits: 0
+- name: PLAIN-613
+  ndcg_at_10: 0.07839826897867533
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.1
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - MED-909
+  - MED-1846
+  - MED-2983
+  - MED-4468
+  - MED-3921
+  - MED-1198
+  - MED-859
+  - MED-936
+  - MED-3476
+  - MED-4901
+  unmapped_hits: 0
+- name: PLAIN-623
+  ndcg_at_10: 0.3557772116892465
+  recall:
+    '1': 0.024390243902439025
+    '5': 0.024390243902439025
+    '10': 0.07317073170731707
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4880
+  - MED-1674
+  - MED-825
+  - MED-4985
+  - MED-1454
+  - MED-1669
+  - MED-4104
+  - MED-4515
+  - MED-1616
+  - MED-4848
+  unmapped_hits: 0
+- name: PLAIN-634
+  ndcg_at_10: 0.4721567066247473
+  recall:
+    '1': 0.047619047619047616
+    '5': 0.09523809523809523
+    '10': 0.19047619047619047
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4620
+  - MED-5010
+  - MED-4619
+  - MED-5011
+  - MED-4303
+  - MED-4618
+  - MED-861
+  - MED-3199
+  - MED-1378
+  - MED-4621
+  unmapped_hits: 0
+- name: PLAIN-645
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.03125
+  ranked:
+  - MED-3582
+  - MED-4701
+  - MED-3370
+  - MED-1676
+  - MED-2372
+  - MED-5110
+  - MED-3141
+  - MED-1259
+  - MED-3895
+  - MED-3894
+  unmapped_hits: 0
+- name: PLAIN-660
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.002105263157894737
+    '5': 0.010526315789473684
+    '10': 0.021052631578947368
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4991
+  - MED-3141
+  - MED-3584
+  - MED-1880
+  - MED-5079
+  - MED-2144
+  - MED-2147
+  - MED-2140
+  - MED-3138
+  - MED-2570
+  unmapped_hits: 0
+- name: PLAIN-671
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4857
+  - MED-4602
+  - MED-4973
+  - MED-2644
+  - MED-2677
+  - MED-3850
+  - MED-957
+  - MED-4992
+  - MED-930
+  - MED-996
+  unmapped_hits: 0
+- name: PLAIN-681
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5017
+  - MED-4300
+  - MED-2597
+  - MED-4289
+  - MED-2596
+  - MED-2380
+  - MED-4301
+  - MED-2153
+  - MED-4286
+  - MED-2595
+  unmapped_hits: 0
+- name: PLAIN-691
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.038461538461538464
+  ranked:
+  - MED-2791
+  - MED-4454
+  - MED-2263
+  - MED-4390
+  - MED-4909
+  - MED-885
+  - MED-3922
+  - MED-3209
+  - MED-4320
+  - MED-2265
+  unmapped_hits: 0
+- name: PLAIN-701
+  ndcg_at_10: 0.5178170746652447
+  recall:
+    '1': 0.125
+    '5': 0.25
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3720
+  - MED-2922
+  - MED-2280
+  - MED-3721
+  - MED-917
+  - MED-5070
+  - MED-1676
+  - MED-3719
+  - MED-3716
+  - MED-3199
+  unmapped_hits: 0
+- name: PLAIN-711
+  ndcg_at_10: 0.6987957033953601
+  recall:
+    '1': 0.017543859649122806
+    '5': 0.07017543859649122
+    '10': 0.10526315789473684
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2077
+  - MED-2085
+  - MED-1691
+  - MED-1352
+  - MED-2083
+  - MED-1701
+  - MED-707
+  - MED-1397
+  - MED-2080
+  - MED-2110
+  unmapped_hits: 0
+- name: PLAIN-721
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.04
+    '5': 0.2
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4876
+  - MED-1284
+  - MED-1278
+  - MED-1289
+  - MED-1287
+  - MED-1267
+  - MED-1265
+  - MED-1282
+  - MED-1268
+  - MED-1288
+  unmapped_hits: 0
+- name: PLAIN-731
+  ndcg_at_10: 0.7859162856301583
+  recall:
+    '1': 0.018518518518518517
+    '5': 0.09259259259259259
+    '10': 0.12962962962962962
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1337
+  - MED-4722
+  - MED-5145
+  - MED-1340
+  - MED-2987
+  - MED-5253
+  - MED-1341
+  - MED-5243
+  - MED-5241
+  - MED-1339
+  unmapped_hits: 0
+- name: PLAIN-741
+  ndcg_at_10: 0.8414929602590189
+  recall:
+    '1': 0.05263157894736842
+    '5': 0.21052631578947367
+    '10': 0.42105263157894735
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4236
+  - MED-4237
+  - MED-4234
+  - MED-4232
+  - MED-3924
+  - MED-4231
+  - MED-4890
+  - MED-4235
+  - MED-4230
+  - MED-5176
+  unmapped_hits: 0
+- name: PLAIN-751
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3130
+  - MED-2152
+  - MED-1797
+  - MED-2247
+  - MED-4696
+  - MED-4073
+  - MED-3129
+  - MED-3482
+  - MED-3135
+  - MED-1442
+  unmapped_hits: 0
+- name: PLAIN-761
+  ndcg_at_10: 0.13032376591037065
+  recall:
+    '1': 0.0
+    '5': 0.16666666666666666
+    '10': 0.16666666666666666
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-3800
+  - MED-3797
+  - MED-3795
+  - MED-666
+  - MED-1829
+  - MED-4651
+  - MED-3840
+  - MED-4694
+  - MED-2424
+  - MED-2417
+  unmapped_hits: 0
+- name: PLAIN-771
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.3333333333333333
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3386
+  - MED-3385
+  - MED-3387
+  - MED-4704
+  - MED-3310
+  - MED-2110
+  - MED-3317
+  - MED-3704
+  - MED-899
+  - MED-2982
+  unmapped_hits: 0
+- name: PLAIN-782
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1055
+  - MED-1811
+  - MED-2208
+  - MED-4740
+  - MED-3056
+  - MED-3636
+  - MED-1248
+  - MED-4602
+  - MED-4162
+  - MED-713
+  unmapped_hits: 0
+- name: PLAIN-792
+  ndcg_at_10: 0.644824486427155
+  recall:
+    '1': 0.16666666666666666
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4546
+  - MED-4958
+  - MED-4547
+  - MED-5164
+  - MED-3783
+  - MED-1280
+  - MED-4075
+  - MED-4309
+  - MED-4419
+  - MED-3821
+  unmapped_hits: 0
+- name: PLAIN-806
+  ndcg_at_10: 0.933745776545611
+  recall:
+    '1': 0.010416666666666666
+    '5': 0.052083333333333336
+    '10': 0.09375
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2138
+  - MED-2506
+  - MED-4996
+  - MED-2519
+  - MED-2502
+  - MED-2510
+  - MED-3273
+  - MED-2513
+  - MED-3201
+  - MED-2325
+  unmapped_hits: 0
+- name: PLAIN-817
+  ndcg_at_10: 0.6309297535714575
+  recall:
+    '1': 0.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3462
+  - MED-4841
+  - MED-2092
+  - MED-2271
+  - MED-3461
+  - MED-3716
+  - MED-3459
+  - MED-4842
+  - MED-3721
+  - MED-4839
+  unmapped_hits: 0
+- name: PLAIN-827
+  ndcg_at_10: 0.7162874455029681
+  recall:
+    '1': 0.0
+    '5': 0.01639344262295082
+    '10': 0.03278688524590164
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4391
+  - MED-2106
+  - MED-4451
+  - MED-4068
+  - MED-1605
+  - MED-4049
+  - MED-4071
+  - MED-4060
+  - MED-5122
+  - MED-2172
+  unmapped_hits: 0
+- name: PLAIN-838
+  ndcg_at_10: 0.8550956239938449
+  recall:
+    '1': 0.1111111111111111
+    '5': 0.5555555555555556
+    '10': 0.7777777777777778
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3499
+  - MED-3495
+  - MED-3502
+  - MED-3501
+  - MED-3500
+  - MED-3496
+  - MED-3494
+  - MED-5143
+  - MED-3816
+  - MED-5037
+  unmapped_hits: 0
+- name: PLAIN-850
+  ndcg_at_10: 0.8006937664098819
+  recall:
+    '1': 0.017543859649122806
+    '5': 0.08771929824561403
+    '10': 0.12280701754385964
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2064
+  - MED-4455
+  - MED-2066
+  - MED-2070
+  - MED-2075
+  - MED-2074
+  - MED-2071
+  - MED-2232
+  - MED-2204
+  - MED-5162
+  unmapped_hits: 0
+- name: PLAIN-872
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3989
+  - MED-4916
+  - MED-3712
+  - MED-1291
+  - MED-3991
+  - MED-3986
+  - MED-1292
+  - MED-864
+  - MED-4098
+  - MED-3707
+  unmapped_hits: 0
+- name: PLAIN-882
+  ndcg_at_10: 0.8006937664098819
+  recall:
+    '1': 0.06666666666666667
+    '5': 0.3333333333333333
+    '10': 0.4666666666666667
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3632
+  - MED-3622
+  - MED-3630
+  - MED-3636
+  - MED-3635
+  - MED-3629
+  - MED-3615
+  - MED-3625
+  - MED-2400
+  - MED-3610
+  unmapped_hits: 0
+- name: PLAIN-892
+  ndcg_at_10: 0.933745776545611
+  recall:
+    '1': 0.010869565217391304
+    '5': 0.05434782608695652
+    '10': 0.09782608695652174
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2009
+  - MED-3583
+  - MED-2010
+  - MED-2008
+  - MED-2145
+  - MED-4347
+  - MED-3132
+  - MED-2148
+  - MED-5079
+  - MED-2147
+  unmapped_hits: 0
+- name: PLAIN-902
+  ndcg_at_10: 0.6366824387328317
+  recall:
+    '1': 0.25
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4195
+  - MED-4197
+  - MED-4849
+  - MED-842
+  - MED-3555
+  - MED-5024
+  - MED-2899
+  - MED-860
+  - MED-5143
+  - MED-838
+  unmapped_hits: 0
+- name: PLAIN-913
+  ndcg_at_10: 0.8669479898642709
+  recall:
+    '1': 0.029411764705882353
+    '5': 0.14705882352941177
+    '10': 0.23529411764705882
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3811
+  - MED-4415
+  - MED-4416
+  - MED-3813
+  - MED-3812
+  - MED-4417
+  - MED-5000
+  - MED-3810
+  - MED-4418
+  - MED-2780
+  unmapped_hits: 0
+- name: PLAIN-924
+  ndcg_at_10: 0.28952298823485745
+  recall:
+    '1': 0.03125
+    '5': 0.03125
+    '10': 0.0625
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3044
+  - MED-5248
+  - MED-4439
+  - MED-3810
+  - MED-3585
+  - MED-3816
+  - MED-2284
+  - MED-3544
+  - MED-3144
+  - MED-5042
+  unmapped_hits: 0
+- name: PLAIN-934
+  ndcg_at_10: 0.7951657524814091
+  recall:
+    '1': 0.009900990099009901
+    '5': 0.0297029702970297
+    '10': 0.07920792079207921
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1648
+  - MED-1621
+  - MED-5245
+  - MED-5249
+  - MED-1649
+  - MED-1640
+  - MED-2159
+  - MED-1628
+  - MED-1622
+  - MED-1636
+  unmapped_hits: 0
+- name: PLAIN-946
+  ndcg_at_10: 0.28952298823485745
+  recall:
+    '1': 0.03225806451612903
+    '5': 0.03225806451612903
+    '10': 0.06451612903225806
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4381
+  - MED-5221
+  - MED-2889
+  - MED-866
+  - MED-3175
+  - MED-855
+  - MED-1023
+  - MED-4380
+  - MED-1032
+  - MED-1570
+  unmapped_hits: 0
+- name: PLAIN-956
+  ndcg_at_10: 0.61886564587798
+  recall:
+    '1': 0.0
+    '5': 0.014563106796116505
+    '10': 0.03398058252427184
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-884
+  - MED-5074
+  - MED-5076
+  - MED-5191
+  - MED-2182
+  - MED-4053
+  - MED-2209
+  - MED-1165
+  - MED-910
+  - MED-2064
+  unmapped_hits: 0
+- name: PLAIN-966
+  ndcg_at_10: 0.15642624200758548
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.3333333333333333
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-4323
+  - MED-3671
+  - MED-1618
+  - MED-3919
+  - MED-831
+  - MED-4192
+  - MED-4103
+  - MED-3676
+  - MED-2039
+  - MED-4789
+  unmapped_hits: 0
+- name: PLAIN-977
+  ndcg_at_10: 0.23463936301137822
+  recall:
+    '1': 0.0
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-4891
+  - MED-2944
+  - MED-4402
+  - MED-4617
+  - MED-1276
+  - MED-3977
+  - MED-4427
+  - MED-4315
+  - MED-3394
+  - MED-2162
+  unmapped_hits: 0
+- name: PLAIN-987
+  ndcg_at_10: 0.2960819109658652
+  recall:
+    '1': 0.0
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2780
+  - MED-2830
+  - MED-1293
+  - MED-1444
+  - MED-3810
+  - MED-2810
+  - MED-2813
+  - MED-3842
+  - MED-4150
+  - MED-2009
+  unmapped_hits: 0
+- name: PLAIN-997
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2256
+  - MED-3622
+  - MED-4672
+  - MED-4364
+  - MED-2659
+  - MED-1409
+  - MED-1957
+  - MED-2254
+  - MED-3181
+  - MED-3949
+  unmapped_hits: 0
+- name: PLAIN-1008
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4668
+  - MED-4694
+  - MED-2217
+  - MED-5142
+  - MED-4161
+  - MED-5221
+  - MED-991
+  - MED-5133
+  - MED-2889
+  - MED-2218
+  unmapped_hits: 0
+- name: PLAIN-1018
+  ndcg_at_10: 0.6332971816211657
+  recall:
+    '1': 0.016666666666666666
+    '5': 0.05
+    '10': 0.1
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5091
+  - MED-5095
+  - MED-1832
+  - MED-838
+  - MED-4936
+  - MED-3012
+  - MED-5092
+  - MED-839
+  - MED-5093
+  - MED-5361
+  unmapped_hits: 0
+- name: PLAIN-1028
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.03125
+  ranked:
+  - MED-1377
+  - MED-3723
+  - MED-2294
+  - MED-3722
+  - MED-5327
+  - MED-1402
+  - MED-2423
+  - MED-4163
+  - MED-5363
+  - MED-1210
+  unmapped_hits: 0
+- name: PLAIN-1039
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.5
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4380
+  - MED-4381
+  - MED-838
+  - MED-1287
+  - MED-3221
+  - MED-1067
+  - MED-1280
+  - MED-1289
+  - MED-3215
+  - MED-1267
+  unmapped_hits: 0
+- name: PLAIN-1050
+  ndcg_at_10: 0.4448530294934502
+  recall:
+    '1': 0.010638297872340425
+    '5': 0.02127659574468085
+    '10': 0.0425531914893617
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2763
+  - MED-1712
+  - MED-4243
+  - MED-2510
+  - MED-4255
+  - MED-1021
+  - MED-4613
+  - MED-2498
+  - MED-4247
+  - MED-2324
+  unmapped_hits: 0
+- name: PLAIN-1066
+  ndcg_at_10: 0.06794340091829076
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.1111111111111111
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-2763
+  - MED-1366
+  - MED-1712
+  - MED-2510
+  - MED-1021
+  - MED-4255
+  - MED-2498
+  - MED-4613
+  - MED-2324
+  - MED-4600
+  unmapped_hits: 0
+- name: PLAIN-1088
+  ndcg_at_10: 0.5531464700081437
+  recall:
+    '1': 0.2
+    '5': 0.4
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2109
+  - MED-2110
+  - MED-4423
+  - MED-1634
+  - MED-4245
+  - MED-3278
+  - MED-4235
+  - MED-2368
+  - MED-4806
+  - MED-966
+  unmapped_hits: 0
+- name: PLAIN-1098
+  ndcg_at_10: 0.5531464700081437
+  recall:
+    '1': 0.2
+    '5': 0.4
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3810
+  - MED-3806
+  - MED-2372
+  - MED-2115
+  - MED-2371
+  - MED-2774
+  - MED-2884
+  - MED-4676
+  - MED-3782
+  - MED-4753
+  unmapped_hits: 0
+- name: PLAIN-1109
+  ndcg_at_10: 0.6083169141195838
+  recall:
+    '1': 0.01020408163265306
+    '5': 0.04081632653061224
+    '10': 0.05102040816326531
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2650
+  - MED-2643
+  - MED-5323
+  - MED-1763
+  - MED-1099
+  - MED-4728
+  - MED-2087
+  - MED-2627
+  - MED-1732
+  - MED-1737
+  unmapped_hits: 0
+- name: PLAIN-1119
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-877
+  - MED-1627
+  - MED-1710
+  - MED-4587
+  - MED-3588
+  - MED-895
+  - MED-4834
+  - MED-3351
+  - MED-1708
+  - MED-4438
+  unmapped_hits: 0
+- name: PLAIN-1130
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4165
+  - MED-3704
+  - MED-2065
+  - MED-5048
+  - MED-2326
+  - MED-2979
+  - MED-3609
+  - MED-4332
+  - MED-5120
+  - MED-5143
+  unmapped_hits: 0
+- name: PLAIN-1141
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.0625
+    '5': 0.0625
+    '10': 0.0625
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2112
+  - MED-1343
+  - MED-4840
+  - MED-3953
+  - MED-3750
+  - MED-1398
+  - MED-3626
+  - MED-3113
+  - MED-945
+  - MED-1830
+  unmapped_hits: 0
+- name: PLAIN-1151
+  ndcg_at_10: 0.7728378251807518
+  recall:
+    '1': 0.006535947712418301
+    '5': 0.026143790849673203
+    '10': 0.0457516339869281
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4140
+  - MED-4139
+  - MED-4594
+  - MED-4129
+  - MED-4944
+  - MED-4489
+  - MED-730
+  - MED-4137
+  - MED-4141
+  - MED-3306
+  unmapped_hits: 0
+- name: PLAIN-1161
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2570
+  - MED-2144
+  - MED-2147
+  - MED-3136
+  - MED-1880
+  - MED-3141
+  - MED-3138
+  - MED-4991
+  - MED-5079
+  - MED-2010
+  unmapped_hits: 0
+- name: PLAIN-1172
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.05263157894736842
+    '5': 0.05263157894736842
+    '10': 0.05263157894736842
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4150
+  - MED-1525
+  - MED-3869
+  - MED-3842
+  - MED-1521
+  - MED-1879
+  - MED-820
+  - MED-2146
+  - MED-2144
+  - MED-866
+  unmapped_hits: 0
+- name: PLAIN-1183
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.04
+    '5': 0.04
+    '10': 0.04
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1276
+  - MED-5331
+  - MED-4727
+  - MED-10
+  - MED-1201
+  - MED-2582
+  - MED-5369
+  - MED-3856
+  - MED-5351
+  - MED-5192
+  unmapped_hits: 0
+- name: PLAIN-1193
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.06666666666666667
+  ranked:
+  - MED-3868
+  - MED-2378
+  - MED-1825
+  - MED-3796
+  - MED-1826
+  - MED-3864
+  - MED-839
+  - MED-4303
+  - MED-3869
+  - MED-4936
+  unmapped_hits: 0
+- name: PLAIN-1203
+  ndcg_at_10: 0.42257499837058643
+  recall:
+    '1': 0.08333333333333333
+    '5': 0.16666666666666666
+    '10': 0.25
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1203
+  - MED-4771
+  - MED-980
+  - MED-986
+  - MED-4600
+  - MED-994
+  - MED-3867
+  - MED-3275
+  - MED-993
+  - MED-1201
+  unmapped_hits: 0
+- name: PLAIN-1214
+  ndcg_at_10: 0.5199967979955745
+  recall:
+    '1': 0.058823529411764705
+    '5': 0.17647058823529413
+    '10': 0.23529411764705882
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2990
+  - MED-2980
+  - MED-3232
+  - MED-2987
+  - MED-1337
+  - MED-4682
+  - MED-1339
+  - MED-5145
+  - MED-2989
+  - MED-5009
+  unmapped_hits: 0
+- name: PLAIN-1225
+  ndcg_at_10: 0.6464018466408363
+  recall:
+    '1': 0.037037037037037035
+    '5': 0.07407407407407407
+    '10': 0.2222222222222222
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1674
+  - MED-1669
+  - MED-3059
+  - MED-717
+  - MED-918
+  - MED-1675
+  - MED-1261
+  - MED-1710
+  - MED-1672
+  - MED-2969
+  unmapped_hits: 0
+- name: PLAIN-1236
+  ndcg_at_10: 0.3391602052736161
+  recall:
+    '1': 0.2
+    '5': 0.2
+    '10': 0.2
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1341
+  - MED-4150
+  - MED-2369
+  - MED-5133
+  - MED-2348
+  - MED-2352
+  - MED-5189
+  - MED-2354
+  - MED-2843
+  - MED-2060
+  unmapped_hits: 0
+- name: PLAIN-1249
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2303
+  - MED-2247
+  - MED-2090
+  - MED-3283
+  - MED-2674
+  - MED-5055
+  - MED-1797
+  - MED-3884
+  - MED-1442
+  - MED-1321
+  unmapped_hits: 0
+- name: PLAIN-1262
+  ndcg_at_10: 0.40853591842579556
+  recall:
+    '1': 0.1
+    '5': 0.2
+    '10': 0.3
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5293
+  - MED-983
+  - MED-5303
+  - MED-2211
+  - MED-1680
+  - MED-2082
+  - MED-1054
+  - MED-3174
+  - MED-2484
+  - MED-4132
+  unmapped_hits: 0
+- name: PLAIN-1275
+  ndcg_at_10: 0.538431315257452
+  recall:
+    '1': 0.01818181818181818
+    '5': 0.05454545454545454
+    '10': 0.07272727272727272
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2886
+  - MED-4712
+  - MED-2922
+  - MED-4900
+  - MED-1671
+  - MED-1676
+  - MED-2076
+  - MED-2924
+  - MED-4860
+  - MED-5070
+  unmapped_hits: 0
+- name: PLAIN-1288
+  ndcg_at_10: 0.8512360941594272
+  recall:
+    '1': 0.00510204081632653
+    '5': 0.02040816326530612
+    '10': 0.04081632653061224
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2668
+  - MED-2669
+  - MED-1538
+  - MED-5065
+  - MED-2083
+  - MED-1533
+  - MED-4585
+  - MED-3744
+  - MED-2663
+  - MED-2085
+  unmapped_hits: 0
+- name: PLAIN-1299
+  ndcg_at_10: 0.24655055544758614
+  recall:
+    '1': 0.0
+    '5': 0.01639344262295082
+    '10': 0.04918032786885246
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-1229
+  - MED-2123
+  - MED-1770
+  - MED-4747
+  - MED-4222
+  - MED-3887
+  - MED-2774
+  - MED-5164
+  - MED-1601
+  - MED-4224
+  unmapped_hits: 0
+- name: PLAIN-1309
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4961
+  - MED-4960
+  - MED-4730
+  - MED-4944
+  - MED-4811
+  - MED-1491
+  - MED-4874
+  - MED-3592
+  - MED-5094
+  - MED-4791
+  unmapped_hits: 0
+- name: PLAIN-1320
+  ndcg_at_10: 0.4725458388387121
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4929
+  - MED-2760
+  - MED-2758
+  - MED-2761
+  - MED-1549
+  - MED-5124
+  - MED-1377
+  - MED-1986
+  - MED-1679
+  - MED-4398
+  unmapped_hits: 0
+- name: PLAIN-1331
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1049
+  - MED-4883
+  - MED-1832
+  - MED-3381
+  - MED-3358
+  - MED-3391
+  - MED-4812
+  - MED-3514
+  - MED-1442
+  - MED-2910
+  unmapped_hits: 0
+- name: PLAIN-1342
+  ndcg_at_10: 0.5548989126424902
+  recall:
+    '1': 0.0625
+    '5': 0.1875
+    '10': 0.3125
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1403
+  - MED-2851
+  - MED-4317
+  - MED-2845
+  - MED-1401
+  - MED-2844
+  - MED-4316
+  - MED-5326
+  - MED-4318
+  - MED-2983
+  unmapped_hits: 0
+- name: PLAIN-1353
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-976
+  - MED-1665
+  - MED-2110
+  - MED-1027
+  - MED-979
+  - MED-4883
+  - MED-1026
+  - MED-4839
+  - MED-4427
+  - MED-978
+  unmapped_hits: 0
+- name: PLAIN-1363
+  ndcg_at_10: 0.22009176629808017
+  recall:
+    '1': 0.09090909090909091
+    '5': 0.09090909090909091
+    '10': 0.09090909090909091
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3620
+  - MED-3632
+  - MED-3630
+  - MED-3629
+  - MED-2218
+  - MED-3635
+  - MED-3604
+  - MED-2773
+  - MED-3636
+  - MED-3033
+  unmapped_hits: 0
+- name: PLAIN-1374
+  ndcg_at_10: 0.06625422345438903
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.038461538461538464
+  reciprocal_rank: 0.1111111111111111
+  ranked:
+  - MED-826
+  - MED-3429
+  - MED-1595
+  - MED-3794
+  - MED-4663
+  - MED-4157
+  - MED-835
+  - MED-3959
+  - MED-4752
+  - MED-820
+  unmapped_hits: 0
+- name: PLAIN-1387
+  ndcg_at_10: 0.7183627972686238
+  recall:
+    '1': 0.08333333333333333
+    '5': 0.4166666666666667
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3380
+  - MED-5062
+  - MED-3383
+  - MED-3381
+  - MED-3382
+  - MED-2078
+  - MED-1686
+  - MED-5063
+  - MED-4655
+  - MED-1153
+  unmapped_hits: 0
+- name: PLAIN-1398
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.009708737864077669
+    '5': 0.04854368932038835
+    '10': 0.0970873786407767
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1715
+  - MED-1722
+  - MED-4228
+  - MED-4212
+  - MED-4216
+  - MED-4220
+  - MED-1723
+  - MED-1724
+  - MED-4225
+  - MED-1712
+  unmapped_hits: 0
+- name: PLAIN-1409
+  ndcg_at_10: 0.13698471029831175
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.007905138339920948
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-3634
+  - MED-3385
+  - MED-2173
+  - MED-3308
+  - MED-1569
+  - MED-4908
+  - MED-1774
+  - MED-943
+  - MED-1570
+  - MED-2405
+  unmapped_hits: 0
+- name: PLAIN-1419
+  ndcg_at_10: 0.5730379245414764
+  recall:
+    '1': 0.015384615384615385
+    '5': 0.03076923076923077
+    '10': 0.07692307692307693
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3279
+  - MED-4198
+  - MED-2327
+  - MED-3662
+  - MED-3710
+  - MED-4357
+  - MED-5156
+  - MED-2344
+  - MED-4403
+  - MED-1220
+  unmapped_hits: 0
+- name: PLAIN-1429
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1559
+  - MED-4057
+  - MED-1210
+  - MED-4646
+  - MED-1381
+  - MED-5183
+  - MED-3799
+  - MED-5066
+  - MED-4594
+  - MED-4925
+  unmapped_hits: 0
+- name: PLAIN-1441
+  ndcg_at_10: 0.5907272848394972
+  recall:
+    '1': 0.005376344086021506
+    '5': 0.016129032258064516
+    '10': 0.026881720430107527
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2773
+  - MED-1332
+  - MED-2216
+  - MED-3629
+  - MED-2218
+  - MED-5094
+  - MED-2770
+  - MED-3659
+  - MED-2299
+  - MED-2657
+  unmapped_hits: 0
+- name: PLAIN-1453
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.004081632653061225
+    '5': 0.02040816326530612
+    '10': 0.04081632653061224
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1761
+  - MED-1534
+  - MED-2181
+  - MED-2221
+  - MED-3060
+  - MED-3356
+  - MED-3375
+  - MED-3376
+  - MED-3769
+  - MED-3050
+  unmapped_hits: 0
+- name: PLAIN-1463
+  ndcg_at_10: 0.3693362536342716
+  recall:
+    '1': 0.0
+    '5': 0.08333333333333333
+    '10': 0.16666666666666666
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2147
+  - MED-2140
+  - MED-5079
+  - MED-3136
+  - MED-4991
+  - MED-1880
+  - MED-3584
+  - MED-2144
+  - MED-3141
+  - MED-3132
+  unmapped_hits: 0
+- name: PLAIN-1473
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4455
+  - MED-842
+  - MED-2074
+  - MED-2066
+  - MED-2073
+  - MED-2071
+  - MED-2064
+  - MED-1444
+  - MED-1604
+  - MED-2068
+  unmapped_hits: 0
+- name: PLAIN-1485
+  ndcg_at_10: 0.33013764944712026
+  recall:
+    '1': 0.018518518518518517
+    '5': 0.037037037037037035
+    '10': 0.037037037037037035
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1491
+  - MED-2099
+  - MED-1801
+  - MED-5016
+  - MED-2697
+  - MED-4006
+  - MED-3494
+  - MED-4704
+  - MED-2792
+  - MED-2115
+  unmapped_hits: 0
+- name: PLAIN-1496
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1950
+  - MED-3475
+  - MED-1580
+  - MED-3370
+  - MED-2098
+  - MED-4347
+  - MED-2073
+  - MED-2066
+  - MED-842
+  - MED-2071
+  unmapped_hits: 0
+- name: PLAIN-1506
+  ndcg_at_10: 0.31488013066763093
+  recall:
+    '1': 0.06666666666666667
+    '5': 0.13333333333333333
+    '10': 0.13333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5239
+  - MED-2126
+  - MED-4306
+  - MED-2509
+  - MED-2326
+  - MED-2121
+  - MED-3281
+  - MED-2117
+  - MED-2129
+  - MED-1618
+  unmapped_hits: 0
+- name: PLAIN-1516
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-930
+  - MED-4181
+  - MED-4187
+  - MED-5029
+  - MED-3936
+  - MED-3022
+  - MED-931
+  - MED-4939
+  - MED-1726
+  - MED-1733
+  unmapped_hits: 0
+- name: PLAIN-1527
+  ndcg_at_10: 0.9305687780632227
+  recall:
+    '1': 0.0049504950495049506
+    '5': 0.024752475247524754
+    '10': 0.04455445544554455
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1307
+  - MED-1304
+  - MED-4817
+  - MED-2160
+  - MED-1302
+  - MED-4873
+  - MED-1309
+  - MED-912
+  - MED-4101
+  - MED-2154
+  unmapped_hits: 0
+- name: PLAIN-1537
+  ndcg_at_10: 0.28762634971412726
+  recall:
+    '1': 0.0
+    '5': 0.044444444444444446
+    '10': 0.06666666666666667
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4880
+  - MED-4515
+  - MED-2943
+  - MED-1714
+  - MED-4514
+  - MED-5113
+  - MED-1669
+  - MED-1323
+  - MED-4985
+  - MED-2588
+  unmapped_hits: 0
+- name: PLAIN-1547
+  ndcg_at_10: 0.13032376591037065
+  recall:
+    '1': 0.0
+    '5': 0.16666666666666666
+    '10': 0.16666666666666666
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-2360
+  - MED-2361
+  - MED-3182
+  - MED-2365
+  - MED-983
+  - MED-1121
+  - MED-975
+  - MED-4133
+  - MED-4431
+  - MED-1129
+  unmapped_hits: 0
+- name: PLAIN-1557
+  ndcg_at_10: 0.2489083270225946
+  recall:
+    '1': 0.0
+    '5': 0.07692307692307693
+    '10': 0.07692307692307693
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-1406
+  - MED-4315
+  - MED-3918
+  - MED-2248
+  - MED-2249
+  - MED-876
+  - MED-1447
+  - MED-1841
+  - MED-3670
+  - MED-5005
+  unmapped_hits: 0
+- name: PLAIN-1568
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.5
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4150
+  - MED-5056
+  - MED-2490
+  - MED-5057
+  - MED-1672
+  - MED-1710
+  - MED-1674
+  - MED-4782
+  - MED-2054
+  - MED-2679
+  unmapped_hits: 0
+- name: PLAIN-1579
+  ndcg_at_10: 0.3391602052736161
+  recall:
+    '1': 0.2
+    '5': 0.2
+    '10': 0.2
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4667
+  - MED-4801
+  - MED-4465
+  - MED-2056
+  - MED-3795
+  - MED-3800
+  - MED-1759
+  - MED-4802
+  - MED-901
+  - MED-1979
+  unmapped_hits: 0
+- name: PLAIN-1590
+  ndcg_at_10: 0.1736666713479918
+  recall:
+    '1': 0.0
+    '5': 0.05555555555555555
+    '10': 0.1111111111111111
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-748
+  - MED-3757
+  - MED-3604
+  - MED-1344
+  - MED-3759
+  - MED-3754
+  - MED-3760
+  - MED-5346
+  - MED-3749
+  - MED-3601
+  unmapped_hits: 0
+- name: PLAIN-1601
+  ndcg_at_10: 0.8669479898642709
+  recall:
+    '1': 0.013513513513513514
+    '5': 0.06756756756756757
+    '10': 0.10810810810810811
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3537
+  - MED-4996
+  - MED-4860
+  - MED-5002
+  - MED-2669
+  - MED-2668
+  - MED-4381
+  - MED-1503
+  - MED-4404
+  - MED-4900
+  unmapped_hits: 0
+- name: PLAIN-1611
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.07692307692307693
+  ranked:
+  - MED-3906
+  - MED-2144
+  - MED-2140
+  - MED-4150
+  - MED-875
+  - MED-4300
+  - MED-5079
+  - MED-4716
+  - MED-2146
+  - MED-4408
+  unmapped_hits: 0
+- name: PLAIN-1621
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.06666666666666667
+  ranked:
+  - MED-4540
+  - MED-1765
+  - MED-1882
+  - MED-2589
+  - MED-1193
+  - MED-1258
+  - MED-1395
+  - MED-1399
+  - MED-1429
+  - MED-2524
+  unmapped_hits: 0
+- name: PLAIN-1635
+  ndcg_at_10: 0.8263333286520081
+  recall:
+    '1': 0.002320185614849188
+    '5': 0.009280742459396751
+    '10': 0.018561484918793503
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2774
+  - MED-4899
+  - MED-5118
+  - MED-4753
+  - MED-2123
+  - MED-1229
+  - MED-1337
+  - MED-4897
+  - MED-1768
+  - MED-3087
+  unmapped_hits: 0
+- name: PLAIN-1645
+  ndcg_at_10: 0.3026024134988135
+  recall:
+    '1': 0.16666666666666666
+    '5': 0.16666666666666666
+    '10': 0.16666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5056
+  - MED-4150
+  - MED-1859
+  - MED-5078
+  - MED-830
+  - MED-708
+  - MED-4859
+  - MED-3499
+  - MED-1600
+  - MED-1671
+  unmapped_hits: 0
+- name: PLAIN-1656
+  ndcg_at_10: 0.13886244387355454
+  recall:
+    '1': 0.0
+    '5': 0.03571428571428571
+    '10': 0.03571428571428571
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3764
+  - MED-4819
+  - MED-2092
+  - MED-4479
+  - MED-1721
+  - MED-2095
+  - MED-1362
+  - MED-2174
+  - MED-4470
+  - MED-3717
+  unmapped_hits: 0
+- name: PLAIN-1667
+  ndcg_at_10: 0.7759944384848244
+  recall:
+    '1': 0.006289308176100629
+    '5': 0.018867924528301886
+    '10': 0.050314465408805034
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3460
+  - MED-1752
+  - MED-3157
+  - MED-4828
+  - MED-1750
+  - MED-4830
+  - MED-3163
+  - MED-3534
+  - MED-3220
+  - MED-1460
+  unmapped_hits: 0
+- name: PLAIN-1679
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5142
+  - MED-4423
+  - MED-4428
+  - MED-1663
+  - MED-3317
+  - MED-1657
+  - MED-959
+  - MED-1569
+  - MED-3248
+  - MED-4424
+  unmapped_hits: 0
+- name: PLAIN-1690
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1504
+  - MED-1878
+  - MED-3030
+  - MED-3604
+  - MED-1289
+  - MED-4599
+  - MED-2725
+  - MED-4674
+  - MED-2928
+  - MED-3726
+  unmapped_hits: 0
+- name: PLAIN-1700
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1100
+  - MED-5198
+  - MED-1417
+  - MED-1747
+  - MED-2213
+  - MED-4107
+  - MED-3033
+  - MED-4494
+  - MED-4095
+  - MED-1744
+  unmapped_hits: 0
+- name: PLAIN-1710
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.0625
+    '5': 0.3125
+    '10': 0.625
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3169
+  - MED-3181
+  - MED-3178
+  - MED-3175
+  - MED-3179
+  - MED-3180
+  - MED-3177
+  - MED-3174
+  - MED-3170
+  - MED-4672
+  unmapped_hits: 0
+- name: PLAIN-1721
+  ndcg_at_10: 0.5513310624619329
+  recall:
+    '1': 0.03225806451612903
+    '5': 0.06451612903225806
+    '10': 0.16129032258064516
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1602
+  - MED-1377
+  - MED-4821
+  - MED-4787
+  - MED-4485
+  - MED-4983
+  - MED-1606
+  - MED-4823
+  - MED-5258
+  - MED-4514
+  unmapped_hits: 0
+- name: PLAIN-1731
+  ndcg_at_10: 0.7653606369886217
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.6666666666666666
+    '10': 0.6666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2749
+  - MED-2748
+  - MED-3509
+  - MED-4131
+  - MED-4132
+  - MED-4967
+  - MED-4968
+  - MED-1568
+  - MED-2740
+  - MED-3974
+  unmapped_hits: 0
+- name: PLAIN-1741
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.002380952380952381
+    '5': 0.011904761904761904
+    '10': 0.023809523809523808
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4286
+  - MED-4300
+  - MED-2597
+  - MED-2383
+  - MED-1388
+  - MED-1381
+  - MED-4301
+  - MED-2595
+  - MED-2596
+  - MED-2380
+  unmapped_hits: 0
+- name: PLAIN-1752
+  ndcg_at_10: 0.2890648263178879
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-1859
+  - MED-4455
+  - MED-5043
+  - MED-1868
+  - MED-706
+  - MED-712
+  - MED-4544
+  - MED-1444
+  - MED-1866
+  - MED-2098
+  unmapped_hits: 0
+- name: PLAIN-1762
+  ndcg_at_10: 0.48867512060993706
+  recall:
+    '1': 0.125
+    '5': 0.25
+    '10': 0.375
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3716
+  - MED-3721
+  - MED-3103
+  - MED-759
+  - MED-3561
+  - MED-3111
+  - MED-3558
+  - MED-3107
+  - MED-3715
+  - MED-4030
+  unmapped_hits: 0
+- name: PLAIN-1772
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.5
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4727
+  - MED-4728
+  - MED-4730
+  - MED-4937
+  - MED-2644
+  - MED-4935
+  - MED-2661
+  - MED-2652
+  - MED-1265
+  - MED-4187
+  unmapped_hits: 0
+- name: PLAIN-1784
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1802
+  - MED-5326
+  - MED-2671
+  - MED-4261
+  - MED-3499
+  - MED-5235
+  - MED-4758
+  - MED-4057
+  - MED-2584
+  - MED-1762
+  unmapped_hits: 0
+- name: PLAIN-1794
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.5
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5042
+  - MED-5041
+  - MED-4826
+  - MED-4822
+  - MED-1818
+  - MED-1814
+  - MED-4948
+  - MED-911
+  - MED-1817
+  - MED-4823
+  unmapped_hits: 0
+- name: PLAIN-1805
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.008620689655172414
+    '5': 0.04310344827586207
+    '10': 0.08620689655172414
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3938
+  - MED-4939
+  - MED-5196
+  - MED-3931
+  - MED-3932
+  - MED-3936
+  - MED-3933
+  - MED-3927
+  - MED-2177
+  - MED-3925
+  unmapped_hits: 0
+- name: PLAIN-1817
+  ndcg_at_10: 0.601572065456638
+  recall:
+    '1': 0.037037037037037035
+    '5': 0.1111111111111111
+    '10': 0.18518518518518517
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4284
+  - MED-2150
+  - MED-4287
+  - MED-4706
+  - MED-2382
+  - MED-4709
+  - MED-4291
+  - MED-4707
+  - MED-1534
+  - MED-2381
+  unmapped_hits: 0
+- name: PLAIN-1827
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3302
+  - MED-3288
+  - MED-3385
+  - MED-1273
+  - MED-3317
+  - MED-4463
+  - MED-1166
+  - MED-1172
+  - MED-2361
+  - MED-3319
+  unmapped_hits: 0
+- name: PLAIN-1837
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.00510204081632653
+    '5': 0.025510204081632654
+    '10': 0.05102040816326531
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1161
+  - MED-1162
+  - MED-1160
+  - MED-4535
+  - MED-4177
+  - MED-1157
+  - MED-1726
+  - MED-2748
+  - MED-4179
+  - MED-1164
+  unmapped_hits: 0
+- name: PLAIN-1847
+  ndcg_at_10: 0.2999050316974944
+  recall:
+    '1': 0.0
+    '5': 0.18181818181818182
+    '10': 0.2727272727272727
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3603
+  - MED-3983
+  - MED-867
+  - MED-4000
+  - MED-1285
+  - MED-2568
+  - MED-1412
+  - MED-4068
+  - MED-3984
+  - MED-5094
+  unmapped_hits: 0
+- name: PLAIN-1857
+  ndcg_at_10: 0.6275071330616558
+  recall:
+    '1': 0.030303030303030304
+    '5': 0.12121212121212122
+    '10': 0.15151515151515152
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2988
+  - MED-4319
+  - MED-2544
+  - MED-2986
+  - MED-2578
+  - MED-2979
+  - MED-2575
+  - MED-5231
+  - MED-2983
+  - MED-1846
+  unmapped_hits: 0
+- name: PLAIN-1867
+  ndcg_at_10: 0.27487633291429087
+  recall:
+    '1': 0.14285714285714285
+    '5': 0.14285714285714285
+    '10': 0.14285714285714285
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3744
+  - MED-1846
+  - MED-863
+  - MED-5160
+  - MED-3945
+  - MED-3906
+  - MED-943
+  - MED-2206
+  - MED-5022
+  - MED-4716
+  unmapped_hits: 0
+- name: PLAIN-1877
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4831
+  - MED-1991
+  - MED-4255
+  - MED-4613
+  - MED-3931
+  - MED-1489
+  - MED-4515
+  - MED-1445
+  - MED-1723
+  - MED-992
+  unmapped_hits: 0
+- name: PLAIN-1887
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1731
+  - MED-3022
+  - MED-4914
+  - MED-4874
+  - MED-3607
+  - MED-1733
+  - MED-4913
+  - MED-2333
+  - MED-5083
+  - MED-5069
+  unmapped_hits: 0
+- name: PLAIN-1897
+  ndcg_at_10: 0.23719771276929622
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.2
+  ranked:
+  - MED-2644
+  - MED-4186
+  - MED-996
+  - MED-3173
+  - MED-4992
+  - MED-4276
+  - MED-1312
+  - MED-2559
+  - MED-4182
+  - MED-2653
+  unmapped_hits: 0
+- name: PLAIN-1909
+  ndcg_at_10: 0.8414929602590189
+  recall:
+    '1': 0.0021598272138228943
+    '5': 0.008639308855291577
+    '10': 0.017278617710583154
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2341
+  - MED-4818
+  - MED-1610
+  - MED-1979
+  - MED-1491
+  - MED-2352
+  - MED-2678
+  - MED-4593
+  - MED-1983
+  - MED-2340
+  unmapped_hits: 0
+- name: PLAIN-1919
+  ndcg_at_10: 0.8603818544462508
+  recall:
+    '1': 0.037037037037037035
+    '5': 0.18518518518518517
+    '10': 0.2962962962962963
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4431
+  - MED-3321
+  - MED-4819
+  - MED-4433
+  - MED-3315
+  - MED-3320
+  - MED-4429
+  - MED-3311
+  - MED-4182
+  - MED-3307
+  unmapped_hits: 0
+- name: PLAIN-1929
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.08333333333333333
+  ranked:
+  - MED-3032
+  - MED-4872
+  - MED-2905
+  - MED-716
+  - MED-4724
+  - MED-4930
+  - MED-962
+  - MED-2497
+  - MED-4600
+  - MED-4370
+  unmapped_hits: 0
+- name: PLAIN-1940
+  ndcg_at_10: 0.3589542101716347
+  recall:
+    '1': 0.08333333333333333
+    '5': 0.16666666666666666
+    '10': 0.16666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3792
+  - MED-3797
+  - MED-2006
+  - MED-4753
+  - MED-4946
+  - MED-4114
+  - MED-4465
+  - MED-1198
+  - MED-2123
+  - MED-1229
+  unmapped_hits: 0
+- name: PLAIN-1950
+  ndcg_at_10: 0.39356081945565896
+  recall:
+    '1': 0.0
+    '5': 0.15384615384615385
+    '10': 0.3076923076923077
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-912
+  - MED-3904
+  - MED-4250
+  - MED-1950
+  - MED-1795
+  - MED-3908
+  - MED-1538
+  - MED-1533
+  - MED-3900
+  - MED-5073
+  unmapped_hits: 0
+- name: PLAIN-1962
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2438
+  - MED-2206
+  - MED-2207
+  - MED-4295
+  - MED-3810
+  - MED-5160
+  - MED-2209
+  - MED-3399
+  - MED-2189
+  - MED-2205
+  unmapped_hits: 0
+- name: PLAIN-1972
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.02702702702702703
+  ranked:
+  - MED-2143
+  - MED-1442
+  - MED-905
+  - MED-4439
+  - MED-5042
+  - MED-3704
+  - MED-3816
+  - MED-3158
+  - MED-5248
+  - MED-3941
+  unmapped_hits: 0
+- name: PLAIN-1983
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.03125
+    '5': 0.15625
+    '10': 0.3125
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2137
+  - MED-2521
+  - MED-2134
+  - MED-2517
+  - MED-2132
+  - MED-5237
+  - MED-2520
+  - MED-2127
+  - MED-2514
+  - MED-2507
+  unmapped_hits: 0
+- name: PLAIN-1995
+  ndcg_at_10: 0.13886244387355454
+  recall:
+    '1': 0.0
+    '5': 0.09090909090909091
+    '10': 0.09090909090909091
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4776
+  - MED-4864
+  - MED-1637
+  - MED-1647
+  - MED-1853
+  - MED-1867
+  - MED-898
+  - MED-4902
+  - MED-4331
+  - MED-1865
+  unmapped_hits: 0
+- name: PLAIN-2009
+  ndcg_at_10: 0.30088559429208195
+  recall:
+    '1': 0.0
+    '5': 0.125
+    '10': 0.375
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-5173
+  - MED-3951
+  - MED-4961
+  - MED-1733
+  - MED-4439
+  - MED-4830
+  - MED-4828
+  - MED-1569
+  - MED-3491
+  - MED-5021
+  unmapped_hits: 0
+- name: PLAIN-2019
+  ndcg_at_10: 0.18154179253735267
+  recall:
+    '1': 0.0
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 0.2
+  ranked:
+  - MED-1341
+  - MED-5133
+  - MED-716
+  - MED-4668
+  - MED-4575
+  - MED-1340
+  - MED-921
+  - MED-962
+  - MED-5145
+  - MED-1985
+  unmapped_hits: 0
+- name: PLAIN-2030
+  ndcg_at_10: 0.15130120674940675
+  recall:
+    '1': 0.0
+    '5': 0.16666666666666666
+    '10': 0.16666666666666666
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-2816
+  - MED-2280
+  - MED-4051
+  - MED-4124
+  - MED-3168
+  - MED-1670
+  - MED-4501
+  - MED-2085
+  - MED-4587
+  - MED-3922
+  unmapped_hits: 0
+- name: PLAIN-2040
+  ndcg_at_10: 0.7819835854675755
+  recall:
+    '1': 0.007575757575757576
+    '5': 0.03787878787878788
+    '10': 0.05303030303030303
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4933
+  - MED-4961
+  - MED-3024
+  - MED-4936
+  - MED-2678
+  - MED-4964
+  - MED-5094
+  - MED-2396
+  - MED-4943
+  - MED-4960
+  unmapped_hits: 0
+- name: PLAIN-2051
+  ndcg_at_10: 0.8115558478722845
+  recall:
+    '1': 0.0028169014084507044
+    '5': 0.011267605633802818
+    '10': 0.022535211267605635
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1556
+  - MED-1781
+  - MED-1873
+  - MED-1454
+  - MED-4556
+  - MED-1072
+  - MED-3586
+  - MED-5014
+  - MED-4004
+  - MED-4005
+  unmapped_hits: 0
+- name: PLAIN-2061
+  ndcg_at_10: 0.905211635630449
+  recall:
+    '1': 0.0024390243902439024
+    '5': 0.00975609756097561
+    '10': 0.02195121951219512
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2344
+  - MED-5101
+  - MED-4960
+  - MED-3295
+  - MED-4742
+  - MED-3031
+  - MED-4736
+  - MED-2339
+  - MED-4968
+  - MED-3030
+  unmapped_hits: 0
+- name: PLAIN-2071
+  ndcg_at_10: 0.6364741801035538
+  recall:
+    '1': 0.022222222222222223
+    '5': 0.06666666666666667
+    '10': 0.13333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3532
+  - MED-4309
+  - MED-4306
+  - MED-1349
+  - MED-3530
+  - MED-3546
+  - MED-3540
+  - MED-3526
+  - MED-3658
+  - MED-1352
+  unmapped_hits: 0
+- name: PLAIN-2081
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4303
+  - MED-2700
+  - MED-2671
+  - MED-2074
+  - MED-4180
+  - MED-859
+  - MED-2506
+  - MED-2519
+  - MED-3021
+  - MED-2514
+  unmapped_hits: 0
+- name: PLAIN-2092
+  ndcg_at_10: 0.6489315753318465
+  recall:
+    '1': 0.1
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1434
+  - MED-1437
+  - MED-1432
+  - MED-1436
+  - MED-1440
+  - MED-2509
+  - MED-2517
+  - MED-4222
+  - MED-2336
+  - MED-2512
+  unmapped_hits: 0
+- name: PLAIN-2102
+  ndcg_at_10: 0.7917267193679838
+  recall:
+    '1': 0.0023752969121140144
+    '5': 0.011876484560570071
+    '10': 0.0166270783847981
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2237
+  - MED-1545
+  - MED-3544
+  - MED-3318
+  - MED-1603
+  - MED-3033
+  - MED-1598
+  - MED-2678
+  - MED-759
+  - MED-5159
+  unmapped_hits: 0
+- name: PLAIN-2113
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1182
+  - MED-3890
+  - MED-1147
+  - MED-915
+  - MED-1757
+  - MED-1150
+  - MED-842
+  - MED-4687
+  - MED-4206
+  - MED-2264
+  unmapped_hits: 0
+- name: PLAIN-2124
+  ndcg_at_10: 0.8486026589039899
+  recall:
+    '1': 0.058823529411764705
+    '5': 0.23529411764705882
+    '10': 0.47058823529411764
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1525
+  - MED-1522
+  - MED-1521
+  - MED-1247
+  - MED-1008
+  - MED-1520
+  - MED-1244
+  - MED-1519
+  - MED-1009
+  - MED-1523
+  unmapped_hits: 0
+- name: PLAIN-2134
+  ndcg_at_10: 0.07839826897867533
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.08333333333333333
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - MED-1625
+  - MED-4120
+  - MED-4124
+  - MED-5056
+  - MED-4868
+  - MED-5054
+  - MED-1674
+  - MED-1630
+  - MED-1672
+  - MED-4121
+  unmapped_hits: 0
+- name: PLAIN-2145
+  ndcg_at_10: 0.14829723057014912
+  recall:
+    '1': 0.0
+    '5': 0.1111111111111111
+    '10': 0.1111111111111111
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-743
+  - MED-3918
+  - MED-2891
+  - MED-1359
+  - MED-4188
+  - MED-4193
+  - MED-1293
+  - MED-4671
+  - MED-1860
+  - MED-5361
+  unmapped_hits: 0
+- name: PLAIN-2156
+  ndcg_at_10: 0.644824486427155
+  recall:
+    '1': 0.16666666666666666
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4868
+  - MED-5055
+  - MED-4867
+  - MED-4124
+  - MED-1868
+  - MED-5056
+  - MED-870
+  - MED-939
+  - MED-1625
+  - MED-1860
+  unmapped_hits: 0
+- name: PLAIN-2167
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2488
+  - MED-1230
+  - MED-3001
+  - MED-1744
+  - MED-2201
+  - MED-4172
+  - MED-3769
+  - MED-1447
+  - MED-3770
+  - MED-2726
+  unmapped_hits: 0
+- name: PLAIN-2177
+  ndcg_at_10: 0.39170347105873193
+  recall:
+    '1': 0.0
+    '5': 0.08333333333333333
+    '10': 0.16666666666666666
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3282
+  - MED-1185
+  - MED-1421
+  - MED-4499
+  - MED-1953
+  - MED-4320
+  - MED-1418
+  - MED-1184
+  - MED-2065
+  - MED-4687
+  unmapped_hits: 0
+- name: PLAIN-2187
+  ndcg_at_10: 0.3833427799846345
+  recall:
+    '1': 0.1111111111111111
+    '5': 0.2222222222222222
+    '10': 0.2222222222222222
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1248
+  - MED-1244
+  - MED-3719
+  - MED-3904
+  - MED-949
+  - MED-3753
+  - MED-3694
+  - MED-2203
+  - MED-3759
+  - MED-4512
+  unmapped_hits: 0
+- name: PLAIN-2197
+  ndcg_at_10: 0.7935840677649109
+  recall:
+    '1': 0.017241379310344827
+    '5': 0.08620689655172414
+    '10': 0.1206896551724138
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1625
+  - MED-5054
+  - MED-4868
+  - MED-4120
+  - MED-5056
+  - MED-5057
+  - MED-1710
+  - MED-2226
+  - MED-5053
+  - MED-4822
+  unmapped_hits: 0
+- name: PLAIN-2209
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2207
+  - MED-3807
+  - MED-4309
+  - MED-4526
+  - MED-2210
+  - MED-2204
+  - MED-4525
+  - MED-2209
+  - MED-2206
+  - MED-3809
+  unmapped_hits: 0
+- name: PLAIN-2220
+  ndcg_at_10: 0.5008655546918773
+  recall:
+    '1': 0.1111111111111111
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4976
+  - MED-5002
+  - MED-5078
+  - MED-1495
+  - MED-1254
+  - MED-4309
+  - MED-1253
+  - MED-708
+  - MED-1859
+  - MED-4150
+  unmapped_hits: 0
+- name: PLAIN-2230
+  ndcg_at_10: 0.07945707943276742
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.14285714285714285
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-2009
+  - MED-5135
+  - MED-557
+  - MED-980
+  - MED-4872
+  - MED-994
+  - MED-2207
+  - MED-4034
+  - MED-4309
+  - MED-4313
+  unmapped_hits: 0
+- name: PLAIN-2240
+  ndcg_at_10: 0.7034066032439746
+  recall:
+    '1': 0.09090909090909091
+    '5': 0.36363636363636365
+    '10': 0.5454545454545454
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3969
+  - MED-3963
+  - MED-3970
+  - MED-3960
+  - MED-5059
+  - MED-1956
+  - MED-3964
+  - MED-944
+  - MED-3966
+  - MED-842
+  unmapped_hits: 0
+- name: PLAIN-2250
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.020833333333333332
+  ranked:
+  - MED-2346
+  - MED-5024
+  - MED-5094
+  - MED-2210
+  - MED-4819
+  - MED-4839
+  - MED-2510
+  - MED-3175
+  - MED-2345
+  - MED-3311
+  unmapped_hits: 0
+- name: PLAIN-2261
+  ndcg_at_10: 0.6835381846158708
+  recall:
+    '1': 0.016666666666666666
+    '5': 0.06666666666666667
+    '10': 0.1
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3599
+  - MED-4556
+  - MED-1700
+  - MED-3597
+  - MED-4450
+  - MED-3598
+  - MED-2850
+  - MED-5193
+  - MED-1558
+  - MED-2697
+  unmapped_hits: 0
+- name: PLAIN-2271
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3105
+  - MED-5164
+  - MED-734
+  - MED-4956
+  - MED-1832
+  - MED-3374
+  - MED-4839
+  - MED-733
+  - MED-979
+  - MED-5313
+  unmapped_hits: 0
+- name: PLAIN-2281
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.03225806451612903
+  ranked:
+  - MED-2066
+  - MED-2207
+  - MED-948
+  - MED-4455
+  - MED-2200
+  - MED-2074
+  - MED-2206
+  - MED-2071
+  - MED-2209
+  - MED-2189
+  unmapped_hits: 0
+- name: PLAIN-2291
+  ndcg_at_10: 0.4599715079731103
+  recall:
+    '1': 0.2
+    '5': 0.2
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2726
+  - MED-1196
+  - MED-3085
+  - MED-1534
+  - MED-4765
+  - MED-1650
+  - MED-1165
+  - MED-2572
+  - MED-4299
+  - MED-4494
+  unmapped_hits: 0
+- name: PLAIN-2301
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.022727272727272728
+  ranked:
+  - MED-2122
+  - MED-818
+  - MED-4751
+  - MED-3703
+  - MED-4160
+  - MED-2208
+  - MED-3682
+  - MED-1546
+  - MED-2239
+  - MED-3778
+  unmapped_hits: 0
+- name: PLAIN-2311
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4801
+  - MED-4811
+  - MED-1165
+  - MED-4812
+  - MED-4816
+  - MED-4817
+  - MED-4968
+  - MED-2790
+  - MED-4303
+  - MED-4813
+  unmapped_hits: 0
+- name: PLAIN-2321
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4882
+  - MED-2991
+  - MED-1801
+  - MED-1610
+  - MED-2492
+  - MED-2339
+  - MED-1797
+  - MED-5101
+  - MED-4800
+  - MED-4626
+  unmapped_hits: 0
+- name: PLAIN-2332
+  ndcg_at_10: 0.7353797772725617
+  recall:
+    '1': 0.010309278350515464
+    '5': 0.030927835051546393
+    '10': 0.07216494845360824
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4766
+  - MED-1798
+  - MED-3974
+  - MED-1808
+  - MED-5281
+  - MED-1799
+  - MED-4815
+  - MED-3561
+  - MED-1804
+  - MED-4769
+  unmapped_hits: 0
+- name: PLAIN-2343
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-859
+  - MED-4872
+  - MED-716
+  - MED-3990
+  - MED-3986
+  - MED-4724
+  - MED-3988
+  - MED-4575
+  - MED-2946
+  - MED-5131
+  unmapped_hits: 0
+- name: PLAIN-2354
+  ndcg_at_10: 0.5087403079104241
+  recall:
+    '1': 0.2
+    '5': 0.4
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4303
+  - MED-5153
+  - MED-2152
+  - MED-4709
+  - MED-4302
+  - MED-4249
+  - MED-2378
+  - MED-4705
+  - MED-4708
+  - MED-2379
+  unmapped_hits: 0
+- name: PLAIN-2364
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-5004
+  - MED-4261
+  - MED-4707
+  - MED-1365
+  - MED-4291
+  - MED-1807
+  - MED-3751
+  - MED-5284
+  - MED-2592
+  - MED-2595
+  unmapped_hits: 0
+- name: PLAIN-2375
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1412
+  - MED-4332
+  - MED-3024
+  - MED-3295
+  - MED-4032
+  - MED-3584
+  - MED-4811
+  - MED-3094
+  - MED-990
+  - MED-1435
+  unmapped_hits: 0
+- name: PLAIN-2386
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0625
+  ranked:
+  - MED-2346
+  - MED-4198
+  - MED-2510
+  - MED-1724
+  - MED-2345
+  - MED-5094
+  - MED-4141
+  - MED-4811
+  - MED-732
+  - MED-5024
+  unmapped_hits: 0
+- name: PLAIN-2396
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4137
+  - MED-3407
+  - MED-1273
+  - MED-4141
+  - MED-2590
+  - MED-3253
+  - MED-4243
+  - MED-3379
+  - MED-2166
+  - MED-1498
+  unmapped_hits: 0
+- name: PLAIN-2408
+  ndcg_at_10: 0.4703652827859579
+  recall:
+    '1': 0.2
+    '5': 0.4
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1360
+  - MED-1010
+  - MED-1342
+  - MED-1347
+  - MED-1357
+  - MED-1354
+  - MED-3540
+  - MED-1349
+  - MED-1348
+  - MED-4188
+  unmapped_hits: 0
+- name: PLAIN-2430
+  ndcg_at_10: 0.6606689170984172
+  recall:
+    '1': 0.021739130434782608
+    '5': 0.06521739130434782
+    '10': 0.15217391304347827
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-980
+  - MED-994
+  - MED-5128
+  - MED-2946
+  - MED-5129
+  - MED-986
+  - MED-990
+  - MED-982
+  - MED-2664
+  - MED-1435
+  unmapped_hits: 0
+- name: PLAIN-2440
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-3908
+  - MED-5019
+  - MED-5082
+  - MED-3744
+  - MED-1792
+  - MED-5020
+  - MED-4089
+  - MED-2816
+  - MED-4414
+  - MED-2451
+  unmapped_hits: 0
+- name: PLAIN-2450
+  ndcg_at_10: 0.1610425878239398
+  recall:
+    '1': 0.0
+    '5': 0.02631578947368421
+    '10': 0.05263157894736842
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-1140
+  - MED-1144
+  - MED-1179
+  - MED-1178
+  - MED-1151
+  - MED-1150
+  - MED-2738
+  - MED-1181
+  - MED-1169
+  - MED-1182
+  unmapped_hits: 0
+- name: PLAIN-2460
+  ndcg_at_10: 0.400426135791208
+  recall:
+    '1': 0.03225806451612903
+    '5': 0.06451612903225806
+    '10': 0.06451612903225806
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1236
+  - MED-4333
+  - MED-1237
+  - MED-1672
+  - MED-5228
+  - MED-1062
+  - MED-1681
+  - MED-1063
+  - MED-5233
+  - MED-1468
+  unmapped_hits: 0
+- name: PLAIN-2470
+  ndcg_at_10: 0.6485839243179936
+  recall:
+    '1': 0.0136986301369863
+    '5': 0.0547945205479452
+    '10': 0.0684931506849315
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1337
+  - MED-1340
+  - MED-4722
+  - MED-2774
+  - MED-4897
+  - MED-1223
+  - MED-1338
+  - MED-4682
+  - MED-4751
+  - MED-5118
+  unmapped_hits: 0
+- name: PLAIN-2480
+  ndcg_at_10: 0.30366625500213634
+  recall:
+    '1': 0.05555555555555555
+    '5': 0.05555555555555555
+    '10': 0.16666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3964
+  - MED-2811
+  - MED-2782
+  - MED-1187
+  - MED-4628
+  - MED-1576
+  - MED-1184
+  - MED-1582
+  - MED-3970
+  - MED-1039
+  unmapped_hits: 0
+- name: PLAIN-2490
+  ndcg_at_10: 0.400426135791208
+  recall:
+    '1': 0.043478260869565216
+    '5': 0.08695652173913043
+    '10': 0.08695652173913043
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1490
+  - MED-2007
+  - MED-1488
+  - MED-2301
+  - MED-1354
+  - MED-1655
+  - MED-5301
+  - MED-4603
+  - MED-1348
+  - MED-4347
+  unmapped_hits: 0
+- name: PLAIN-2500
+  ndcg_at_10: 0.11974534227438745
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.14285714285714285
+  reciprocal_rank: 0.125
+  ranked:
+  - MED-5016
+  - MED-1556
+  - MED-1781
+  - MED-1454
+  - MED-1921
+  - MED-3198
+  - MED-4709
+  - MED-1557
+  - MED-1552
+  - MED-1366
+  unmapped_hits: 0
+- name: PLAIN-2510
+  ndcg_at_10: 0.7827392871477701
+  recall:
+    '1': 0.021739130434782608
+    '5': 0.08695652173913043
+    '10': 0.17391304347826086
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1648
+  - MED-878
+  - MED-1640
+  - MED-1639
+  - MED-1642
+  - MED-880
+  - MED-1649
+  - MED-1638
+  - MED-1641
+  - MED-1645
+  unmapped_hits: 0
+- name: PLAIN-2520
+  ndcg_at_10: 0.13924029471365182
+  recall:
+    '1': 0.0
+    '5': 0.0136986301369863
+    '10': 0.0410958904109589
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-3273
+  - MED-2506
+  - MED-1991
+  - MED-4831
+  - MED-4515
+  - MED-4996
+  - MED-2502
+  - MED-1445
+  - MED-2138
+  - MED-4613
+  unmapped_hits: 0
+- name: PLAIN-2530
+  ndcg_at_10: 0.9334739949321355
+  recall:
+    '1': 0.013888888888888888
+    '5': 0.06944444444444445
+    '10': 0.1388888888888889
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1804
+  - MED-1798
+  - MED-1808
+  - MED-1803
+  - MED-1796
+  - MED-4767
+  - MED-4769
+  - MED-4766
+  - MED-1800
+  - MED-4768
+  unmapped_hits: 0
+- name: PLAIN-2540
+  ndcg_at_10: 0.648124219922816
+  recall:
+    '1': 0.047619047619047616
+    '5': 0.19047619047619047
+    '10': 0.23809523809523808
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1882
+  - MED-1886
+  - MED-1885
+  - MED-1552
+  - MED-1890
+  - MED-3398
+  - MED-1884
+  - MED-1968
+  - MED-2020
+  - MED-5266
+  unmapped_hits: 0
+- name: PLAIN-2550
+  ndcg_at_10: 0.09077394133714937
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.04
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - MED-728
+  - MED-4255
+  - MED-4613
+  - MED-5299
+  - MED-1679
+  - MED-2525
+  - MED-1677
+  - MED-1680
+  - MED-1557
+  - MED-4609
+  unmapped_hits: 0
+- name: PLAIN-2560
+  ndcg_at_10: 0.8701249883466592
+  recall:
+    '1': 0.047619047619047616
+    '5': 0.23809523809523808
+    '10': 0.38095238095238093
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2055
+  - MED-2057
+  - MED-2061
+  - MED-2058
+  - MED-2060
+  - MED-2053
+  - MED-2059
+  - MED-2063
+  - MED-5005
+  - MED-2126
+  unmapped_hits: 0
+- name: PLAIN-2570
+  ndcg_at_10: 0.24879917473339705
+  recall:
+    '1': 0.0
+    '5': 0.05
+    '10': 0.05
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2008
+  - MED-2145
+  - MED-2148
+  - MED-3583
+  - MED-2146
+  - MED-1320
+  - MED-1541
+  - MED-1992
+  - MED-1860
+  - MED-2009
+  unmapped_hits: 0
+- name: PLAIN-2580
+  ndcg_at_10: 0.36417417493582804
+  recall:
+    '1': 0.043478260869565216
+    '5': 0.08695652173913043
+    '10': 0.08695652173913043
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2220
+  - MED-1351
+  - MED-3487
+  - MED-2725
+  - MED-2112
+  - MED-2295
+  - MED-2201
+  - MED-4599
+  - MED-4674
+  - MED-749
+  unmapped_hits: 0
+- name: PLAIN-2590
+  ndcg_at_10: 0.11366150026645366
+  recall:
+    '1': 0.0
+    '5': 0.015873015873015872
+    '10': 0.015873015873015872
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-4163
+  - MED-5338
+  - MED-2290
+  - MED-934
+  - MED-5340
+  - MED-4894
+  - MED-1135
+  - MED-2108
+  - MED-1540
+  - MED-1723
+  unmapped_hits: 0
+- name: PLAIN-2600
+  ndcg_at_10: 0.6604400652351456
+  recall:
+    '1': 0.1
+    '5': 0.4
+    '10': 0.4
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2372
+  - MED-2371
+  - MED-4324
+  - MED-4676
+  - MED-2939
+  - MED-5124
+  - MED-1884
+  - MED-1889
+  - MED-2884
+  - MED-5330
+  unmapped_hits: 0
+- name: PLAIN-2610
+  ndcg_at_10: 0.23101571094852588
+  recall:
+    '1': 0.0
+    '5': 0.03278688524590164
+    '10': 0.04918032786885246
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-2460
+  - MED-2482
+  - MED-2452
+  - MED-5072
+  - MED-2655
+  - MED-2458
+  - MED-2464
+  - MED-3950
+  - MED-2471
+  - MED-1834
+  unmapped_hits: 0
+- name: PLAIN-2620
+  ndcg_at_10: 0.5960060011541364
+  recall:
+    '1': 0.01818181818181818
+    '5': 0.09090909090909091
+    '10': 0.16363636363636364
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2989
+  - MED-2985
+  - MED-2988
+  - MED-2987
+  - MED-4319
+  - MED-2979
+  - MED-2986
+  - MED-3271
+  - MED-2585
+  - MED-2983
+  unmapped_hits: 0
+- name: PLAIN-2630
+  ndcg_at_10: 0.7058075148678525
+  recall:
+    '1': 0.020833333333333332
+    '5': 0.08333333333333333
+    '10': 0.125
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2643
+  - MED-2658
+  - MED-2650
+  - MED-2644
+  - MED-5323
+  - MED-2652
+  - MED-1099
+  - MED-1003
+  - MED-1763
+  - MED-2661
+  unmapped_hits: 0
+- name: PLAIN-2640
+  ndcg_at_10: 0.49855595682523995
+  recall:
+    '1': 0.020833333333333332
+    '5': 0.10416666666666667
+    '10': 0.16666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2743
+  - MED-3880
+  - MED-2745
+  - MED-3892
+  - MED-3882
+  - MED-2492
+  - MED-4354
+  - MED-3888
+  - MED-2339
+  - MED-4429
+  unmapped_hits: 0
+- name: PLAIN-2650
+  ndcg_at_10: 0.522495596791931
+  recall:
+    '1': 0.034482758620689655
+    '5': 0.10344827586206896
+    '10': 0.13793103448275862
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2800
+  - MED-2819
+  - MED-2831
+  - MED-2788
+  - MED-2801
+  - MED-2807
+  - MED-2813
+  - MED-2783
+  - MED-2825
+  - MED-2817
+  unmapped_hits: 0
+- name: PLAIN-2660
+  ndcg_at_10: 0.3647442587311445
+  recall:
+    '1': 0.037037037037037035
+    '5': 0.037037037037037035
+    '10': 0.1111111111111111
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3012
+  - MED-4376
+  - MED-5099
+  - MED-5097
+  - MED-4733
+  - MED-2905
+  - MED-3032
+  - MED-3029
+  - MED-2907
+  - MED-3592
+  unmapped_hits: 0
+- name: PLAIN-2670
+  ndcg_at_10: 0.4155682294746731
+  recall:
+    '1': 0.02857142857142857
+    '5': 0.05714285714285714
+    '10': 0.05714285714285714
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2994
+  - MED-2618
+  - MED-5122
+  - MED-3502
+  - MED-2993
+  - MED-2106
+  - MED-4057
+  - MED-2678
+  - MED-4974
+  - MED-4451
+  unmapped_hits: 0
+- name: PLAIN-2680
+  ndcg_at_10: 0.36458598999465325
+  recall:
+    '1': 0.07142857142857142
+    '5': 0.14285714285714285
+    '10': 0.14285714285714285
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3100
+  - MED-5102
+  - MED-1961
+  - MED-3102
+  - MED-1958
+  - MED-2388
+  - MED-2394
+  - MED-5105
+  - MED-2495
+  - MED-1098
+  unmapped_hits: 0
+- name: PLAIN-2690
+  ndcg_at_10: 0.5349469795456405
+  recall:
+    '1': 0.023255813953488372
+    '5': 0.09302325581395349
+    '10': 0.11627906976744186
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3175
+  - MED-3169
+  - MED-4672
+  - MED-5094
+  - MED-3288
+  - MED-3171
+  - MED-4818
+  - MED-3319
+  - MED-4814
+  - MED-2352
+  unmapped_hits: 0
+- name: PLAIN-2700
+  ndcg_at_10: 0.36417417493582804
+  recall:
+    '1': 0.1
+    '5': 0.2
+    '10': 0.2
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3253
+  - MED-3954
+  - MED-4255
+  - MED-4613
+  - MED-1932
+  - MED-1542
+  - MED-2126
+  - MED-1366
+  - MED-1991
+  - MED-2476
+  unmapped_hits: 0
+- name: PLAIN-2710
+  ndcg_at_10: 0.5889304030616844
+  recall:
+    '1': 0.047619047619047616
+    '5': 0.14285714285714285
+    '10': 0.19047619047619047
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3380
+  - MED-3382
+  - MED-1153
+  - MED-3381
+  - MED-4655
+  - MED-3351
+  - MED-2994
+  - MED-1630
+  - MED-2618
+  - MED-5062
+  unmapped_hits: 0
+- name: PLAIN-2720
+  ndcg_at_10: 0.32730659600126993
+  recall:
+    '1': 0.027777777777777776
+    '5': 0.05555555555555555
+    '10': 0.08333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4392
+  - MED-3483
+  - MED-2711
+  - MED-2707
+  - MED-2713
+  - MED-3479
+  - MED-2083
+  - MED-5319
+  - MED-1846
+  - MED-2265
+  unmapped_hits: 0
+- name: PLAIN-2730
+  ndcg_at_10: 0.4284959781804263
+  recall:
+    '1': 0.0
+    '5': 0.06896551724137931
+    '10': 0.13793103448275862
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2573
+  - MED-3554
+  - MED-3553
+  - MED-3840
+  - MED-2513
+  - MED-3551
+  - MED-3548
+  - MED-1315
+  - MED-2568
+  - MED-4777
+  unmapped_hits: 0
+- name: PLAIN-2740
+  ndcg_at_10: 0.5451067074859084
+  recall:
+    '1': 0.0
+    '5': 0.06
+    '10': 0.12
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-2940
+  - MED-3627
+  - MED-3624
+  - MED-3623
+  - MED-2947
+  - MED-3620
+  - MED-3444
+  - MED-3621
+  - MED-3619
+  - MED-3634
+  unmapped_hits: 0
+- name: PLAIN-2750
+  ndcg_at_10: 0.6254843812442439
+  recall:
+    '1': 0.01694915254237288
+    '5': 0.06779661016949153
+    '10': 0.11864406779661017
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3683
+  - MED-3680
+  - MED-4762
+  - MED-3695
+  - MED-3690
+  - MED-3688
+  - MED-1300
+  - MED-2482
+  - MED-3692
+  - MED-3693
+  unmapped_hits: 0
+- name: PLAIN-2760
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.07692307692307693
+  ranked:
+  - MED-4600
+  - MED-2220
+  - MED-1377
+  - MED-4313
+  - MED-1366
+  - MED-1210
+  - MED-3900
+  - MED-2294
+  - MED-2201
+  - MED-1650
+  unmapped_hits: 0
+- name: PLAIN-2770
+  ndcg_at_10: 0.5684055517521508
+  recall:
+    '1': 0.0
+    '5': 0.0975609756097561
+    '10': 0.17073170731707318
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-1826
+  - MED-3836
+  - MED-3830
+  - MED-3855
+  - MED-3834
+  - MED-3840
+  - MED-2437
+  - MED-3832
+  - MED-5066
+  - MED-3853
+  unmapped_hits: 0
+- name: PLAIN-2780
+  ndcg_at_10: 0.4458227964692971
+  recall:
+    '1': 0.045454545454545456
+    '5': 0.13636363636363635
+    '10': 0.22727272727272727
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3896
+  - MED-4292
+  - MED-4286
+  - MED-2595
+  - MED-4707
+  - MED-4291
+  - MED-2383
+  - MED-2592
+  - MED-4287
+  - MED-2594
+  unmapped_hits: 0
+- name: PLAIN-2790
+  ndcg_at_10: 0.7155506487682609
+  recall:
+    '1': 0.01694915254237288
+    '5': 0.06779661016949153
+    '10': 0.1016949152542373
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3970
+  - MED-3969
+  - MED-3964
+  - MED-3963
+  - MED-2811
+  - MED-3960
+  - MED-3967
+  - MED-2831
+  - MED-3496
+  - MED-2809
+  unmapped_hits: 0
+- name: PLAIN-2800
+  ndcg_at_10: 0.15114358520260918
+  recall:
+    '1': 0.0
+    '5': 0.041666666666666664
+    '10': 0.08333333333333333
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-2070
+  - MED-4456
+  - MED-2074
+  - MED-4454
+  - MED-2235
+  - MED-5075
+  - MED-2231
+  - MED-2071
+  - MED-2068
+  - MED-4040
+  unmapped_hits: 0
+- name: PLAIN-2810
+  ndcg_at_10: 0.05184819766823351
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.125
+  reciprocal_rank: 0.125
+  ranked:
+  - MED-2491
+  - MED-1792
+  - MED-4580
+  - MED-4029
+  - MED-4590
+  - MED-3945
+  - MED-2969
+  - MED-4585
+  - MED-1672
+  - MED-3201
+  unmapped_hits: 0
+- name: PLAIN-2820
+  ndcg_at_10: 0.11671218210122507
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.125
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-1677
+  - MED-907
+  - MED-1408
+  - MED-2698
+  - MED-1394
+  - MED-1329
+  - MED-2007
+  - MED-1232
+  - MED-1233
+  - MED-4106
+  unmapped_hits: 0
+- name: PLAIN-2830
+  ndcg_at_10: 0.6387878864795979
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.3333333333333333
+    '10': 0.3333333333333333
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4120
+  - MED-5054
+  - MED-1625
+  - MED-1630
+  - MED-1626
+  - MED-1623
+  - MED-5053
+  - MED-1624
+  - MED-4126
+  - MED-1108
+  unmapped_hits: 0
+- name: PLAIN-2840
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2009
+  - MED-4150
+  - MED-3796
+  - MED-3842
+  - MED-4443
+  - MED-2010
+  - MED-2145
+  - MED-2438
+  - MED-3136
+  - MED-3869
+  unmapped_hits: 0
+- name: PLAIN-2850
+  ndcg_at_10: 0.11002574107570623
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.1111111111111111
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-2492
+  - MED-2671
+  - MED-1977
+  - MED-4358
+  - MED-5326
+  - MED-5205
+  - MED-4057
+  - MED-4182
+  - MED-2584
+  - MED-4166
+  unmapped_hits: 0
+- name: PLAIN-2860
+  ndcg_at_10: 1.0
+  recall:
+    '1': 0.5
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4185
+  - MED-4186
+  - MED-3590
+  - MED-3421
+  - MED-4992
+  - MED-891
+  - MED-2644
+  - MED-3431
+  - MED-3424
+  - MED-4755
+  unmapped_hits: 0
+- name: PLAIN-2870
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.020833333333333332
+  ranked:
+  - MED-2178
+  - MED-2253
+  - MED-3378
+  - MED-2491
+  - MED-3595
+  - MED-2260
+  - MED-3592
+  - MED-1003
+  - MED-4533
+  - MED-4529
+  unmapped_hits: 0
+- name: PLAIN-2880
+  ndcg_at_10: 0.14982420171299154
+  recall:
+    '1': 0.058823529411764705
+    '5': 0.058823529411764705
+    '10': 0.058823529411764705
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4255
+  - MED-4890
+  - MED-2116
+  - MED-4613
+  - MED-4493
+  - MED-4686
+  - MED-1366
+  - MED-1780
+  - MED-2522
+  - MED-4609
+  unmapped_hits: 0
+- name: PLAIN-2890
+  ndcg_at_10: 0.11381311447980799
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.034482758620689655
+  reciprocal_rank: 0.125
+  ranked:
+  - MED-1533
+  - MED-1534
+  - MED-1538
+  - MED-3896
+  - MED-939
+  - MED-4287
+  - MED-1535
+  - MED-4250
+  - MED-3370
+  - MED-3376
+  unmapped_hits: 0
+- name: PLAIN-2900
+  ndcg_at_10: 0.10026710274415572
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.08333333333333333
+  reciprocal_rank: 0.16666666666666666
+  ranked:
+  - MED-3687
+  - MED-1420
+  - MED-1417
+  - MED-3679
+  - MED-3681
+  - MED-4271
+  - MED-3675
+  - MED-4266
+  - MED-5198
+  - MED-3692
+  unmapped_hits: 0
+- name: PLAIN-2910
+  ndcg_at_10: 0.20436662668128655
+  recall:
+    '1': 0.0
+    '5': 0.06666666666666667
+    '10': 0.06666666666666667
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4296
+  - MED-4295
+  - MED-2430
+  - MED-4298
+  - MED-4566
+  - MED-5095
+  - MED-2826
+  - MED-5115
+  - MED-1258
+  - MED-2152
+  unmapped_hits: 0
+- name: PLAIN-2920
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-4309
+  - MED-3532
+  - MED-2333
+  - MED-3522
+  - MED-1623
+  - MED-1624
+  - MED-5231
+  - MED-2664
+  - MED-5069
+  - MED-3518
+  unmapped_hits: 0
+- name: PLAIN-2930
+  ndcg_at_10: 0.36077903708155934
+  recall:
+    '1': 0.07142857142857142
+    '5': 0.07142857142857142
+    '10': 0.07142857142857142
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4325
+  - MED-1005
+  - MED-1008
+  - MED-1016
+  - MED-1009
+  - MED-1017
+  - MED-1014
+  - MED-1013
+  - MED-3539
+  - MED-946
+  unmapped_hits: 0
+- name: PLAIN-2940
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.03571428571428571
+  ranked:
+  - MED-3961
+  - MED-1578
+  - MED-1579
+  - MED-1425
+  - MED-1580
+  - MED-3965
+  - MED-3966
+  - MED-1576
+  - MED-1582
+  - MED-1581
+  unmapped_hits: 0
+- name: PLAIN-2950
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1956
+  - MED-1957
+  - MED-4944
+  - MED-1959
+  - MED-2742
+  - MED-4490
+  - MED-1960
+  - MED-4724
+  - MED-2738
+  - MED-1147
+  unmapped_hits: 0
+- name: PLAIN-2960
+  ndcg_at_10: 0.3273949503887395
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-4371
+  - MED-4372
+  - MED-4374
+  - MED-4370
+  - MED-5123
+  - MED-4366
+  - MED-4598
+  - MED-4673
+  - MED-4028
+  - MED-2750
+  unmapped_hits: 0
+- name: PLAIN-2970
+  ndcg_at_10: 0.4356393980791516
+  recall:
+    '1': 0.1111111111111111
+    '5': 0.1111111111111111
+    '10': 0.2222222222222222
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4382
+  - MED-2069
+  - MED-2889
+  - MED-4030
+  - MED-3550
+  - MED-5033
+  - MED-2895
+  - MED-2900
+  - MED-1334
+  - MED-4384
+  unmapped_hits: 0
+- name: PLAIN-2981
+  ndcg_at_10: 0.43122038713502514
+  recall:
+    '1': 0.14285714285714285
+    '5': 0.14285714285714285
+    '10': 0.14285714285714285
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4403
+  - MED-5109
+  - MED-3087
+  - MED-3198
+  - MED-1773
+  - MED-4357
+  - MED-2775
+  - MED-4198
+  - MED-335
+  - MED-4964
+  unmapped_hits: 0
+- name: PLAIN-2991
+  ndcg_at_10: 0.38685280723454163
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-1663
+  - MED-4424
+  - MED-1657
+  - MED-1667
+  - MED-4827
+  - MED-5266
+  - MED-4830
+  - MED-3198
+  - MED-2432
+  - MED-2488
+  unmapped_hits: 0
+- name: PLAIN-3001
+  ndcg_at_10: 0.2640681225725909
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-3314
+  - MED-1103
+  - MED-1114
+  - MED-4436
+  - MED-1151
+  - MED-3699
+  - MED-3123
+  - MED-5060
+  - MED-4278
+  - MED-1156
+  unmapped_hits: 0
+- name: PLAIN-3014
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-2716
+  - MED-3452
+  - MED-5200
+  - MED-5207
+  - MED-2520
+  - MED-4609
+  - MED-1478
+  - MED-5088
+  - MED-3509
+  - MED-4650
+  unmapped_hits: 0
+- name: PLAIN-3026
+  ndcg_at_10: 0.3333333333333333
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 1.0
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-1601
+  - MED-3453
+  - MED-4976
+  - MED-3157
+  - MED-5188
+  - MED-936
+  - MED-4470
+  - MED-4929
+  - MED-859
+  - MED-3617
+  unmapped_hits: 0
+- name: PLAIN-3037
+  ndcg_at_10: 0.32531670832675136
+  recall:
+    '1': 0.0
+    '5': 0.25
+    '10': 0.5
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-1451
+  - MED-1936
+  - MED-4506
+  - MED-863
+  - MED-2520
+  - MED-4663
+  - MED-4504
+  - MED-917
+  - MED-3894
+  - MED-5069
+  unmapped_hits: 0
+- name: PLAIN-3053
+  ndcg_at_10: 0.9325210919548239
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.6666666666666666
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4525
+  - MED-4526
+  - MED-4625
+  - MED-1620
+  - MED-1492
+  - MED-4527
+  - MED-2523
+  - MED-4778
+  - MED-1192
+  - MED-3807
+  unmapped_hits: 0
+- name: PLAIN-3063
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.05263157894736842
+  ranked:
+  - MED-2886
+  - MED-4712
+  - MED-2922
+  - MED-1676
+  - MED-2076
+  - MED-2924
+  - MED-1671
+  - MED-4900
+  - MED-4860
+  - MED-5070
+  unmapped_hits: 0
+- name: PLAIN-3074
+  ndcg_at_10: 1.0
+  recall:
+    '1': 1.0
+    '5': 1.0
+    '10': 1.0
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4555
+  - MED-4423
+  - MED-4424
+  - MED-3254
+  - MED-3427
+  - MED-1512
+  - MED-1680
+  - MED-4560
+  - MED-1679
+  - MED-3180
+  unmapped_hits: 0
+- name: PLAIN-3085
+  ndcg_at_10: 0.2640681225725909
+  recall:
+    '1': 0.0
+    '5': 0.5
+    '10': 0.5
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-714
+  - MED-919
+  - MED-4575
+  - MED-4573
+  - MED-716
+  - MED-3990
+  - MED-3988
+  - MED-4872
+  - MED-3986
+  - MED-4574
+  unmapped_hits: 0
+- name: PLAIN-3097
+  ndcg_at_10: 0.4770382338730848
+  recall:
+    '1': 0.25
+    '5': 0.25
+    '10': 0.25
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4590
+  - MED-1792
+  - MED-4580
+  - MED-4267
+  - MED-5019
+  - MED-2491
+  - MED-733
+  - MED-3908
+  - MED-2083
+  - MED-4585
+  unmapped_hits: 0
+- name: PLAIN-3116
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1363
+  - MED-2665
+  - MED-1553
+  - MED-2924
+  - MED-2076
+  - MED-5083
+  - MED-3718
+  - MED-2290
+  - MED-4893
+  - MED-1676
+  unmapped_hits: 0
+- name: PLAIN-3131
+  ndcg_at_10: 0.7247563515789053
+  recall:
+    '1': 0.16666666666666666
+    '5': 0.5
+    '10': 0.6666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4620
+  - MED-5010
+  - MED-4618
+  - MED-4619
+  - MED-5011
+  - MED-4303
+  - MED-5283
+  - MED-4600
+  - MED-2009
+  - MED-4621
+  unmapped_hits: 0
+- name: PLAIN-3141
+  ndcg_at_10: 0.2996484034259831
+  recall:
+    '1': 0.029411764705882353
+    '5': 0.029411764705882353
+    '10': 0.029411764705882353
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4644
+  - MED-2647
+  - MED-5226
+  - MED-1597
+  - MED-1594
+  - MED-4755
+  - MED-1592
+  - MED-1596
+  - MED-4160
+  - MED-3701
+  unmapped_hits: 0
+- name: PLAIN-3151
+  ndcg_at_10: 0.7870810316820983
+  recall:
+    '1': 0.05555555555555555
+    '5': 0.2222222222222222
+    '10': 0.4444444444444444
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4662
+  - MED-4665
+  - MED-4666
+  - MED-4664
+  - MED-4660
+  - MED-3444
+  - MED-4668
+  - MED-3971
+  - MED-3445
+  - MED-3448
+  unmapped_hits: 0
+- name: PLAIN-3161
+  ndcg_at_10: 0.4752115325793111
+  recall:
+    '1': 0.023255813953488372
+    '5': 0.023255813953488372
+    '10': 0.06976744186046512
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4677
+  - MED-2055
+  - MED-4897
+  - MED-2774
+  - MED-2341
+  - MED-2063
+  - MED-4396
+  - MED-900
+  - MED-1768
+  - MED-5118
+  unmapped_hits: 0
+- name: PLAIN-3171
+  ndcg_at_10: 0.3182088950120324
+  recall:
+    '1': 0.029411764705882353
+    '5': 0.058823529411764705
+    '10': 0.08823529411764706
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-1501
+  - MED-2510
+  - MED-5123
+  - MED-1504
+  - MED-1777
+  - MED-1952
+  - MED-1502
+  - MED-1754
+  - MED-2890
+  - MED-2904
+  unmapped_hits: 0
+- name: PLAIN-3181
+  ndcg_at_10: 0.06362078819895171
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.037037037037037035
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-4525
+  - MED-4526
+  - MED-3900
+  - MED-1695
+  - MED-1262
+  - MED-3728
+  - MED-1686
+  - MED-3744
+  - MED-5022
+  - MED-1795
+  unmapped_hits: 0
+- name: PLAIN-3191
+  ndcg_at_10: 0.4791774795804215
+  recall:
+    '1': 0.0625
+    '5': 0.1875
+    '10': 0.1875
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4730
+  - MED-1831
+  - MED-4943
+  - MED-928
+  - MED-4731
+  - MED-4936
+  - MED-5100
+  - MED-839
+  - MED-3024
+  - MED-4961
+  unmapped_hits: 0
+- name: PLAIN-3201
+  ndcg_at_10: 0.23469217452493826
+  recall:
+    '1': 0.0
+    '5': 0.03125
+    '10': 0.0625
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-2120
+  - MED-2117
+  - MED-4752
+  - MED-4394
+  - MED-2121
+  - MED-2124
+  - MED-2116
+  - MED-4896
+  - MED-4398
+  - MED-2122
+  unmapped_hits: 0
+- name: PLAIN-3211
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-924
+  - MED-4365
+  - MED-4439
+  - MED-4595
+  - MED-4468
+  - MED-842
+  - MED-2098
+  - MED-4775
+  - MED-5173
+  - MED-5048
+  unmapped_hits: 0
+- name: PLAIN-3221
+  ndcg_at_10: 0.06978419164318801
+  recall:
+    '1': 0.0
+    '5': 0.041666666666666664
+    '10': 0.041666666666666664
+  reciprocal_rank: 0.2
+  ranked:
+  - MED-2212
+  - MED-2216
+  - MED-1506
+  - MED-1851
+  - MED-726
+  - MED-1702
+  - MED-987
+  - MED-1433
+  - MED-1705
+  - MED-4590
+  unmapped_hits: 0
+- name: PLAIN-3231
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.047619047619047616
+  ranked:
+  - MED-1114
+  - MED-1109
+  - MED-1103
+  - MED-5188
+  - MED-1106
+  - MED-5326
+  - MED-4485
+  - MED-1110
+  - MED-2584
+  - MED-4482
+  unmapped_hits: 0
+- name: PLAIN-3241
+  ndcg_at_10: 0.48486588470890596
+  recall:
+    '1': 0.034482758620689655
+    '5': 0.06896551724137931
+    '10': 0.10344827586206896
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4841
+  - MED-1184
+  - MED-3970
+  - MED-1039
+  - MED-2056
+  - MED-4628
+  - MED-1575
+  - MED-735
+  - MED-2062
+  - MED-2821
+  unmapped_hits: 0
+- name: PLAIN-3251
+  ndcg_at_10: 0.056906557239903996
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.047619047619047616
+  reciprocal_rank: 0.125
+  ranked:
+  - MED-4278
+  - MED-1380
+  - MED-1529
+  - MED-5145
+  - MED-3123
+  - MED-2304
+  - MED-5236
+  - MED-3699
+  - MED-4245
+  - MED-3314
+  unmapped_hits: 0
+- name: PLAIN-3261
+  ndcg_at_10: 0.14982420171299154
+  recall:
+    '1': 0.0
+    '5': 0.07692307692307693
+    '10': 0.07692307692307693
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-5157
+  - MED-5158
+  - MED-4873
+  - MED-4539
+  - MED-3487
+  - MED-3490
+  - MED-4328
+  - MED-1400
+  - MED-1450
+  - MED-3491
+  unmapped_hits: 0
+- name: PLAIN-3271
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.05
+  ranked:
+  - MED-4823
+  - MED-4450
+  - MED-3862
+  - MED-4069
+  - MED-1781
+  - MED-1873
+  - MED-2434
+  - MED-3878
+  - MED-1556
+  - MED-1455
+  unmapped_hits: 0
+- name: PLAIN-3281
+  ndcg_at_10: 0.38160358729772015
+  recall:
+    '1': 0.038461538461538464
+    '5': 0.038461538461538464
+    '10': 0.07692307692307693
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4909
+  - MED-1849
+  - MED-1850
+  - MED-5097
+  - MED-1851
+  - MED-2264
+  - MED-2906
+  - MED-3087
+  - MED-1843
+  - MED-3315
+  unmapped_hits: 0
+- name: PLAIN-3292
+  ndcg_at_10: 0.46637661544723547
+  recall:
+    '1': 0.0
+    '5': 0.2857142857142857
+    '10': 0.7142857142857143
+  reciprocal_rank: 0.3333333333333333
+  ranked:
+  - MED-2757
+  - MED-2758
+  - MED-2760
+  - MED-2762
+  - MED-2761
+  - MED-4647
+  - MED-4600
+  - MED-4925
+  - MED-950
+  - MED-2759
+  unmapped_hits: 0
+- name: PLAIN-3302
+  ndcg_at_10: 0.052144264846557896
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.02702702702702703
+  reciprocal_rank: 0.1
+  ranked:
+  - MED-3592
+  - MED-2751
+  - MED-3545
+  - MED-3783
+  - MED-4811
+  - MED-4959
+  - MED-4944
+  - MED-4961
+  - MED-1572
+  - MED-3012
+  unmapped_hits: 0
+- name: PLAIN-3312
+  ndcg_at_10: 0.26604678486472727
+  recall:
+    '1': 0.0
+    '5': 0.15384615384615385
+    '10': 0.3076923076923077
+  reciprocal_rank: 0.5
+  ranked:
+  - MED-4360
+  - MED-1570
+  - MED-1572
+  - MED-4959
+  - MED-4961
+  - MED-4966
+  - MED-1569
+  - MED-1274
+  - MED-2345
+  - MED-3631
+  unmapped_hits: 0
+- name: PLAIN-3322
+  ndcg_at_10: 0.15850703974098102
+  recall:
+    '1': 0.0
+    '5': 0.012658227848101266
+    '10': 0.02531645569620253
+  reciprocal_rank: 0.2
+  ranked:
+  - MED-5066
+  - MED-4714
+  - MED-2189
+  - MED-2205
+  - MED-2577
+  - MED-2174
+  - MED-3557
+  - MED-3245
+  - MED-840
+  - MED-1146
+  unmapped_hits: 0
+- name: PLAIN-3332
+  ndcg_at_10: 0.8222143827149657
+  recall:
+    '1': 0.07142857142857142
+    '5': 0.35714285714285715
+    '10': 0.5714285714285714
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3696
+  - MED-4994
+  - MED-3762
+  - MED-3768
+  - MED-3700
+  - MED-3763
+  - MED-3766
+  - MED-4445
+  - MED-1678
+  - MED-3767
+  unmapped_hits: 0
+- name: PLAIN-3342
+  ndcg_at_10: 0.7039180890341347
+  recall:
+    '1': 0.3333333333333333
+    '5': 0.6666666666666666
+    '10': 0.6666666666666666
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5012
+  - MED-4000
+  - MED-5014
+  - MED-4004
+  - MED-4002
+  - MED-5015
+  - MED-5016
+  - MED-4001
+  - MED-5118
+  - MED-2774
+  unmapped_hits: 0
+- name: PLAIN-3352
+  ndcg_at_10: 0.10797114656290628
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.02564102564102564
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-4789
+  - MED-2224
+  - MED-3151
+  - MED-3504
+  - MED-5120
+  - MED-3316
+  - MED-5026
+  - MED-1638
+  - MED-2595
+  - MED-1999
+  unmapped_hits: 0
+- name: PLAIN-3362
+  ndcg_at_10: 0.44922026313329616
+  recall:
+    '1': 0.09090909090909091
+    '5': 0.18181818181818182
+    '10': 0.18181818181818182
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5042
+  - MED-5296
+  - MED-5292
+  - MED-4529
+  - MED-5041
+  - MED-2780
+  - MED-5294
+  - MED-2792
+  - MED-1571
+  - MED-1944
+  unmapped_hits: 0
+- name: PLAIN-3372
+  ndcg_at_10: 0.15537907391531902
+  recall:
+    '1': 0.0
+    '5': 0.07142857142857142
+    '10': 0.07142857142857142
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-4868
+  - MED-1625
+  - MED-5054
+  - MED-5056
+  - MED-5057
+  - MED-4120
+  - MED-1710
+  - MED-2226
+  - MED-1707
+  - MED-4125
+  unmapped_hits: 0
+- name: PLAIN-3382
+  ndcg_at_10: 0.47284711549325353
+  recall:
+    '1': 0.07142857142857142
+    '5': 0.2857142857142857
+    '10': 0.35714285714285715
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-3382
+  - MED-5054
+  - MED-2994
+  - MED-3381
+  - MED-3380
+  - MED-1625
+  - MED-3359
+  - MED-3351
+  - MED-5062
+  - MED-906
+  unmapped_hits: 0
+- name: PLAIN-3392
+  ndcg_at_10: 0.0
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.0
+  reciprocal_rank: 0.0
+  ranked:
+  - MED-1646
+  - MED-1627
+  - MED-4331
+  - MED-1637
+  - MED-5123
+  - MED-3734
+  - MED-3533
+  - MED-4318
+  - MED-5039
+  - MED-3490
+  unmapped_hits: 0
+- name: PLAIN-3402
+  ndcg_at_10: 0.06625422345438903
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.07142857142857142
+  reciprocal_rank: 0.1111111111111111
+  ranked:
+  - MED-2951
+  - MED-4689
+  - MED-4149
+  - MED-4413
+  - MED-2223
+  - MED-5056
+  - MED-2285
+  - MED-4523
+  - MED-3744
+  - MED-2693
+  unmapped_hits: 0
+- name: PLAIN-3412
+  ndcg_at_10: 0.34834666750752674
+  recall:
+    '1': 0.02040816326530612
+    '5': 0.061224489795918366
+    '10': 0.08163265306122448
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-4682
+  - MED-4894
+  - MED-2774
+  - MED-3227
+  - MED-3233
+  - MED-1138
+  - MED-3226
+  - MED-3216
+  - MED-1135
+  - MED-1339
+  unmapped_hits: 0
+- name: PLAIN-3422
+  ndcg_at_10: 0.08611327522355305
+  recall:
+    '1': 0.0
+    '5': 0.03225806451612903
+    '10': 0.06451612903225806
+  reciprocal_rank: 0.25
+  ranked:
+  - MED-2762
+  - MED-4866
+  - MED-4373
+  - MED-4566
+  - MED-4872
+  - MED-4930
+  - MED-5136
+  - MED-3452
+  - MED-2942
+  - MED-951
+  unmapped_hits: 0
+- name: PLAIN-3432
+  ndcg_at_10: 0.43810818083050457
+  recall:
+    '1': 0.023809523809523808
+    '5': 0.023809523809523808
+    '10': 0.09523809523809523
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-2227
+  - MED-3050
+  - MED-5040
+  - MED-4782
+  - MED-5038
+  - MED-2223
+  - MED-2228
+  - MED-5283
+  - MED-2224
+  - MED-5284
+  unmapped_hits: 0
+- name: PLAIN-3442
+  ndcg_at_10: 0.04236776600349706
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.034482758620689655
+  reciprocal_rank: 0.1111111111111111
+  ranked:
+  - MED-2201
+  - MED-5076
+  - MED-3371
+  - MED-967
+  - MED-5026
+  - MED-2066
+  - MED-4496
+  - MED-1162
+  - MED-2098
+  - MED-2085
+  unmapped_hits: 0
+- name: PLAIN-3452
+  ndcg_at_10: 0.5427357380331039
+  recall:
+    '1': 0.058823529411764705
+    '5': 0.17647058823529413
+    '10': 0.23529411764705882
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5175
+  - MED-4638
+  - MED-1049
+  - MED-1031
+  - MED-2100
+  - MED-1035
+  - MED-4641
+  - MED-1034
+  - MED-4810
+  - MED-1040
+  unmapped_hits: 0
+- name: PLAIN-3462
+  ndcg_at_10: 0.6879509227782193
+  recall:
+    '1': 0.015625
+    '5': 0.046875
+    '10': 0.109375
+  reciprocal_rank: 1.0
+  ranked:
+  - MED-5274
+  - MED-5153
+  - MED-5271
+  - MED-1373
+  - MED-5260
+  - MED-1390
+  - MED-5268
+  - MED-5269
+  - MED-5263
+  - MED-5273
+  unmapped_hits: 0
+- name: PLAIN-3472
+  ndcg_at_10: 0.08898358573137954
+  recall:
+    '1': 0.0
+    '5': 0.0
+    '10': 0.058823529411764705
+  reciprocal_rank: 0.14285714285714285
+  ranked:
+  - MED-1350
+  - MED-2525
+  - MED-2750
+  - MED-3760
+  - MED-5299
+  - MED-3106
+  - MED-5343
+  - MED-3686
+  - MED-1549
+  - MED-2923
+  unmapped_hits: 0
+means:
+  ndcg@10: 0.39581759925700455
+  recall@1: 0.06524410730984456
+  recall@5: 0.15057162371173533
+  recall@10: 0.1982143547598941
+  mrr: 0.6188848957621961
+unmapped_hits: 0

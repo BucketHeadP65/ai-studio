@@ -1,0 +1,105 @@
+# Local Temporal for durable workflow runs: the OPT-IN, Postgres-backed profile.
+#
+# The default needs neither Docker nor this file. `APP_RUN__RUN_ENGINE` defaults to `in_process`, which
+# runs every workflow inside the app with no Temporal at all. With `APP_RUN__RUN_ENGINE=temporal`, the
+# app starts Temporal's own dev server itself when nothing answers `APP_RUN__TEMPORAL_ADDRESS` and the
+# address names this machine (`src/harness/adapters/temporal_server.py`). Its history is a SQLite
+# file under `.state/`, so a parked gate survives a restart of both the app and the server, and the
+# web UI is on 8233 either way.
+#
+# What this file adds is a server whose history lives in Postgres, for a deployment that wants one:
+#
+#     docker compose --profile persistent up -d temporal-postgresql temporal-persistent temporal-ui
+#
+# With it up on 7233 (the default address), the app finds it on the probe and starts nothing of its
+# own. The unprofiled `temporal` service below is the same all-in-one dev server the app would have
+# started, in a container instead, useful when the server should outlive the app. It keeps its state
+# in memory, so a `docker compose down` forgets every run.
+services:
+  # The dev server: Temporal's own all-in-one image. No profile, so plain `docker compose up -d`
+  # starts it.
+  #   7233 — the gRPC frontend every client and worker connects to. `connect("localhost:7233")`.
+  #   8233 — the web UI. http://localhost:8233 shows a run's history, which is the fastest way to
+  #          see that a parked gate really is server state and not a coroutine in the app.
+  temporal:
+    image: temporalio/auto-setup:1.31.2
+    container_name: workflows-temporal
+    command: ["autosetup"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    environment:
+      # `sqlite` keeps the whole server in one container. The persistent profile below swaps it.
+      DB: sqlite
+      SKIP_DB_CREATE: "true"
+      # The UI is served by this container rather than a second one, so a laptop runs one image.
+      ENABLE_UI: "true"
+      UI_PORT: "8233"
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--address", "127.0.0.1:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Postgres for the `persistent` profile. Port 5435 on the host: engram's own stack already holds
+  # 5433 (ParadeDB) and 5434 (the local Postgres), and two projects fighting over a port is a
+  # confusing way to find out you started the wrong database.
+  temporal-postgresql:
+    image: postgres:17.6
+    container_name: workflows-temporal-postgres
+    profiles:
+      - persistent
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - workflows-temporal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The same server on the same port, keeping its history in Postgres. Behind the `persistent`
+  # profile so it never races the in-memory one for 7233.
+  temporal-persistent:
+    image: temporalio/auto-setup:1.31.2
+    container_name: workflows-temporal-persistent
+    profiles:
+      - persistent
+    depends_on:
+      temporal-postgresql:
+        condition: service_healthy
+    ports:
+      - "7233:7233"
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgresql
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--address", "127.0.0.1:7233"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # The standalone UI, for the persistent profile only — the default stack serves its own on 8233.
+  temporal-ui:
+    image: temporalio/ui:2.42.1
+    container_name: workflows-temporal-ui
+    profiles:
+      - persistent
+    depends_on:
+      temporal-persistent:
+        condition: service_healthy
+    ports:
+      - "8233:8080"
+    environment:
+      TEMPORAL_ADDRESS: temporal-persistent:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+
+volumes:
+  workflows-temporal-pgdata:

@@ -1,0 +1,31 @@
+{
+  "question_id": "q.memory-eval-commensurability",
+  "path": "reuse",
+  "surfaced": [
+    "ent.horma",
+    "ent.locomo",
+    "ent.longmemeval",
+    "paper.agents-k1-2026",
+    "paper.episodic-memory-bench-2025",
+    "paper.evermemos-2026",
+    "paper.hipif-2026",
+    "paper.hmem-2026",
+    "paper.horma-2026",
+    "paper.memtree-2024",
+    "paper.meta-harness-2026",
+    "paper.zep-2025"
+  ],
+  "recall": 1.0,
+  "missed": [],
+  "requests": 2,
+  "input_tokens": 9388,
+  "output_tokens": 1402,
+  "seconds": 20.25,
+  "contaminated": false,
+  "failed": false,
+  "failure": null,
+  "answer": "\"cited_page_ids=['paper.horma-2026', 'ent.locomo', 'cmp.agent-memory-systems', 'ent.horma', 'paper.hmem-2026', 'paper.evermemos-2026', 'moc.agent-memory'] answer_markdown='## 1) Direct answer\\\\nTo make agent-memory leaderboards commensurable across budget, judge, and backbone, you have to treat a \\u201cleaderboard score\\u201d as a *configuration-dependent measurement* and then **standardize (and publish) that configuration**: fix the **token/context budget**, fix the **judge model and scoring protocol**, fix the **backbone** (or report stratified results per backbone), and ensure **baselines are re-run under the same harness** rather than copied. The corpus frames the core issue as provenance: \\u201c**The discriminating variable is not architecture but eval provenance: embedder, reranker, judge model, and (decisively) whether baselines were re-run or copied from a leaderboard**\\u201d (cmp.agent-memory-systems#tl_dr). It also notes that without these controls, the same benchmarks yield inverted rankings and the \\u201ccells cannot be made commensurable\\u201d (cmp.agent-memory-systems#verdict).\\\\n\\\\nA practical way to do this in reporting is to (a) publish a single unified harness that reruns all systems under identical settings, (b) report **Pareto curves** (accuracy vs tokens/latency/cost) rather than a single scalar, because some systems optimize explicitly for budgeted efficiency and are \\u201c**budget-bounded, not free leaderboard scores**\\u201d (paper.horma-2026#limitations), and (c) disclose judge/backbone/budget so the community can reproduce and compare.\\\\n\\\\n## 2) Evidence for side A (skeptical: you can\\u2019t trust cross-paper rankings; must unify harness)\\\\n- \\u201c**Per current evidence, no system is established as best on comparable terms.**\\u201d (cmp.agent-memory-systems#verdict)\\\\n- \\u201cPractical reading: (1) **discount any single-paper memory leaderboard \\u2014 demand a unified re-run with stated embedder/reranker/judge before believing a ranking** \\u2026\\u201d (cmp.agent-memory-systems#verdict)\\\\n- \\u201cThe discriminating variable is not architecture but **eval provenance**: embedder, reranker, judge model, and (decisively) whether baselines were re-run or copied from a leaderboard.\\u201d (cmp.agent-memory-systems#tl_dr)\\\\n- \\u201c**The dispute is eval-config, not architecture.** Same systems, same named benchmarks, inverted rankings.\\u201d (cmp.agent-memory-systems#analysis)\\\\n- \\u201c**Numbers are budget-bounded, not free leaderboard scores.** \\u2026 *not commensurable* with unconstrained memory-system leaderboards \\u2026 that report different backbones, judges, and no budget.\\u201d (paper.horma-2026#limitations)\\\\n- \\u201cA third harness makes the incommensurability undeniable\\u2026 runs under a hard 10K/50K-token budget with a Sonnet-4.5 judge and optimizes for **token-efficiency**\\u2026 Same two benchmark names, a third non-comparable scoring regime.\\u201d (cmp.agent-memory-systems#analysis)\\\\n\\\\n## 3) Evidence for side B (actionable path: commensurability comes from fixing objective + harness; unified re-evals can produce comparable rankings)\\\\n- \\u201c**The only cross-system numbers produced under one controlled harness are H-Mem\\u2019s**, and under them H-Mem leads\\u2026\\u201d (cmp.agent-memory-systems#verdict)\\\\n- \\u201c[[hmem]]\\u2026 **beats six agent-memory systems** \\u2026 on overall F1 and LLM-judged accuracy across three conversational-memory benchmarks\\u2026\\u201d (paper.hmem-2026#tl_dr)\\\\n- \\u201cHORMA\\u2026 relocat[es] the question from \\u2018which system scores highest\\u2019 to \\u2018which system sits on the efficiency\\u2013performance Pareto under a fixed context budget\\u2019\\u2026\\u201d (cmp.agent-memory-systems#analysis)\\\\n- \\u201cA **third, budget-constrained harness** on LoCoMo\\u2026 where the contribution is token-efficiency\\u2026 **not** leaderboard accuracy \\u2014 not commensurable\\u2026\\u201d (ent.locomo#evidence)\\\\n\\\\n## 4) Conditions / when each side applies (if supported)\\\\n- If your goal is a **single global ranking across papers**, the corpus says it is not currently valid: rankings flip because the \\u201cdispute is eval-config\\u201d (cmp.agent-memory-systems#analysis) and many results are \\u201cnot commensurable\\u201d across budgets/judges/backbones (paper.horma-2026#limitations).\\\\n- If your goal is a **commensurable comparison**, you can get one *conditionally* by:\\\\n  - using a **single controlled harness** that reruns baselines (cmp.agent-memory-systems#verdict; cmp.agent-memory-systems#tl_dr), and\\\\n  - reporting under a **fixed budget** when budget is the objective (paper.horma-2026#limitations; ent.locomo#evidence), ideally as an efficiency\\u2013performance tradeoff rather than a raw score (cmp.agent-memory-systems#analysis).\\\\n\\\\n## 5) Page ids relied on (paper.* / ent.* only)\\\\n- paper.horma-2026\\\\n- ent.locomo\\\\n- ent.horma\\\\n- paper.hmem-2026\\\\n- paper.evermemos-2026\\\\n- cmp.agent-memory-systems\\\\n- moc.agent-memory'\"",
+  "workflow_id": "wf.primary-source-fork-answer.v5",
+  "hit_rank": 2,
+  "drift": []
+}

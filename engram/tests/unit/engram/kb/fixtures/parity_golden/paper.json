@@ -1,0 +1,129 @@
+{
+  "page_type": "paper",
+  "universal_fields": {
+    "id": "paper.ur2-2025",
+    "type": "paper",
+    "title": "UR²: Unify RAG and Reasoning through Reinforcement Learning",
+    "status": "synthesized",
+    "tasks": [
+      "open-domain-qa",
+      "multi-hop-qa",
+      "domain-qa",
+      "math-reasoning",
+      "agentic-search"
+    ],
+    "domains": [
+      "encyclopedic",
+      "biomed",
+      "mixed"
+    ],
+    "stages": [
+      "training",
+      "retrieval",
+      "generation",
+      "orchestration"
+    ],
+    "modalities": [
+      "text"
+    ],
+    "scale_regimes": [],
+    "aliases": [
+      "UR2 paper",
+      "UR² paper"
+    ]
+  },
+  "edge_set": [
+    [
+      "builds_on",
+      "r1-searcher-2025"
+    ],
+    [
+      "builds_on",
+      "search-r1-2025"
+    ],
+    [
+      "evaluates",
+      "gpt-4-1-mini"
+    ],
+    [
+      "evaluates",
+      "gpt-4o-mini"
+    ],
+    [
+      "evaluates",
+      "naive-rag"
+    ],
+    [
+      "evaluates",
+      "open-reasoner-zero"
+    ],
+    [
+      "evaluates",
+      "r1-searcher"
+    ],
+    [
+      "evaluates",
+      "rat"
+    ],
+    [
+      "evaluates",
+      "search-o1"
+    ],
+    [
+      "evaluates",
+      "search-r1"
+    ],
+    [
+      "evaluates",
+      "self-ask"
+    ],
+    [
+      "evaluates",
+      "zerosearch"
+    ],
+    [
+      "proposes",
+      "difficulty-aware-curriculum"
+    ],
+    [
+      "proposes",
+      "llm-summarized-retrieval"
+    ],
+    [
+      "proposes",
+      "ur2"
+    ],
+    [
+      "uses_datasets",
+      "2wikimultihopqa"
+    ],
+    [
+      "uses_datasets",
+      "bamboogle"
+    ],
+    [
+      "uses_datasets",
+      "hotpotqa"
+    ],
+    [
+      "uses_datasets",
+      "math500"
+    ],
+    [
+      "uses_datasets",
+      "medqa"
+    ],
+    [
+      "uses_datasets",
+      "minerva-math"
+    ],
+    [
+      "uses_datasets",
+      "mmlu-pro"
+    ],
+    [
+      "uses_datasets",
+      "musique"
+    ]
+  ]
+}

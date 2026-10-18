@@ -1,0 +1,360 @@
+# yaml-language-server: $schema=p6smoke.v1_schema.json
+name: engram-retrieval-golden
+cases:
+- name: pinpoint:paper.graphrag-2024#c3#0
+  inputs:
+    question: According to the sources, which method produces the most direct responses
+      across all comparisons?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphrag-2024
+    difficulty: easy
+    archetype: pinpoint
+    anchors:
+    - unit_id: paper.graphrag-2024
+      body_hash: 3aed1effd909562a90289b2a90a641e4d7087347f11d9374184da55b9dd6724c
+    mirror_hash: db4988e8b9da77974850a8d4c9044a42a68fde404caff35a80f872c6459156b0
+  expected_output:
+    answer: Vector RAG produces the most direct responses across all comparisons.
+    cited_source_ids:
+    - paper.graphrag-2024
+  evaluators: []
+- name: pinpoint:paper.graphrag-2024#c3#1
+  inputs:
+    question: In the described Microsoft GraphRAG approach, by how much do root-level
+      summaries reduce query tokens compared to TS?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphrag-2024
+    difficulty: easy
+    archetype: pinpoint
+    anchors:
+    - unit_id: paper.graphrag-2024
+      body_hash: 3aed1effd909562a90289b2a90a641e4d7087347f11d9374184da55b9dd6724c
+    mirror_hash: db4988e8b9da77974850a8d4c9044a42a68fde404caff35a80f872c6459156b0
+  expected_output:
+    answer: Root-level summaries reduce query tokens by more than 97% compared to
+      TS.
+    cited_source_ids:
+    - paper.graphrag-2024
+  evaluators: []
+- name: pinpoint:paper.graphrag-2024#c3#2
+  inputs:
+    question: By what percentage range does Microsoft GraphRAG win in comprehensiveness
+      over vector RAG on two ~1M-token corpora?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphrag-2024
+    difficulty: easy
+    archetype: pinpoint
+    anchors:
+    - unit_id: paper.graphrag-2024
+      body_hash: 3aed1effd909562a90289b2a90a641e4d7087347f11d9374184da55b9dd6724c
+    mirror_hash: db4988e8b9da77974850a8d4c9044a42a68fde404caff35a80f872c6459156b0
+  expected_output:
+    answer: Microsoft GraphRAG achieves a 72–83% comprehensiveness win over vector
+      RAG on two approximately 1-million-token corpora.
+    cited_source_ids:
+    - paper.graphrag-2024
+  evaluators: []
+- name: pinpoint:paper.graphrag-2024#c5#0
+  inputs:
+    question: By what percentage does GraphRAG reduce required context tokens when
+      answering from low-level community summaries (C3) compared to map-reduce over
+      source texts?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphrag-2024
+    difficulty: easy
+    archetype: pinpoint
+    anchors:
+    - unit_id: paper.graphrag-2024
+      body_hash: 3aed1effd909562a90289b2a90a641e4d7087347f11d9374184da55b9dd6724c
+    mirror_hash: 503485a1d26370836e1a82e6f6c83484b9aedfcae2d8f426c1e856083befd2ba
+  expected_output:
+    answer: GraphRAG reduces required context tokens by 26–33% at low-level community
+      summaries (C3) compared to map-reduce over source texts.
+    cited_source_ids:
+    - paper.graphrag-2024
+  evaluators: []
+- name: pinpoint:paper.graphrag-2024#c5#1
+  inputs:
+    question: How much do GraphRAG root-level summaries reduce query tokens compared
+      to traditional summarization (TS)?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphrag-2024
+    difficulty: easy
+    archetype: pinpoint
+    anchors:
+    - unit_id: paper.graphrag-2024
+      body_hash: 3aed1effd909562a90289b2a90a641e4d7087347f11d9374184da55b9dd6724c
+    mirror_hash: 503485a1d26370836e1a82e6f6c83484b9aedfcae2d8f426c1e856083befd2ba
+  expected_output:
+    answer: GraphRAG root-level summaries reduce query tokens by more than 97% compared
+      to traditional summarization (TS).
+    cited_source_ids:
+    - paper.graphrag-2024
+  evaluators: []
+- name: survey:applies_to:ent.domain-qa#0
+  inputs:
+    question: Across the specialized-domain QA settings mentioned, how does ACE (Agentic
+      Context Engineering) engage with financial benchmarks, and what role do FiNER
+      and Formula (FinLoRA) play in demonstrating ACE’s capabilities?
+    task: null
+  metadata:
+    anchor_page_id: ent.domain-qa
+    difficulty: hard
+    archetype: survey
+    anchors:
+    - unit_id: ent.domain-qa
+      body_hash: f257a2196b8240a083844aef0c1f50006f56cbb7322f90daa3d54f5d6155008d
+    - unit_id: ent.ace
+      body_hash: d67e36ae8408ca36e3d54e74c74bc69e43495d2fdfc4e13c569766178df4b52f
+    - unit_id: ent.finer
+      body_hash: 0df43de77d3c12afc517908fdebe4db56cb7b39bb21a6d76b78b70002c556fb8
+    - unit_id: ent.formula
+      body_hash: 3dd84ab78b00f7d28078a9490266a5d3d9d27a865ab0ad71898fea69136c9d68
+    mirror_hash: 7890dd283a2becd9d2a7b078a8b5f614ab4d71ad18e6d96477e3de4b83beb22f
+  expected_output:
+    answer: 'ACE operates within specialized-domain QA by targeting finance-focused,
+      regulated-corpus benchmarks and demonstrating gains on both information-extraction
+      and numerical-reasoning tasks. It does this by using FiNER as its main finance
+      case-study dataset for financial information extraction and Formula (FinLoRA)
+      as the benchmark where ACE achieves its largest improvement in financial numerical
+      reasoning.
+
+
+      Specifically:
+
+      - The overall setting is “specialized-domain QA — QA over a closed professional/vertical
+      corpus (medicine, law, agriculture...) where answers depend on domain-specific
+      content,” and ACE is designed for “agentic-task-execution / domain-qa / prompt-optimization
+      / memory.” This situates ACE directly in specialized-domain QA, including finance.
+
+      - FiNER is described as a “Financial NER benchmark (Loukas et al. 2022): label
+      tokens in XBRL financial documents with one of 139 fine-grained entity types;
+      tests financial information extraction in a regulated domain. ACE''s main finance
+      case-study dataset.” This shows ACE’s role in financial information extraction
+      over a closed, regulated financial corpus.
+
+      - Formula (FinLoRA) is described as a “Financial numerical-reasoning benchmark
+      (FinLoRA / Wang et al. 2025): apply financial concepts and perform XBRL-based
+      computations to answer queries. ACE''s largest finance gain.” This demonstrates
+      ACE’s effectiveness on domain-specific numerical reasoning tasks in finance.
+
+
+      Taken together, these sources show ACE being applied to specialized-domain QA
+      in finance by using FiNER to showcase regulated-domain information extraction
+      and Formula (FinLoRA) to highlight its strongest performance gains in financial
+      numerical reasoning.'
+    cited_source_ids:
+    - ent.domain-qa
+    - ent.ace
+    - ent.finer
+    - ent.formula
+  evaluators: []
+- name: survey:composes_with:paper.ahe-2026#0
+  inputs:
+    question: How do the three observability pillars in Agentic Harness Engineering
+      collectively enable effective automatic evolution of coding-agent harnesses
+      and robust transfer across benchmarks and model families?
+    task: null
+  metadata:
+    anchor_page_id: paper.ahe-2026
+    difficulty: hard
+    archetype: survey
+    anchors:
+    - unit_id: paper.ahe-2026
+      body_hash: ed8e1b42e3d8be252423e6e802ecfaaa743ece2abb7f10c4c762ab37588802e2
+    - unit_id: ent.component-observability
+      body_hash: da85c4fef4469124c400e55e98d090c69a4cba34fc037247220df6c59f85528e
+    - unit_id: ent.decision-observability
+      body_hash: 917469330b85bdb22baf20caf642644aa331fd1f0e2e2d1ea16a84aecb11456a
+    - unit_id: ent.experience-observability
+      body_hash: c401409e3c32c7cd3251bf4a02ff79f4a2def178dbdb7e8709f57f115a36b27d
+    mirror_hash: 82a5a338818300c02cf3adbae5e86ba70855e0021ec3fee90b5a1629525e59e5
+  expected_output:
+    answer: 'Agentic Harness Engineering (AHE) relies on three complementary observability
+      pillars that together make it possible to automatically evolve coding-agent
+      harnesses in a controlled, effective way and then transfer the resulting harness
+      across benchmarks and model families.
+
+
+      1. Component observability: AHE first makes every harness component explicitly
+      visible and controllable as an individual file-level unit. Using a "file-level
+      harness substrate (NexAU)" it "expos[es] each editable component as a file,"
+      which ensures that "failure patterns map to component classes" and that "the
+      action space is explicit and revertible." This design also guarantees that "every
+      pass-rate change localizes to one file with git rollback," so evolution can
+      be tied to specific components and safely reversed.
+
+
+      2. Experience observability: AHE then structures the agents’ execution experience
+      so the evolution agent consumes summarized root causes rather than raw logs.
+      An "Agent Debugger distills millions of raw trajectory tokens into a layered,
+      drill-down corpus of per-task root causes plus a benchmark-level overview,"
+      which means "the evolver consumes structured root causes, not raw logs." This
+      lets the evolution process target specific, recurrent failure modes and understand
+      their impact at both task and benchmark levels.
+
+
+      3. Decision observability: Finally, AHE tracks and tests each harness change
+      as an explicit, falsifiable hypothesis. A "versioned change manifest" pairs
+      "every harness edit with a self-declared prediction (expected fixes + at-risk
+      regressions), verified next round against task-level deltas — making each edit
+      a falsifiable contract, reverted if unconfirmed." This ensures that decisions
+      are accountable and that changes which do not perform as predicted are rolled
+      back.
+
+
+      Combined effect and transfer: These pillars operate jointly within an "evolution
+      agent" that "jointly evolves all coding-agent harness components via three observability
+      pillars; 10 iterations lift Terminal-Bench 2 pass@1 69.7->77.0%, beating Codex
+      and self-evolving ACE/TF-GRPO; the frozen harness transfers to SWE-bench-verified
+      and 3 model families." The structured component, experience, and decision observability
+      enable targeted, reversible improvements that increase performance on Terminal-Bench
+      2, and because the harness is made robust and modular through these observability
+      mechanisms, the "frozen harness transfers to SWE-bench-verified and 3 model
+      families" without needing bespoke re-engineering.
+
+
+      Thus, the three pillars collectively provide fine-grained control over *what*
+      can change (components), *why* changes are needed (experience/root causes),
+      and *how* changes are validated (decisions/contracts), which together underpin
+      effective automatic evolution and successful transfer across different benchmarks
+      and models.'
+    cited_source_ids:
+    - paper.ahe-2026
+    - ent.component-observability
+    - ent.decision-observability
+    - ent.experience-observability
+  evaluators: []
+- name: synthesis:synthesizes:cmp.self-improving-harness#0
+  inputs:
+    question: Across Agentic Context Engineering (ACE), Agentic Harness Engineering,
+      Meta-Harness, and Self-Harness, how do these systems collectively redefine where
+      “intelligence” resides in LLM-based agents, and how do benchmark results on
+      Terminal-Bench illustrate the impact of evolving *contexts* versus evolving
+      *harnesses*?
+    task: null
+  metadata:
+    anchor_page_id: paper.ace-2025
+    difficulty: hard
+    archetype: synthesis
+    anchors:
+    - unit_id: paper.ace-2025
+      body_hash: f6dcb6f534402b1dd81a452e77658f23f1ef8e62a10f218b7aedcb0847a65ede
+    - unit_id: paper.ahe-2026
+      body_hash: ed8e1b42e3d8be252423e6e802ecfaaa743ece2abb7f10c4c762ab37588802e2
+    - unit_id: paper.meta-harness-2026
+      body_hash: 66cd20e8454f9dfb936c5bf88ebc6cc3b46b7aa0e13c816b79d9626669bef82a
+    - unit_id: paper.self-harness-2026
+      body_hash: e841cac2932b61d19613a5950d0ee91821f2114cb5675789d55fbf0cc033f463
+    - unit_id: paper.terminal-bench-2026
+      body_hash: 6dfbd8b6857a37d019a35eeb91c624fb6110e6489e35682ea7d90a4ae7376cdc
+    mirror_hash: ab2e539855a108db94d918377aa09dafddd79b1b9a1dd64c3cf373af97c28c37
+  expected_output:
+    answer: 'These four systems jointly shift the locus of intelligence in LLM agents
+      from the bare model weights toward the evolving software and information environment
+      around the model—its context and harness—and Terminal-Bench provides the empirical
+      backdrop that shows this shift matters.
+
+
+      ACE shows that the information *fed into* the model can be treated as a first-class,
+      evolving artifact. Instead of brief prompts, ACE treats contexts as rich, “comprehensive
+      playbooks” that a Generator/Reflector/Curator pipeline continually improves
+      using “delta updates” and “grow-and-refine.” The fact that these evolving contexts
+      deliver “+10.6% on AppWorld agents, +8.6% on finance vs ICL/GEPA/DC” and can
+      “match IBM CUGA with a smaller open model” demonstrates that a modest model
+      can perform like a much larger one if its surrounding context is engineered
+      and iteratively evolved.
+
+
+      Agentic Harness Engineering extends this idea from content to *control structure*:
+      it evolves the entire coding-agent harness—tools, prompts, routing, and orchestration—guided
+      by observability. Here the model remains fixed, but the harness is treated as
+      a dynamic, optimizable system. Over “10 iterations” the evolved harness lifts
+      “Terminal-Bench 2 pass@1 69.7->77.0%, beating Codex and self-evolving ACE/TF-GRPO,”
+      and the resulting “frozen harness transfers to SWE-bench-verified and 3 model
+      families.” This shows that careful, data-driven evolution of the harness can
+      both outperform stronger baselines and generalize across tasks and models.
+
+
+      Meta-Harness then treats the harness as a search space unto itself: an outer-loop
+      search over harness “CODE” where a coding-agent proposer reads all prior candidates’
+      “source/scores/traces via a filesystem.” By operating at the level of harness
+      programs and using traces as signals, Meta-Harness can beat ACE on a classification
+      task “by 7.7pts at 4x fewer tokens,” improve math performance “+4.7 over no-retrieval
+      on 200 IMO problems,” and “surpasses Terminus-KIRA on TerminalBench-2.” This
+      indicates that harness-level optimization, informed by rich execution history,
+      can yield both accuracy gains and efficiency gains relative to context-only
+      approaches.
+
+
+      Self-Harness pushes the decentralization of intelligence further by eliminating
+      external supervisors: the LLM agent improves its *own* harness—“prompts/tools/runtime”—through
+      an internal cycle of “Weakness-Mining → Harness-Proposal → regression-gated
+      Validation.” On Terminal-Bench-2.0, this self-directed harness evolution drives
+      held-out pass rates up “for all three base models (up to +21.4pp / +138% rel.).”
+      Here, the model is not just executing tasks within a harness; it is actively
+      diagnosing and repairing the harness that governs its behavior.
+
+
+      Terminal-Bench and Terminal-Bench 2.0 provide the shared proving ground on which
+      these ideas are tested. The benchmark defines “89 curated hard terminal tasks,
+      each a unique Docker environment with a human reference solution and final-state
+      verification tests,” and even “frontier model+agent combos resolve <65% (best
+      Codex CLI+GPT-5.2, 63%).” That persistent gap underscores that raw model capability
+      is insufficient; robust performance on these realistic CLI tasks depends on
+      how the agent’s context and harness are designed and evolved.
+
+
+      Taken together, ACE focuses on evolving *what the model sees* (context playbooks),
+      Agentic Harness Engineering and Meta-Harness focus on evolving *how the model
+      is used* (the harness code, tools, and orchestration), and Self-Harness shows
+      the model can itself manage that evolution. The Terminal-Bench results—such
+      as pass@1 rising from “69.7->77.0%” with Agentic Harness Engineering, Meta-Harness
+      “surpasses Terminus-KIRA on TerminalBench-2,” and Self-Harness delivering “up
+      to +21.4pp / +138% rel.” on Terminal-Bench-2.0—collectively demonstrate that
+      significant gains now come from treating contexts and harnesses as the primary
+      substrates of intelligence, rather than viewing the model alone as the locus
+      of capability.'
+    cited_source_ids:
+    - paper.ace-2025
+    - paper.ahe-2026
+    - paper.meta-harness-2026
+    - paper.self-harness-2026
+    - paper.terminal-bench-2026
+  evaluators: []
+- name: trace:cmp.agent-memory-systems>paper.memtree-2024>ent.multihop-rag#0
+  inputs:
+    question: According to the comparison of long-term-memory systems and the MemTree
+      paper, which benchmark corpus is used as the second evaluation corpus for GraphRAG,
+      and what kind of task does MemTree match RAPTOR on when evaluated over that
+      corpus?
+    task: null
+  metadata:
+    anchor_page_id: cmp.agent-memory-systems
+    difficulty: hard
+    archetype: trace
+    anchors:
+    - unit_id: cmp.agent-memory-systems
+      body_hash: 1d0d689cc6a5fa25eba78bef58e6319be0e346bc37472e8fc179ebb5da058d6d
+    - unit_id: paper.memtree-2024
+      body_hash: 17b6db850cc383dca078ed1411440cb20907ea1b8eb2de2ab1e28cbf3c6fb619
+    - unit_id: ent.multihop-rag
+      body_hash: b2b48b0f53de2adbad93e59a1e75e4bcbcda39279243e86c44a4d7a2186fce27
+    mirror_hash: 78b25d44dc6211e09d9a4be203217bab80ecc0745b4fb3180fb2a13814fdfef1
+  expected_output:
+    answer: The benchmark corpus used as GraphRAG’s second evaluation corpus is MultiHop-RAG,
+      which is a news-article benchmark corpus. MemTree matches offline RAPTOR on
+      a multi-hop question answering task (MultiHop-RAG).
+    cited_source_ids:
+    - cmp.agent-memory-systems
+    - paper.memtree-2024
+    - ent.multihop-rag
+  evaluators: []
+evaluators:
+- RetrievalMetrics
+report_evaluators: []

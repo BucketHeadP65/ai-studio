@@ -1,0 +1,217 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The tree ships exactly one top-level package rooted at ``src/``: ``engram_connectors``.
+# ``only-include`` names it so nothing else under ``src/`` reaches the wheel, and ``sources``
+# strips the ``src/`` prefix so it imports at top level in the installed env.
+only-include = ["src/engram_connectors"]
+sources      = ["src"]
+
+[project]
+name = "engram-connectors"
+description = "Connectors (Zotero, YouTube, the general URL connector), scanners and document converters, over the engram library's ports."
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+maintainers = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+readme = "README.md"
+# No connector's fetcher dependencies here: each subpackage carries its own under its own extra,
+# so an install with none of them still imports (the entry-point group is only walked, never
+# eagerly loaded) and a knowledge base with no connector configured never pulls in Zotero sqlite, Azure,
+# or trafilatura.
+dependencies = [
+    "core",
+    "engram",
+    "pydantic>=2.13.4",
+]
+
+[project.optional-dependencies]
+zotero = [
+    "aiosqlite>=0.22.1",
+    "sqlalchemy[asyncio]>=2.0.49",
+]
+youtube = [
+    "httpx>=0.28.1",
+]
+source-queue = [
+    # `SourceQueueConnector.build` assembles its arXiv/article resolvers from the conversion adapters
+    # (`ArxivHtmlConverter`, `AzureDocumentConverter`, `ArticleConverter`), imported at module
+    # scope, so importing this connector at all needs `conversion`'s own dependencies too.
+    "engram-connectors[conversion]",
+    "httpx>=0.28.1",
+    "pydantic-ai>=2.20.0",
+    "pydantic-ai-slim[xai]>=2.20.0",
+]
+x = [
+    # The scanner runs a Grok model with native X search, so it needs the xAI model class.
+    "pydantic-ai>=2.20.0",
+    "pydantic-ai-slim[xai]>=2.20.0",
+]
+conversion = [
+    "azure-ai-documentintelligence>=1.0.2",
+    "azure-identity>=1.19.0",
+    "httpx>=0.28.1",
+    "pypandoc-binary>=1.17",
+    "trafilatura>=2.0.0",
+]
+# `engram_connectors.testing`: fakes and factories other projects' tests import (studio's wiring and
+# integration tests, this project's own suite). Carries only what those modules import, a plain
+# `engram-connectors` install stays test-tooling-free.
+testing = [
+    "polyfactory>=3.2.0",
+]
+
+[project.entry-points."engram.sources.connectors"]
+# name -> the connector's own class: `claims`, `key_for` and `source_type_of` are stateless
+# staticmethods (so the class itself, never instantiated, satisfies classification with no
+# settings), `build` is the classmethod a host calls once it has real settings to construct a live
+# instance with. A name is data: a knowledge base's schema declares it and every mirror note and
+# `kb.sources_raw` row carries it, so it outlives a rename of the class behind it.
+zotero = "engram_connectors.zotero.contracts:SqliteZoteroConnector"
+youtube = "engram_connectors.youtube.contracts:YouTubeConnector"
+intake = "engram_connectors.source_queue.contracts:SourceQueueConnector"
+beir = "engram_connectors.beir.contracts:BeirConnector"
+multihop_rag = "engram_connectors.multihop_rag.contracts:MultihopRagConnector"
+
+[project.entry-points."engram.sources.converters"]
+# name -> a plain factory function, `DocumentIntelligenceSettings -> DocumentConverter`.
+zotero = "engram_connectors.conversion.contracts:zotero_converter_factory"
+youtube = "engram_connectors.conversion.contracts:youtube_converter_factory"
+intake = "engram_connectors.conversion.contracts:source_queue_converter_factory"
+beir = "engram_connectors.conversion.contracts:beir_converter_factory"
+multihop_rag = "engram_connectors.conversion.contracts:multihop_rag_converter_factory"
+
+[project.entry-points."engram.sources.scanners"]
+# name -> the scanner's own class, the `scanner` a watch entry carries. `build(resources)` is the
+# classmethod a host calls with the knowledge base's resources in hand. engram's own `xml` reader
+# needs no entry point, so this group holds only the scanners a host has to install to use.
+x = "engram_connectors.x.contracts:XScanner"
+
+[tool.uv.sources]
+core = { path = "../core", editable = true }
+engram = { path = "../engram", editable = true }
+
+[dependency-groups]
+dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.16.0,<0.17.0)"]
+test = [
+    "engram-connectors[conversion,source-queue,testing,x,youtube,zotero]",
+    "engram[testing]",
+    "pytest (>=9.0.2,<10.0.0)",
+    "pytest-asyncio (>=1.3.0,<2.0.0)",
+]
+
+[tool.uv]
+# The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``.
+# Install both tooling groups (every extra, via the test group) by default so the gate is
+# self-contained and exercises every connector.
+default-groups = ["dev", "test"]
+
+[tool.pytest.ini_options]
+pythonpath       = [".", "src"]
+python_files     = ["test_*.py"]
+testpaths        = ["tests/unit"]
+python_classes   = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode     = "auto"
+addopts          = ["--verbose", "--tb=short"]
+filterwarnings   = ["module::DeprecationWarning"]
+
+[tool.ruff]
+src            = ["src"]
+extend-exclude = [".venv"]
+line-length    = 140
+indent-width   = 4
+fix            = false
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style                = "double"
+line-ending                = "auto"
+skip-magic-trailing-comma  = true
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+preview                    = false
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY001", # Missing copyright notice at top of file
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on line following TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "COM812", # Trailing comma missing
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN204", # Missing return type annotation for special method
+    "S104",   # Possible binding to all interfaces
+    "E501",   # Line too long
+    "RET504", # Unnecessary assignment before return statement
+    "RUF001", # String contains ambiguous unicode character
+    "RUF002", # Docstring contains ambiguous unicode character
+    "RUF003", # Comment contains ambiguous unicode character
+]
+fixable = ["ALL"]
+preview = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*.py" = [
+    "D101",    # Docstring not required for test classes
+    "D102",    # Docstring not required for test methods
+    "D103",    # Docstring not required for test functions
+    "ANN201",  # Return type annotation not required for test functions
+    "ANN202",  # Return type annotation not required for test methods
+    "PLC0415", # Import on top not required for test files
+    "PLR0913", # Fake constructors take many scriptable knobs by design
+    "PLR0917", # Same — the positional-argument sibling of PLR0913
+    "S101",    # asserts allowed in tests...
+    "S105",    # Test fixtures use literal strings that resemble secrets
+    "S106",    # Same — kwarg passes test-only string values
+    "S107",    # Same — function-default variant
+    "SLF001",  # Tests may peek at module-private constants for drift guards
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+]
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+detect-same-package = true
+lines-between-types = 1
+# Pairs with ``format.skip-magic-trailing-comma = true`` so isort and the formatter agree.
+split-on-trailing-comma = false
+known-first-party = ["engram_connectors", "tests"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+order-by-type = true
+
+[tool.ruff.lint.flake8-type-checking]
+# pydantic resolves field annotations at runtime, so a name used only inside them must stay
+# importable at module scope — not moved under TYPE_CHECKING (TC00X).
+runtime-evaluated-base-classes = ["pydantic.BaseModel"]
+
+[tool.pyright]
+# A deprecated API fails the type check, so a deprecation is fixed when it lands, not when its removal breaks the build.
+reportDeprecated = "error"

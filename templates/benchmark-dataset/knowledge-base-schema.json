@@ -1,0 +1,101 @@
+{
+  "version": "1",
+  "slug": "benchmark-dataset",
+  "purpose": "One benchmark dataset's documents, held as source mirrors so search can be scored against its relevance judgments.",
+  "page_types": [
+    {
+      "page_type": "digest",
+      "id_prefix": "dg.",
+      "folder": "Wiki/Digests",
+      "frontmatter_fields": [
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "source_key",
+          "type": "scalar"
+        },
+        {
+          "name": "source_hash",
+          "type": "scalar"
+        }
+      ],
+      "status_values": [
+        "active",
+        "skipped"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        {
+          "slug": "findings",
+          "guidance": "Write one claim per finding or method the document states, each with a quote copied verbatim from the document."
+        }
+      ],
+      "claims_enabled": true
+    }
+  ],
+  "claim_types": [
+    {
+      "value": "finding",
+      "definition": "A result or conclusion the document states"
+    },
+    {
+      "value": "method",
+      "definition": "How the document shows a finding: its data, design or measurement"
+    }
+  ],
+  "claims": {
+    "section": "findings",
+    "edge_relations": [],
+    "multilink_fields": [],
+    "link_scalar_fields": [],
+    "text_scalar_fields": [],
+    "plain_fields": [
+      "loc",
+      "quote",
+      "kind"
+    ],
+    "comparative_relations": [],
+    "quote_required_types": [
+      "finding",
+      "method"
+    ]
+  },
+  "sources": {
+    "enabled": true,
+    "quote_verify": true,
+    "connectors": [
+      "beir"
+    ],
+    "key_field": "source_key",
+    "digest_link_field": "digest_of",
+    "hash_field": "source_hash",
+    "digest_types": {
+      "article": "digest"
+    },
+    "librarian": false,
+    "digest_workflow": "benchmark-digest"
+  },
+  "compounding": {
+    "entries": [
+      {
+        "name": "digest-sources",
+        "from": {
+          "plane": "sources",
+          "selector": "undigested"
+        },
+        "to": [
+          "digest"
+        ],
+        "cap_per_run": 40,
+        "gate": "none",
+        "guidance": "One digest per document. Read it whole and claim only what a quote supports."
+      }
+    ]
+  }
+}

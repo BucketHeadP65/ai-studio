@@ -1,0 +1,32 @@
+{
+  "page_type": "playbook",
+  "universal_fields": {
+    "id": "pb.when-to-graph",
+    "type": "playbook",
+    "title": "When to use graph-RAG over chunk-RAG",
+    "status": "draft",
+    "tasks": [
+      "retrieval",
+      "knowledge-management"
+    ],
+    "domains": [],
+    "stages": [],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": []
+  },
+  "edge_set": [
+    [
+      "advises_against",
+      "naive-rag"
+    ],
+    [
+      "recommends",
+      "lightrag"
+    ],
+    [
+      "synthesizes",
+      "lightrag-2025"
+    ]
+  ]
+}

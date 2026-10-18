@@ -1,0 +1,191 @@
+# yaml-language-server: $schema=seed_schema.json
+name: engram-retrieval-golden
+cases:
+- name: paper.cag-2024-0
+  inputs:
+    question: When does cache-augmented generation (CAG) beat retrieval-augmented
+      generation, and where does that advantage reverse?
+    task: null
+  metadata:
+    anchor_page_id: paper.cag-2024
+    kind: comparative
+    difficulty: medium
+  expected_output:
+    answer: 'CAG wins when the whole corpus fits inside the model''s effective context:
+      with Llama 3.1 8B it posts the top BERTScore in 5 of 6 SQuAD/HotPotQA configurations
+      and answers up to ~41x faster than uncached in-context learning. The advantage
+      reverses at 85k tokens (past the ~32K effective context), where sparse BM25
+      RAG retakes the accuracy and latency lead.'
+    cited_source_ids:
+    - paper.cag-2024
+  evaluators: []
+- name: paper.gepa-2025-1
+  inputs:
+    question: Can reflective prompt evolution (GEPA) outperform RL-tuned baselines
+      on code generation?
+    task: null
+  metadata:
+    anchor_page_id: paper.gepa-2025
+    kind: benchmark
+    difficulty: medium
+  expected_output:
+    answer: Yes. As an inference-time search strategy, GEPA lifts GPT-4o on AMD-NPU
+      kernel generation from 4.25% to a 30.52% mean vector utilization, above a RAG-augmented
+      agent (16.33%) and MIPROv2 (19.03%).
+    cited_source_ids:
+    - paper.gepa-2025
+  evaluators: []
+- name: paper.gnn-rag-2024-2
+  inputs:
+    question: In GNN-RAG, does combining all three retrievers improve over using the
+      best two?
+    task: null
+  metadata:
+    anchor_page_id: paper.gnn-rag-2024
+    kind: factual
+    difficulty: medium
+  expected_output:
+    answer: No. Augmenting all three retrievers (GNN, GNN+SR, and RoG paths) does
+      not improve over the best two-retriever combination and sometimes hurts, because
+      the longer input context (330/668 median tokens) confuses the LLM.
+    cited_source_ids:
+    - paper.gnn-rag-2024
+  evaluators: []
+- name: paper.msrs-2025-3
+  inputs:
+    question: What does the MSRS benchmark evaluate?
+    task: null
+  metadata:
+    anchor_page_id: paper.msrs-2025
+    kind: factual
+    difficulty: easy
+  expected_output:
+    answer: 'Multi-source retrieval-augmented generation: retrieving complementary
+      documents from ~1M-token corpora and synthesizing long-form summaries (Story
+      and Meeting subsets). Generation quality tracks retrieval quality and oracle
+      synthesis stays hard.'
+    cited_source_ids:
+    - paper.msrs-2025
+  evaluators: []
+- name: paper.horma-2026-4
+  inputs:
+    question: Does HORMA's structured note representation help retrievers other than
+      HORMA itself?
+    task: null
+  metadata:
+    anchor_page_id: paper.horma-2026
+    kind: factual
+    difficulty: medium
+  expected_output:
+    answer: Yes. Augmenting a plain embedding-similarity retriever with HORMA's structured
+      note representation improves accuracy on both LoCoMo and LongMemEval over standard
+      embedding memory.
+    cited_source_ids:
+    - paper.horma-2026
+  evaluators: []
+- name: paper.simgrag-2024-5
+  inputs:
+    question: How does SimGRAG retrieve knowledge-graph subgraphs without oracle entities?
+    task: null
+  metadata:
+    anchor_page_id: paper.simgrag-2024
+    kind: factual
+    difficulty: hard
+  expected_output:
+    answer: 'It is training-free: an LLM rewrites the query into a graph pattern,
+      then SimGRAG selects the top-k isomorphic KG subgraphs with the smallest Graph
+      Semantic Distance to feed generation, retrieving in ~0.74s on a 10M-node DBpedia
+      graph.'
+    cited_source_ids:
+    - paper.simgrag-2024
+  evaluators: []
+- name: paper.search-r1-2025-6
+  inputs:
+    question: How does Search-R1 train LLMs to use search engines?
+    task: null
+  metadata:
+    anchor_page_id: paper.search-r1-2025
+    kind: factual
+    difficulty: easy
+  expected_output:
+    answer: 'With reinforcement learning: it trains the model to reason while interleaving
+      search-engine calls, rather than relying on a supervised retrieval pipeline.'
+    cited_source_ids:
+    - paper.search-r1-2025
+  evaluators: []
+- name: paper.hypergraphrag-2025-7
+  inputs:
+    question: What knowledge representation does HyperGraphRAG use, and how does it
+      expand retrieval?
+    task: null
+  metadata:
+    anchor_page_id: paper.hypergraphrag-2025
+    kind: factual
+    difficulty: medium
+  expected_output:
+    answer: A knowledge hypergraph of n-ary relational facts. Given a query it bidirectionally
+      expands hyperedges from retrieved entities and entities from retrieved hyperedges,
+      then fuses the hypergraph knowledge with chunk-based RAG text for generation.
+    cited_source_ids:
+    - paper.hypergraphrag-2025
+  evaluators: []
+- name: paper.graph-rag-survey-2025-8
+  inputs:
+    question: Where can I find a comprehensive analysis of when graph structure helps
+      in RAG?
+    task: null
+  metadata:
+    anchor_page_id: paper.graph-rag-survey-2025
+    kind: synthesis
+    difficulty: easy
+  expected_output:
+    answer: The survey 'When to use Graphs in RAG' provides a comprehensive analysis
+      of graph retrieval-augmented generation and the conditions under which graph
+      structure pays off.
+    cited_source_ids:
+    - paper.graph-rag-survey-2025
+  evaluators: []
+- name: paper.leanrag-2025-9
+  inputs:
+    question: What does LeanRAG add to knowledge-graph-based generation?
+    task: null
+  metadata:
+    anchor_page_id: paper.leanrag-2025
+    kind: factual
+    difficulty: medium
+  expected_output:
+    answer: Semantic aggregation together with hierarchical retrieval over the knowledge
+      graph.
+    cited_source_ids:
+    - paper.leanrag-2025
+  evaluators: []
+- name: paper.kag-2024-10
+  inputs:
+    question: What does KAG target with knowledge-augmented generation?
+    task: null
+  metadata:
+    anchor_page_id: paper.kag-2024
+    kind: factual
+    difficulty: easy
+  expected_output:
+    answer: Boosting LLMs in professional domains via knowledge-augmented generation
+      (KAG).
+    cited_source_ids:
+    - paper.kag-2024
+  evaluators: []
+- name: paper.graphr1-2025-11
+  inputs:
+    question: What is Graph-R1?
+    task: null
+  metadata:
+    anchor_page_id: paper.graphr1-2025
+    kind: factual
+    difficulty: medium
+  expected_output:
+    answer: An agentic GraphRAG framework trained end-to-end with reinforcement learning.
+    cited_source_ids:
+    - paper.graphr1-2025
+  evaluators: []
+evaluators:
+- RetrievalMetrics
+report_evaluators: []

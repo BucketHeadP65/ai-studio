@@ -1,0 +1,302 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# The tree ships exactly one top-level package rooted at ``src/``: ``engram``, the library.
+# ``only-include`` names it so nothing else under ``src/`` reaches the wheel, and ``sources``
+# strips the ``src/`` prefix so it imports at top level in the installed env.
+only-include = ["src/engram"]
+sources      = ["src"]
+
+[project]
+name = "engram"
+description = "Markdown knowledge-base indexer and retrieval library: index to Postgres, retrieve through the read tools and MCP."
+version = "0.0.1"
+license = "MIT"
+requires-python = ">=3.13,<3.14"
+authors = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+maintainers = [
+    { name = "BucketHeadP65", email = "104688161+BucketHeadP65@users.noreply.github.com" },
+]
+readme = "README.md"
+# Exactly what the library imports — plus asyncpg, the driver loaded by DSN at connect time with
+# no import site (`postgresql+asyncpg`). App-tier deps (typer, wireup, fastapi, uvicorn, rich,
+# pydantic-settings) moved out with the studio, and the connector-specific fetcher deps (Zotero
+# sqlite, Azure Document Intelligence, trafilatura, pypandoc) live in the `connectors` project.
+# `httpx` stays: it backs `evals/rca`, which is not connector-specific.
+dependencies = [
+    "alembic>=1.14.0",
+    "anyio>=4.11.0",
+    "asyncpg>=0.31.0",
+    "aiohttp>=3.11",
+    "core",
+    "httpx>=0.28.1",
+    "logfire>=4.39.0",
+    "markdown-it-py>=3.0.0",
+    "mcp>=1.29.0",
+    "pgvector>=0.3.6",
+    "pydantic>=2.13.4",
+    "pydantic-ai>=2.20.0",
+    "pydantic-ai-harness[code-mode]>=0.54.0",
+    "pydantic-evals>=2.0.0",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.0.49",
+    "text-unidecode>=1.3",
+    "tiktoken>=0.13.0",
+]
+
+[project.optional-dependencies]
+# `engram.testing` — the official test toolkit (fakes, factories, knowledge base builders, the
+# containerized-DB pytest plugin). These are the deps only its submodules import; plain `engram`
+# stays test-tooling-free, and importing `engram.testing` itself loads none of them.
+testing = [
+    "polyfactory>=3.2.0",
+    "pytest>=9.0.2",
+    "testcontainers[postgres]>=4.8.0",
+]
+
+[tool.uv.sources]
+core = { path = "../core", editable = true }
+
+[dependency-groups]
+dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.16.0,<0.17.0)"]
+test = [
+    # The toolkit's deps, via the extra the suite itself exercises.
+    "engram[testing]",
+    "pytest-asyncio (>=1.3.0,<2.0.0)",
+]
+
+[tool.uv]
+# The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``;
+# install both tooling groups by default so the gate is self-contained.
+default-groups = ["dev", "test"]
+
+[tool.pytest.ini_options]
+pythonpath       = [".", "src"]
+python_files     = ["test_*.py"]
+testpaths        = ["tests/unit", "tests/integration"]
+python_classes   = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode     = "auto"
+addopts          = ["--verbose", "--tb=short"]
+filterwarnings   = ["module::DeprecationWarning"]
+
+[tool.ruff]
+src            = ["src"]
+extend-exclude = [".venv", "alembic/versions"]
+line-length    = 140
+indent-width   = 4
+fix            = false
+target-version = "py313"
+
+[tool.ruff.format]
+quote-style                = "double"
+line-ending                = "auto"
+skip-magic-trailing-comma  = true
+docstring-code-format      = true
+docstring-code-line-length = "dynamic"
+preview                    = false
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+    "CPY001", # Missing copyright notice at top of file
+    "TD002",  # Missing author in TODO
+    "TD003",  # Missing issue link on line following TODO
+    "FIX002", # Line contains TODO, consider resolving the issue
+    "COM812", # Trailing comma missing
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D105",   # Missing docstring in magic method
+    "D107",   # Missing docstring in __init__
+    "ANN001", # Missing type annotation for function argument
+    "ANN002", # Missing type annotation for *args
+    "ANN003", # Missing type annotation for **kwargs
+    "ANN204", # Missing return type annotation for special method
+    "S104",   # Possible binding to all interfaces
+    "E501",   # Line too long
+    "RET504", # Unnecessary assignment before return statement
+    "RUF001", # String contains ambiguous unicode character
+    "RUF002", # Docstring contains ambiguous unicode character
+    "RUF003", # Comment contains ambiguous unicode character
+]
+fixable = ["ALL"]
+preview = false
+
+[tool.ruff.lint.extend-per-file-ignores]
+# The MCP server factory wires the same injected-deps composition (gateway + handlers + optional
+# embed / graph / search / fetch handlers) — its arity is the DI surface.
+# TC002 on `core.ai.disclosure.contracts.DisclosureEnvelope`: it annotates the `disclose` tool's RETURN, and
+# FastMCP evaluates a tool function's annotations at registration to publish its `outputSchema` —
+# same rationale as `JsonValue` in retrieval/sql_tools.py. `GraphResult` (the sibling `graph_expand`
+# return) needs no entry only because it shares its `from engram.retrieval.domain import ...` statement with
+# `GraphExpand`/`GraphPaths` (genuine constructor calls), which ruff already keeps at module scope.
+"src/engram/retrieval/infrastructure/mcp_server.py" = ["PLR0913", "TC002"]
+# TC002 on `pydantic.JsonValue`: it annotates the `run_sql` tool's RETURN, and both consumers of
+# these factories evaluate a tool function's annotations at registration to publish its schema —
+# FastMCP for the MCP `outputSchema`, pydantic-ai for the FunctionToolset tool definition. Under a
+# type-checking block the name is absent at that moment and registration dies on a NameError, so
+# this is a genuine runtime-evaluated annotation, not an import that merely looks like one. It is
+# not expressible via `runtime-evaluated-base-classes` (no class is involved), hence the file rule.
+"src/engram/retrieval/sql_tools.py" = ["TC002"]
+# register_mcp_tools takes the server and handlers plus one parameter per tuning knob
+# (only / search_hybrid / descriptions / collection / k_source) — the tool-registration surface, and
+# the same rationale core.ai applies to its own retrieval toolset registrar.
+# FBT001/FBT002: pydantic-ai and FastMCP both derive a tool's JSON schema from its function
+# signature, so the capped `search`'s `bm25_only` flag is the tool's arg surface rather than a smell
+# — the same rule, for the same closures, core.ai applies to `src/core/ai/retrieval/toolset.py`.
+"src/engram/retrieval/tools.py" = ["PLR0913", "FBT001", "FBT002"]
+# RetrievalKnowledgeBase's published `search` signatures take one argument per thing the agent may pass
+# (query, knowledge_base, k, since, until, facets), because pydantic-ai derives the tool's schema from
+# them. The search bodies they close over take the same arguments, the same rationale as tools.py above.
+"src/engram/retrieval/capability.py" = ["PLR0913"]
+# embedded_retrieval opens one knowledge base from its DSN plus one parameter per thing a library cannot
+# know (spec / domain / embed_query / guidance / k_source) — the composition surface it exists to be.
+"src/engram/retrieval/infrastructure/embedded.py" = ["PLR0913"]
+# EnvelopeHandler.__init__ takes one keyword per knowledge-base-schema disclosure declaration it enforces
+# (mode / excluded_kinds / group_by / orientation / collection) — the spec-fixed constructor arity,
+# not a smell (same rationale as embedded.py above).
+"src/engram/retrieval/envelope.py" = ["PLR0913"]
+# AuthoringTools.__init__ takes one keyword per collaborator its eighteen tools need (targets,
+# reindex, admin, queue_for, memory_for, connectors) is the composition surface it exists to be,
+# not a smell (same rationale as embedded.py above).
+"src/engram/authoring/tools.py" = ["PLR0913"]
+# IndexKnowledgeBaseHandler.__init__ gains spec as a named DI port — that is the composition root's arity,
+# not a smell; _consume_inline threads claim_fields through a fixed pipeline, not a public API.
+"src/engram/indexing/service/index.py" = ["PLR0913"]
+# _RowBuilder.__init__ takes one keyword per spec declaration the shared row assembly honours, the
+# same arity rationale as indexing/service/index.py above.
+"src/engram/indexing/service/_row_builder.py" = ["PLR0913"]
+# The index fingerprint port's set() takes one keyword per fingerprint column it writes, the
+# repository method's own fixed arity.
+"src/engram/indexing/internal_contracts.py" = ["PLR0913"]
+# ExportOkfHandler.__init__ takes its three ports (knowledge base reader, bundle writer, source-link reader)
+# plus the spec and the two injected determinism sources (clock / generated_by) — constructor
+# injection, the same arity rationale as indexing/service/index.py above.
+"src/engram/export/service.py" = ["PLR0913"]
+# TuneRetrievalHandler.__init__ takes three collaborators plus three injected determinism
+# sources (clock / now / new_run_id) — constructor injection, the same arity rationale as
+# indexing/service/index.py, not a smell.
+"src/engram/evals/handlers.py" = ["PLR0913", "PLR0917"]
+# audit_cycle takes the cycle's three record collections (cases / seals / exposures) plus the
+# implementation's three custody facts and two optional live-check inputs (freshness / premises),
+# the audit's fixed input surface, not a smell.
+"src/engram/evals/outcomes/domain/governance.py" = ["PLR0913"]
+# layered_evidence_metrics takes what its three layers need between them (the citations, the
+# expected ids, the trial's trace, the reader, the collection) plus the two shared scoring knobs
+# (ks / granularity), the fan-in the whole module exists to be, not a smell.
+"src/engram/evals/outcomes/service.py" = ["PLR0913"]
+# StopReason's TOKEN_BUDGET = "token_budget" member trips flake8-bandit's hardcoded-password rule
+# (a false positive on a member whose name resembles a secret), the same class tests already whitelist.
+"src/engram/evals/tuning/domain/objective.py" = ["S105"]
+# _check_claim takes its spec-derived field-set params as an explicit slice (Interface Segregation);
+# _consume_inline passes claim_fields down the fixed pipeline.
+"src/engram/indexing/domain/validator.py" = ["PLR0913", "PLR0917"]
+# compute_closure takes diff + the old/new identity surfaces + three Interface-Segregated lookup
+# callables (inbound-by-name, mirror-citers, path-of-page) — the spec-fixed closure port arity, not a smell.
+"src/engram/indexing/domain/manifest.py" = ["PLR0913"]
+"src/engram/kb/domain/parser.py" = ["PLR0913", "PLR0917"]
+# build_frontmatter takes one keyword per MirrorFrontmatter field family it derives (provider /
+# source_hash / status / synced / converter) plus the item — the mapping function's fixed arity,
+# not a smell (same rationale as retrieval/infrastructure/embedded.py above).
+"src/engram/sources/domain/sync.py" = ["PLR0913"]
+# EngramMemoryStore.search implements the vendor pydantic_ai_harness.memory.SearchableMemoryStore
+# Protocol, whose six-argument signature (prefix, query, limit, max_files, max_chars, max_file_chars)
+# this store must match exactly to satisfy the Protocol at the call sites that type against it.
+# It is not a smell, and not ours to narrow.
+"src/engram/agent_memory/service.py" = ["PLR0913"]
+# embedded_memory_store's params are one flat, all-keyword-only deployment config (writer role,
+# embedding ports, collection, pool sizing) with no natural grouping into a settings object without
+# adding indirection for a five-line async context manager.
+"src/engram/agent_memory/infrastructure/postgres.py" = ["PLR0913"]
+# read_identity takes the gateway plus the reader collaborator plus one keyword per field the
+# caller supplies (slug, root, database, collection, code_revision) and the optional last_run
+# collaborator, the fixed composition surface every caller of the identity read fills in.
+"src/engram/identity.py" = ["PLR0913"]
+# The test toolkit ships in src but carries test-support shapes by design: fakes implement the
+# library's already-documented Protocols (D101/D102 — restating each contract on the fake is
+# duplication), their constructors take many scriptable knobs (PLR0913) and accept Protocol args
+# they ignore (ARG002); the DB plugin lazy-imports docker tooling so importing the module without
+# the extra stays cheap (PLC0415) and asserts its checkout anchors at import (S101); the
+# synthetic-knowledge-base builder is seeded-random test data, not cryptography (S311), and the bed's
+# reader password is a test-container literal (S106).
+"src/engram/testing/**" = ["D101", "D102", "PLC0415", "S101", "S311", "S106", "PLR0913", "PLR0917", "ARG002"]
+# The skill script runs on the vault machine's python3 (3.9 or newer) and prints its results.
+"src/engram/skills/agent-threads/scripts/notes.py" = ["T201", "UP017", "UP006", "UP035"]
+# The AGE cross-knowledge-base trap replay interpolates fixed module-level constants (the graph name, a
+# node id, a rel literal) into raw cypher via `ag_catalog.cypher(...)` — the same S608
+# string-interpolation false positive `core/pyproject.toml` already exempts for the shared graph
+# SQL generator; these are author-controlled test literals, never runtime or user-supplied input.
+"tests/integration/test_graph_collection_isolation.py" = ["S608"]
+# PT018: each assertion states one fact about the row a call returned (the job claimed, the
+# event stored, the delivery recorded), chaining the fields that describe it into one statement
+# instead of splitting every field compared on that row into its own assert.
+"tests/integration/test_coordination.py" = ["PT018"]
+"tests/**/*.py" = [
+    "D101",    # Docstring not required for test classes
+    "D102",    # Docstring not required for test methods
+    "D103",    # Docstring not required for test functions
+    "ANN201",  # Return type annotation not required for test functions
+    "ANN202",  # Return type annotation not required for test methods
+    "PLC0415", # Import on top not required for test files
+    "ASYNC240", # Test coroutines read the tiny artifacts their handler-under-test just wrote; a blocking read in a test is fine
+    "PLR0911", # A fake container's type-dispatch `get` returns one branch per provided type
+    "PLR0913", # Fake constructors take many scriptable knobs by design
+    "PLR0917", # Same — the positional-argument sibling of PLR0913
+    "S101",    # asserts allowed in tests...
+    "S105",    # Test fixtures use literal strings that resemble secrets
+    "S106",    # Same — kwarg passes test-only string values
+    "S107",    # Same — function-default variant
+    "SLF001",  # Tests may peek at module-private constants for drift guards
+    "ARG",     # Unused function args -> fixtures nevertheless are functionally relevant...
+    "FBT",     # Don't care about booleans as positional arguments in tests
+    "PLR2004", # Magic value used in comparison, ...
+    "S311",    # Standard pseudo-random generators are not suitable for cryptographic purposes
+]
+
+[tool.ruff.lint.pycodestyle]
+ignore-overlong-task-comments = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+detect-same-package = true
+lines-between-types = 1
+# Pairs with ``format.skip-magic-trailing-comma = true`` so isort and the formatter agree.
+split-on-trailing-comma = false
+known-first-party = ["engram", "tests"]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+order-by-type = true
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-decorators = ["wireup.injectable"]
+# KbBase (a SQLAlchemy DeclarativeBase) resolves its ``Mapped[...]`` annotations at runtime
+# during mapper configuration, so names used only inside them (e.g. date / datetime / JsonValue in
+# engram/indexing/infrastructure/orm.py) must stay importable at module scope — not moved under TYPE_CHECKING (TC00X).
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "pydantic_settings.BaseSettings",
+    # `core.ai.disclosure.contracts.DisclosureEnvelope` resolves a subclass's field annotations when the class
+    # body runs, same as any other `pydantic.BaseModel`.
+    "core.ai.disclosure.contracts.DisclosureEnvelope",
+    # `core.ai.evaluation.contracts.EvaluationModel` is the same, its evaluation-kernel subclasses'
+    # field annotations (e.g. a `datetime` seal or exposure timestamp) resolve at class-body time.
+    "core.ai.evaluation.contracts.EvaluationModel",
+    # `core.cqrs.contracts.Command` is a pydantic model, so a command's field annotations resolve at class-body time.
+    "core.cqrs.contracts.Command",
+    "engram.db.contracts.KbBase",
+]
+
+[tool.pyright]
+# A deprecated API fails the type check, so a deprecation is fixed when it lands, not when its removal breaks the build.
+reportDeprecated = "error"

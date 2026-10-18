@@ -1,0 +1,27 @@
+{
+  "page_type": "concept",
+  "universal_fields": {
+    "id": "con.knowledge-compounding",
+    "type": "concept",
+    "title": "Knowledge Compounding",
+    "status": "stub",
+    "tasks": [
+      "knowledge-management"
+    ],
+    "domains": [],
+    "stages": [],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": []
+  },
+  "edge_set": [
+    [
+      "synthesizes",
+      "graphrag-2024"
+    ],
+    [
+      "synthesizes",
+      "lightrag-2025"
+    ]
+  ]
+}

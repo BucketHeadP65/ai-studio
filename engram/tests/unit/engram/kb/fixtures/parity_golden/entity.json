@@ -1,0 +1,23 @@
+{
+  "page_type": "entity",
+  "universal_fields": {
+    "id": "ent.ultradomain",
+    "type": "entity",
+    "title": "UltraDomain",
+    "status": "stub",
+    "tasks": [
+      "long-doc-qa",
+      "sensemaking-qa"
+    ],
+    "domains": [],
+    "stages": [],
+    "modalities": [
+      "text"
+    ],
+    "scale_regimes": [],
+    "aliases": [
+      "UltraDomain benchmark"
+    ]
+  },
+  "edge_set": []
+}

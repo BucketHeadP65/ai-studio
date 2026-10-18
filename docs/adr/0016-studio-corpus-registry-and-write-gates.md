@@ -1,0 +1,49 @@
+---
+id: adr-0016-studio-corpus-registry-and-write-gates
+type: adr
+title: The studio manages every knowledge base through a settings-file registry, a gated terminal, and governed vocabulary
+summary: 'Absorbs the studio corpus management design: the corpus registry lives in the settings file with registry names doubling as collection namespaces, creation is a dashboard wizard whose AI assistance is'
+status: proposed
+aliases:
+- adr-0016-studio-corpus-registry-and-write-gates
+app: root
+absorbs:
+- '[[spec-2026-08-20-studio-corpus-management-design]]'
+created: '2026-08-29'
+---
+
+## Context
+
+The studio brainstorm on knowledge intake (bs.studio-knowledge-intake) asked for the dashboard to list every knowledge base its owner has, for new ones to be created with buttons plus AI assistance, and for Claude Code to be reachable from inside the studio. The design for this lives in the 2026-08-20 studio corpus management initiative (design: spec-2026-08-20-studio-corpus-management-design, plan: plan-2026-08-20-studio-corpus-management-plan, brainstorm: bs.studio-knowledge-intake), which this ADR absorbs. No accepted ADR decides any of it yet.
+
+The studio today has no answer to the question "which knowledge bases does this owner have". A corpus is a collection name plus a folder plus a corpusspec (engram ADR-0042 makes the collection the namespace), so listing one is a query over compiled collections, but nothing records intent to have a corpus that has not compiled yet, and creation means leaving the dashboard for the CLI. Vocabulary an author uses outside the corpus's registries drifts silently until a compile flag names it, and the only repair is a hand edit to the registry file. The agent server cannot even answer the list question, because it reaches the corpus through a raw-dict reader of the settings file that runs beside the typed reader and shares no contract with it.
+
+Constraints that shaped the decision: everything assumes a localhost, single-owner studio, so there is no auth problem to solve and none is solved here; the corpusspec is the declaration surface, so any AI assistance authors a spec, never a bespoke schema; the collection name is the corpus's identity under engram-adr-0042, so a registry name cannot be a second, rivaling identity; and the AI assistance that exists today is the engram-init interview skill, while the in-app agent is not yet trusted to carry a spec dialogue. Adjacent decisions stand and are not reopened: engram-adr-0042 owns corpus-qualified identity and collection naming, adr-0012 owns the inbox preset as a scaffold recipe on the knowledge-intake side, harness-adr-0012 owns which registered corpora answer a session's search, and adr-0013's pending-until-activation pattern is the same governance shape this registry borrows for vocabulary.
+
+## Decision
+
+D1. The registry is settings, not a database. ApplicationSettings gains corpora, a map of name to entry carrying path and description, in the one settings file that already exists. The settings file declares which corpora the studio intends to have, the database reports what actually got compiled, and the dashboard list showing both states is the reconciliation. Once the registry is non-empty, the active corpus is always one of its members: a write that would otherwise leave it unrepresented auto-enrolls it, under the collection name read from its own spec, in the same atomic write, and an unreadable active spec refuses rather than guessing a name. Both parsers of that file, the typed settings model and the agent server's raw-dict reader, learn the registry shape together and are pinned by a parity test.
+
+D2. A registry name is the corpus's collection name. Creating an entry enforces uniqueness at the door, the same rule imports follow, so a registry name and a collection namespace can never disagree. The dashboard list joins the registry against the database so a registered-but-never-compiled corpus and a compiled-but-unregistered collection are both visible states, not confusions.
+
+D3. The dashboard endpoints are thin and few, on the corpus API the SPA already talks to: one list route merging registry entries with database vitals, one create route that validates a pasted or templated spec, scaffolds through the existing engram init machinery, registers the entry and refuses collisions, and one route serving the parsed spec for a viewer. There is deliberately no long-running compile endpoint; compile stays a CLI and terminal concern.
+
+D4. Creation is a wizard over the corpusspec, with the interview as its AI mode. The dashboard gains a knowledge-bases station: the list, a create dialog (template, minimal, or a pasted spec), and a spec viewer. The "design it with AI" button opens the terminal pane inside the new corpus with a hint to run the engram-init skill. The interview that already exists is the AI assistance, and nothing waits on the in-app agent. Where a template exists in two places, the CLI preset is the authority, and the SPA's hand-copied approximation is a recorded divergence to converge, not a second definition to legitimize.
+
+D5. The terminal is a pty bridge on the agent server, and its gates are non-negotiable. A websocket spawns the claude CLI, falling back to the shell, in a requested working directory over a real pty, one session per socket, killed on disconnect, with the SPA pane as its client. The feature binds localhost only, checks the origin against the exact existing allowlist, requires the working directory to resolve inside a registered corpus root or the repo checkout, and is off unless explicitly enabled. Because that file is the corpus's own settings under D1, the toggle lives in the agent server's own environment-driven settings idiom, not in the shared settings JSON. This is genuine shell access to the machine, so the gate is explicit opt-in, never a default.
+
+D6. Vocabulary evolution is governed, not silent. New vocabulary an author uses that the registry does not recognize can be proposed: a pending row the owner approves before the registry gains it, through a propose, list, approve, reject CLI that mirrors summary governance, landing on approval via the union-merge writer that already exists. The compile lint keeps flagging unknown values exactly as before, and approval is what turns a flag into a registry row. Agents never edit registries directly.
+
+D7. Agent writes go through the gate. Any studio door that lets an agent author a page into a corpus runs the spec's page-local validation before it writes anything and refuses with named findings: the grammar at the door, the registries at the ledger. This slice wires the rule into the one agent-facing write that exists, ingest. Compile-time lint stays the corpus-wide net for everything page-local validation cannot see.
+
+## Consequences
+
+What becomes easier. A knowledge base now exists as declared intent the moment it is registered, before it ever compiles, and the list that shows registered-but-never-compiled beside compiled-but-unregistered makes both states honest instead of confusing. Creating one is a wizard plus one optional interview, and the interview is an existing skill rather than a feature to build. Ontology growth has a review loop, so a corpus's vocabulary can only widen by an owner's decision, and every agent-facing write is refused with named findings instead of silently landing unregistered vocabulary.
+
+What becomes harder. The settings file has two readers that must agree, so a parity test is a permanent obligation, and any new settings shape must be taught to both or the agent server diverges silently. The terminal gate constrains only where a session starts, not what it may reach afterward, and the child inherits the server's full environment, so enabling it is a real operational decision an owner must understand. Template presets reproduced in two places can drift, and until they converge a corpus created from the dialog is not the same shape as one created from the CLI. The propose-approve loop adds a step between seeing a lint flag and fixing it, and vocabulary outside facet values has a gate but no proposal path yet.
+
+What the repo must keep doing to honor the decision. Keep the settings file the single source of registry truth and keep the parity test pinning both readers to it. Never let a registry write land a file the application cannot reload, and never let an agent edit a registry file directly. Keep terminal gates in front of the pty, cheapest and most consequential first, with the feature off by default. Keep the vocabulary check in front of every agent-facing write path, including new ones, and route every registry change through union-merge rather than a second writer.
+
+## Options considered
+
+A database-side registry table was rejected because two places would then claim to know which corpora exist and would eventually disagree, with no owner to referee, and the same reasoning refused a database table for pending vocabulary proposals in favor of a file beside the corpus's registry. Serving AI corpus design only through a future in-app agent was rejected because the engram-init interview exists today and a terminal pane is the shortest honest path to it. A terminal with no gates, or gates that could be defaulted on, was rejected outright: the pane is genuine shell access to the machine, so opt-in, origin checking and a registered-roots cwd check are the price of the feature existing at all. Letting ingest write first and lint later was rejected because an agent-authored page with invented vocabulary is cheaper to refuse than to unwind. Corpus deletion from the UI, compile-from-dashboard job endpoints, a remote multi-user studio, and reasoner-grade ontology machinery were all left out on purpose and are not reopened by this decision.

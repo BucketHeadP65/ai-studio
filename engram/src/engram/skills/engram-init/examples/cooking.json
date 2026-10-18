@@ -1,0 +1,73 @@
+{
+  "version": "0.1",
+  "slug": "cooking",
+  "purpose": "A personal recipe collection organized by cuisine, technique, and ingredient pairings.",
+  "slug_conventions": "Recipes use recipe.<slug>, ingredients use ing.<slug>",
+  "page_types": [
+    {
+      "page_type": "recipe",
+      "id_prefix": "recipe.",
+      "folder": "Wiki/Recipes",
+      "frontmatter_fields": [
+        {"name": "servings", "type": "int", "required": true},
+        {"name": "cuisine", "type": "scalar", "required": false},
+        {"name": "prep_time_minutes", "type": "int", "required": false},
+        {"name": "cook_time_minutes", "type": "int", "required": false},
+        {"name": "pairs_with", "type": "link-list"},
+        {"name": "features", "type": "link-list"}
+      ],
+      "canonical_sections": ["ingredients", "method", "notes"],
+      "edge_fields": ["pairs_with", "features"],
+      "claims_enabled": false
+    },
+    {
+      "page_type": "ingredient",
+      "id_prefix": "ing.",
+      "folder": "Wiki/Ingredients",
+      "frontmatter_fields": [
+        {"name": "substitute_for", "type": "link-list"},
+        {"name": "flavour_profile", "type": "scalar", "required": false}
+      ],
+      "canonical_sections": ["description", "uses", "pairings", "notes"],
+      "edge_fields": ["substitute_for"],
+      "claims_enabled": false
+    }
+  ],
+  "relations": [
+    {"slug": "pairs_with", "domain": "recipe", "range": "recipe", "symmetric": true, "qualifiers": [], "description": "These recipes pair well together (symmetric)"},
+    {"slug": "features", "domain": "recipe", "range": "ingredient", "symmetric": false, "qualifiers": [], "description": "The recipe uses this ingredient as a key component"},
+    {"slug": "substitute_for", "domain": "ingredient", "range": "ingredient", "symmetric": false, "qualifiers": [], "description": "Can replace the target ingredient in most uses"}
+  ],
+  "entity_types": [],
+  "claim_types": [],
+  "facets": [
+    {
+      "key": "cuisine",
+      "scope": ["recipe"],
+      "seed": ["italian", "thai", "french", "indian", "japanese", "mexican", "middle-eastern", "chinese", "greek", "spanish", "american", "korean"]
+    },
+    {
+      "key": "dietary",
+      "scope": ["recipe"],
+      "seed": ["vegan", "vegetarian", "gluten-free", "dairy-free", "nut-free", "low-carb", "high-protein"]
+    },
+    {
+      "key": "meal_type",
+      "scope": ["recipe"],
+      "seed": ["breakfast", "lunch", "dinner", "snack", "dessert", "side", "sauce", "drink"]
+    },
+    {
+      "key": "technique",
+      "scope": ["recipe"],
+      "seed": ["roasting", "braising", "grilling", "steaming", "frying", "baking", "raw", "fermented", "cured"]
+    }
+  ],
+  "claims": null,
+  "sources": {
+    "enabled": false,
+    "quote_verify": false
+  },
+  "retrieval": {
+    "profile": "search-hybrid"
+  }
+}

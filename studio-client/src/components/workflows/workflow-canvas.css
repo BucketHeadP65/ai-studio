@@ -1,0 +1,134 @@
+/* The canvas's effects layer: everything here has no Tailwind utility equivalent
+   (multi-layer box-shadow composition, a dot-matrix background, the running-node
+   and rejection-wire keyframes, and beating React Flow's own imported handle rule
+   on specificity rather than !important). Every color is derived from the
+   dashboard's existing semantic tokens via color-mix, never a literal — scoped
+   entirely under .workflow-canvas so it never leaks into the rest of the chrome.
+   Elevation here is always a hard offset, never a soft blur: the same two-value
+   color-mix recipe the rest of the dashboard's --elevation-* tokens use, kept
+   local rather than reused directly, since the canvas wants this exact
+   hard-offset look in every theme, dark included, where the global elevation
+   tokens switch to a soft blur recipe for dark surfaces. */
+
+.workflow-canvas {
+  --canvas-dot: color-mix(in oklch, var(--line-strong) 70%, transparent);
+  --canvas-glow: color-mix(in oklch, var(--accent) 60%, transparent);
+  --canvas-danger-ring: color-mix(in oklch, var(--danger-ink) 45%, transparent);
+  --canvas-elevation: 0 4px 0 color-mix(in oklch, var(--label-1) 8%, transparent);
+  --canvas-elevation-raised: 0 6px 0 color-mix(in oklch, var(--label-1) 12%, transparent);
+  /* The header bar's tint: a shade off the body's own surface, never a third
+     background color of its own. */
+  --canvas-header-tint: color-mix(in oklch, var(--well) 55%, var(--surface));
+}
+
+/* Resting elevation: every card floats a hair above the grid, a hard offset
+   with no blur. */
+.workflow-canvas-node {
+  --canvas-ring: 0 0 0 0 transparent;
+  box-shadow: var(--canvas-elevation), var(--canvas-ring);
+}
+
+/* Raised elevation: running, waiting-on-you, failed, and selected all read as
+   closer to the glass than an idle card — a bigger offset, still hard. */
+.workflow-canvas-node--elevated {
+  box-shadow: var(--canvas-elevation-raised), var(--canvas-ring);
+}
+
+/* Ring color is a variable, not a shadow list, so running and failed each set
+   only the tint — never fighting over which rule's whole box-shadow wins. */
+.workflow-canvas-node--running {
+  --canvas-ring: 0 0 0 3px var(--canvas-glow);
+}
+
+.workflow-canvas-node--failed {
+  --canvas-ring: 0 0 0 2px var(--canvas-danger-ring);
+}
+
+/* Selection reads as a dashed accent outline, not another solid ring — an
+   independent CSS property from the box-shadow ring above, so a running (or
+   failed) card that is also selected still shows both the glow and the dash
+   at once instead of one replacing the other. */
+.workflow-canvas-node--selected {
+  outline: 2px dashed var(--line-strong);
+  outline-offset: 2px;
+}
+
+/* The selected card's own border and shadow key off its current state color
+   instead of a neutral ring: `data-select-tone` is only ever present while
+   the card is selected (set in workflow-canvas.tsx), so these four rules
+   only ever fire then, each tinting the offset shadow toward that state's
+   own token. */
+.workflow-canvas-node[data-select-tone="warn"] {
+  box-shadow: 0 4px 0 color-mix(in oklch, var(--warn) 20%, transparent), var(--canvas-ring);
+}
+
+.workflow-canvas-node[data-select-tone="accent"] {
+  box-shadow: 0 4px 0 color-mix(in oklch, var(--accent) 20%, transparent), var(--canvas-ring);
+}
+
+.workflow-canvas-node[data-select-tone="danger"] {
+  box-shadow: 0 4px 0 color-mix(in oklch, var(--danger-ink) 20%, transparent), var(--canvas-ring);
+}
+
+.workflow-canvas-node[data-select-tone="ink"] {
+  box-shadow: 0 4px 0 color-mix(in oklch, var(--label-1) 16%, transparent), var(--canvas-ring);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workflow-canvas-node:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Referenced from the card via a motion-safe: Tailwind animate-[] utility, so the
+   pulse itself only ever exists in a stylesheet already gated behind
+   (prefers-reduced-motion: no-preference); the static ring above is what
+   reduced-motion viewers see instead. */
+@keyframes workflow-canvas-glow {
+  0%,
+  100% {
+    box-shadow: var(--canvas-elevation-raised), 0 0 0 3px var(--canvas-glow);
+  }
+  50% {
+    box-shadow: var(--canvas-elevation-raised), 0 0 10px 6px var(--canvas-glow);
+  }
+}
+
+/* The dashed rejection wire's own marching-ants flow: the dash pattern steps
+   along the path so a return-path edge reads as actively carrying something
+   back, gated the same way every other motion in this file is. */
+@keyframes workflow-canvas-wire-flow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workflow-canvas-wire-rejected {
+    animation: workflow-canvas-wire-flow 1.4s linear infinite;
+  }
+}
+
+/* The header bar's tint sits a shade off the body's own surface, with a
+   hairline below it — the card's overflow-hidden still owns the outer
+   corners, so this flat rectangle never pokes past them. A gate's own
+   warn/well tint (set inline in workflow-canvas.tsx) overrides this default. */
+.workflow-canvas-node__header {
+  background: var(--canvas-header-tint);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Edges terminate directly at the card's own border with an arrowhead
+   marking the entry point: no connector dot is drawn. The Handle components
+   stay mounted (React Flow anchors every edge to one), just undrawn and out
+   of the hit-test path. */
+.workflow-canvas .react-flow__handle.workflow-canvas-handle {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  pointer-events: none;
+}

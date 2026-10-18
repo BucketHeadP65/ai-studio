@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=sample2_schema.json
+name: engram-retrieval-golden
+cases:
+- name: paper.raptor-2024-0
+  inputs:
+    question: With a GPT-4 reader, what answer-F1 does RAPTOR reach on the QASPER
+      benchmark, and which prior state-of-the-art model does that surpass?
+    task: null
+  metadata:
+    anchor_page_id: paper.raptor-2024
+    kind: benchmark
+    difficulty: medium
+  expected_output:
+    answer: RAPTOR with GPT-4 reaches 55.7% answer-F1 on QASPER, surpassing CoLT5
+      XL's 53.9% and setting a new state of the art at publication time.
+    cited_source_ids:
+    - paper.raptor-2024
+  evaluators: []
+- name: paper.lightrag-2025-1
+  inputs:
+    question: On the UltraDomain Mix subset, does LightRAG actually outperform GraphRAG?
+    task: null
+  metadata:
+    anchor_page_id: paper.lightrag-2025
+    kind: comparative
+    difficulty: medium
+  expected_output:
+    answer: No. On the Mix subset the two are effectively tied, with GraphRAG slightly
+      ahead on Overall (50.4% vs 49.6%) and Empowerment (50.8% vs 49.2%); LightRAG's
+      'consistently outperforms' framing does not hold there.
+    cited_source_ids:
+    - paper.lightrag-2025
+  evaluators: []
+evaluators:
+- RetrievalMetrics
+report_evaluators: []

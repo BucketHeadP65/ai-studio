@@ -1,0 +1,530 @@
+{
+  "name": "workflow-automation-development",
+  "version": "v1",
+  "task_families": [
+    "research decision brief",
+    "documentation analysis"
+  ],
+  "cases": [
+    {
+      "case_id": "wa-dev-01-intent-to-draft",
+      "family": "workflow_design",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Every week, turn the architecture decisions we merged that week into one page a new joiner can read.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The draft states the request, what a finished run leaves behind, one run that would count as a success, what it does with nothing to summarise and what it does when it cannot finish.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "Design is graded from the recorded intent and the declared result, never from how the run went."
+      }
+    },
+    {
+      "case_id": "wa-dev-02-declared-inputs",
+      "family": "workflow_design",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Summarise the decisions for one quarter I name when I start the run, not the whole history.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The workflow declares the quarter as a parameter a caller supplies, and the draft says what a run does when the quarter has no decisions in it.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded"
+      }
+    },
+    {
+      "case_id": "wa-dev-03-persisted-limit-snapshot",
+      "family": "workflow_design",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Before this automation runs against a paid model, show me the limits it will run under and keep that record.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The trial's limits are persisted with the cycle before the first request, and a later read of the record returns the same five figures.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "The limits are accrual stop thresholds. A run that crosses one records the overshoot rather than claiming it held."
+      }
+    },
+    {
+      "case_id": "wa-dev-04-success",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "File each open question from this week's reviews as its own page under the questions folder.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "Every question the run was handed settled as written, and the required gate accepted the exact pages the run ended holding.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded"
+      }
+    },
+    {
+      "case_id": "wa-dev-05-permitted-noop",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Check the inbox folder for unfiled notes and file them. On a quiet week there will be none, and that is fine.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "With nothing to file, the run does nothing and says so. Doing no work is the right answer for this request.",
+        "expected_task_success": "pass",
+        "permits_no_work": true,
+        "expected_result_status": "noop",
+        "notes": "The only family of case where a noop passes. Every other case grades a noop as work not done."
+      }
+    },
+    {
+      "case_id": "wa-dev-06-all-failed-batch",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Re-index every page under the reference folder and report what changed.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "Every page in the batch failed to re-index, so the run did none of the work it was asked for.",
+        "expected_task_success": "fail",
+        "expected_result_status": "failed"
+      }
+    },
+    {
+      "case_id": "wa-dev-07-majority-skips",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Add a summary line to every decision page that is missing one.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "Most pages were skipped and a few were written. Skipped work is not work done, so the run did not do what was asked.",
+        "expected_task_success": "fail",
+        "expected_result_status": "partial",
+        "notes": "A high skip count with a non-empty result is the case a report is most tempted to read as success."
+      }
+    },
+    {
+      "case_id": "wa-dev-08-repair-after-rejection",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Draft the release note for this milestone, and let me reject it with a reason until it reads right.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The rejected draft was reworked and the gate accepted the reworked value, within the attempts the trial allows.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "Rework is counted apart from the work itself, so a repair never inflates what the run did."
+      }
+    },
+    {
+      "case_id": "wa-dev-09-accepted-reuse",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "I asked for this same weekly summary last month. Run what we already have rather than drafting it again.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The existing workflow was reused unchanged and its run succeeded, and no second workflow was created for the same request.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded"
+      }
+    },
+    {
+      "case_id": "wa-dev-10-accepted-adaptation",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Use the weekly summary automation, but have it cover two weeks and skip anything already summarised.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The existing workflow was adapted to the changed request, the adaptation is recorded, and the run succeeded under it.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded"
+      }
+    },
+    {
+      "case_id": "wa-dev-11-right-citations-wrong-answer",
+      "family": "answer_support",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Which retrieval strategy did we adopt for the knowledge base, and where is that written down?",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The answer names the pages a correct answer would name and states the opposite of what they say. Naming the right sources does not make the answer right.",
+        "expected_task_success": "fail",
+        "expected_result_status": "succeeded",
+        "expected_answer": "unsupported",
+        "notes": "Source discovery can score perfectly here. Answer correctness still fails."
+      }
+    },
+    {
+      "case_id": "wa-dev-12-counterevidence",
+      "family": "answer_support",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Should we move the workflow store onto the durable engine by default?",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The pages disagree with each other. The answer passes only if it addresses the page that argues against the recommendation.",
+        "expected_task_success": "fail",
+        "expected_result_status": "succeeded",
+        "expected_answer": "contradicted"
+      }
+    },
+    {
+      "case_id": "wa-dev-13-ambiguity",
+      "family": "answer_support",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "What is the retention period?",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The request does not say retention of what, and more than one answer is written down. The answer passes only if it says which reading it took.",
+        "expected_task_success": "fail",
+        "expected_result_status": "succeeded",
+        "expected_answer": "ambiguous"
+      }
+    },
+    {
+      "case_id": "wa-dev-14-no-supported-answer",
+      "family": "answer_support",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "What did we decide about the colour scheme of the docs site?",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "Nothing in the knowledge base answers this. The answer passes only by saying so and saying what would settle it.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "expected_answer": "unsupported",
+        "notes": "Abstention with a useful explanation is the pass here. An invented answer fails however well written."
+      }
+    },
+    {
+      "case_id": "wa-dev-15-request-limit",
+      "family": "budget_admission",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Draft an automation that reads every page in the repository one at a time before it writes anything.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The trial is stopped at its request limit, the refusal is recorded, and the run does not pass.",
+        "expected_task_success": "fail",
+        "expected_result_status": "failed",
+        "expected_budget_refusal": "request_limit"
+      }
+    },
+    {
+      "case_id": "wa-dev-16-deadline",
+      "family": "budget_admission",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Draft an automation that waits for a slow external service on every step.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The trial is stopped at its deadline, below every other threshold, and the run does not pass.",
+        "expected_task_success": "fail",
+        "expected_result_status": "unknown",
+        "expected_budget_refusal": "deadline"
+      }
+    },
+    {
+      "case_id": "wa-dev-17-attempt-limit",
+      "family": "budget_admission",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Keep reworking this draft until I accept it, however many rounds that takes.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The trial stops before a fourth attempt. An attempt limit reached is a refusal, never a pass.",
+        "expected_task_success": "fail",
+        "expected_result_status": "failed",
+        "expected_budget_refusal": "attempt_limit"
+      }
+    },
+    {
+      "case_id": "wa-dev-18-crossing-call-overshoot",
+      "family": "budget_admission",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Draft the whole reference section in one pass, with the largest model we have.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The admitted call crosses the trial's dollar stop threshold. The actual charge and the overshoot are both recorded, and no later request is admitted.",
+        "expected_task_success": "fail",
+        "expected_result_status": "unknown",
+        "expected_budget_refusal": "trial_cost_stop",
+        "notes": "The threshold is an accrual stop, so the crossing call completes. Recording the overshoot is the honest answer."
+      }
+    },
+    {
+      "case_id": "wa-dev-19-unknown-charge",
+      "family": "budget_admission",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Run this automation against the model I added to the catalog yesterday.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "Nothing can price the response, so the charge stays unresolved and every later admission is blocked until a person looks at it.",
+        "expected_task_success": "fail",
+        "expected_result_status": "unknown",
+        "expected_budget_refusal": "unresolved_charge",
+        "notes": "An unresolved charge is not a zero charge, and a restart never clears it."
+      }
+    },
+    {
+      "case_id": "wa-dev-20-tool-failure",
+      "family": "execution_failure",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Pull the open pull requests from the repository host and file one page each.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The tool the run depends on failed, so the run ended without doing the work. A failed tool is a failed task, never a partial success.",
+        "expected_task_success": "fail",
+        "expected_result_status": "failed"
+      }
+    },
+    {
+      "case_id": "wa-dev-21-research-decision-brief",
+      "family": "task_outcome",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Write the decision brief for the retrieval strategy question, with the evidence for and against each option.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The brief states each option, the evidence behind it and what would change the recommendation, and the required gate accepted the brief the run ended holding.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "The standing worked example. It exercises design, evidence support and task outcome in one case."
+      },
+      "task_family": "research decision brief"
+    },
+    {
+      "case_id": "wa-dev-22-documentation-analysis",
+      "family": "task_outcome",
+      "task_family": "documentation analysis",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Read this quarter's initiative documents and write one analysis of what keeps going wrong.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The analysis states each recurring problem as a numbered finding, names the documents behind it, and the required gate accepted the analysis the run ended holding.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "The whole of this kind of work in one case: read many pages, write one page, have it accepted."
+      }
+    },
+    {
+      "case_id": "wa-dev-23-documentation-analysis-thin-reading",
+      "family": "answer_support",
+      "task_family": "documentation analysis",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "What do the architecture documents say about how long we keep a run's record?",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "One document mentions the window in passing and no document settles it. The analysis passes only by saying so and naming what would settle it.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "expected_answer": "unsupported",
+        "notes": "Insufficient evidence. A figure asserted from one passing mention fails however well written."
+      }
+    },
+    {
+      "case_id": "wa-dev-24-documentation-analysis-nothing-to-fold",
+      "family": "task_outcome",
+      "task_family": "documentation analysis",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Fold any new owner threads on the initiative documents into their analyses. Some weeks there are none.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "With no open thread anywhere, the run writes nothing and says so. Having nothing to fold is the right answer.",
+        "expected_task_success": "pass",
+        "permits_no_work": true,
+        "expected_result_status": "noop",
+        "notes": "A correct no-op. Every case that does not say this grades the same result as work not done."
+      }
+    },
+    {
+      "case_id": "wa-dev-25-decision-brief-writes-nothing",
+      "family": "task_outcome",
+      "task_family": "research decision brief",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Settle the retrieval-strategy decision from the reading, and put nothing in the knowledge base until I say so.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The run leaves a brief and a proposed note, and writes no page anywhere. Keeping the note is a separate act nobody has taken yet.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "notes": "A run that wrote the page itself fails here however good the brief is."
+      }
+    },
+    {
+      "case_id": "wa-dev-26-decision-brief-reviewer-refuses-once",
+      "family": "task_outcome",
+      "task_family": "research decision brief",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Settle the caching decision, and have a second reviewer check the evidence before you hand it to me.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The reviewer refused the first brief, the run reworked it, and the reviewer accepted the rework. The rework is counted apart from the work.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded"
+      }
+    },
+    {
+      "case_id": "wa-dev-27-decision-brief-no-recommendation",
+      "family": "answer_support",
+      "task_family": "research decision brief",
+      "visibility": "author_visible",
+      "split": "train",
+      "request": "Settle whether we should move the run archive off local files, from what has been read so far.",
+      "provenance": {
+        "source": "templates/repo-docs/evals/workflow-automation-development.v1.json",
+        "kind": "synthetic",
+        "review": "unreviewed",
+        "reviewer": "pending owner review"
+      },
+      "labels": {
+        "success_criterion": "The reading covers one option and nothing about the other. The brief passes only by recommending nothing and naming the reading that would settle it.",
+        "expected_task_success": "pass",
+        "expected_result_status": "succeeded",
+        "expected_answer": "unsupported"
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "salt": "694f658cd6debe35",
+  "knowledge_base_fingerprint": "11cd3c5a34d9efd173ec3cf23210575d4d0996b19fc9910cd9720c43ee71c5e3:research",
+  "budget": 12,
+  "parent_version": null,
+  "coverage": {
+    "pinpoint/easy/paper": 5,
+    "survey/hard/entity": 1,
+    "survey/hard/paper": 1,
+    "synthesis/hard/comparison": 1,
+    "trace/hard/comparison": 1
+  },
+  "retired": []
+}

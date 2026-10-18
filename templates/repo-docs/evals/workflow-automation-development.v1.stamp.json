@@ -1,0 +1,40 @@
+{
+  "dataset": "workflow-automation-development",
+  "version": "v1",
+  "visibility": "author_visible",
+  "custody": "authored in this repository and readable by whoever implements against it",
+  "case_ids": [
+    "wa-dev-01-intent-to-draft",
+    "wa-dev-02-declared-inputs",
+    "wa-dev-03-persisted-limit-snapshot",
+    "wa-dev-04-success",
+    "wa-dev-05-permitted-noop",
+    "wa-dev-06-all-failed-batch",
+    "wa-dev-07-majority-skips",
+    "wa-dev-08-repair-after-rejection",
+    "wa-dev-09-accepted-reuse",
+    "wa-dev-10-accepted-adaptation",
+    "wa-dev-11-right-citations-wrong-answer",
+    "wa-dev-12-counterevidence",
+    "wa-dev-13-ambiguity",
+    "wa-dev-14-no-supported-answer",
+    "wa-dev-15-request-limit",
+    "wa-dev-16-deadline",
+    "wa-dev-17-attempt-limit",
+    "wa-dev-18-crossing-call-overshoot",
+    "wa-dev-19-unknown-charge",
+    "wa-dev-20-tool-failure",
+    "wa-dev-21-research-decision-brief",
+    "wa-dev-22-documentation-analysis",
+    "wa-dev-23-documentation-analysis-thin-reading",
+    "wa-dev-24-documentation-analysis-nothing-to-fold",
+    "wa-dev-25-decision-brief-writes-nothing",
+    "wa-dev-26-decision-brief-reviewer-refuses-once",
+    "wa-dev-27-decision-brief-no-recommendation"
+  ],
+  "notes": "Development evidence. Every case is author-visible, none is sealed, and no result from this set is independent generalization evidence. The two kinds of work named here are the set's own words for them.",
+  "task_families": [
+    "research decision brief",
+    "documentation analysis"
+  ]
+}

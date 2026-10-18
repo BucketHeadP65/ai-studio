@@ -1,0 +1,71 @@
+{
+  "run": {
+    "run_engine": "in_process",
+    "temporal_address": "localhost:7233",
+    "temporal_namespace": "default",
+    "temporal_task_queue": "pydantic-ai-workflows",
+    "archive_days": 30
+  },
+  "store": {
+    "hybrid_search": true
+  },
+  "models": {
+    "deepseek_gateway_route": "DeepSeek",
+    "max_tokens": 32768
+  },
+  "self_authoring": {
+    "custom_root": null,
+    "saved_by": "human:owner"
+  },
+  "terminal": {
+    "enabled": false
+  },
+  "web_search": {
+    "tavily_api_key": null
+  },
+  "studio_api": {
+    "base_url": "http://127.0.0.1:8100"
+  },
+  "knowledge_base_guidance": {},
+  "library_search": {
+    "cross_knowledge_base_search": false
+  },
+  "state": {},
+  "inspection": {
+    "watches": [
+      {
+        "name": "every-run",
+        "rules": [
+          "schema_rejected_arguments",
+          "retried_after_clear_error",
+          "denied_action_repeated",
+          "duplicate_call",
+          "result_overflowed_context",
+          "budget_exhausted_unfinished"
+        ],
+        "inspector": "when_a_rule_led",
+        "clean_run_sample_rate": 0.1,
+        "reconcile_hours": 24,
+        "when": "run_end"
+      }
+    ],
+    "world_changing": [],
+    "result_cap_chars": null,
+    "inspector_tiers": [
+      "helper",
+      "worker"
+    ],
+    "dispatch_seconds": 15,
+    "sweep_seconds": 3600,
+    "job_poll_seconds": 1.0,
+    "batch": 200
+  },
+  "skill_hint": {"enabled": true, "model": "jev-1.13", "threshold": 0.6, "deadline_seconds": 2.0},
+  "logging": {
+    "service_name": "harness",
+    "service_version": "0.0.0",
+    "environment": "local",
+    "level": "INFO",
+    "console": false
+  }
+}

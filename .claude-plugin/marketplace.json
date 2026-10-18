@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai-studio",
+  "description": "The AI Studio plugin catalog.",
+  "owner": {
+    "name": "BucketHeadP65",
+    "email": "104688161+BucketHeadP65@users.noreply.github.com"
+  },
+  "plugins": [
+    {
+      "name": "knowledge-base",
+      "description": "Retrieval and note-writing tools over a markdown knowledge base indexed into Postgres, served over MCP.",
+      "source": "./engram/plugin",
+      "category": "knowledge"
+    }
+  ]
+}

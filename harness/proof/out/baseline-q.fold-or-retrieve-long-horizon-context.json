@@ -1,0 +1,29 @@
+{
+  "question_id": "q.fold-or-retrieve-long-horizon-context",
+  "path": "baseline",
+  "surfaced": [
+    "ent.graphrag",
+    "ent.lightrag",
+    "paper.hipif-2026",
+    "paper.hmem-2026",
+    "paper.horma-2026",
+    "paper.lightrag-2025",
+    "paper.x"
+  ],
+  "recall": 0.4,
+  "missed": [
+    "ent.hipif",
+    "ent.long-context-degradation",
+    "ent.long-horizon-agent-task"
+  ],
+  "requests": 5,
+  "input_tokens": 31225,
+  "output_tokens": 876,
+  "seconds": 38.35,
+  "contaminated": false,
+  "failed": false,
+  "answer": "Neither is universally “the right” strategy; the evidence in this corpus supports a **hybrid** view:\n\n- **Fold/compress what is *done* (working-memory control):** HIPIF’s results argue that long-horizon failure is driven by *ever-growing* trajectories causing “long-context interference,” and that **subgoal-level folding** is a load-bearing fix. In their ablations, removing the subgoal decomposition + folding structure is the biggest performance drop, and folding also reduces interaction/token cost substantially (paper.hipif-2026; see claims paper.hipif-2026#c5 and paper.hipif-2026#c9).\n\n- **Navigate-and-retrieve what must remain accessible (lossless recall / pinpointing):** HORMA is built around organizing experience into a hierarchy and then **retrieving minimal context via navigation**, and reports strong performance under tight context budgets. Importantly, it includes a negative result where a **context-folding baseline** underperforms a sliding window on ALFWorld because the retained reasoning “inflates context cost and reduces actionable capacity” (paper.horma-2026; claim paper.horma-2026#c11). That suggests folding can be harmful when it preserves verbose traces rather than compact task state.\n\n- **Compression is still valuable inside retrieval systems (as an index primitive):** H‑Mem’s ablation shows that removing **long-term summaries** hurts (events/raw fragments alone degrade), implying that *some* form of consolidation/compression is beneficial—but as a structured memory layer that supports later retrieval, not necessarily as the sole representation (paper.hmem-2026; claim paper.hmem-2026#c8).\n\n**Synthesis:** For long-horizon agents, fold/compact history into **state-like summaries at natural boundaries (e.g., completed subgoals)** to control context growth and reduce interference (HIPIF), but rely on **structured navigation + retrieval** to bring back high-fidelity details only when needed (HORMA/H‑Mem). The “compress everything into reasoning traces” style of folding can backfire under budget constraints (HORMA’s Fold baseline).  \n\nCited pages: paper.hipif-2026, paper.horma-2026, paper.hmem-2026, cmp.hierarchical-rl-credit-assignment.",
+  "workflow_id": null,
+  "hit_rank": null,
+  "drift": null
+}

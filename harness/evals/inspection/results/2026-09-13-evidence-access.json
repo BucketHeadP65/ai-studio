@@ -1,0 +1,77 @@
+{
+  "verdict": "accepted",
+  "reasons": [],
+  "baseline_task_success": 0.6111111111111112,
+  "candidate_task_success": 1.0,
+  "baseline_diagnostics": {
+    "trials": 18,
+    "true_positives": 3,
+    "false_positives": 0,
+    "false_negatives": 5,
+    "failures": 0,
+    "precision": 1.0,
+    "recall": 0.375,
+    "abstention_rate": 0.5,
+    "correct_abstentions": 2,
+    "clean_accuracy": 0.75,
+    "verdict_accuracy": 0.6111111111111112,
+    "cause_accuracy": 1.0
+  },
+  "candidate_diagnostics": {
+    "trials": 18,
+    "true_positives": 8,
+    "false_positives": 0,
+    "false_negatives": 0,
+    "failures": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "abstention_rate": 0.1111111111111111,
+    "correct_abstentions": 2,
+    "clean_accuracy": 1.0,
+    "verdict_accuracy": 1.0,
+    "cause_accuracy": 1.0
+  },
+  "owner_calibrated": false,
+  "review_counts": {
+    "agent": 9
+  },
+  "dataset_fingerprint": "a400253045016612f185ea837da66107cfa493ba4d094d6d56c591503564e2dd",
+  "configured_model": "z-ai/glm-5.3-flash",
+  "observed_models": [
+    "z-ai/glm-5.3-flash"
+  ],
+  "observed_revisions": [],
+  "baseline_usage": {
+    "input_tokens": 144035,
+    "output_tokens": 16791,
+    "requests": 50,
+    "cost_usd": 0.017413230000000002
+  },
+  "candidate_usage": {
+    "input_tokens": 98810,
+    "output_tokens": 8736,
+    "requests": 32,
+    "cost_usd": 0.01107174
+  },
+  "methodology_audit": {
+    "audited_on": "2026-09-13",
+    "experiment_kind": "synthetic_evidence_access_ablation",
+    "split_counts": {
+      "train": 2,
+      "test": 9
+    },
+    "training_performed": false,
+    "independently_withheld_test_set": false,
+    "all_cases_visible_to_implementer": true,
+    "lead_conditioned_evaluation_cases": 8,
+    "unprompted_failure_discovery_evaluation_cases": 0,
+    "clean_scan_evaluation_cases": 1,
+    "gold_verdict_and_cause_fields_sent_to_model": false,
+    "answer_bearing_case_ids_found_in_saved_traces": false,
+    "baseline_is_previous_implementation": false,
+    "interpretation": "Descriptive result on author-visible constructed examples. It is neither a before/after release benchmark nor evidence of generalization.",
+    "baseline_limitation": "Both variants ran the same updated inspector. The baseline removed request instructions and tool definitions even though the previous attribution path already exposed instructions and tool names/descriptions.",
+    "split_limitation": "Disjoint ids and serialized inputs do not establish independence. The implementer authored and saw all cases, and related scenario patterns occur in both splits.",
+    "next_required_evidence": "Freeze implementations before independently preparing unseen scenario families and labels. Compare the actual previous and new implementations on equivalent allowed inputs."
+  }
+}

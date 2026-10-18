@@ -1,0 +1,64 @@
+# Local dev databases for the knowledge base indexer/serving layer.
+#
+# The `postgres` service (Postgres 17 + pg_textsearch/BM25 + Apache AGE + pgvector + ltree) on host
+# port 5434 is the default dev database: `docker compose up` starts it, and it runs the
+# `pg_textsearch` dialect and the AGE graph. ParadeDB (pg_search/BM25) is the opt-in database
+# behind the `paradedb` profile (host 5433). Integration tests use testcontainers
+# (this image by default, ParadeDB via KNOWLEDGE_BASE_TEST_DIALECT=pg_search) and skip without Docker.
+services:
+  # ParadeDB — the OPT-IN local bed (engram ADR-0017). Behind the `paradedb` profile, so
+  # `docker compose up` does NOT start it; `docker compose --profile paradedb up paradedb` does.
+  # Pair it with APP_RETRIEVAL__DIALECT=pg_search + graph_backend=cte at runtime.
+  paradedb:
+    image: paradedb/paradedb:latest-pg17
+    container_name: wiki-paradedb
+    profiles:
+      - paradedb
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: knowledge_bases
+      POSTGRES_USER: wiki
+      POSTGRES_PASSWORD: wiki
+    volumes:
+      - wiki-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wiki -d knowledge_bases"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The default dev database: the `pg_textsearch` dialect (AGE + pg_textsearch/BM25 + pgvector +
+  # ltree), so the full pipeline is developed and tested offline. See ADR-0006 + ADR-0017.
+  #
+  # No profile: plain `docker compose up` starts it on host port 5434. (ParadeDB is the opt-in
+  # database behind the `paradedb` profile, above.)
+  #
+  # The image (docker/postgres/Dockerfile) bakes shared_preload_libraries=
+  # 'age,pg_textsearch' into postgresql.conf.sample at build time, so NO `command:`
+  # override is needed (and adding one that omits either lib would silently break AGE/BM25).
+  # The CREATE EXTENSION statements are NOT copied into the image (kept editable without a
+  # rebuild). They are mounted here into the postgres entrypoint dir so they run once at first boot.
+  postgres:
+    build:
+      context: docker/postgres
+    image: engram-postgres:latest
+    container_name: wiki-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: knowledge_bases
+      POSTGRES_USER: wiki
+      POSTGRES_PASSWORD: wiki
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wiki -d knowledge_bases"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  wiki-pgdata:
+  postgres-data:

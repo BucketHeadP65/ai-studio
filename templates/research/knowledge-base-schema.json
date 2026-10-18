@@ -1,0 +1,1227 @@
+{
+  "version": "0.1",
+  "slug": "research",
+  "purpose": "A compiled research wiki: literature is ingested into durable, cross-linked, claim-grounded Markdown, then compiled into Postgres (SQL + BM25 + vectors) to supercharge specialized agents. The first domain is retrieval/RAG and context engineering for LLM systems, with the end goal of agents that co-design RAG pipelines.",
+  "slug_conventions": "",
+  "page_types": [
+    {
+      "id_prefix": "paper.",
+      "status_values": [
+        "active",
+        "stub",
+        "draft",
+        "synthesized",
+        "verified",
+        "superseded",
+        "outdated",
+        "pending",
+        "skipped"
+      ],
+      "disclosed": false,
+      "folder": "Wiki/Papers",
+      "frontmatter_fields": [
+        {
+          "name": "paper_type",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "year",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "zotero_key",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "source_hash",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "proposes",
+          "type": "link-list"
+        },
+        {
+          "name": "evaluates",
+          "type": "link-list"
+        },
+        {
+          "name": "uses_datasets",
+          "type": "link-list"
+        },
+        {
+          "name": "builds_on",
+          "type": "link-list"
+        },
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "part_of",
+          "type": "link",
+          "required": false
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "context",
+        "approach",
+        "evaluation_setup",
+        "findings",
+        "limitations",
+        "practical_notes"
+      ],
+      "edge_fields": [
+        "proposes",
+        "evaluates",
+        "uses_datasets",
+        "builds_on",
+        "part_of"
+      ],
+      "claims_enabled": true,
+      "page_type": "paper"
+    },
+    {
+      "id_prefix": "talk.",
+      "disclosed": false,
+      "folder": "Wiki/Talks",
+      "frontmatter_fields": [
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "scalar"
+        },
+        {
+          "name": "published",
+          "type": "scalar"
+        },
+        {
+          "name": "builds_on",
+          "type": "link-list"
+        },
+        {
+          "name": "alternative_to",
+          "type": "link-list"
+        },
+        {
+          "name": "applies_to",
+          "type": "link-list"
+        },
+        {
+          "name": "mentions",
+          "type": "link-list"
+        },
+        {
+          "name": "part_of",
+          "type": "link"
+        }
+      ],
+      "status_values": [
+        "active",
+        "skipped",
+        "outdated",
+        "superseded"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "findings",
+        "entities"
+      ],
+      "edge_fields": [
+        "builds_on",
+        "alternative_to",
+        "applies_to",
+        "mentions",
+        "part_of"
+      ],
+      "claims_enabled": true,
+      "page_type": "talk"
+    },
+    {
+      "id_prefix": "art.",
+      "disclosed": false,
+      "folder": "Wiki/Articles",
+      "frontmatter_fields": [
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "scalar"
+        },
+        {
+          "name": "published",
+          "type": "scalar"
+        },
+        {
+          "name": "builds_on",
+          "type": "link-list"
+        },
+        {
+          "name": "alternative_to",
+          "type": "link-list"
+        },
+        {
+          "name": "applies_to",
+          "type": "link-list"
+        },
+        {
+          "name": "mentions",
+          "type": "link-list"
+        },
+        {
+          "name": "part_of",
+          "type": "link"
+        }
+      ],
+      "status_values": [
+        "active",
+        "skipped",
+        "outdated",
+        "superseded"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "findings",
+        "entities"
+      ],
+      "edge_fields": [
+        "builds_on",
+        "alternative_to",
+        "applies_to",
+        "mentions",
+        "part_of"
+      ],
+      "claims_enabled": true,
+      "page_type": "article"
+    },
+    {
+      "id_prefix": "post.",
+      "disclosed": false,
+      "folder": "Wiki/Posts",
+      "frontmatter_fields": [
+        {
+          "name": "digest_of",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "channel",
+          "type": "scalar"
+        },
+        {
+          "name": "published",
+          "type": "scalar"
+        },
+        {
+          "name": "builds_on",
+          "type": "link-list"
+        },
+        {
+          "name": "alternative_to",
+          "type": "link-list"
+        },
+        {
+          "name": "applies_to",
+          "type": "link-list"
+        },
+        {
+          "name": "mentions",
+          "type": "link-list"
+        },
+        {
+          "name": "part_of",
+          "type": "link"
+        }
+      ],
+      "status_values": [
+        "active",
+        "skipped",
+        "outdated",
+        "superseded"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "findings",
+        "entities"
+      ],
+      "edge_fields": [
+        "builds_on",
+        "alternative_to",
+        "applies_to",
+        "mentions",
+        "part_of"
+      ],
+      "claims_enabled": true,
+      "page_type": "post"
+    },
+    {
+      "id_prefix": "flag.",
+      "disclosed": true,
+      "folder": "Wiki/Flags",
+      "frontmatter_fields": [
+        {
+          "name": "flag_kind",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "idea",
+            "feature",
+            "risk",
+            "question"
+          ]
+        },
+        {
+          "name": "about",
+          "type": "link-list",
+          "required": true
+        },
+        {
+          "name": "resolved_by",
+          "type": "link-list"
+        }
+      ],
+      "status_values": [
+        "pending",
+        "accepted",
+        "dismissed",
+        "completed"
+      ],
+      "canonical_sections": [
+        "why",
+        "proposal",
+        "evidence"
+      ],
+      "edge_fields": [
+        "about",
+        "resolved_by"
+      ],
+      "claims_enabled": false,
+      "decision": {
+        "open": "pending",
+        "outcomes": [
+          {
+            "status": "accepted"
+          },
+          {
+            "status": "dismissed"
+          },
+          {
+            "status": "completed",
+            "link": "resolved_by"
+          }
+        ]
+      },
+      "page_type": "flag"
+    },
+    {
+      "id_prefix": "stance.",
+      "folder": "Wiki/Stances",
+      "frontmatter_fields": [
+        {
+          "name": "record",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "synthesizes",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "recommends",
+          "type": "link-list",
+          "required": false
+        },
+        {
+          "name": "advises_against",
+          "type": "link-list",
+          "required": false
+        }
+      ],
+      "status_values": [
+        "considering",
+        "trying",
+        "adopted",
+        "rejected"
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "position",
+        "why",
+        "evidence",
+        "alternatives",
+        "open_questions"
+      ],
+      "edge_fields": [
+        "synthesizes",
+        "recommends",
+        "advises_against"
+      ],
+      "claims_enabled": false,
+      "disclosed": true,
+      "guidance": "A stance page states the position the system this base serves takes on one topic, why it takes it, and what in the base supports or disputes it. Its status is the stance: considering, trying, adopted or rejected. record names the engineering record behind it, synthesizes the digests it rests on, recommends and advises_against the techniques adopted and passed over. A flag about the topic completes onto this page.",
+      "decision": {
+        "open": "considering",
+        "outcomes": [
+          {
+            "status": "trying"
+          },
+          {
+            "status": "adopted"
+          },
+          {
+            "status": "rejected"
+          }
+        ]
+      },
+      "page_type": "stance"
+    },
+    {
+      "id_prefix": "ent.",
+      "disclosed": false,
+      "folder": "Wiki/Entities",
+      "frontmatter_fields": [
+        {
+          "name": "entity_type",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "is_a",
+          "type": "link-list"
+        },
+        {
+          "name": "variant_of",
+          "type": "link-list"
+        },
+        {
+          "name": "extends",
+          "type": "link-list"
+        },
+        {
+          "name": "composes_with",
+          "type": "link-list"
+        },
+        {
+          "name": "alternative_to",
+          "type": "link-list"
+        },
+        {
+          "name": "requires",
+          "type": "link-list"
+        },
+        {
+          "name": "addresses",
+          "type": "link-list"
+        },
+        {
+          "name": "applies_to",
+          "type": "link-list"
+        },
+        {
+          "name": "includes",
+          "type": "link-list"
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "definition",
+        "mechanism",
+        "variants",
+        "evidence",
+        "trade_offs",
+        "open_questions"
+      ],
+      "edge_fields": [
+        "is_a",
+        "variant_of",
+        "extends",
+        "composes_with",
+        "alternative_to",
+        "requires",
+        "addresses",
+        "applies_to",
+        "includes"
+      ],
+      "claims_enabled": false,
+      "page_type": "entity"
+    },
+    {
+      "id_prefix": "con.",
+      "folder": "Wiki/Concepts",
+      "frontmatter_fields": [
+        {
+          "name": "synthesizes",
+          "type": "link-list"
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "overview",
+        "themes",
+        "state_of_evidence",
+        "open_questions"
+      ],
+      "edge_fields": [
+        "synthesizes"
+      ],
+      "claims_enabled": false,
+      "page_type": "concept"
+    },
+    {
+      "id_prefix": "cmp.",
+      "folder": "Wiki/Comparisons",
+      "frontmatter_fields": [
+        {
+          "name": "compares",
+          "type": "link-list"
+        },
+        {
+          "name": "dimensions",
+          "type": "scalar-list"
+        },
+        {
+          "name": "synthesizes",
+          "type": "link-list"
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "scope",
+        "matrix",
+        "analysis",
+        "verdict"
+      ],
+      "edge_fields": [
+        "compares",
+        "synthesizes"
+      ],
+      "claims_enabled": false,
+      "page_type": "comparison"
+    },
+    {
+      "id_prefix": "pb.",
+      "folder": "Wiki/Playbooks",
+      "frontmatter_fields": [
+        {
+          "name": "maturity",
+          "type": "scalar",
+          "required": false
+        },
+        {
+          "name": "recommends",
+          "type": "link-list"
+        },
+        {
+          "name": "advises_against",
+          "type": "link-list"
+        },
+        {
+          "name": "synthesizes",
+          "type": "link-list"
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "applies_when",
+        "recommendation",
+        "recipe",
+        "evidence",
+        "caveats",
+        "alternatives"
+      ],
+      "edge_fields": [
+        "recommends",
+        "advises_against",
+        "synthesizes"
+      ],
+      "claims_enabled": false,
+      "page_type": "playbook"
+    },
+    {
+      "id_prefix": "q.",
+      "folder": "Wiki/Questions",
+      "frontmatter_fields": [
+        {
+          "name": "question_status",
+          "type": "scalar",
+          "required": false,
+          "choices": [
+            "open",
+            "answered"
+          ],
+          "default": "open"
+        },
+        {
+          "name": "answered_by",
+          "type": "link"
+        }
+      ],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "why_it_matters",
+        "current_evidence",
+        "candidate_answers"
+      ],
+      "edge_fields": [
+        "answered_by"
+      ],
+      "claims_enabled": false,
+      "page_type": "question"
+    },
+    {
+      "id_prefix": "moc.",
+      "folder": "Wiki/MOCs",
+      "frontmatter_fields": [],
+      "canonical_sections": [
+        {
+          "slug": "tl_dr",
+          "heading": "TL;DR"
+        },
+        "map"
+      ],
+      "edge_fields": [],
+      "claims_enabled": false,
+      "page_type": "moc"
+    },
+    {
+      "id_prefix": "meta.",
+      "disclosed": false,
+      "folder": "Wiki/_meta",
+      "frontmatter_fields": [],
+      "canonical_sections": [],
+      "edge_fields": [],
+      "claims_enabled": false,
+      "page_type": "meta"
+    }
+  ],
+  "relations": [
+    {
+      "slug": "is_a",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Subtype of a more general technique/task/family"
+    },
+    {
+      "slug": "variant_of",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Same core idea, different formulation"
+    },
+    {
+      "slug": "extends",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Builds on it and adds capability"
+    },
+    {
+      "slug": "composes_with",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": true,
+      "qualifiers": [],
+      "description": "Combinable in one pipeline (symmetric)"
+    },
+    {
+      "slug": "alternative_to",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": true,
+      "qualifiers": [],
+      "description": "Substitutable in the same role (symmetric). The talk, article and post digests carry it as an edge field too."
+    },
+    {
+      "slug": "requires",
+      "domain": "entity",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Hard dependency"
+    },
+    {
+      "slug": "addresses",
+      "domain": "technique",
+      "range": "problem",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Mitigates this failure mode"
+    },
+    {
+      "slug": "applies_to",
+      "domain": "technique",
+      "range": "task",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Useful for this task. The talk, article and post digests carry it as an edge field too."
+    },
+    {
+      "slug": "includes",
+      "domain": "benchmark",
+      "range": "dataset",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Suite membership"
+    },
+    {
+      "slug": "proposes",
+      "domain": "paper",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The paper introduces it (first one = default claim subject)"
+    },
+    {
+      "slug": "evaluates",
+      "domain": "paper",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The paper measures it (incl. baselines)"
+    },
+    {
+      "slug": "uses_datasets",
+      "domain": "paper",
+      "range": "dataset",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Evaluation corpora"
+    },
+    {
+      "slug": "builds_on",
+      "domain": "paper",
+      "range": "paper",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Curated intellectual lineage (NOT the full bibliography). The talk, article and post digests carry it as an edge field too.",
+      "queue_when_missing": true
+    },
+    {
+      "slug": "part_of",
+      "domain": "paper | talk | article | post",
+      "range": "paper | talk | article | post",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "A digest section page's lead page (same page type, same source): used when a long source is digested as a lead page plus one page per major section."
+    },
+    {
+      "slug": "synthesizes",
+      "domain": "page",
+      "range": "paper",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Sources this page digests (drives computed staleness)",
+      "queue_when_missing": true
+    },
+    {
+      "slug": "maps",
+      "domain": "moc",
+      "range": "any page",
+      "symmetric": false,
+      "qualifiers": [],
+      "domain_section": "map",
+      "description": "Navigation membership — derived from links in the moc's Map section, not frontmatter"
+    },
+    {
+      "slug": "compares",
+      "domain": "comparison",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "What the matrix covers"
+    },
+    {
+      "slug": "recommends",
+      "domain": "playbook",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Positive guidance"
+    },
+    {
+      "slug": "advises_against",
+      "domain": "playbook",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Negative guidance (cite evidence)"
+    },
+    {
+      "slug": "supports",
+      "domain": "claim",
+      "range": "entity | claim",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Evidence in favor"
+    },
+    {
+      "slug": "refutes",
+      "domain": "claim",
+      "range": "entity | claim",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Evidence against"
+    },
+    {
+      "slug": "replicates",
+      "domain": "claim",
+      "range": "claim",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Independent reproduction of a prior claim"
+    },
+    {
+      "slug": "outperforms",
+      "domain": "subject entity",
+      "range": "object entity",
+      "symmetric": false,
+      "qualifiers": [
+        [
+          "on_dataset",
+          "on_task"
+        ],
+        [
+          "metric"
+        ]
+      ],
+      "description": "Comparative win"
+    },
+    {
+      "slug": "comparable_to",
+      "domain": "subject entity",
+      "range": "object entity",
+      "symmetric": false,
+      "qualifiers": [
+        [
+          "on_dataset",
+          "on_task"
+        ],
+        [
+          "metric"
+        ]
+      ],
+      "description": "No meaningful difference (null result)"
+    },
+    {
+      "slug": "superseded_by",
+      "domain": "",
+      "range": "",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Points to the replacement; the old item is kept and filtered from default queries"
+    },
+    {
+      "slug": "same_as",
+      "domain": "",
+      "range": "",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "Duplicate marker pending merge (lint surfaces it)"
+    },
+    {
+      "slug": "answered_by",
+      "domain": "question",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The entity or paper that answers the question"
+    },
+    {
+      "slug": "mentions",
+      "domain": "talk | article | post",
+      "range": "entity",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The digest names this entity without building on it."
+    },
+    {
+      "slug": "about",
+      "domain": "flag",
+      "range": "any page",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The digests this flag rose from."
+    },
+    {
+      "slug": "resolved_by",
+      "domain": "flag",
+      "range": "any page",
+      "symmetric": false,
+      "qualifiers": [],
+      "description": "The page that carried out or answered this flag, written when it is completed."
+    }
+  ],
+  "entity_types": [
+    {
+      "value": "technique",
+      "definition": "A method/algorithm/strategy that can be applied, composed, or compared"
+    },
+    {
+      "value": "task",
+      "definition": "A problem formulation systems are evaluated on"
+    },
+    {
+      "value": "problem",
+      "definition": "A failure mode or difficulty techniques address"
+    },
+    {
+      "value": "dataset",
+      "definition": "A concrete evaluation/training corpus"
+    },
+    {
+      "value": "benchmark",
+      "definition": "A suite/protocol aggregating datasets + methodology (`includes` its datasets)"
+    },
+    {
+      "value": "metric",
+      "definition": "A quantity used to score systems"
+    },
+    {
+      "value": "tool",
+      "definition": "A concrete software system/library/product"
+    },
+    {
+      "value": "model",
+      "definition": "A specific LLM/embedding/reranker model that evidence depends on"
+    },
+    {
+      "value": "concept",
+      "definition": "A named abstract notion that is referenced as a thing but isn't a technique"
+    }
+  ],
+  "claim_types": [
+    {
+      "value": "benchmark-result",
+      "definition": "Quantitative result on a named dataset/metric"
+    },
+    {
+      "value": "ablation",
+      "definition": "Component-removal evidence"
+    },
+    {
+      "value": "replication",
+      "definition": "Independent reproduction of someone else's claim"
+    },
+    {
+      "value": "negative-result",
+      "definition": "No-effect / failure finding (first-class — pruning depends on these)"
+    },
+    {
+      "value": "theoretical",
+      "definition": "Proof or complexity argument"
+    },
+    {
+      "value": "qualitative",
+      "definition": "Case study, error analysis, examples"
+    },
+    {
+      "value": "author-claim",
+      "definition": "Asserted by authors without direct evidence shown"
+    },
+    {
+      "value": "observation",
+      "definition": "Our own synthesis-time observation (must say so)"
+    }
+  ],
+  "facets": [
+    {
+      "key": "tasks",
+      "scope": [
+        "paper",
+        "entity",
+        "comparison",
+        "playbook",
+        "question"
+      ],
+      "seed": [
+        "open-domain-qa",
+        "multi-hop-qa",
+        "long-doc-qa",
+        "summarization",
+        "fact-verification",
+        "code-generation",
+        "agentic-search",
+        "recommendation",
+        "dialogue",
+        "sensemaking-qa",
+        "kgqa",
+        "domain-qa",
+        "reading-comprehension",
+        "episodic-qa",
+        "narrative-qa",
+        "scientific-reasoning",
+        "long-term-memory-qa",
+        "grid-world-navigation",
+        "continuous-control",
+        "open-domain-mds",
+        "response-evaluation",
+        "instruction-following",
+        "agentic-task-execution",
+        "math-reasoning",
+        "embodied-agent-task",
+        "text-classification"
+      ],
+      "card": true
+    },
+    {
+      "key": "domains",
+      "scope": [
+        "paper",
+        "playbook"
+      ],
+      "seed": [
+        "encyclopedic",
+        "legal",
+        "biomed",
+        "finance",
+        "code",
+        "scientific",
+        "enterprise",
+        "mixed",
+        "government",
+        "literary",
+        "conversational",
+        "simulated-control"
+      ],
+      "card": true
+    },
+    {
+      "key": "stages",
+      "scope": [
+        "entity",
+        "comparison",
+        "playbook"
+      ],
+      "seed": [
+        "indexing",
+        "chunking",
+        "embedding",
+        "query-transformation",
+        "retrieval",
+        "reranking",
+        "generation",
+        "evaluation",
+        "orchestration",
+        "memory",
+        "training",
+        "prompt-optimization",
+        "context-compilation",
+        "planning",
+        "harness-optimization"
+      ],
+      "card": true
+    },
+    {
+      "key": "modalities",
+      "scope": [
+        "paper",
+        "entity",
+        "playbook"
+      ],
+      "seed": [
+        "text",
+        "code",
+        "tables",
+        "images",
+        "graph",
+        "multimodal"
+      ]
+    },
+    {
+      "key": "scale_regimes",
+      "scope": [
+        "playbook",
+        "comparison"
+      ],
+      "seed": [
+        "toy",
+        "small",
+        "large",
+        "web-scale"
+      ]
+    },
+    {
+      "key": "paper_type",
+      "scope": [
+        "paper"
+      ],
+      "seed": [
+        "method",
+        "survey",
+        "benchmark",
+        "analysis",
+        "position",
+        "engineering-report"
+      ]
+    },
+    {
+      "key": "maturity",
+      "scope": [
+        "playbook"
+      ],
+      "seed": [
+        "experimental",
+        "emerging",
+        "battle-tested",
+        "deprecated"
+      ]
+    },
+    {
+      "key": "eval_setting",
+      "scope": [],
+      "seed": [
+        "zero-shot",
+        "few-shot",
+        "fine-tuned"
+      ]
+    }
+  ],
+  "claims": {
+    "section": "findings",
+    "edge_relations": [
+      "supports",
+      "refutes",
+      "replicates",
+      "outperforms",
+      "comparable_to"
+    ],
+    "multilink_fields": [
+      "on_dataset",
+      "metric",
+      "disputed_by"
+    ],
+    "link_scalar_fields": [
+      "subject",
+      "on_task"
+    ],
+    "text_scalar_fields": [
+      "condition",
+      "baseline",
+      "magnitude",
+      "eval_setting",
+      "derived",
+      "status"
+    ],
+    "plain_fields": [
+      "loc",
+      "quote",
+      "kind"
+    ],
+    "comparative_relations": [
+      "outperforms",
+      "comparable_to"
+    ],
+    "quote_required_types": [
+      "benchmark-result",
+      "ablation"
+    ]
+  },
+  "sources": {
+    "enabled": true,
+    "quote_verify": true,
+    "connectors": [
+      "zotero",
+      "intake"
+    ],
+    "key_field": "zotero_key",
+    "digest_link_field": "digest_of",
+    "hash_field": "source_hash",
+    "digest_part_field": "part_of",
+    "digest_types": {
+      "video": "talk",
+      "paper": "paper",
+      "article": "article",
+      "post": "post"
+    },
+    "digest_workflow": "research-digest"
+  },
+  "compounding": {
+    "entries": [
+      {
+        "name": "digest-sources",
+        "from": {
+          "plane": "sources",
+          "selector": "undigested"
+        },
+        "to": [
+          "paper",
+          "talk",
+          "article",
+          "post"
+        ],
+        "cap_per_run": 40,
+        "gate": "none",
+        "guidance": "One digest per mirror, typed by the mirror's item type through sources.digest_types. Read the source whole, claim only what a quote supports, split a long source into a lead page plus section pages."
+      },
+      {
+        "name": "flag-ideas",
+        "from": {
+          "plane": "pages",
+          "within_hours": 26,
+          "page_types": [
+            "paper",
+            "talk",
+            "article",
+            "post"
+          ]
+        },
+        "to": [
+          "flag"
+        ],
+        "cap_per_run": 40,
+        "gate": "owner",
+        "guidance": "Read the new digests for ideas worth the owner's attention, grounded in the base's purpose and its flag history. A flag that restates a digest or names no evidence is not a flag."
+      }
+    ]
+  },
+  "retrieval": {
+    "profile": "full"
+  }
+}

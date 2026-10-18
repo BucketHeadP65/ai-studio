@@ -1,0 +1,160 @@
+name: engram-retrieval-golden
+cases:
+- name: why-one-alembic-chain
+  inputs:
+    question: >-
+      Why does the repo keep a single alembic chain, and which package owns it?
+  expected_output:
+    answer: >-
+      engram owns the repo's one alembic chain, at engram/alembic; it migrates both the corpus DB and the
+      workflow-store database (engram_workflows) by URL parameter, so studio adds no chain of its own.
+    cited_source_ids:
+    - adr-0009-ai-factory-studio-consolidation
+  metadata:
+    anchor_page_id: adr-0009-ai-factory-studio-consolidation
+    difficulty: easy
+- name: what-governs-the-workflow-engine
+  inputs:
+    question: >-
+      Which decisions govern core.ai.workflows and what doctrine does it apply?
+  expected_output:
+    answer: >-
+      The AI Factory Studio consolidation decision (ADR-0009) governs core.ai.workflows; the module applies
+      the evidence-kinds doctrine — a verdict is evidence, never truth.
+    cited_source_ids:
+    - mod.core-ai-workflows
+    - adr-0009-ai-factory-studio-consolidation
+  metadata:
+    anchor_page_id: mod.core-ai-workflows
+    difficulty: medium
+- name: ai-factory-studio-two-halves
+  inputs:
+    question: >-
+      What are AI Factory Studio's two halves, and which library or engine does each sit over?
+  expected_output:
+    answer: >-
+      The corpus half is studio.corpus (Typer CLI + local FastAPI + MCP) over the engram library, compiling
+      an Obsidian-style markdown corpus into Postgres and serving hybrid retrieval to agents and the
+      dashboard. The agent half is studio.agent (local FastAPI + ACP) over the core.ai.workflows engine,
+      running workflow artifacts as data behind human gates.
+    cited_source_ids:
+    - system-architecture
+  metadata:
+    anchor_page_id: system-architecture
+    difficulty: medium
+- name: one-chain-migrates-two-databases
+  inputs:
+    question: >-
+      How do the corpus DB and the workflow-store database differ in disposability, and what migrates both
+      of them?
+  expected_output:
+    answer: >-
+      The corpus DB is disposable — a global derivative of the corpus rebuilt by `studio compile` — while
+      the workflow store, engram_workflows, is not disposable and carries authored workflow-artifact rows on
+      the same memory schema. Neither database has a migration chain of its own; engram's single alembic
+      chain migrates both by URL parameter.
+    cited_source_ids:
+    - system-architecture
+    - adr-0009-ai-factory-studio-consolidation
+  metadata:
+    anchor_page_id: system-architecture
+    difficulty: hard
+- name: what-engram-memory-kernel-does-and-refuses
+  inputs:
+    question: >-
+      What does the engram.memory kernel do, and what does it deliberately refuse to do?
+  expected_output:
+    answer: >-
+      engram.memory turns corpus Markdown into typed domain objects (parse), turns domain objects back into
+      canonical Markdown (render), and verifies a claim's quote against its source mirror (verify) —
+      encoding the schema once so the compile slice and the studio note CLI bind to one contract. It
+      deliberately does no I/O, never touches the database, never resolves wikilinks to ids, and never
+      enforces vocabulary membership or lint thresholds — those are the compile slice's resolve and validate
+      stages.
+    cited_source_ids:
+    - engram-knowledge-base
+  metadata:
+    anchor_page_id: engram-knowledge-base
+    difficulty: medium
+- name: core-ai-shared-contracts
+  inputs:
+    question: >-
+      What is core.ai, and which non-AI modules does its reference doc also cover?
+  expected_output:
+    answer: >-
+      core.ai is the app-agnostic AI building-block package every Python app in the monorepo may depend on —
+      model/embedding factories, a capability registry, the retrieval strategy axis, and the progressive-disclosure
+      protocol. Its reference doc also covers core.cqrs,
+      core.observability, and core.resolver, plain infrastructure that shares the same
+      shared-library-apps-own-their-adapters contract.
+    cited_source_ids:
+    - core-ai
+  metadata:
+    anchor_page_id: core-ai
+    difficulty: easy
+- name: context-map-entry-point
+  inputs:
+    question: >-
+      What is CONTEXT-MAP.md, and where does it send a reader for docs conventions?
+  expected_output:
+    answer: >-
+      CONTEXT-MAP.md is the single entry point to every governed document in the repo. It sends a reader to
+      the docs charter at docs/README.md for conventions, the frontmatter schema, the split-doc workflow,
+      and the graduation rule, and it lists known gaps as TODO rows rather than leaving them silent.
+    cited_source_ids:
+    - context-map
+  metadata:
+    anchor_page_id: context-map
+    difficulty: easy
+- name: evidence-kinds-doctrine-independence
+  inputs:
+    question: >-
+      Under the evidence-kinds doctrine, why must a judge be independent of the agent it judges, and what
+      does a verdict ship as?
+  expected_output:
+    answer: >-
+      A judge is a fallible instrument whose output is evidence and never truth, and self-assessment is the
+      one evidence kind the doctrine rules out — so a judge must be independent of the agent it judges. A
+      verdict ships as a typed, signed evidence kind carrying its own provenance — judge model, rubric
+      version, sample count, dispersion, per-step findings, redactions disclosed, and signed-by.
+    cited_source_ids:
+    - mu.evidence-kinds-doctrine
+  metadata:
+    anchor_page_id: mu.evidence-kinds-doctrine
+    difficulty: hard
+- name: judges-thread-two-grounding-doctrines
+  inputs:
+    question: >-
+      What two doctrines from the judges-operators-telemetry brainstorm ground the judges-thread hub's units
+      without being compressed into any one of them?
+  expected_output:
+    answer: >-
+      Evaluation is a controlled experiment while monitoring is field observation — the suite fixes inputs
+      and compares against a baseline, and monitors instead answer whether reality is drifting from what the
+      lab covers, so neither substitutes for the other. And the unit of judgment is the trajectory, not the
+      answer, since an agent can reach the right answer through broken reasoning, at excessive cost, or by
+      luck on garbage retrieval, which is why the verdict-binding-algebra signature takes a Trajectory rather
+      than an answer.
+    cited_source_ids:
+    - hub.judges-thread
+    - bs.judges-operators-telemetry
+  metadata:
+    anchor_page_id: hub.judges-thread
+    difficulty: hard
+- name: compile-your-corpus-project-ownership
+  inputs:
+    question: >-
+      When compiling a corpus end to end, which project owns the database and schema chain, and which owns
+      the CLI commands you run day to day?
+  expected_output:
+    answer: >-
+      The database and the schema chain belong to the library, engram — docker compose and alembic run from
+      engram/. Every studio command is the application, and it runs from studio/.
+    cited_source_ids:
+    - engram-howto-index-your-knowledge-base
+  metadata:
+    anchor_page_id: engram-howto-index-your-knowledge-base
+    difficulty: easy
+evaluators:
+- RetrievalMetrics
+report_evaluators: []

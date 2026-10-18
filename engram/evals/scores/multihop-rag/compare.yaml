@@ -1,0 +1,677 @@
+pairs:
+- baseline: a0.jsonl
+  candidate: a.jsonl
+  baseline_header:
+    strategy: search-hybrid
+    sql: false
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-14T18:06:51.573539+00:00'
+    source_lookup_error: null
+  candidate_header:
+    strategy: search-hybrid
+    sql: false
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T01:34:38.132951+00:00'
+    source_lookup_error: null
+  overall:
+    cases: 400
+    baseline_strict: 0.775
+    candidate_strict: 0.8075
+    difference: 0.0325
+    interval:
+    - 0.0012476793844097209
+    - 0.06375232061559027
+    baseline_only: 14
+    candidate_only: 27
+    p_value: 0.05958388801809633
+    holm_p_value: 0.23833555207238533
+    baseline_official: 0.775
+    candidate_official: 0.7925
+    baseline_other_collection: 0
+    candidate_other_collection: 0
+    baseline_failed: 6
+    candidate_failed: 8
+    baseline_retrieval:
+      cases: 300
+      recall_at_4: 0.6044444444444445
+      recall_at_10: 0.6044444444444445
+      mrr: 0.8530555555555556
+    candidate_retrieval:
+      cases: 300
+      recall_at_4: 0.7080555555555555
+      recall_at_10: 0.7080555555555555
+      mrr: 0.9111111111111111
+  query_types:
+  - query_type: comparison_query
+    scores:
+      cases: 100
+      baseline_strict: 0.63
+      candidate_strict: 0.73
+      difference: 0.1
+      interval:
+      - 0.014135177885424594
+      - 0.18586482211457542
+      baseline_only: 5
+      candidate_only: 15
+      p_value: 0.04138946533203125
+      holm_p_value: 0.165557861328125
+      baseline_official: 0.62
+      candidate_official: 0.68
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 1
+      candidate_failed: 3
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.665
+        recall_at_10: 0.665
+        mrr: 0.8325
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.78
+        recall_at_10: 0.78
+        mrr: 0.9133333333333333
+  - query_type: inference_query
+    scores:
+      cases: 100
+      baseline_strict: 0.97
+      candidate_strict: 0.98
+      difference: 0.01
+      interval:
+      - -0.024062307732753634
+      - 0.04406230773275364
+      baseline_only: 1
+      candidate_only: 2
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.98
+      candidate_official: 0.98
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 0
+      candidate_failed: 0
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.495
+        recall_at_10: 0.495
+        mrr: 0.8566666666666667
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.6075
+        recall_at_10: 0.6075
+        mrr: 0.905
+  - query_type: null_query
+    scores:
+      cases: 100
+      baseline_strict: 0.92
+      candidate_strict: 0.92
+      difference: 0.0
+      interval:
+      - -0.0557164538742662
+      - 0.0557164538742662
+      baseline_only: 4
+      candidate_only: 4
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.92
+      candidate_official: 0.92
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 5
+      candidate_failed: 3
+      baseline_retrieval: null
+      candidate_retrieval: null
+  - query_type: temporal_query
+    scores:
+      cases: 100
+      baseline_strict: 0.58
+      candidate_strict: 0.6
+      difference: 0.02
+      interval:
+      - -0.04216817855014271
+      - 0.0821681785501427
+      baseline_only: 4
+      candidate_only: 6
+      p_value: 0.75390625
+      holm_p_value: 1.0
+      baseline_official: 0.58
+      candidate_official: 0.59
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 0
+      candidate_failed: 2
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.6533333333333333
+        recall_at_10: 0.6533333333333333
+        mrr: 0.87
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.7366666666666667
+        recall_at_10: 0.7366666666666667
+        mrr: 0.915
+- baseline: a.jsonl
+  candidate: b.jsonl
+  baseline_header:
+    strategy: search-hybrid
+    sql: false
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T01:34:38.132951+00:00'
+    source_lookup_error: null
+  candidate_header:
+    strategy: search-hybrid
+    sql: true
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T02:29:37.668801+00:00'
+    source_lookup_error: null
+  overall:
+    cases: 400
+    baseline_strict: 0.8075
+    candidate_strict: 0.82
+    difference: 0.0125
+    interval:
+    - -0.016499168167138256
+    - 0.04149916816713826
+    baseline_only: 15
+    candidate_only: 20
+    p_value: 0.49955983320251107
+    holm_p_value: 0.5363745021095383
+    baseline_official: 0.7925
+    candidate_official: 0.8175
+    baseline_other_collection: 0
+    candidate_other_collection: 0
+    baseline_failed: 8
+    candidate_failed: 9
+    baseline_retrieval:
+      cases: 300
+      recall_at_4: 0.7080555555555555
+      recall_at_10: 0.7080555555555555
+      mrr: 0.9111111111111111
+    candidate_retrieval:
+      cases: 300
+      recall_at_4: 0.7102777777777778
+      recall_at_10: 0.7102777777777778
+      mrr: 0.905
+  query_types:
+  - query_type: comparison_query
+    scores:
+      cases: 100
+      baseline_strict: 0.73
+      candidate_strict: 0.75
+      difference: 0.02
+      interval:
+      - -0.05360057092444351
+      - 0.09360057092444352
+      baseline_only: 6
+      candidate_only: 8
+      p_value: 0.79052734375
+      holm_p_value: 1.0
+      baseline_official: 0.68
+      candidate_official: 0.73
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 3
+      candidate_failed: 3
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.78
+        recall_at_10: 0.78
+        mrr: 0.9133333333333333
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.795
+        recall_at_10: 0.795
+        mrr: 0.9083333333333333
+  - query_type: inference_query
+    scores:
+      cases: 100
+      baseline_strict: 0.98
+      candidate_strict: 0.97
+      difference: -0.01
+      interval:
+      - -0.0296
+      - 0.0096
+      baseline_only: 1
+      candidate_only: 0
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.98
+      candidate_official: 0.98
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 0
+      candidate_failed: 0
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.6075
+        recall_at_10: 0.6075
+        mrr: 0.905
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.6075
+        recall_at_10: 0.6075
+        mrr: 0.8966666666666667
+  - query_type: null_query
+    scores:
+      cases: 100
+      baseline_strict: 0.92
+      candidate_strict: 0.93
+      difference: 0.01
+      interval:
+      - -0.04906338317708555
+      - 0.06906338317708555
+      baseline_only: 4
+      candidate_only: 5
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.92
+      candidate_official: 0.93
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 3
+      candidate_failed: 1
+      baseline_retrieval: null
+      candidate_retrieval: null
+  - query_type: temporal_query
+    scores:
+      cases: 100
+      baseline_strict: 0.6
+      candidate_strict: 0.63
+      difference: 0.03
+      interval:
+      - -0.035065511663866955
+      - 0.09506551166386695
+      baseline_only: 4
+      candidate_only: 7
+      p_value: 0.548828125
+      holm_p_value: 1.0
+      baseline_official: 0.59
+      candidate_official: 0.63
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 2
+      candidate_failed: 5
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.7366666666666667
+        recall_at_10: 0.7366666666666667
+        mrr: 0.915
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.7283333333333333
+        recall_at_10: 0.7283333333333333
+        mrr: 0.91
+- baseline: b.jsonl
+  candidate: c.jsonl
+  baseline_header:
+    strategy: search-hybrid
+    sql: true
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T02:29:37.668801+00:00'
+    source_lookup_error: null
+  candidate_header:
+    strategy: full
+    sql: true
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T03:26:21.732459+00:00'
+    source_lookup_error: null
+  overall:
+    cases: 400
+    baseline_strict: 0.82
+    candidate_strict: 0.8
+    difference: -0.02
+    interval:
+    - -0.05096701131000027
+    - 0.010967011310000264
+    baseline_only: 24
+    candidate_only: 16
+    p_value: 0.26818725105476915
+    holm_p_value: 0.5363745021095383
+    baseline_official: 0.8175
+    candidate_official: 0.795
+    baseline_other_collection: 0
+    candidate_other_collection: 0
+    baseline_failed: 9
+    candidate_failed: 20
+    baseline_retrieval:
+      cases: 300
+      recall_at_4: 0.7102777777777778
+      recall_at_10: 0.7102777777777778
+      mrr: 0.905
+    candidate_retrieval:
+      cases: 300
+      recall_at_4: 0.6997222222222222
+      recall_at_10: 0.6997222222222222
+      mrr: 0.8933333333333333
+  query_types:
+  - query_type: comparison_query
+    scores:
+      cases: 100
+      baseline_strict: 0.75
+      candidate_strict: 0.74
+      difference: -0.01
+      interval:
+      - -0.09119609882652284
+      - 0.07119609882652285
+      baseline_only: 9
+      candidate_only: 8
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.73
+      candidate_official: 0.72
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 3
+      candidate_failed: 3
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.795
+        recall_at_10: 0.795
+        mrr: 0.9083333333333333
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.78
+        recall_at_10: 0.78
+        mrr: 0.9183333333333333
+  - query_type: inference_query
+    scores:
+      cases: 100
+      baseline_strict: 0.97
+      candidate_strict: 0.95
+      difference: -0.02
+      interval:
+      - -0.047578237650712785
+      - 0.00757823765071278
+      baseline_only: 2
+      candidate_only: 0
+      p_value: 0.5
+      holm_p_value: 1.0
+      baseline_official: 0.98
+      candidate_official: 0.96
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 0
+      candidate_failed: 1
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.6075
+        recall_at_10: 0.6075
+        mrr: 0.8966666666666667
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.6041666666666666
+        recall_at_10: 0.6041666666666666
+        mrr: 0.8866666666666667
+  - query_type: null_query
+    scores:
+      cases: 100
+      baseline_strict: 0.93
+      candidate_strict: 0.88
+      difference: -0.05
+      interval:
+      - -0.11458664214397854
+      - 0.014586642143978534
+      baseline_only: 8
+      candidate_only: 3
+      p_value: 0.2265625
+      holm_p_value: 0.6796875
+      baseline_official: 0.93
+      candidate_official: 0.88
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 1
+      candidate_failed: 7
+      baseline_retrieval: null
+      candidate_retrieval: null
+  - query_type: temporal_query
+    scores:
+      cases: 100
+      baseline_strict: 0.63
+      candidate_strict: 0.63
+      difference: 0.0
+      interval:
+      - -0.06229288916404536
+      - 0.06229288916404536
+      baseline_only: 5
+      candidate_only: 5
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.63
+      candidate_official: 0.62
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 5
+      candidate_failed: 9
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.7283333333333333
+        recall_at_10: 0.7283333333333333
+        mrr: 0.91
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.715
+        recall_at_10: 0.715
+        mrr: 0.875
+- baseline: c.jsonl
+  candidate: d.jsonl
+  baseline_header:
+    strategy: full
+    sql: true
+    code_mode: false
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T03:26:21.732459+00:00'
+    source_lookup_error: null
+  candidate_header:
+    strategy: full
+    sql: true
+    code_mode: true
+    model: gpt-6-luna
+    thinking: xhigh
+    instructions_sha256: e38292dc43dd0a2f3d115c3ef95cb6eecccbdb1c95fb0a360cbe01c3847c61bb
+    max_tool_calls: 20
+    pinned_search: true
+    dataset: engram-retrieval-golden
+    dataset_sha256: 6c6df73357797bdab3cf578a9d78d961ccd85a186664da9530254ac4fb1d74c5
+    collection: multihop-rag
+    knowledge_base_fingerprint: 990584ffc2c64f63c934b452ffc7bef58644ef22be9dc0bdd7897e2c2c1abe81:multihop-rag
+    started: '2026-10-16T15:17:29.225874+00:00'
+    source_lookup_error: null
+  overall:
+    cases: 400
+    baseline_strict: 0.8
+    candidate_strict: 0.825
+    difference: 0.025
+    interval:
+    - -0.005932013734708742
+    - 0.05593201373470874
+    baseline_only: 15
+    candidate_only: 25
+    p_value: 0.1538599441628321
+    holm_p_value: 0.4615798324884963
+    baseline_official: 0.795
+    candidate_official: 0.8225
+    baseline_other_collection: 0
+    candidate_other_collection: 0
+    baseline_failed: 20
+    candidate_failed: 5
+    baseline_retrieval:
+      cases: 300
+      recall_at_4: 0.6997222222222222
+      recall_at_10: 0.6997222222222222
+      mrr: 0.8933333333333333
+    candidate_retrieval:
+      cases: 300
+      recall_at_4: 0.73
+      recall_at_10: 0.73
+      mrr: 0.9272222222222223
+  query_types:
+  - query_type: comparison_query
+    scores:
+      cases: 100
+      baseline_strict: 0.74
+      candidate_strict: 0.75
+      difference: 0.01
+      interval:
+      - -0.06626746132241232
+      - 0.08626746132241231
+      baseline_only: 7
+      candidate_only: 8
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.72
+      candidate_official: 0.74
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 3
+      candidate_failed: 1
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.78
+        recall_at_10: 0.78
+        mrr: 0.9183333333333333
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.8116666666666668
+        recall_at_10: 0.8116666666666668
+        mrr: 0.9333333333333332
+  - query_type: inference_query
+    scores:
+      cases: 100
+      baseline_strict: 0.95
+      candidate_strict: 0.98
+      difference: 0.03
+      interval:
+      - -0.003603535167561997
+      - 0.063603535167562
+      baseline_only: 0
+      candidate_only: 3
+      p_value: 0.25
+      holm_p_value: 1.0
+      baseline_official: 0.96
+      candidate_official: 0.98
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 1
+      candidate_failed: 0
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.6041666666666666
+        recall_at_10: 0.6041666666666666
+        mrr: 0.8866666666666667
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.6066666666666667
+        recall_at_10: 0.6066666666666667
+        mrr: 0.9033333333333333
+  - query_type: null_query
+    scores:
+      cases: 100
+      baseline_strict: 0.88
+      candidate_strict: 0.95
+      difference: 0.07
+      interval:
+      - 0.012535020765827846
+      - 0.12746497923417216
+      baseline_only: 1
+      candidate_only: 8
+      p_value: 0.0390625
+      holm_p_value: 0.15625
+      baseline_official: 0.88
+      candidate_official: 0.95
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 7
+      candidate_failed: 1
+      baseline_retrieval: null
+      candidate_retrieval: null
+  - query_type: temporal_query
+    scores:
+      cases: 100
+      baseline_strict: 0.63
+      candidate_strict: 0.62
+      difference: -0.01
+      interval:
+      - -0.08099749888893867
+      - 0.06099749888893868
+      baseline_only: 7
+      candidate_only: 6
+      p_value: 1.0
+      holm_p_value: 1.0
+      baseline_official: 0.62
+      candidate_official: 0.62
+      baseline_other_collection: 0
+      candidate_other_collection: 0
+      baseline_failed: 9
+      candidate_failed: 3
+      baseline_retrieval:
+        cases: 100
+        recall_at_4: 0.715
+        recall_at_10: 0.715
+        mrr: 0.875
+      candidate_retrieval:
+        cases: 100
+        recall_at_4: 0.7716666666666667
+        recall_at_10: 0.7716666666666667
+        mrr: 0.945

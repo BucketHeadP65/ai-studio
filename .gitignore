@@ -1,0 +1,53 @@
+*/implementation/*/backups
+
+# Local credentials and durable run state — protected at the root so a directory
+# move can never strand them without an ignore rule (a project-local .gitignore
+# travels with its directory; these must not).
+**/creds.json
+**/.state/
+# Office lock files — written while a document is open, meaningless after.
+~$*
+
+.DS_Store
+
+# Obsidian workspace config — editor state, not repo content.
+.obsidian/
+
+# Claude Code worktrees — linked checkouts, never repo content.
+.claude/worktrees/
+
+/void
+# Per-corpus ingest-run ledger the studio writes beside a corpus (studio.corpus.runs); machine output, never source.
+**/_meta/runs.jsonl
+
+# A stray root node_modules holds only tool caches (vitest writes one when run from the repo root); never source.
+node_modules/
+
+# Playwright output written at the repo root when its runner is invoked from here rather than from
+# studio-client (which ignores its own copy); screenshots and traces, never source.
+/test-results/
+
+# The harness's own runtime config, written beside its state under this checkout.
+harness/.aifactory/
+
+# written by the knowledge-base plugin's session-start index hook
+docs/_meta/ingest-auto.log
+
+# session artifacts, never committed
+/FINDINGS-*.md
+**/pending_pages.*.json
+
+# Owner note threads stay local
+.agent-threads/
+
+# Working documents stay local
+docs/brainstorming/
+docs/specs/
+docs/plans/
+docs/implementation/
+docs/initiatives/
+engram/docs/implementation/
+studio/docs/implementation/
+
+# Rewritten by every index run
+docs/_meta/dashboard.md

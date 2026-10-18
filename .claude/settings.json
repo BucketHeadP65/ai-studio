@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "ai-studio": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "knowledge-base@ai-studio": true
+  }
+}

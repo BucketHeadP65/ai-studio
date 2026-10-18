@@ -1,0 +1,62 @@
+{
+  "page_type": "comparison",
+  "universal_fields": {
+    "id": "cmp.self-improving-harness",
+    "type": "comparison",
+    "title": "Self-improving harnesses — who optimizes, what gets edited, and where the gain lives",
+    "status": "draft",
+    "tasks": [
+      "agentic-task-execution",
+      "text-classification"
+    ],
+    "domains": [],
+    "stages": [
+      "harness-optimization"
+    ],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": [
+      "harness evolution comparison",
+      "self-improving harness",
+      "harness optimization comparison"
+    ]
+  },
+  "edge_set": [
+    [
+      "compares",
+      "ace"
+    ],
+    [
+      "compares",
+      "ahe"
+    ],
+    [
+      "compares",
+      "meta-harness"
+    ],
+    [
+      "compares",
+      "self-harness"
+    ],
+    [
+      "synthesizes",
+      "ace-2025"
+    ],
+    [
+      "synthesizes",
+      "ahe-2026"
+    ],
+    [
+      "synthesizes",
+      "meta-harness-2026"
+    ],
+    [
+      "synthesizes",
+      "self-harness-2026"
+    ],
+    [
+      "synthesizes",
+      "terminal-bench-2026"
+    ]
+  ]
+}

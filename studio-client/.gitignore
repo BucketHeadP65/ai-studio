@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+next-env.d.ts
+.env.local
+*.local
+.vscode/.vivaldi-debug-profile
+
+# TypeScript incremental build cache (machine-local)
+tsconfig.tsbuildinfo
+
+# Playwright output (the walk screenshots regenerate per run)
+test-results/

@@ -1,0 +1,37 @@
+{
+  "question_id": "q.when-does-optimization-beat-hand-design",
+  "path": "baseline",
+  "surfaced": [
+    "ent.gepa",
+    "ent.graphrag",
+    "ent.lightrag",
+    "ent.miprov2",
+    "paper.ace-2025",
+    "paper.gepa-2025",
+    "paper.lightrag-2025",
+    "paper.prompt-opt-coinflip-2026",
+    "paper.self-harness-2026",
+    "paper.x"
+  ],
+  "recall": 0.2727272727272727,
+  "missed": [
+    "ent.ace",
+    "ent.brevity-bias",
+    "ent.filesystem-feedback-channel",
+    "ent.grpo",
+    "ent.meta-harness",
+    "ent.prompt-optimization",
+    "paper.ahe-2026",
+    "paper.meta-harness-2026"
+  ],
+  "requests": 4,
+  "input_tokens": 25536,
+  "output_tokens": 825,
+  "seconds": 23.14,
+  "contaminated": false,
+  "failed": false,
+  "answer": "Automated optimization tends to beat hand-design when there’s **real, stable “headroom”** that a search/optimizer can exploit—especially when that headroom comes from **getting the model to consistently emit/adhere to a known structure** that it *can* produce but *doesn’t default to* (e.g., JSON/rubrics). In the “coin flip” study, the only setting (of four tasks) where prompt optimization methods **reliably** beat a zero-shot/manual baseline was **HelpSteer2**, which the authors attribute to **exploitable output structure**; elsewhere, improvements were inconsistent and often vanished or reversed. (paper.prompt-opt-coinflip-2026#tl_dr, paper.prompt-opt-coinflip-2026#practical_notes)\n\nIt becomes a **coin flip** when:\n- **The task is free-form** (no tight schema to enforce) and the model already produces “good enough” outputs, leaving little systematic gradient for prompt search. (paper.prompt-opt-coinflip-2026#practical_notes)\n- **Optimizer rankings and gains are executor-model-dependent** (what works on one LLM doesn’t transfer), making “the best found prompt” fragile/perishable. (paper.prompt-opt-coinflip-2026#tl_dr, paper.prompt-opt-coinflip-2026#practical_notes)\n- You’re trying **joint optimization across agents** under the assumption that prompts strongly interact. Their coupling test finds the **interaction term is never significant** (all F<1.0; only ~0.18–2.15% of variance), implying joint end-to-end prompt co-optimization often doesn’t buy you much beyond per-component tuning. (paper.prompt-opt-coinflip-2026#tl_dr)\n\nA practical takeaway from that work is to treat “automate vs hand-design” as a **go/no-go decision**:\n1) check whether components actually interact (if not, don’t pay for joint optimization), and  \n2) run a cheap “headroom” probe (if best-of-N candidates can’t clear a small gain threshold, default to simple/manual/zero-shot). (paper.prompt-opt-coinflip-2026#practical_notes)\n\nSeparately, some systems report gains from broader *context/harness* evolution beyond a single prompt (e.g., “playbook” contexts), suggesting automation is more likely to win when it can edit **richer scaffolding** than just phrasing (paper.ace-2025), but the coin-flip result cautions that even then you should verify headroom and robustness per target executor. (paper.prompt-opt-coinflip-2026#practical_notes)",
+  "workflow_id": null,
+  "hit_rank": null,
+  "drift": null
+}

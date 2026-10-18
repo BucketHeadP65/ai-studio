@@ -1,0 +1,37 @@
+{
+  "question_id": "q.when-to-skip-retrieval",
+  "path": "reuse",
+  "surfaced": [
+    "ent.graph-enhanced-rag",
+    "ent.graphrag-bench",
+    "ent.naive-rag",
+    "paper.cag-2024",
+    "paper.cuprate-expert-eval-2025",
+    "paper.graph-rag-survey-2025",
+    "paper.graphr1-2025",
+    "paper.graphrag-2024",
+    "paper.hipporag-2024",
+    "paper.hipporag2-2025",
+    "paper.ircot-2022",
+    "paper.lightrag-2025",
+    "paper.msrs-2025",
+    "paper.step-hrl-2026"
+  ],
+  "recall": 0.5,
+  "missed": [
+    "ent.cache-augmented-generation",
+    "paper.comorag-2025",
+    "paper.gsw-2025"
+  ],
+  "requests": 2,
+  "input_tokens": 15523,
+  "output_tokens": 1012,
+  "seconds": 16.44,
+  "contaminated": false,
+  "failed": false,
+  "failure": null,
+  "answer": "\"cited_page_ids=['paper.cag-2024'] answer_markdown='1) Direct answer\\\\n\\\\nRetrieval \\u201cstops paying\\u201d (in the sense that full-corpus preloading via CAG is at least as accurate, and simpler) only in the small regime where the entire reference corpus is comfortably within the model\\u2019s usable context: the CAG paper\\u2019s practical boundary is **~30\\u201350k corpus tokens**; beyond that, the advantage narrows and then flips, with retrieval winning by **~85k tokens**.\\\\n\\\\n2) Evidence for side A (skip retrieval / use preloading-CAG below a boundary)\\\\n\\\\n- Boundary claim (practical note): \\u201c**below ~30\\u201350k corpus tokens, retrieval bought nothing here \\u2014 full preloading with a precomputed KV cache \\u2026 was at least as accurate and architecturally simpler**\\u201d (paper.cag-2024#practical_notes).\\\\n\\\\n- Empirical accuracy headline in that toy scale: \\u201c**CAG consistently achieved the highest BERTScore in most cases, outperforming both sparse and dense RAG methods**\\u201d with corpora \\u201c**3\\u201364 docs (21k\\u201385k tokens)**\\u201d (paper.cag-2024#findings, ^c1).\\\\n\\\\n- Architecture motivation for skipping retrieval: the approach answers \\u201c**with no retrieval step**\\u201d and claims \\u201c**a simpler architecture with no retriever to tune or maintain**\\u201d (paper.cag-2024#approach).\\\\n\\\\n3) Evidence for side B (retrieval still pays above the boundary)\\\\n\\\\n- Accuracy flips at the largest tested corpus: on HotPotQA-Large, BM25 RAG beats CAG on BERTScore: \\u201c**0.7535** \\u2026 vs \\u2026 **0.7407**\\u201d (paper.cag-2024#findings, ^c2).\\\\n\\\\n- The paper attributes shrinking gaps to long-context issues: \\u201c**as the data size increases, the performance gap between CAG and RAG narrows slightly**\\u201d and this \\u201c**align[es] with \\u2026 degradation when handling very long contexts**\\u201d (paper.cag-2024#findings, ^c3).\\\\n\\\\n- Practical limitation: CAG is for \\u201c**manageable**\\u201d knowledge sources and \\u201c**becomes impractical for significantly larger datasets**\\u201d (paper.cag-2024#findings, ^c8).\\\\n\\\\n4) Conditions / when each side applies (if supported)\\\\n\\\\n- Preloading/CAG is the better bet when the knowledge source is \\u201c**of a manageable size**\\u201d (paper.cag-2024#findings, ^c8) and, per the paper\\u2019s own practical note, **below ~30\\u201350k corpus tokens** (paper.cag-2024#practical_notes).\\\\n\\\\n- Retrieval becomes worthwhile as corpus tokens grow: the paper notes the gap narrows with size (paper.cag-2024#findings, ^c3) and shows a concrete reversal at **85k tokens** (paper.cag-2024#findings, ^c2); it also warns that preloading \\u201c**becomes impractical for significantly larger datasets**\\u201d (paper.cag-2024#findings, ^c8).\\\\n\\\\n5) Page ids relied on (paper.* / ent.* only)\\\\n\\\\n- paper.cag-2024'\"",
+  "workflow_id": "wf.primary-source-fork-answer.v5",
+  "hit_rank": 3,
+  "drift": []
+}

@@ -1,0 +1,30 @@
+{
+  "page_type": "moc",
+  "universal_fields": {
+    "id": "moc.agent-self-improvement",
+    "type": "moc",
+    "title": "Map: Agent self-improvement — harness, context, and optimization",
+    "status": "draft",
+    "tasks": [
+      "agentic-task-execution",
+      "text-classification"
+    ],
+    "domains": [
+      "code",
+      "mixed"
+    ],
+    "stages": [
+      "harness-optimization",
+      "prompt-optimization",
+      "context-compilation"
+    ],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": [
+      "agent self-improvement map",
+      "harness optimization map",
+      "self-improving agents"
+    ]
+  },
+  "edge_set": []
+}

@@ -1,0 +1,106 @@
+{
+    "folders": [
+        {
+            "name": "root",
+            "path": "."
+        },
+        {
+            "name": "engram",
+            "path": "engram"
+        },
+        {
+            "name": "core",
+            "path": "core"
+        },
+        {
+            "name": "studio",
+            "path": "studio"
+        },
+        {
+            "name": "client-core",
+            "path": "client-core"
+        },
+        {
+            "name": "studio-client",
+            "path": "studio-client"
+        },
+        {
+            "name": "harness",
+            "path": "harness"
+        },
+        {
+            "name": "connectors",
+            "path": "connectors"
+        }
+    ],
+    "settings": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "ruff.nativeServer": true,
+        "ruff.configurationPreference": "filesystemFirst",
+        "ruff.configuration": "./pyproject.toml",
+        "python.languageServer": "Pylance",
+        "python.analysis.typeCheckingMode": "standard",
+        "python.analysis.importFormat": "absolute",
+        "python.analysis.inlayHints.functionReturnTypes": true,
+        "python.analysis.inlayHints.variableTypes": true,
+        "python.analysis.inlayHints.pytestParameters": true,
+        "python.useEnvironmentsExtension": true,
+        "python.terminal.activateEnvironment": false,
+        "python.terminal.activateEnvInCurrentTerminal": false,
+        "python.testing.pytestEnabled": false,
+        "python.testing.unittestEnabled": false,
+        "[python]": {
+            "editor.formatOnSave": true,
+            "editor.codeActionsOnSave": {
+                "source.fixAll": "explicit",
+                "source.organizeImports": "always",
+                "source.sortImports": "always",
+                "source.addMissingImports": "always"
+            },
+            "editor.defaultFormatter": "charliermarsh.ruff"
+        },
+        "github.copilot.chat.codeGeneration.useInstructionFiles": true,
+        "github.copilot.chat.reviewSelection.enabled": true,
+        "github.copilot.chat.commitMessageGeneration.instructions": [
+            {
+                "text": "Use conventional commit message format."
+            },
+            {
+                "text": "Use the imperative mood in the subject line."
+            },
+            {
+                "text": "Use a short, descriptive subject line."
+            },
+            {
+                "text": "Use a body to explain the motivation for the change and how it addresses the issue."
+            },
+            {
+                "text": "Use bullet points for multiple changes in the body."
+            },
+            {
+                "text": "Use a footer to reference any related issues or pull requests."
+            }
+        ],
+        "explorer.fileNesting.enabled": true,
+        "chat.useAgentsMdFile": true,
+        "chat.useNestedAgentsMdFiles": true,
+        "[markdown]": {
+            "editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+        },
+        "python.terminal.useEnvFile": true
+    },
+    "extensions": {
+        "recommendations": [
+            "charliermarsh.ruff",
+            "sonarsource.sonarlint-vscode",
+            "ms-python.vscode-python-envs",
+            "ms-python.vscode-pylance",
+            "github.copilot-chat",
+            "github.vscode-pull-request-github",
+            "tamasfe.even-better-toml",
+            "alexkrechik.cucumberautocomplete",
+            "vitest.explorer",
+            "biomejs.biome"
+        ]
+    }
+}

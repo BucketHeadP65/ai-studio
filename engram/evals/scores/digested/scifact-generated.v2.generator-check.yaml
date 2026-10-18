@@ -1,0 +1,44 @@
+human: scifact.yaml
+generated: scifact-generated.v2.yaml
+collection: scifact
+setups:
+- setup: hybrid
+  human_ndcg: 0.7567645064233428
+  human_rank: 2
+  generated_ndcg: 0.9437320388818087
+  generated_rank: 2
+- setup: keyword
+  human_ndcg: 0.6739952378104219
+  human_rank: 6
+  generated_ndcg: 0.9377621569980098
+  generated_rank: 3
+- setup: hybrid-raw
+  human_ndcg: 0.7473773625191892
+  human_rank: 3
+  generated_ndcg: 0.9030661777368787
+  generated_rank: 6
+- setup: keyword-raw
+  human_ndcg: 0.6709222803693107
+  human_rank: 7
+  generated_ndcg: 0.9252773943732787
+  generated_rank: 5
+- setup: hybrid-card
+  human_ndcg: 0.6798112365396785
+  human_rank: 5
+  generated_ndcg: 0.8505070499704985
+  generated_rank: 7
+- setup: hybrid-section
+  human_ndcg: 0.757854040843397
+  human_rank: 1
+  generated_ndcg: 0.9298511172685162
+  generated_rank: 4
+- setup: hybrid-claim
+  human_ndcg: 0.7236874189228608
+  human_rank: 4
+  generated_ndcg: 0.9450311383911035
+  generated_rank: 1
+tau_b: 0.14285714285714285
+agreeing_pairs: 12
+pairs: 21
+passed: false
+rank_decimals: 4

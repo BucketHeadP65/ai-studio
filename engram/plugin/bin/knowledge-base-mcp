@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# MCP entry. Finds the project's knowledge base by its knowledge-base-schema.json, at the project
+# root, under docs/ or under knowledge-base/, and serves it. The project root arrives as $1 from the plugin manifest, else
+# from CLAUDE_PROJECT_DIR, else the working directory. With no schema file anywhere the root is
+# served as-is, so the studio's own refusal answers instead of a dead server.
+set -euo pipefail
+
+project="${1:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
+
+knowledge_base="$project"
+for candidate in "$project" "$project/docs" "$project/knowledge-base"; do
+    if [ -f "$candidate/knowledge-base-schema.json" ]; then
+        knowledge_base="$candidate"
+        break
+    fi
+done
+
+here="$(cd "$(dirname "$0")" && pwd)"
+exec "$here/studio" mcp --knowledge-base "$knowledge_base"

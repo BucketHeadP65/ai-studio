@@ -1,0 +1,16 @@
+{
+  "page_type": "meta",
+  "universal_fields": {
+    "id": "meta.schema",
+    "type": "meta",
+    "title": "Wiki schema and conventions",
+    "status": "verified",
+    "tasks": [],
+    "domains": [],
+    "stages": [],
+    "modalities": [],
+    "scale_regimes": [],
+    "aliases": []
+  },
+  "edge_set": []
+}

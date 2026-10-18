@@ -1,0 +1,466 @@
+/* The reading view's typography layer. Scoped entirely under .projects-prose so it
+   never leaks into the rest of the dashboard's Tailwind-driven chrome. Tokens as CSS
+   custom properties with light defaults on the class; dark overrides apply both from
+   the OS preference (@media, guarded so an explicit light choice always wins) and from
+   an explicit [data-theme="dark"] attribute on the same element. */
+
+.projects-prose {
+  --prose-fg: #1f2328;
+  --prose-fg-muted: #57606a;
+  --prose-fg-faint: #6e7781;
+  --prose-bg: #ffffff;
+  --prose-bg-well: #f6f8fa;
+  --prose-border: #d0d7de;
+  --prose-border-strong: #afb8c1;
+  --prose-link: #0969da;
+  --prose-link-visited: #8250df;
+  --prose-wikilink: #116329;
+  --prose-wikilink-dead: #cf222e;
+  --prose-selection: rgba(84, 174, 255, 0.35);
+  --prose-note-highlight: rgba(9, 105, 218, 0.1);
+  --prose-note-highlight-border: rgba(9, 105, 218, 0.4);
+  --prose-hr: #d8dee4;
+  --prose-code-keyword: #d73a49;
+  --prose-code-entity: #6f42c1;
+  --prose-code-constant: #005cc5;
+  --prose-code-string: #032f62;
+  --prose-code-variable: #e36209;
+  --prose-code-comment: #6a737d;
+  --prose-code-tag: #22863a;
+  --prose-code-section: #005cc5;
+  --prose-code-bullet: #735c0f;
+  --prose-code-addition: #22863a;
+  --prose-code-addition-bg: #f0fff4;
+  --prose-code-deletion: #b31d28;
+  --prose-code-deletion-bg: #ffeef0;
+  --prose-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --prose-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --prose-measure: 70ch;
+
+  max-width: var(--prose-measure);
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+  color: var(--prose-fg);
+  background: var(--prose-bg);
+  font-family: var(--prose-font-sans);
+  font-size: 16px;
+  line-height: 1.7;
+  word-wrap: break-word;
+}
+
+@media (prefers-color-scheme: dark) {
+  .projects-prose:not([data-theme="light"]) {
+    --prose-fg: #e6edf3;
+    --prose-fg-muted: #9198a1;
+    --prose-fg-faint: #7d8590;
+    --prose-bg: #0d1117;
+    --prose-bg-well: #161b22;
+    --prose-border: #30363d;
+    --prose-border-strong: #444c56;
+    --prose-link: #4493f8;
+    --prose-link-visited: #d2a8ff;
+    --prose-wikilink: #56d364;
+    --prose-wikilink-dead: #ff7b72;
+    --prose-selection: rgba(56, 139, 253, 0.4);
+    --prose-note-highlight: rgba(68, 147, 248, 0.14);
+    --prose-note-highlight-border: rgba(68, 147, 248, 0.45);
+    --prose-hr: #21262d;
+    --prose-code-keyword: #ff7b72;
+    --prose-code-entity: #d2a8ff;
+    --prose-code-constant: #79c0ff;
+    --prose-code-string: #a5d6ff;
+    --prose-code-variable: #ffa657;
+    --prose-code-comment: #9198a1;
+    --prose-code-tag: #7ee787;
+    --prose-code-section: #79c0ff;
+    --prose-code-bullet: #f2cc60;
+    --prose-code-addition: #aff5b4;
+    --prose-code-addition-bg: #033a16;
+    --prose-code-deletion: #ffdcd7;
+    --prose-code-deletion-bg: #67060c;
+  }
+}
+
+.projects-prose[data-theme="dark"] {
+  --prose-fg: #e6edf3;
+  --prose-fg-muted: #9198a1;
+  --prose-fg-faint: #7d8590;
+  --prose-bg: #0d1117;
+  --prose-bg-well: #161b22;
+  --prose-border: #30363d;
+  --prose-border-strong: #444c56;
+  --prose-link: #4493f8;
+  --prose-link-visited: #d2a8ff;
+  --prose-wikilink: #56d364;
+  --prose-wikilink-dead: #ff7b72;
+  --prose-selection: rgba(56, 139, 253, 0.4);
+  --prose-note-highlight: rgba(68, 147, 248, 0.14);
+  --prose-note-highlight-border: rgba(68, 147, 248, 0.45);
+  --prose-hr: #21262d;
+  --prose-code-keyword: #ff7b72;
+  --prose-code-entity: #d2a8ff;
+  --prose-code-constant: #79c0ff;
+  --prose-code-string: #a5d6ff;
+  --prose-code-variable: #ffa657;
+  --prose-code-comment: #9198a1;
+  --prose-code-tag: #7ee787;
+  --prose-code-section: #79c0ff;
+  --prose-code-bullet: #f2cc60;
+  --prose-code-addition: #aff5b4;
+  --prose-code-addition-bg: #033a16;
+  --prose-code-deletion: #ffdcd7;
+  --prose-code-deletion-bg: #67060c;
+}
+
+.projects-prose ::selection {
+  background: var(--prose-selection);
+}
+
+/* ── Type scale ─────────────────────────────────────────────────────────────── */
+
+.projects-prose h1,
+.projects-prose h2,
+.projects-prose h3,
+.projects-prose h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--prose-fg);
+}
+
+.projects-prose h1 {
+  margin: 0 0 1rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--prose-border);
+  font-size: 2em;
+}
+
+.projects-prose h2 {
+  margin: 1.8em 0 0.8em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--prose-border);
+  font-size: 1.5em;
+}
+
+.projects-prose h3 {
+  margin: 1.6em 0 0.6em;
+  font-size: 1.25em;
+}
+
+.projects-prose h4 {
+  margin: 1.4em 0 0.5em;
+  font-size: 1.05em;
+}
+
+.projects-prose h1:first-child,
+.projects-prose h2:first-child,
+.projects-prose h3:first-child,
+.projects-prose h4:first-child {
+  margin-top: 0;
+}
+
+.projects-prose p {
+  margin: 0 0 1em;
+}
+
+/* ── Inline ─────────────────────────────────────────────────────────────────── */
+
+.projects-prose a {
+  color: var(--prose-link);
+  text-decoration: none;
+}
+
+.projects-prose a:hover {
+  text-decoration: underline;
+}
+
+.projects-prose a:visited {
+  color: var(--prose-link-visited);
+}
+
+.projects-prose .wikilink {
+  color: var(--prose-wikilink);
+}
+
+.projects-prose .wikilink-dead {
+  color: var(--prose-wikilink-dead);
+  border-bottom: 1px dashed var(--prose-wikilink-dead);
+  cursor: default;
+}
+
+.projects-prose strong {
+  font-weight: 600;
+}
+
+.projects-prose em {
+  font-style: italic;
+}
+
+.projects-prose del {
+  color: var(--prose-fg-muted);
+}
+
+/* ── Code ───────────────────────────────────────────────────────────────────── */
+
+.projects-prose code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--prose-bg-well);
+  color: var(--prose-fg);
+  font-family: var(--prose-font-mono);
+  font-size: 0.85em;
+}
+
+.projects-prose pre {
+  margin: 0 0 1em;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--prose-bg-well);
+  border: 1px solid var(--prose-border);
+}
+
+.projects-prose pre code {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 0.85em;
+  line-height: 1.55;
+}
+
+/* Syntax tokens. The app-wide highlight.js sheet is a light theme with a hard-coded
+   white code background, so every rule it sets is restated here against the prose
+   tokens, which follow this container's own light/dark state. */
+
+.projects-prose .hljs {
+  color: var(--prose-fg);
+  background: transparent;
+}
+
+.projects-prose .hljs-doctag,
+.projects-prose .hljs-keyword,
+.projects-prose .hljs-meta .hljs-keyword,
+.projects-prose .hljs-template-tag,
+.projects-prose .hljs-template-variable,
+.projects-prose .hljs-type,
+.projects-prose .hljs-variable.language_ {
+  color: var(--prose-code-keyword);
+}
+
+.projects-prose .hljs-title,
+.projects-prose .hljs-title.class_,
+.projects-prose .hljs-title.class_.inherited__,
+.projects-prose .hljs-title.function_ {
+  color: var(--prose-code-entity);
+}
+
+.projects-prose .hljs-attr,
+.projects-prose .hljs-attribute,
+.projects-prose .hljs-literal,
+.projects-prose .hljs-meta,
+.projects-prose .hljs-number,
+.projects-prose .hljs-operator,
+.projects-prose .hljs-variable,
+.projects-prose .hljs-selector-attr,
+.projects-prose .hljs-selector-class,
+.projects-prose .hljs-selector-id {
+  color: var(--prose-code-constant);
+}
+
+.projects-prose .hljs-regexp,
+.projects-prose .hljs-string,
+.projects-prose .hljs-meta .hljs-string {
+  color: var(--prose-code-string);
+}
+
+.projects-prose .hljs-built_in,
+.projects-prose .hljs-symbol {
+  color: var(--prose-code-variable);
+}
+
+.projects-prose .hljs-code,
+.projects-prose .hljs-comment,
+.projects-prose .hljs-formula {
+  color: var(--prose-code-comment);
+}
+
+.projects-prose .hljs-name,
+.projects-prose .hljs-quote,
+.projects-prose .hljs-selector-tag,
+.projects-prose .hljs-selector-pseudo {
+  color: var(--prose-code-tag);
+}
+
+.projects-prose .hljs-subst,
+.projects-prose .hljs-emphasis,
+.projects-prose .hljs-strong {
+  color: var(--prose-fg);
+}
+
+.projects-prose .hljs-section {
+  color: var(--prose-code-section);
+  font-weight: 600;
+}
+
+.projects-prose .hljs-bullet {
+  color: var(--prose-code-bullet);
+}
+
+.projects-prose .hljs-addition {
+  color: var(--prose-code-addition);
+  background-color: var(--prose-code-addition-bg);
+}
+
+.projects-prose .hljs-deletion {
+  color: var(--prose-code-deletion);
+  background-color: var(--prose-code-deletion-bg);
+}
+
+/* ── Blockquote ─────────────────────────────────────────────────────────────── */
+
+.projects-prose blockquote {
+  margin: 0 0 1em;
+  padding: 0 1em;
+  color: var(--prose-fg-muted);
+  border-left: 0.25em solid var(--prose-border-strong);
+}
+
+.projects-prose blockquote > :first-child {
+  margin-top: 0;
+}
+
+.projects-prose blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────────── */
+
+.projects-prose ul,
+.projects-prose ol {
+  margin: 0 0 1em;
+  padding-left: 1.6em;
+}
+
+.projects-prose li + li {
+  margin-top: 0.2em;
+}
+
+.projects-prose li > ul,
+.projects-prose li > ol {
+  margin: 0.2em 0 0;
+}
+
+.projects-prose li.task-list-item {
+  list-style: none;
+  margin-left: -1.6em;
+}
+
+.projects-prose input[type="checkbox"] {
+  margin-right: 0.4em;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────────── */
+
+.projects-prose .table-wrap {
+  margin: 0 0 1em;
+  overflow-x: auto;
+}
+
+.projects-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+}
+
+.projects-prose th,
+.projects-prose td {
+  padding: 0.4em 0.8em;
+  border: 1px solid var(--prose-border);
+}
+
+.projects-prose th {
+  font-weight: 600;
+  background: var(--prose-bg-well);
+}
+
+.projects-prose tr:nth-child(2n) {
+  background: color-mix(in srgb, var(--prose-bg-well) 50%, transparent);
+}
+
+/* ── Misc ───────────────────────────────────────────────────────────────────── */
+
+.projects-prose hr {
+  margin: 1.6em 0;
+  border: none;
+  border-top: 1px solid var(--prose-hr);
+}
+
+.projects-prose img {
+  max-width: 100%;
+}
+
+/* ── Note highlight ─────────────────────────────────────────────────────────── */
+
+/* A soft, persistent highlight over the block carrying an open note -- so an owner can
+   see at a glance that a span is annotated, not just hover a gutter dot to find out.
+   Clicking it opens that note's thread (wired by the host component); this stylesheet
+   only paints the affordance. */
+
+.projects-prose .note-highlight {
+  cursor: pointer;
+  border-radius: 4px;
+  margin-left: -0.4em;
+  padding-left: 0.4em;
+  background: var(--prose-note-highlight);
+  box-shadow: inset 2px 0 0 var(--prose-note-highlight-border);
+}
+
+/* Character-precise highlight, painted by the CSS Custom Highlight API over exactly the
+   anchored characters (never the whole block) -- registered by the host component, this
+   stylesheet only paints it. Hardcoded colors, not the `--prose-note-highlight` custom
+   properties: a highlight pseudo-element does not reliably inherit properties scoped to
+   its originating element across browsers, so the same light/dark values are restated
+   directly here. */
+
+.projects-prose::highlight(engram-note) {
+  background-color: rgba(9, 105, 218, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .projects-prose:not([data-theme="light"])::highlight(engram-note) {
+    background-color: rgba(68, 147, 248, 0.14);
+  }
+}
+
+.projects-prose[data-theme="dark"]::highlight(engram-note) {
+  background-color: rgba(68, 147, 248, 0.14);
+}
+
+/* Cursor-only affordance for a block carrying an anchored span, when the exact-character
+   highlight above is doing the visual work -- no background here, so the two never double up. */
+
+.projects-prose .note-anchor-hit {
+  cursor: pointer;
+}
+
+/* ── Note margin row ───────────────────────────────────────────────────────── */
+
+/* Pairs the prose column with its note-dot gutter as one centered unit, so the gutter hugs
+   the prose's own (width-capped) right edge instead of the far edge of whatever wider pane
+   it sits in. `.projects-prose` keeps its own max-width/centering for every OTHER consumer
+   (e.g. a read-only skill body with no gutter); nested in this row, both are traded for
+   filling the row's flex slot exactly, so the two sit flush. */
+
+.projects-prose-row {
+  display: flex;
+  align-items: stretch;
+  max-width: calc(var(--prose-measure, 70ch) + 1.5rem);
+  margin: 0 auto;
+}
+
+.projects-prose-row .projects-prose {
+  max-width: none;
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}

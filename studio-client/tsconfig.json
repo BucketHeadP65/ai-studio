@@ -1,0 +1,22 @@
+{
+  "//": "Extends the shared base THROUGH the copy-installed package (in-root path — Turbopack's build refuses an extends that resolves outside the project root, and widening turbopack.root is forbidden). client-core ships tsconfig.base.json in its `files` since 0.0.3; after changing the base there, refresh with `npm install ../client-core`.",
+  "extends": "./node_modules/client-core/tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

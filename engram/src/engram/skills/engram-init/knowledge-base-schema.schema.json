@@ -1,0 +1,1136 @@
+{
+  "$defs": {
+    "CanonicalSection": {
+      "description": "One canonical H2 slug a page type pre-seeds, with the heading it renders as and its authoring guidance.\n\nA bare slug string in `PageTypeSpec.canonical_sections` is this section's `slug` alone, with\n`heading` unset. The renderer then title-cases the slug (`tl_dr` becomes `Tl Dr`). A declared\n`heading` is the literal H2 text this knowledge base writes for that slug (e.g. `TL;DR`), and\nthe renderer prefers it. A declared `guidance` says what this section should contain and is\nshown to whoever authors a page of this page type. \"\" means no such note.",
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading"
+        },
+        "guidance": {
+          "default": "",
+          "title": "Guidance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug"
+      ],
+      "title": "CanonicalSection",
+      "type": "object"
+    },
+    "ClaimGrammarSpec": {
+      "description": "Claim-bullet grammar field-sets and validation rules. Present iff some page type has claims_enabled.",
+      "properties": {
+        "section": {
+          "title": "Section",
+          "type": "string"
+        },
+        "edge_relations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Edge Relations",
+          "type": "array"
+        },
+        "multilink_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Multilink Fields",
+          "type": "array"
+        },
+        "link_scalar_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Link Scalar Fields",
+          "type": "array"
+        },
+        "text_scalar_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Text Scalar Fields",
+          "type": "array"
+        },
+        "plain_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Plain Fields",
+          "type": "array"
+        },
+        "quote_required_types": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Quote Required Types",
+          "type": "array"
+        },
+        "comparative_relations": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Comparative Relations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "section"
+      ],
+      "title": "ClaimGrammarSpec",
+      "type": "object"
+    },
+    "CompoundingSpec": {
+      "description": "A knowledge base's derivation map: which existing material produces which page types, and under what policy.\n\nAbsent from a spec, `entries` is empty and the knowledge base compounds nothing on its own.",
+      "properties": {
+        "entries": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/DerivationEntry"
+          },
+          "title": "Entries",
+          "type": "array"
+        }
+      },
+      "title": "CompoundingSpec",
+      "type": "object"
+    },
+    "DecisionSpec": {
+      "description": "A page type's decision block: the status it opens in, and the statuses an owner may resolve it to.\n\n`open` and every outcome `status` must sit in the page type's effective status set (its own\n`status_values`, or the grammar default set when it declares none), `open` itself must not also\nbe an outcome, and every outcome `link` must name one of the page type's `link_list_edge_fields`.\n`KnowledgeBaseSchema` refuses a spec that breaks any of the three.",
+      "properties": {
+        "open": {
+          "title": "Open",
+          "type": "string"
+        },
+        "outcomes": {
+          "items": {
+            "$ref": "#/$defs/Outcome"
+          },
+          "title": "Outcomes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "open",
+        "outcomes"
+      ],
+      "title": "DecisionSpec",
+      "type": "object"
+    },
+    "DerivationEntry": {
+      "description": "One derivation rule: an input selector, the page types it may produce, and its run policy.\n\n`source` is the Python attribute for the JSON key `from`, the input side against `to`, the output side.\n`cap_per_run` bounds how many outputs one run of this entry may produce. `gate` is `\"none\"`\n(indexes straight in) or `\"owner\"` (lands for the owner to accept or dismiss before it\nindexes). `guidance` is free text a workflow step may surface to whatever produces the\noutput, \"\" = no extra guidance beyond the output page type's own.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "from": {
+          "discriminator": {
+            "mapping": {
+              "notes": "#/$defs/NotesSelector",
+              "pages": "#/$defs/PagesSelector",
+              "sources": "#/$defs/SourcesSelector"
+            },
+            "propertyName": "plane"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SourcesSelector"
+            },
+            {
+              "$ref": "#/$defs/PagesSelector"
+            },
+            {
+              "$ref": "#/$defs/NotesSelector"
+            }
+          ],
+          "title": "From"
+        },
+        "to": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "To",
+          "type": "array"
+        },
+        "cap_per_run": {
+          "default": 20,
+          "minimum": 1,
+          "title": "Cap Per Run",
+          "type": "integer"
+        },
+        "gate": {
+          "default": "none",
+          "enum": [
+            "none",
+            "owner"
+          ],
+          "title": "Gate",
+          "type": "string"
+        },
+        "guidance": {
+          "default": "",
+          "title": "Guidance",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "from",
+        "to"
+      ],
+      "title": "DerivationEntry",
+      "type": "object"
+    },
+    "EmbedStrategiesSpec": {
+      "description": "Which embedding-composition strategies index activates for this knowledge base, and their config.\n\n`active=None` (the default) activates the default set `KnowledgeBaseSchema.active_embed_strategies`\nderives: `page-card` and `section` always, `claim` when this spec declares a claim grammar, and\n`source-chunk` when `sources.enabled`. An explicit tuple replaces that set outright. `config` is an\nopaque settings blob per strategy name. The stock strategies ignore it, and a knowledge base's own\nstrategy reads its own entry.",
+      "properties": {
+        "active": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Active"
+        },
+        "config": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JsonValue"
+            },
+            "type": "object"
+          },
+          "default": {},
+          "title": "Config",
+          "type": "object"
+        }
+      },
+      "title": "EmbedStrategiesSpec",
+      "type": "object"
+    },
+    "EntitiesSpec": {
+      "additionalProperties": false,
+      "description": "The page type a knowledge base keeps its entities in, one page per named thing.\n\nThe page type must be declared and must hold a frontmatter field `entity_type`. `KnowledgeBaseSchema` refuses\none that breaks either rule.",
+      "properties": {
+        "page_type": {
+          "title": "Page Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page_type"
+      ],
+      "title": "EntitiesSpec",
+      "type": "object"
+    },
+    "FacetSpec": {
+      "additionalProperties": false,
+      "description": "A domain facet: key, applicable scope, seed vocabulary, and whether the card prints it.\n\nThe key is the sole address: `BaseFrontmatter.facet_values(key)` reads it from a page's frontmatter.\nAn unknown key, such as `slot`, is refused.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "scope": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Scope",
+          "type": "array"
+        },
+        "seed": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Seed",
+          "type": "array"
+        },
+        "card": {
+          "default": false,
+          "title": "Card",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "FacetSpec",
+      "type": "object"
+    },
+    "FrontmatterFieldSpec": {
+      "description": "One per-type frontmatter field declared by the spec, beyond the universal BaseFrontmatter fields.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "scalar",
+            "int",
+            "scalar-list",
+            "link",
+            "link-list"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "choices": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Choices",
+          "type": "array"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "FrontmatterFieldSpec",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "NotesSelector": {
+      "description": "A compounding input drawn from the notes plane: markdown under one knowledge-base-root-relative folder.\n\n`folder` \"\" (the default) is the whole knowledge base.",
+      "properties": {
+        "plane": {
+          "const": "notes",
+          "title": "Plane",
+          "type": "string"
+        },
+        "folder": {
+          "default": "",
+          "title": "Folder",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plane"
+      ],
+      "title": "NotesSelector",
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "One status a decision may resolve to, with the link field an owner fills in when it does.",
+      "properties": {
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Link"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "Outcome",
+      "type": "object"
+    },
+    "PageTypeSpec": {
+      "description": "One page type (`page_type`): id prefix, folder, fields, canonical sections, edges, and claim applicability.",
+      "properties": {
+        "page_type": {
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "title": "Page Type",
+          "type": "string"
+        },
+        "id_prefix": {
+          "default": "",
+          "title": "Id Prefix",
+          "type": "string"
+        },
+        "folder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Folder"
+        },
+        "folders": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Folders",
+          "type": "array"
+        },
+        "files": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "frontmatter_fields": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FrontmatterFieldSpec"
+          },
+          "title": "Frontmatter Fields",
+          "type": "array"
+        },
+        "status_values": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Status Values",
+          "type": "array"
+        },
+        "path_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Path Fields",
+          "type": "array"
+        },
+        "canonical_sections": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/CanonicalSection"
+              }
+            ],
+            "description": "A bare slug string, or a CanonicalSection object declaring slug + heading + guidance."
+          },
+          "title": "Canonical Sections",
+          "type": "array"
+        },
+        "edge_fields": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Edge Fields",
+          "type": "array"
+        },
+        "claims_enabled": {
+          "default": false,
+          "title": "Claims Enabled",
+          "type": "boolean"
+        },
+        "disclosed": {
+          "default": true,
+          "title": "Disclosed",
+          "type": "boolean"
+        },
+        "guidance": {
+          "default": "",
+          "title": "Guidance",
+          "type": "string"
+        },
+        "decision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DecisionSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "page_type"
+      ],
+      "title": "PageTypeSpec",
+      "type": "object"
+    },
+    "PagesSelector": {
+      "description": "A compounding input drawn from the pages plane: pages of the given page types.\n\n`within_hours` windows to pages written in the last N hours, None = no window. `status`\nnarrows to one status value, None = any status except `skipped`.",
+      "properties": {
+        "plane": {
+          "const": "pages",
+          "title": "Plane",
+          "type": "string"
+        },
+        "page_types": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Page Types",
+          "type": "array"
+        },
+        "within_hours": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Within Hours"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "plane",
+        "page_types"
+      ],
+      "title": "PagesSelector",
+      "type": "object"
+    },
+    "RelationDecl": {
+      "description": "A registered typed relation, as the knowledge base's vocabulary declares it.",
+      "properties": {
+        "slug": {
+          "title": "Slug",
+          "type": "string"
+        },
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "range": {
+          "title": "Range",
+          "type": "string"
+        },
+        "symmetric": {
+          "default": false,
+          "title": "Symmetric",
+          "type": "boolean"
+        },
+        "qualifiers": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "title": "Qualifiers",
+          "type": "array"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "queue_when_missing": {
+          "default": false,
+          "title": "Queue When Missing",
+          "type": "boolean"
+        },
+        "domain_section": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The slug of a canonical section of the domain page type. When set, this relation is derived from the wikilinks written in that section of a domain page's body, one edge per distinct link target, and never from frontmatter.",
+          "title": "Domain Section"
+        }
+      },
+      "required": [
+        "slug",
+        "domain",
+        "range"
+      ],
+      "title": "RelationDecl",
+      "type": "object"
+    },
+    "RetrievalSpec": {
+      "description": "Retrieval profile for the MCP server engram ships.\n\n`profile` is not validated here. The settings layer checks it against the strategy names.\n\n`collection` is the partition this knowledge base's MCP `search` tool scopes to. Left unset (the\ndefault), `KnowledgeBaseSchema` fills it in from the spec's own `slug`. Set it only when the\nknowledge base indexes into a partition named differently from its slug.\n\n`mode` picks between a fixed retrieval configuration and one `engram.indexing.domain.switches` decides\nfrom knowledge base signals. `floor` names switches pinned on regardless of signals. `ceiling`, when set,\nnames the only switches allowed on and forces every other switch off. Both pins name switches from\n`embeddings`, `sql`, `graph`.",
+      "properties": {
+        "profile": {
+          "default": "full",
+          "title": "Profile",
+          "type": "string"
+        },
+        "collection": {
+          "default": "",
+          "title": "Collection",
+          "type": "string"
+        },
+        "disclosure_mode": {
+          "default": "strict",
+          "enum": [
+            "strict",
+            "search_only"
+          ],
+          "title": "Disclosure Mode",
+          "type": "string"
+        },
+        "group_by": {
+          "anyOf": [
+            {
+              "enum": [
+                "app",
+                "page_type"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Group By"
+        },
+        "mode": {
+          "default": "fixed",
+          "enum": [
+            "fixed",
+            "auto"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "floor": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Floor",
+          "type": "array"
+        },
+        "ceiling": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ceiling"
+        },
+        "doc_authoring": {
+          "default": false,
+          "title": "Doc Authoring",
+          "type": "boolean"
+        },
+        "private": {
+          "default": false,
+          "title": "Private",
+          "type": "boolean"
+        },
+        "date_field": {
+          "default": "created",
+          "title": "Date Field",
+          "type": "string"
+        }
+      },
+      "title": "RetrievalSpec",
+      "type": "object"
+    },
+    "SectionSummarySpec": {
+      "description": "Per-knowledge-base tuning for the indexed `kb.sections.summary` fallback (`engram.indexing.domain.section_summary`).\n\n`leading_sentences` bounds both the prose leg (leading sentence count) and the list leg\n(leading list-item count) of the derivation rule. `inline_gate_chars` is the body-length\nceiling under which a section's summary is its own body verbatim.",
+      "properties": {
+        "leading_sentences": {
+          "default": 2,
+          "title": "Leading Sentences",
+          "type": "integer"
+        },
+        "inline_gate_chars": {
+          "default": 1000,
+          "title": "Inline Gate Chars",
+          "type": "integer"
+        }
+      },
+      "title": "SectionSummarySpec",
+      "type": "object"
+    },
+    "SourceQueuePolicy": {
+      "additionalProperties": false,
+      "description": "The hard rules of a knowledge base's ingestion policy: what a digest's references may become with nobody in the path.\n\n`source_types` are the source types a reference may have, checked against every reference when non-empty, empty\nmeans no source-type rule. `max_age_years` drops a reference whose year is older than now minus the value, an\nunknown year passes, no reader enforces it, it is a judgment rule stated in the guidance. `hop_depth` is how many\nqueue hops from a source the owner added a reference may sit and still be fetched, past it the reference is\nrecorded as seen. `per_source_cap` is how many rows one source may put on the queue in total, of any status.\n`per_pass_cap` is how many references one run of a digest workflow may add to the queue in total, across every\nsource it digests, unset means no such ceiling. `never` names the link classes dropped on sight.\n`extra=\"forbid\"` rejects an unknown or mistyped rule name passed to this model directly, a policy page's\nfrontmatter is filtered to the known fields before validation, and the reader that filtered them reports what\nit dropped separately.",
+      "properties": {
+        "source_types": {
+          "default": [
+            "video",
+            "paper",
+            "post",
+            "article"
+          ],
+          "items": {
+            "enum": [
+              "video",
+              "paper",
+              "post",
+              "article"
+            ],
+            "type": "string"
+          },
+          "title": "Source Types",
+          "type": "array"
+        },
+        "max_age_years": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Age Years"
+        },
+        "hop_depth": {
+          "default": 1,
+          "minimum": 0,
+          "title": "Hop Depth",
+          "type": "integer"
+        },
+        "per_source_cap": {
+          "default": 5,
+          "minimum": 1,
+          "title": "Per Source Cap",
+          "type": "integer"
+        },
+        "per_pass_cap": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Per Pass Cap"
+        },
+        "never": {
+          "default": [
+            "profile",
+            "encyclopedia",
+            "homepage",
+            "social-post",
+            "repository"
+          ],
+          "items": {
+            "enum": [
+              "profile",
+              "encyclopedia",
+              "homepage",
+              "social-post",
+              "repository"
+            ],
+            "type": "string"
+          },
+          "title": "Never",
+          "type": "array"
+        }
+      },
+      "title": "SourceQueuePolicy",
+      "type": "object"
+    },
+    "SourcesSelector": {
+      "description": "A compounding input drawn from the source-mirror plane: mirrors with no digest yet.",
+      "properties": {
+        "plane": {
+          "const": "sources",
+          "title": "Plane",
+          "type": "string"
+        },
+        "selector": {
+          "const": "undigested",
+          "default": "undigested",
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plane"
+      ],
+      "title": "SourcesSelector",
+      "type": "object"
+    },
+    "SourcesSpec": {
+      "description": "Whether this knowledge base reads outside sources, quote verification, which connectors read them, and its digest-split threshold.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "quote_verify": {
+          "default": false,
+          "title": "Quote Verify",
+          "type": "boolean"
+        },
+        "connectors": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Connectors",
+          "type": "array"
+        },
+        "key_field": {
+          "default": "",
+          "title": "Key Field",
+          "type": "string"
+        },
+        "digest_link_field": {
+          "default": "",
+          "title": "Digest Link Field",
+          "type": "string"
+        },
+        "hash_field": {
+          "default": "",
+          "title": "Hash Field",
+          "type": "string"
+        },
+        "digest_sections_over": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest Sections Over"
+        },
+        "digest_part_field": {
+          "default": "",
+          "title": "Digest Part Field",
+          "type": "string"
+        },
+        "librarian": {
+          "default": false,
+          "title": "Librarian",
+          "type": "boolean"
+        },
+        "digest_types": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Digest Types",
+          "type": "object"
+        },
+        "digest_fields": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Digest Fields",
+          "type": "object"
+        },
+        "digest_claim_text_fields": {
+          "default": false,
+          "title": "Digest Claim Text Fields",
+          "type": "boolean"
+        },
+        "digest_workflow": {
+          "default": "",
+          "title": "Digest Workflow",
+          "type": "string"
+        },
+        "source_queue": {
+          "$ref": "#/$defs/SourceQueuePolicy"
+        }
+      },
+      "title": "SourcesSpec",
+      "type": "object"
+    },
+    "VocabEntry": {
+      "description": "A vocabulary value with its definition (entity types, claim types).",
+      "properties": {
+        "value": {
+          "title": "Value",
+          "type": "string"
+        },
+        "definition": {
+          "default": "",
+          "title": "Definition",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "VocabEntry",
+      "type": "object"
+    }
+  },
+  "description": "The complete per-knowledge-base ontology, loaded from `<knowledge_base>/knowledge-base-schema.json`.",
+  "properties": {
+    "version": {
+      "default": "0.1",
+      "title": "Version",
+      "type": "string"
+    },
+    "slug": {
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "title": "Slug",
+      "type": "string"
+    },
+    "purpose": {
+      "default": "",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "slug_conventions": {
+      "default": "",
+      "title": "Slug Conventions",
+      "type": "string"
+    },
+    "page_types": {
+      "items": {
+        "$ref": "#/$defs/PageTypeSpec"
+      },
+      "title": "Page Types",
+      "type": "array"
+    },
+    "relations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RelationDecl"
+      },
+      "title": "Relations",
+      "type": "array"
+    },
+    "entity_types": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VocabEntry"
+      },
+      "title": "Entity Types",
+      "type": "array"
+    },
+    "claim_types": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VocabEntry"
+      },
+      "title": "Claim Types",
+      "type": "array"
+    },
+    "facets": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/FacetSpec"
+      },
+      "title": "Facets",
+      "type": "array"
+    },
+    "claims": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ClaimGrammarSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "sources": {
+      "$ref": "#/$defs/SourcesSpec",
+      "default": {
+        "enabled": false,
+        "quote_verify": false,
+        "connectors": [],
+        "key_field": "",
+        "digest_link_field": "",
+        "hash_field": "",
+        "digest_sections_over": null,
+        "digest_part_field": "",
+        "librarian": false,
+        "digest_types": {},
+        "digest_fields": {},
+        "digest_claim_text_fields": false,
+        "digest_workflow": "",
+        "source_queue": {
+          "hop_depth": 1,
+          "max_age_years": null,
+          "never": [
+            "profile",
+            "encyclopedia",
+            "homepage",
+            "social-post",
+            "repository"
+          ],
+          "per_pass_cap": null,
+          "per_source_cap": 5,
+          "source_types": [
+            "video",
+            "paper",
+            "post",
+            "article"
+          ]
+        }
+      }
+    },
+    "entities": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EntitiesSpec"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "compounding": {
+      "$ref": "#/$defs/CompoundingSpec",
+      "default": {
+        "entries": []
+      }
+    },
+    "retrieval": {
+      "$ref": "#/$defs/RetrievalSpec",
+      "default": {
+        "profile": "full",
+        "collection": "",
+        "disclosure_mode": "strict",
+        "group_by": null,
+        "mode": "fixed",
+        "floor": [],
+        "ceiling": null,
+        "doc_authoring": false,
+        "private": false,
+        "date_field": "created"
+      }
+    },
+    "section_summaries": {
+      "$ref": "#/$defs/SectionSummarySpec",
+      "default": {
+        "leading_sentences": 2,
+        "inline_gate_chars": 1000
+      }
+    },
+    "embed_strategies": {
+      "$ref": "#/$defs/EmbedStrategiesSpec",
+      "default": {
+        "active": null,
+        "config": {}
+      }
+    },
+    "path_root": {
+      "default": "parent",
+      "enum": [
+        "parent",
+        "knowledge_base"
+      ],
+      "title": "Path Root",
+      "type": "string"
+    },
+    "run_indexing": {
+      "default": "each_write",
+      "enum": [
+        "each_write",
+        "once_per_run"
+      ],
+      "title": "Run Indexing",
+      "type": "string"
+    }
+  },
+  "required": [
+    "slug",
+    "page_types"
+  ],
+  "title": "KnowledgeBaseSchema",
+  "type": "object"
+}
