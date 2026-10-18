@@ -12,11 +12,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from engram.indexing.contracts import ChunkSizes
+from engram.indexing.contracts import ChunkSizes, indexer_version
 from engram.kb.contracts import KnowledgeBaseSchema, PageTypeSpec
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from studio.knowledge_base.settings import IngestionSettings, KnowledgeBaseSettings
-from studio.knowledge_base.wiring.indexing import _path_root, ingestion_chunk_sizes
+from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings, KnowledgeBaseSettings
+from studio.knowledge_base.wiring.indexing import (
+    _path_root,
+    ingestion_chunk_planner,
+    ingestion_chunk_sizes,
+    ingestion_cut_plan_stage,
+    ingestion_indexer_version,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -66,3 +73,45 @@ class TestChunkSizesWiring:
         ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600)
 
         assert ingestion_chunk_sizes(ingestion) == ChunkSizes(target_tokens=300, max_tokens=600)
+
+
+_AZURE = AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
+
+_ENGINE_URL = "postgresql+asyncpg://example:example@localhost/example"
+
+
+class TestChunkPlannerWiring:
+    def test_the_ingestion_settings_name_the_chunk_planners_deployment(self) -> None:
+        planner = ingestion_chunk_planner(_AZURE, IngestionSettings(chunk_planner_model="example-deployment"))
+
+        assert planner is not None
+        assert planner.identity == "example-deployment/prompt-1"
+
+    def test_an_empty_chunk_planner_model_indexes_with_no_chunk_planner(self) -> None:
+        assert ingestion_chunk_planner(_AZURE, IngestionSettings(chunk_planner_model="")) is None
+
+    def test_no_azure_endpoint_indexes_with_no_chunk_planner(self) -> None:
+        assert ingestion_chunk_planner(AzureOpenAiSettings(endpoint=""), IngestionSettings(chunk_planner_model="example-deployment")) is None
+
+    def test_the_cut_plan_stage_carries_the_settings_planner_and_ceiling(self) -> None:
+        ingestion = IngestionSettings(chunk_planner_model="example-deployment", chunk_planner_ceiling_tokens=9_000)
+
+        stage = ingestion_cut_plan_stage(create_async_engine(_ENGINE_URL), _AZURE, ingestion)
+
+        assert stage is not None
+        assert (stage.planner, stage.ceiling_tokens) == ("example-deployment/prompt-1", 9_000)
+
+    def test_no_chunk_planner_means_no_cut_plan_stage(self) -> None:
+        assert ingestion_cut_plan_stage(create_async_engine(_ENGINE_URL), AzureOpenAiSettings(endpoint=""), IngestionSettings()) is None
+
+    def test_the_indexer_version_names_the_settings_chunk_planner_as_the_handler_stores_it(self) -> None:
+        ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600, chunk_planner_model="example-deployment", chunk_planner_ceiling_tokens=9_000)
+
+        assert ingestion_indexer_version(_AZURE, ingestion) == indexer_version(
+            ChunkSizes(target_tokens=300, max_tokens=600), planner="example-deployment/prompt-1", planner_ceiling_tokens=9_000
+        )
+
+    def test_the_indexer_version_with_no_chunk_planner_names_the_chunk_sizes_only(self) -> None:
+        ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600)
+
+        assert ingestion_indexer_version(AzureOpenAiSettings(endpoint=""), ingestion) == indexer_version(ChunkSizes(target_tokens=300, max_tokens=600))

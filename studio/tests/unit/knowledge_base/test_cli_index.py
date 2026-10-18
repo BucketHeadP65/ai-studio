@@ -54,7 +54,7 @@ from typer.testing import CliRunner
 from studio.knowledge_base import cli as cli_module
 from studio.knowledge_base.cli import app
 from studio.knowledge_base.cli_support import resolve_knowledge_base_alias
-from studio.knowledge_base.settings import IngestionSettings
+from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
 
 if TYPE_CHECKING:
@@ -618,12 +618,15 @@ class _StatusContainer:
     jobs: JobQueries
     reader: KnowledgeBaseReader = field(default_factory=FakeKnowledgeBaseReader)
     ingestion: IngestionSettings = field(default_factory=IngestionSettings)
+    azure_openai: AzureOpenAiSettings = field(default_factory=AzureOpenAiSettings)
 
     async def get(self, key: type) -> object:
         if key is AsyncEngine:
             return self.engine
         if key is IngestionSettings:
             return self.ingestion
+        if key is AzureOpenAiSettings:
+            return self.azure_openai
         if key is AdminSqlGateway:
             return self.gateway
         if key is KnowledgeBaseReader:
@@ -642,6 +645,7 @@ class _StatusContainerFactory:
     files_tracked: int
     embed_meta: _Row | None = None
     ingestion: IngestionSettings = field(default_factory=IngestionSettings)
+    azure_openai: AzureOpenAiSettings = field(default_factory=AzureOpenAiSettings)
 
     def __call__(self) -> _StatusContainer:
         scalars: dict[str, object] = {"kb.index_manifest": self.files_tracked}
@@ -650,7 +654,11 @@ class _StatusContainerFactory:
         scalars["max(asked_at)"] = None
         rows: dict[str, _Row | None] = {"kb.embed_meta": self.embed_meta, "kb.index_fingerprint": self.fingerprint}
         return _StatusContainer(
-            _FakeStatusEngine(_FakeConnection(scalars=scalars, rows=rows)), gateway=_identity_gateway(), jobs=MemoryJobs(), ingestion=self.ingestion
+            _FakeStatusEngine(_FakeConnection(scalars=scalars, rows=rows)),
+            gateway=_identity_gateway(),
+            jobs=MemoryJobs(),
+            ingestion=self.ingestion,
+            azure_openai=self.azure_openai,
         )
 
 
@@ -706,6 +714,28 @@ class TestStatusIndexDrift:
 
         assert result.exit_code == 0
         assert "next run is --full" in result.stdout
+
+    def test_a_chunk_planner_change_shows_stale_hint(self):
+        factory = _StatusContainerFactory(
+            fingerprint=_fingerprint_row(), files_tracked=42, azure_openai=AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
+        )
+
+        result = runner.invoke(app, ["status"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "next run is --full" in result.stdout
+        assert "chunk-planner change" in result.stdout
+
+    def test_a_fingerprint_written_with_the_settings_chunk_planner_shows_no_stale_hint(self):
+        azure_openai = AzureOpenAiSettings(endpoint="https://example.openai.azure.com")
+        ingestion = IngestionSettings(chunk_planner_model="example-deployment")
+        stored = indexer_version(DEFAULT_CHUNK_SIZES, planner="example-deployment/prompt-1", planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
+        factory = _StatusContainerFactory(fingerprint=_fingerprint_row(indexer_version=stored), files_tracked=42, ingestion=ingestion, azure_openai=azure_openai)
+
+        result = runner.invoke(app, ["status"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "next run is --full" not in result.stdout
 
     def test_empty_manifest_shows_stale_hint_and_full_mode(self):
         factory = _StatusContainerFactory(fingerprint=None, files_tracked=0)

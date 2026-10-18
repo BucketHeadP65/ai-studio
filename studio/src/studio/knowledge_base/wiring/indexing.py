@@ -2,7 +2,8 @@
 
 The engine registers the pgvector codec before it is handed out, so every pooled connection reads and writes `halfvec` columns. The unit
 of work factory opens a fresh unit of work on each call, one per transaction. The validation report sink rewrites only the validation block
-of the knowledge base's `_meta/dashboard.md`.
+of the knowledge base's `_meta/dashboard.md`. The index handler cuts text with no heading where the chunk planner the ingestion settings
+name says, over the Azure OpenAI resource the summaries use, and with no deployment or no endpoint it fills that text.
 """
 
 from __future__ import annotations
@@ -13,7 +14,9 @@ from core.ai.embedding import BatchEmbedder
 from core.cqrs.contracts import JobQueries, Jobs, JobsAndQueries, PostgresJobs
 from core.db import build_engine
 from engram.indexing.contracts import (
+    ChunkPlanner,
     ChunkSizes,
+    CutPlanStage,
     FilesystemKnowledgeBaseReader,
     IndexKnowledgeBaseHandler,
     IndexUnitOfWork,
@@ -25,8 +28,11 @@ from engram.indexing.contracts import (
     Summarizer,
     SummaryStage,
     ValidationReportSink,
+    indexer_version,
     register_pgvector,
 )
+from engram.indexing.infrastructure.chunk_planner import PydanticAiChunkPlanner
+from engram.indexing.infrastructure.cut_plans import SqlAlchemyCutPlans
 from engram.indexing.infrastructure.summarizer import PydanticAiSummarizer
 from engram.indexing.infrastructure.summary_uow import SqlAlchemySummaryUnitOfWork
 from engram.kb.contracts import KnowledgeBaseSchema, VocabularyIndex, load_knowledge_base_schema, parse_vocabulary
@@ -257,6 +263,63 @@ def ingestion_chunk_sizes(ingestion: IngestionSettings) -> ChunkSizes:
     return ChunkSizes(target_tokens=ingestion.chunk_target_tokens, max_tokens=ingestion.chunk_max_tokens)
 
 
+def ingestion_chunk_planner(azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> ChunkPlanner | None:
+    """The chunk planner over the Azure OpenAI deployment the ingestion settings name.
+
+    Args:
+        azure_openai: The Azure OpenAI resource the deployment runs on.
+        ingestion: The ingestion settings that name the chunk planner's deployment.
+
+    Returns:
+        The chunk planner, or `None` when the settings name no deployment or the resource has no endpoint.
+    """
+    if not ingestion.chunk_planner_model or not azure_openai.endpoint:
+        return None
+    return PydanticAiChunkPlanner.from_settings(azure_openai, ingestion)
+
+
+def ingestion_cut_plan_stage(engine: AsyncEngine, azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> CutPlanStage | None:
+    """The stage that gives each load's mirrors their cut plans, over the chunk planner the ingestion settings name.
+
+    Args:
+        engine: The admin engine the stored cut plans are read and written over.
+        azure_openai: The Azure OpenAI resource the chunk planner runs on.
+        ingestion: The ingestion settings that name the chunk planner and its ceiling, deadline and concurrency.
+
+    Returns:
+        The stage, or `None` when there is no chunk planner.
+    """
+    planner = ingestion_chunk_planner(azure_openai, ingestion)
+    if planner is None:
+        return None
+    cut_plans = SqlAlchemyCutPlans(engine)
+    return CutPlanStage(
+        planner,
+        cut_plans,
+        cut_plans,
+        ceiling_tokens=ingestion.chunk_planner_ceiling_tokens,
+        deadline_seconds=ingestion.chunk_planner_deadline_seconds,
+        concurrency=ingestion.chunk_planner_concurrency,
+    )
+
+
+def ingestion_indexer_version(azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> str:
+    """The indexer version an index under these settings stores: the chunk sizes and the chunk planner with its ceiling.
+
+    Args:
+        azure_openai: The Azure OpenAI resource the chunk planner runs on.
+        ingestion: The ingestion settings that name the chunk sizes and the chunk planner.
+
+    Returns:
+        The version the index handler built from the same settings stores.
+    """
+    planner = ingestion_chunk_planner(azure_openai, ingestion)
+    sizes = ingestion_chunk_sizes(ingestion)
+    if planner is None:
+        return indexer_version(sizes)
+    return indexer_version(sizes, planner=planner.identity, planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
+
+
 def _path_root(knowledge_base: KnowledgeBaseSettings, schema: KnowledgeBaseSchema) -> Path:
     """The folder the schema's `path_fields` values resolve against: the knowledge base root, or by default its parent."""
     return knowledge_base.path if schema.path_root == "knowledge_base" else knowledge_base.path.parent
@@ -274,12 +337,15 @@ def index_handler_provider(  # noqa: PLR0913, PLR0917 (wireup resolves each hand
     knowledge_base_origin: KnowledgeBasePathOrigin,
     reader_scopes: ReaderScopes,
     ingestion: IngestionSettings,
+    azure_openai: AzureOpenAiSettings,
+    engine: AsyncEngine,
 ) -> IndexKnowledgeBaseHandler:
     """Provide the index handler.
 
     The summary stage runs only when an index asks for summaries. The dangling code path check, on both the full and the
     incremental index, resolves the schema's `path_fields` against the folder the schema declares, and its message names
-    where the knowledge base path came from. Every source mirror is cut into chunks of the sizes the ingestion settings name.
+    where the knowledge base path came from. Every source mirror is cut into chunks of the sizes the ingestion settings name,
+    and text with no heading is cut where the chunk planner they name says, when there is one.
 
     Args:
         reader: The reader of the knowledge base's notes.
@@ -291,7 +357,9 @@ def index_handler_provider(  # noqa: PLR0913, PLR0917 (wireup resolves each hand
         knowledge_base: The knowledge base the handler indexes.
         knowledge_base_origin: Where the knowledge base path came from.
         reader_scopes: Gives a private knowledge base its own reader role after each real run.
-        ingestion: The ingestion settings that name the chunk sizes.
+        ingestion: The ingestion settings that name the chunk sizes and the chunk planner.
+        azure_openai: The Azure OpenAI resource the chunk planner runs on.
+        engine: The admin engine the stored cut plans are read and written over.
 
     Returns:
         The index handler.
@@ -307,6 +375,7 @@ def index_handler_provider(  # noqa: PLR0913, PLR0917 (wireup resolves each hand
         path_root_source=knowledge_base_origin.source,
         reader_scopes=reader_scopes,
         chunk_sizes=ingestion_chunk_sizes(ingestion),
+        cut_plan_stage=ingestion_cut_plan_stage(engine, azure_openai, ingestion),
     )
 
 
