@@ -842,7 +842,7 @@ class Summarizer(Protocol):
 
 @runtime_checkable
 class ChunkPlanner(Protocol):
-    """The model that chooses where a mirror's text with no heading changes topic, answering paragraph numbers only."""
+    """The model that chooses where a heading section of a mirror changes topic, answering paragraph numbers only."""
 
     @property
     def identity(self) -> str:
@@ -872,7 +872,7 @@ class CutPlans(Protocol):
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The identity of the chunk planner that chose them.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             plans: The paragraph numbers where a new chunk starts, by the content hash of the text each cuts.
         """
         ...
@@ -886,7 +886,7 @@ class CutPlanQueries(Protocol):
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The identity of the chunk planner that chose them.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             text_hashes: The content hashes of the texts asked for.
 
         Returns:

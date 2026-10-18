@@ -64,7 +64,7 @@ class SqlAlchemyCutPlans:
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The identity of the chunk planner that chose them.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             text_hashes: The text hashes asked for.
 
         Returns:
@@ -80,7 +80,7 @@ class SqlAlchemyCutPlans:
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The identity of the chunk planner that chose them.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             plans: The paragraph numbers where a new chunk starts, by the content hash of the text each cuts.
         """
         rows = [CutPlanRow(collection=collection, text_hash=text_hash, planner=planner, starts=list(starts)) for text_hash, starts in plans.items()]
@@ -95,7 +95,7 @@ class SqlAlchemyCutPlans:
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The identity of the chunk planner that chose them.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             text_hashes: The content hashes of the texts asked for.
 
         Returns:

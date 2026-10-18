@@ -30,7 +30,7 @@ class FakeChunkPlanner:
 
         Args:
             starts: The paragraph numbers every call answers.
-            identity: The model name and prompt version the planner reports.
+            identity: The model name, prompt version and thinking level the planner reports.
             error: The error every call raises, or `None` to answer.
             never_answers: Whether every call waits for ever instead of answering.
             pause_seconds: How long each call waits before it answers.
@@ -82,7 +82,7 @@ class FakeCutPlans:
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The chunk planner's identity.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             plans: The paragraph numbers by text hash.
         """
         self.inserts.append((collection, planner, dict(plans)))
@@ -94,7 +94,7 @@ class FakeCutPlans:
 
         Args:
             collection: The knowledge base the plans belong to.
-            planner: The chunk planner's identity.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
             text_hashes: The text hashes asked for.
 
         Returns:

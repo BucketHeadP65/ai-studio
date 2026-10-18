@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 20,835 tokens.
+Sections: 10 · whole document ≈ 20,837 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -55,7 +55,7 @@ Sections: 10 · whole document ≈ 20,835 tokens.
 - **Load when:** ingestion, connectors, zotero, conversion, mirror, sync, source queue, watch list, sources, pdf, arxiv, mirrors, paper import, entry point, registry, scanners, refresh
 
 ### 04 — Knowledge (bounded context)
-[sections/04-knowledge-bounded-context.md](sections/04-knowledge-bounded-context.md) · ~2,270 tokens
+[sections/04-knowledge-bounded-context.md](sections/04-knowledge-bounded-context.md) · ~2,272 tokens
 - **TL;DR:** The wikinote kernel is the note grammar (a parser ⟷ renderer pair over one set of domain models, shared by the indexer and authoring), and indexing is the five-stage rebuild (parse to resolve to validate to load to embed) with a true-incremental path that indexes again only a provably minimal dirty set.
 - **Load when:** knowledge, knowledge base, wikinote, note grammar, index, indexing, parse, resolve, validate, validation, embed, incremental, claims, pipeline
 

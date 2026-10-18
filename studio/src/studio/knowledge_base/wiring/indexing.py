@@ -2,8 +2,9 @@
 
 The engine registers the pgvector codec before it is handed out, so every pooled connection reads and writes `halfvec` columns. The unit
 of work factory opens a fresh unit of work on each call, one per transaction. The validation report sink rewrites only the validation block
-of the knowledge base's `_meta/dashboard.md`. The index handler cuts text with no heading where the chunk planner the ingestion settings
-name says, over the Azure OpenAI resource the summaries use, and with no deployment or no endpoint it fills that text.
+of the knowledge base's `_meta/dashboard.md`. The index handler cuts a heading section over the maximum where the chunk planner
+the ingestion settings name says, over the Azure OpenAI resource the summaries use, and with no deployment or no endpoint it fills that
+heading section.
 """
 
 from __future__ import annotations
@@ -353,7 +354,7 @@ def index_handler_provider(  # noqa: PLR0913, PLR0917 (wireup resolves each hand
     The summary stage runs only when an index asks for summaries. The dangling code path check, on both the full and the
     incremental index, resolves the schema's `path_fields` against the folder the schema declares, and its message names
     where the knowledge base path came from. Every source mirror is cut into chunks of the sizes the ingestion settings name,
-    and text with no heading is cut where the chunk planner they name says, when there is one.
+    and a heading section over the maximum is cut where the chunk planner they name says, when there is one.
 
     Args:
         reader: The reader of the knowledge base's notes.

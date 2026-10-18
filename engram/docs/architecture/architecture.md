@@ -901,7 +901,7 @@ C4Component
         Component(vocab, "_vocab_rows", "service/vocab.py", "VocabularyIndex to kb.vocab rows")
         Component(uow, "SqlAlchemyWikiUnitOfWork", "infrastructure/uow.py + infrastructure/repository.py", "One rebuild txn, per-aggregate repos, hash-gated upsert + collection-scoped prune")
         Component(embedder, "PydanticAiEmbedder", "infrastructure/embedder.py", "BatchEmbedder, batched embed_documents, embedding IS NULL queue")
-        Component(cutplans, "CutPlanStage", "service/cut_plan_stage.py", "Cut plans for text with no heading: stored in kb.cut_plans, else asked of the ChunkPlanner port, else filled")
+        Component(cutplans, "CutPlanStage", "service/cut_plan_stage.py", "Cut plans for a heading section over the maximum: stored in kb.cut_plans, else asked of the ChunkPlanner port, else filled")
 
         Component(manifest, "compute_diff / identity_hash", "domain/manifest.py", "Re-hash files vs stored manifest to ManifestDiff")
         Component(closure, "compute_closure", "domain/manifest.py", "Diff to DirtySet (reparse ∪ inbound-closure ∪ mirror-citers) + targeted deletes")
