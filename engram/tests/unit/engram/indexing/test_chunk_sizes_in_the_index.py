@@ -136,6 +136,23 @@ async def test_an_index_written_before_mirrors_were_cut_to_chunk_sizes_runs_full
     assert report.mode == "full"
 
 
+async def test_an_index_written_before_code_fences_kept_hash_lines_out_of_headings_runs_full(tmp_path: Path) -> None:
+    KnowledgeBaseBuilder(tmp_path).build_minimal()
+    KnowledgeBaseBuilder(tmp_path).add_source_mirror("tide-log", _mirror_text("tide-log"))
+    uow = FakeKnowledgeBaseUnitOfWork()
+    handler = _handler(tmp_path, uow)
+    await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+    _seed_stored_state(uow)
+    handler.set_clean_page_view(list)
+    stored = uow.fingerprint.stored
+    assert isinstance(stored, StoredFingerprint)
+    uow.fingerprint.stored = replace(stored, indexer_version=f"6+{_SIZES.target_tokens}-{_SIZES.max_tokens}")
+
+    report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+
+    assert report.mode == "full"
+
+
 async def test_a_chunk_size_change_makes_the_next_plain_index_a_full_one(tmp_path: Path) -> None:
     KnowledgeBaseBuilder(tmp_path).build_minimal()
     text = _mirror_text("tide-log")

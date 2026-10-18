@@ -17,7 +17,7 @@ over it live in [`../studio/`](../studio/README.md). engram depends on [`../core
 | Subpackage | What it does |
 | --- | --- |
 | `kb` | The schema and the note grammar: parsing, rendering and validating a page against its page type. |
-| `indexing` | Parses, resolves links, validates, loads and embeds a knowledge base. An index run only reads the files changed since the last one unless asked for a full run. Source mirrors are cut at their headings into chunks sized by `ingestion.chunk_target_tokens` and `ingestion.chunk_max_tokens`. |
+| `indexing` | Parses, resolves links, validates, loads and embeds a knowledge base. An index run only reads the files changed since the last one unless asked for a full run. Source mirrors are cut at their headings into chunks sized by `ingestion.chunk_target_tokens` and `ingestion.chunk_max_tokens`, and a heading section over the maximum is cut where the chunk planner says its topic changes, when `ingestion.chunk_planner_model` names one (it is off until then). |
 | `retrieval` | The read tools: hybrid search over BM25 and vectors with facets and a date range, fetch by id, graph walks, read-only SQL over the `api` schema and optional re-ranking of search hits. |
 | `authoring` | The write tools a host can mount: `write_note`, `check_note`, `read_page`, `decide_page`, `resolve_entities`, `request_source` and more. Every write is validated against the knowledge base's own grammar and indexed again. |
 | `sources` | The ports for connectors, document converters and watch-list scanners, the source queue (`_meta/source-queue.yaml`) and the watch list (`_meta/watch-list.yaml`). The implementations live in [`../connectors/`](../connectors/README.md). |

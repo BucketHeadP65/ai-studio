@@ -16,20 +16,21 @@ from __future__ import annotations
 
 import re
 
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from core.markdown import split_frontmatter
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from engram.indexing.domain.card import EMBED_TOKEN_BUDGET, token_count
+from engram.indexing.domain.card import EMBED_TOKEN_BUDGET, content_hash, token_count
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
 # A heading line in a mirror: one to four `#` then the heading text.
 _HEADING_RE = re.compile(r"^(?P<hashes>#{1,4})\s+(?P<text>.+?)\s*$")
 
-# A numbered-heading prefix: a dotted run of integers *or* a lettered appendix label
+# A numbered-heading prefix: a dotted sequence of integers *or* a lettered appendix label
 # (`4`, `3.1`, `7.3.1`, `A`, `A.1`), optionally dot-terminated, then whitespace. The remainder is
 # the human heading title. The captured number becomes the `s`-prefixed ltree path.
 _NUMBER_PREFIX_RE = re.compile(r"^(?P<number>(?:\d+|[A-Z])(?:\.\d+)*)\.?\s+(?P<title>.*)$")
@@ -70,6 +71,9 @@ class ChunkSizes(BaseModel):
 DEFAULT_CHUNK_SIZES = ChunkSizes(target_tokens=400, max_tokens=800)
 """The chunk sizes the indexer uses when its host names none: a 400-token target and an 800-token maximum."""
 
+DEFAULT_PLANNER_CEILING_TOKENS = 12_000
+"""The most tokens of text the chunk planner is shown at once when its host names no other ceiling. Longer text is filled."""
+
 
 class MirrorChunk(BaseModel):
     """A draft raw-chunk from a mirror body, the pre-Load shape of `kb.raw_chunks`.
@@ -89,7 +93,7 @@ class MirrorChunk(BaseModel):
 
 
 type _Span = tuple[int, int]
-"""The start and end offsets of a run of text."""
+"""The start and end offsets of a span of text."""
 
 
 def _section_path(heading_text: str) -> str | None:
@@ -114,6 +118,25 @@ def _trimmed(text: str, start: int, end: int) -> _Span:
     return start, end
 
 
+PARAGRAPH_NUMBERING_VERSION = 1
+"""The version of how `_paragraph_spans` splits and numbers paragraphs.
+
+You must raise it whenever `_paragraph_spans` splits text differently, so every stored cut plan is chosen again.
+"""
+
+
+def cut_plan_identity(planner_identity: str) -> str:
+    """The identity a cut plan is stored under and the index fingerprint names: the chunk planner's identity and the paragraph numbering version.
+
+    Args:
+        planner_identity: The chunk planner's identity, its model name, prompt version and thinking level.
+
+    Returns:
+        The cut plan identity, such as `gpt-6-luna/prompt-1/thinking-low/paragraphs-1`.
+    """
+    return f"{planner_identity}/paragraphs-{PARAGRAPH_NUMBERING_VERSION}"
+
+
 def _paragraph_spans(text: str) -> list[_Span]:
     """The paragraphs of `text` in reading order, split at blank lines outside code fences."""
     spans: list[_Span] = []
@@ -122,7 +145,7 @@ def _paragraph_spans(text: str) -> list[_Span]:
     in_fence = False
     offset = 0
     for line in text.splitlines(keepends=True):
-        if line.lstrip().startswith("```"):
+        if _is_fence(line):
             in_fence = not in_fence
         if line.strip():
             if start is None:
@@ -149,7 +172,7 @@ def _sentence_spans(text: str, span: _Span) -> list[_Span]:
 
 
 def _line_spans(text: str, span: _Span) -> list[_Span]:
-    """The lines of one run of `text`, without blank ones."""
+    """The lines of one span of `text`, without blank ones."""
     start, end = span
     spans: list[_Span] = []
     line_end = text.find("\n", start, end)
@@ -188,7 +211,7 @@ def _cut_word(text: str, start: int, end: int, max_tokens: int) -> list[_Span]:
 
 
 def _cut_at_maximum(text: str, span: _Span, max_tokens: int) -> list[_Span]:
-    """Cut a run of `text` into pieces within `max_tokens` at its last word break, or inside a word over it."""
+    """Cut a span of `text` into pieces within `max_tokens` at its last word break, or inside a word over it."""
     pieces: list[_Span] = []
     words = [(match.start(), match.end()) for match in _WORD_RE.finditer(text, *span)]
     first = 0
@@ -207,7 +230,7 @@ def _cut_at_maximum(text: str, span: _Span, max_tokens: int) -> list[_Span]:
 
 
 def _units(text: str, max_tokens: int) -> list[_Span]:
-    """The runs of `text` filling joins, each within `max_tokens`: paragraphs, else sentences, else lines, else pieces of a line."""
+    """The spans of `text` filling joins, each within `max_tokens`: paragraphs, else sentences, else lines, else pieces of a line."""
     units: list[_Span] = []
     for paragraph in _paragraph_spans(text):
         if _fits(text[slice(*paragraph)], max_tokens):
@@ -226,7 +249,7 @@ def _units(text: str, max_tokens: int) -> list[_Span]:
 
 
 def _fill(text: str, sizes: ChunkSizes) -> list[str]:
-    """Fill `text` into chunks in reading order, each closed before the next run would pass the target."""
+    """Fill `text` into chunks in reading order, each closed before the next span would pass the target."""
     spans: list[_Span] = []
     for start, end in _units(text, sizes.max_tokens):
         if spans and _fits(text[spans[-1][0] : end], sizes.target_tokens):
@@ -236,17 +259,93 @@ def _fill(text: str, sizes: ChunkSizes) -> list[str]:
     return [text[start:end] for start, end in spans]
 
 
-def _cut_unheaded(text: str, sizes: ChunkSizes) -> list[str]:
-    """The chunks of a run of mirror text with no heading that does not fit one chunk: it is filled."""
-    return _fill(text, sizes)
+def planner_paragraphs(section: str) -> list[str]:
+    """The paragraphs of a heading section's text as the chunk planner is shown them, numbered from 1 by their place.
+
+    Paragraphs are split at blank lines outside code fences, each the section's own text with edge whitespace removed.
+
+    Args:
+        section: The text of one heading section, its heading left out.
+
+    Returns:
+        The paragraphs in reading order.
+    """
+    return [section[start:end] for start, end in _paragraph_spans(section)]
+
+
+def accepted_starts(answer: Sequence[int], paragraph_count: int) -> tuple[int, ...] | None:
+    """The paragraph numbers where a new chunk starts, from a chunk planner's answer, or `None` when it is refused.
+
+    An answer is accepted only when it is strictly increasing and every number names a paragraph, from 1 to
+    `paragraph_count`. Paragraph 1 always starts the first chunk, so it is dropped. An empty answer is accepted.
+
+    Args:
+        answer: The paragraph numbers the chunk planner answered.
+        paragraph_count: How many paragraphs the chunk planner was shown.
+
+    Returns:
+        The accepted numbers without 1, or `None` for a refused answer.
+    """
+    if any(number < 1 or number > paragraph_count for number in answer):
+        return None
+    if any(earlier >= later for earlier, later in pairwise(answer)):
+        return None
+    return tuple(number for number in answer if number != 1)
+
+
+def heading_sections_for_planner(text: str, sizes: ChunkSizes, *, ceiling_tokens: int) -> list[str]:
+    """The text of each heading section of a mirror the chunk planner is asked to cut, its heading left out.
+
+    Such a heading section is over `sizes.max_tokens`, within `ceiling_tokens` and of at least two paragraphs. Each
+    text is exactly the text `chunk_mirror` looks up in its cut plans by content hash.
+
+    Args:
+        text: The raw mirror file text, frontmatter included.
+        sizes: How many tokens a chunk aims for and may hold.
+        ceiling_tokens: The most tokens of text the chunk planner is shown at once.
+
+    Returns:
+        The heading sections' texts in document order.
+    """
+    _, body = split_frontmatter(text)
+    return [
+        content
+        for _, content in _heading_sections(body)
+        if not _fits(content, sizes.max_tokens) and _fits(content, ceiling_tokens) and len(_paragraph_spans(content)) > 1
+    ]
+
+
+def _cut_at_starts(text: str, starts: tuple[int, ...], sizes: ChunkSizes) -> list[str]:
+    """Cut `text` before each paragraph `starts` numbers, filling any chunk over the maximum."""
+    spans = _paragraph_spans(text)
+    bounds = [0, *(number - 1 for number in starts), len(spans)]
+    chunks: list[str] = []
+    for first, end in pairwise(bounds):
+        chunk = text[spans[first][0] : spans[end - 1][1]]
+        chunks.extend([chunk] if _fits(chunk, sizes.max_tokens) else _fill(chunk, sizes))
+    return chunks
+
+
+def _cut_unheaded(text: str, sizes: ChunkSizes, answer: Sequence[int] | None) -> list[str]:
+    """The chunks of a heading section's text that does not fit one chunk: cut by its cut plan, else filled."""
+    starts = accepted_starts(answer, len(_paragraph_spans(text))) if answer is not None else None
+    return _fill(text, sizes) if starts is None else _cut_at_starts(text, starts, sizes)
+
+
+def _is_fence(line: str) -> bool:
+    """Whether `line` opens or closes a code fence."""
+    return line.lstrip().startswith("```")
 
 
 def _heading_sections(body: str) -> Iterator[tuple[str | None, str]]:
-    """Each heading section of `body` as its heading and its text, the text before the first heading only when it holds text."""
+    """Each heading section of `body` as its heading and text, the text before the first heading only when it holds any, fenced lines never headings."""
     heading: str | None = None
     lines: list[str] = []
+    in_fence = False
     for line in body.splitlines():
-        match = _HEADING_RE.match(line)
+        if _is_fence(line):
+            in_fence = not in_fence
+        match = None if in_fence else _HEADING_RE.match(line)
         if match is None:
             lines.append(line)
             continue
@@ -260,29 +359,35 @@ def _heading_sections(body: str) -> Iterator[tuple[str | None, str]]:
         yield heading, content
 
 
-def chunk_mirror(text: str, sizes: ChunkSizes) -> Iterator[MirrorChunk]:
+def chunk_mirror(text: str, sizes: ChunkSizes, cut_plans: Mapping[str, Sequence[int]] | None = None) -> Iterator[MirrorChunk]:
     """Cut a raw mirror's body into `MirrorChunk` drafts sized for retrieval.
 
     Frontmatter is stripped first. The body is cut at its headings: every heading opens a heading section, even
-    one with an empty body, and the text before the first heading is one only when it holds text. A section within
-    `sizes.max_tokens` is one chunk, so a body with no heading that fits stays whole. A longer section is filled
-    paragraph by paragraph, each chunk closed before the next paragraph would pass `sizes.target_tokens`. A
+    one with an empty body, and the text before the first heading is one only when it holds text. A `#` line inside
+    a code fence is text, never a heading. A section within
+    `sizes.max_tokens` is one chunk, so a body with no heading that fits stays whole. A longer section with a cut
+    plan is cut before each paragraph the plan numbers, from 1, and a chunk of it over the maximum is filled. A plan
+    that is not strictly increasing paragraph numbers is refused. A longer section with no plan, or a refused one, is
+    filled paragraph by paragraph, each chunk closed before the next paragraph would pass `sizes.target_tokens`. A
     paragraph over the maximum is cut at its sentence ends, a sentence over it at its line breaks, a line over it at
-    its last word break within it, and a word over it inside the word. No chunk passes the maximum. Each chunk keeps its section's heading and
-    section path, and each body is a run of the section's own text, edge whitespace removed.
+    its last word break within it, and a word over it inside the word. No chunk passes the maximum. Each chunk keeps
+    its section's heading and section path, and each body is a piece of the section's own text, edge whitespace removed.
 
     Args:
         text: The raw mirror file text, frontmatter included.
         sizes: How many tokens a chunk aims for and may hold.
+        cut_plans: The cut plans by the content hash of the section text each cuts, as `heading_sections_for_planner` yields that
+            text. `None` fills every longer section.
 
     Returns:
         The chunks in document order, with dense `ord` values from `0`.
     """
     _, body = split_frontmatter(text)
+    plans = cut_plans or {}
     chunks: list[MirrorChunk] = []
     for heading, content in _heading_sections(body):
         section_path = _section_path(heading) if heading else None
-        parts = [content] if _fits(content, sizes.max_tokens) else _cut_unheaded(content, sizes)
+        parts = [content] if _fits(content, sizes.max_tokens) else _cut_unheaded(content, sizes, plans.get(content_hash(content)))
         for part in parts:
             chunks.append(MirrorChunk(ord=len(chunks), section_path=section_path, heading=heading, body=part))
     return iter(chunks)

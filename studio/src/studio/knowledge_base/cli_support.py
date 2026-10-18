@@ -467,13 +467,16 @@ async def _deliver_once(bus: MessageBus) -> None:
 
 
 def _print_index_report(report: IndexReport, *, unreviewed: int = 0) -> None:
-    """Echo the human-readable index summary (counts, embeddings, validation, duration, unreviewed feedback)."""
+    """Echo the human-readable index summary (counts, embeddings, cut plans, validation, duration, unreviewed feedback)."""
     typer.echo(
         f"Indexed in {report.duration_seconds:.1f}s: "
         f"{report.pages} pages, {report.sections} sections, {report.claims} claims, {report.edges} edges"
     )
     tokens = f" ({report.embedding_tokens:,} tokens)" if report.embedding_tokens else ""
     typer.echo(f"Pruned: {report.pruned} | Embedded: {report.embedded}{tokens}, reused: {report.reused}")
+    cut_plans = report.cut_plans
+    if cut_plans.reused or cut_plans.chosen or cut_plans.filled:
+        typer.echo(f"Cut plans: {cut_plans.reused} reused, {cut_plans.chosen} chosen, {cut_plans.filled} filled")
     # The run's own validation is printed last, because a subprocess reindex reads only the lines after it.
     standing = report.standing_validation
     if standing is not None:

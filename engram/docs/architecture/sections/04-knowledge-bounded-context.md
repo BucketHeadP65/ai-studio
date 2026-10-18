@@ -214,6 +214,7 @@ C4Component
         Component(vocab, "_vocab_rows", "service/vocab.py", "VocabularyIndex to kb.vocab rows")
         Component(uow, "SqlAlchemyWikiUnitOfWork", "infrastructure/uow.py + infrastructure/repository.py", "One rebuild txn, per-aggregate repos, hash-gated upsert + collection-scoped prune")
         Component(embedder, "PydanticAiEmbedder", "infrastructure/embedder.py", "BatchEmbedder, batched embed_documents, embedding IS NULL queue")
+        Component(cutplans, "CutPlanStage", "service/cut_plan_stage.py", "Cut plans for a heading section over the maximum: stored in kb.cut_plans, else asked of the ChunkPlanner port, else filled")
 
         Component(manifest, "compute_diff / identity_hash", "domain/manifest.py", "Re-hash files vs stored manifest to ManifestDiff")
         Component(closure, "compute_closure", "domain/manifest.py", "Diff to DirtySet (reparse ∪ inbound-closure ∪ mirror-citers) + targeted deletes")
@@ -232,6 +233,8 @@ C4Component
     Rel(uow, pg, "INSERT … ON CONFLICT / DELETE … collection-scoped")
     Rel(handler, embedder, "Embed stage (hash-gated)")
     Rel(embedder, aoai, "embed_documents")
+    Rel(handler, cutplans, "before Load, on both paths")
+    Rel(cutplans, aoai, "PydanticAiChunkPlanner: paragraph numbers only")
 
     Rel(handler, manifest, "incremental? re-hash + diff")
     Rel(manifest, closure, "ManifestDiff")
@@ -240,7 +243,7 @@ C4Component
     Rel(handler, incremental, "_can_incremental to run_incremental, else _full_path")
 ```
 
-Source: `src/engram/indexing/service/index.py`, `src/engram/indexing/infrastructure/knowledge_base_reader.py`, `src/engram/indexing/domain/resolver.py`, `src/engram/indexing/domain/validator.py`, `src/engram/indexing/domain/card.py`, `src/engram/indexing/service/vocab.py`, `src/engram/indexing/infrastructure/uow.py`, `src/engram/indexing/infrastructure/repository.py`, `src/engram/indexing/infrastructure/embedder.py`, `src/engram/indexing/domain/manifest.py`, `src/engram/indexing/service/incremental.py`
+Source: `src/engram/indexing/service/index.py`, `src/engram/indexing/service/cut_plan_stage.py`, `src/engram/indexing/infrastructure/knowledge_base_reader.py`, `src/engram/indexing/domain/resolver.py`, `src/engram/indexing/domain/validator.py`, `src/engram/indexing/domain/card.py`, `src/engram/indexing/service/vocab.py`, `src/engram/indexing/infrastructure/uow.py`, `src/engram/indexing/infrastructure/repository.py`, `src/engram/indexing/infrastructure/embedder.py`, `src/engram/indexing/domain/manifest.py`, `src/engram/indexing/service/incremental.py`
 
 The domain layer (`domain.py`) is one command, one report, ports, and the
 loadable-row models whose field names mirror the `kb.*` ORM columns 1:1 so the Load

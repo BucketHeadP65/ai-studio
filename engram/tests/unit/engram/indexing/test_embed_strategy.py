@@ -13,11 +13,12 @@ for a knowledge base that declares nothing.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
 
-from engram.indexing.contracts import ChunkSizes, MirrorDoc, resolve
+from engram.indexing.contracts import ChunkSizes, MirrorDoc, content_hash, resolve
 from engram.indexing.domain import card
 from engram.indexing.domain.embed_strategy import (
     ClaimStrategy,
@@ -251,6 +252,19 @@ class TestSourceChunkStrategy:
 
         assert len(units) > 1
         assert [unit.id for unit in units] == [f"K:{chunk.ord}" for chunk in chunk_mirror(mirror.text, sizes)]
+
+    def test_yields_one_unit_per_chunk_the_mirrors_cut_plans_cut(self):
+        sizes = ChunkSizes(target_tokens=40, max_tokens=80)
+        paragraphs = [f"Paragraph {index} records the tide at the harbour wall today." for index in range(20)]
+        body = "\n\n".join(paragraphs)
+        mirror = replace(_mirror(body=body), cut_plans={content_hash(body): (6, 11, 16)})
+
+        units = tuple(SourceChunkStrategy(sizes).units(mirror))
+
+        assert [unit.text for unit in units] == [
+            card.raw_chunk_embed_input("LightRAG", section_path=None, heading=None, body="\n\n".join(paragraphs[first:end]))
+            for first, end in ((0, 5), (5, 10), (10, 15), (15, 20))
+        ]
 
 
 class TestNoteEmbedStrategies:

@@ -186,12 +186,13 @@ def resolve_active_knowledge_base_path(settings: Mapping[str, Any], *, name: str
 
 
 class IngestionSettings(BaseModel):
-    """Index-stage chunking, embedding and disclosure-summary policy, including which deployments embed and summarise.
+    """Index-stage chunking, embedding and disclosure-summary policy, including which deployments embed, summarise and plan chunks.
 
-    Both deployments run on the Azure OpenAI resource the infrastructure section names. Indexing and query-time
+    Every deployment runs on the Azure OpenAI resource the infrastructure section names. Indexing and query-time
     embedding read the same `embedding_deployment` and `embedding_dimensions`, so the two must change together.
     An empty `embedding_deployment` builds, and the embedding path refuses it at use time. The chunk target must not
-    exceed the chunk maximum. The index fingerprint records the chunk sizes, so a change makes the next index a full one.
+    exceed the chunk maximum. An empty `chunk_planner_model`, or no Azure OpenAI endpoint, indexes with no chunk planner.
+    The index fingerprint records the chunk sizes, the chunk planner and its ceiling, so a change makes the next index a full one.
     """
 
     embedding_deployment: str = ""
@@ -209,6 +210,14 @@ class IngestionSettings(BaseModel):
     """The tokens the index aims for in one chunk of a source mirror."""
     chunk_max_tokens: int = Field(default=800, gt=0, le=7_500)
     """The most tokens one chunk of a source mirror holds, at most 7,500. A heading section within it stays one chunk."""
+    chunk_planner_model: str = ""
+    """The Azure OpenAI deployment the chunk planner runs on, at a low thinking level. Empty, the default, indexes with no chunk planner."""
+    chunk_planner_ceiling_tokens: int = Field(default=12_000, gt=0)
+    """The most tokens of text the chunk planner is shown at once. Longer text is filled."""
+    chunk_planner_deadline_seconds: float = Field(default=60.0, gt=0)
+    """How long one chunk planner call may take before its text is filled."""
+    chunk_planner_concurrency: int = Field(default=4, ge=1)
+    """How many chunk planner calls may run at once in one index."""
 
     @model_validator(mode="after")
     def _chunk_target_within_maximum(self) -> IngestionSettings:

@@ -179,6 +179,7 @@ class TestOrmMatchesMigration:
             orm.VocabORM,
             orm.EmbedMetaORM,
             orm.QueryLogORM,
+            orm.CutPlanORM,
         ],
     )
     async def test_columns_match_migration_ddl(self, migrated: str, model: type) -> None:

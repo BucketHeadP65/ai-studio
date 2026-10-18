@@ -7,18 +7,18 @@ tests do.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import json
+
+from pathlib import Path
 
 import pytest
 
 from pydantic import ValidationError
 
 from engram.config import IngestionSettings, KnowledgeBaseEntry, resolve_active_knowledge_base_path
-from engram.indexing.contracts import DEFAULT_CHUNK_SIZES
+from engram.indexing.contracts import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.mirror_chunks import MIRROR_CHUNK_TOKEN_BUDGET
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from engram.indexing.service.cut_plan_stage import DEFAULT_PLANNER_CONCURRENCY, DEFAULT_PLANNER_DEADLINE_SECONDS
 
 
 def _make_knowledge_base(root: Path) -> Path:
@@ -128,3 +128,28 @@ class TestIngestionChunkSizes:
         assert IngestionSettings(chunk_max_tokens=MIRROR_CHUNK_TOKEN_BUDGET).chunk_max_tokens == MIRROR_CHUNK_TOKEN_BUDGET
         with pytest.raises(ValidationError, match="chunk_max_tokens"):
             IngestionSettings(chunk_max_tokens=MIRROR_CHUNK_TOKEN_BUDGET + 1)
+
+
+class TestIngestionChunkPlanner:
+    def test_the_chunk_planner_is_off_until_the_settings_name_a_deployment(self) -> None:
+        assert IngestionSettings().chunk_planner_model == ""
+
+    def test_the_example_settings_leave_the_chunk_planner_off(self) -> None:
+        example = json.loads((Path(__file__).parents[3] / "config" / "application_settings.example.json").read_text(encoding="utf-8"))
+
+        assert example["ingestion"]["chunk_planner_model"] == ""
+
+    def test_the_chunk_planner_limits_default_to_the_indexers_own(self) -> None:
+        settings = IngestionSettings()
+
+        assert settings.chunk_planner_ceiling_tokens == DEFAULT_PLANNER_CEILING_TOKENS
+        assert settings.chunk_planner_deadline_seconds == DEFAULT_PLANNER_DEADLINE_SECONDS
+        assert settings.chunk_planner_concurrency == DEFAULT_PLANNER_CONCURRENCY
+
+    def test_a_named_chunk_planner_deployment_is_kept(self) -> None:
+        assert IngestionSettings(chunk_planner_model="example-deployment").chunk_planner_model == "example-deployment"
+
+    @pytest.mark.parametrize("field", ["chunk_planner_ceiling_tokens", "chunk_planner_deadline_seconds", "chunk_planner_concurrency"])
+    def test_a_chunk_planner_limit_that_is_not_positive_is_refused(self, field: str) -> None:
+        with pytest.raises(ValidationError, match=field):
+            IngestionSettings.model_validate({field: 0})

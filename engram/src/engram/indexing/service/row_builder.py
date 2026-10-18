@@ -424,7 +424,8 @@ class RowBuilder:
         """Add a `kb.sources_raw` row, and its raw chunk rows when `source-chunk` is active.
 
         Every key of the mirror's own `meta` lands in the row's `meta`, except a key the row
-        already derives from the mirror's other fields, whose derived value is kept.
+        already derives from the mirror's other fields, whose derived value is kept. The chunks follow
+        the mirror's cut plans.
 
         Args:
             source: The source mirror to add.
@@ -466,7 +467,7 @@ class RowBuilder:
         if "source-chunk" not in self._active:
             return
         chunk_units = self._source_strategies.select("source-chunk").units(source)
-        for chunk, unit in zip(chunk_mirror(source.text, self._chunk_sizes), chunk_units, strict=True):
+        for chunk, unit in zip(chunk_mirror(source.text, self._chunk_sizes, source.cut_plans), chunk_units, strict=True):
             self.chunks.append(
                 {
                     "id": unit.id,

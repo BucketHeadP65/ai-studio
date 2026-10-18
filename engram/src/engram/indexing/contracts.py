@@ -4,9 +4,16 @@ from __future__ import annotations
 
 from engram.indexing.domain.card import content_hash, token_count
 from engram.indexing.domain.manifest import ManifestEntry
-from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, ChunkSizes
+from engram.indexing.domain.mirror_chunks import (
+    DEFAULT_CHUNK_SIZES,
+    DEFAULT_PLANNER_CEILING_TOKENS,
+    PARAGRAPH_NUMBERING_VERSION,
+    ChunkSizes,
+    cut_plan_identity,
+)
 from engram.indexing.domain.models import (
     CitingPagesChanged,
+    CutPlanCounts,
     DryRunPreview,
     IndexKnowledgeBase,
     IndexReport,
@@ -42,8 +49,18 @@ from engram.indexing.infrastructure.orm import (
 from engram.indexing.infrastructure.summary_governance import SummaryGovernance
 from engram.indexing.infrastructure.uow import SqlAlchemyKnowledgeBaseUnitOfWork
 from engram.indexing.infrastructure.vocab_governance import VocabGovernance
-from engram.indexing.internal_contracts import IndexUnitOfWork, KnowledgeBaseReader, ReaderScopes, Summarizer, ValidationReportSink
+from engram.indexing.internal_contracts import (
+    ChunkPlanner,
+    CutPlanQueries,
+    CutPlans,
+    IndexUnitOfWork,
+    KnowledgeBaseReader,
+    ReaderScopes,
+    Summarizer,
+    ValidationReportSink,
+)
 from engram.indexing.read_models import PageKeyRowResult, PendingEmbedChunk, PendingEmbedRow, PendingSummary, StoredFingerprint
+from engram.indexing.service.cut_plan_stage import CutPlanStage
 from engram.indexing.service.index import INDEXER_VERSION, IndexKnowledgeBaseHandler, indexer_version
 from engram.indexing.service.ingest import IngestPageHandler
 from engram.indexing.service.summary_stage import SummaryStage
@@ -51,12 +68,19 @@ from engram.indexing.service.vocab import load_vocab
 
 __all__ = [
     "DEFAULT_CHUNK_SIZES",
+    "DEFAULT_PLANNER_CEILING_TOKENS",
     "INDEXER_VERSION",
+    "PARAGRAPH_NUMBERING_VERSION",
+    "ChunkPlanner",
     "ChunkSizes",
     "CitingPagesChanged",
     "ClaimORM",
     "CollectionIsForeignError",
     "CollectionIsIndexedError",
+    "CutPlanCounts",
+    "CutPlanQueries",
+    "CutPlanStage",
+    "CutPlans",
     "DryRunPreview",
     "EdgeORM",
     "FilesystemKnowledgeBaseReader",
@@ -103,6 +127,7 @@ __all__ = [
     "ValidationReportSink",
     "VocabGovernance",
     "content_hash",
+    "cut_plan_identity",
     "indexer_version",
     "load_vocab",
     "register_pgvector",
