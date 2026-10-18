@@ -11,12 +11,19 @@ from engram.evals.generation.domain.coverage import DIFFICULTY_ORDER, Stratum, S
 from engram.evals.generation.domain.seed_shapes import MIN_SURVEY_FANOUT, MIN_SYNTHESIS_FANOUT, TRACE_HOPS
 from engram.evals.generation.infrastructure.seeds import band_case, passage_sections
 from engram.evals.shared.contracts import Archetype, QaDifficulty, derive_difficulty
-from engram.indexing.contracts import ClaimORM, EdgeORM, IndexFingerprintORM, PageORM, SectionORM
+from engram.indexing.contracts import ClaimORM, EdgeORM, IndexFingerprintORM, PageORM, RetrievalSwitches, SectionORM
 
 if TYPE_CHECKING:
     from engram.evals.generation.infrastructure.seeds import SupportsExecute
     from engram.evals.shared.contracts import DifficultyThresholds
     from engram.kb.contracts import KnowledgeBaseSchema
+
+
+_NOT_INDEXED = "not indexed"
+"""The index build of a knowledge base that holds no stored indexer version."""
+
+_VOCABULARY_CHARS = 12
+"""How many leading characters of the vocabulary hash the index build carries."""
 
 
 def _as_difficulty(value: str) -> QaDifficulty:
@@ -84,6 +91,31 @@ class StratumInventoryQueries:
         statement = select(IndexFingerprintORM.spec_hash).where(IndexFingerprintORM.collection == collection)
         spec_hash = (await self._session.execute(statement)).scalar_one_or_none()
         return f"{spec_hash or ''}:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        """The index build in `kb.index_fingerprint`: the indexer version, the embedding model, the vocabulary and the switches on.
+
+        The indexer version carries the chunk sizes and the chunk planner. The vocabulary is the first twelve characters
+        of `vocabulary_hash`. The switches part names each of the embeddings, SQL and graph switches that is on, and is
+        left out when none is.
+
+        Args:
+            collection: The knowledge base whose index build is read.
+
+        Returns:
+            Such as `6+400-800 text-embedding-3-small vocabulary 0123456789ab switches embeddings+graph`, or `not indexed`
+            when the knowledge base has no stored indexer version.
+        """
+        statement = select(
+            IndexFingerprintORM.indexer_version, IndexFingerprintORM.embed_model, IndexFingerprintORM.vocabulary_hash, IndexFingerprintORM.switches
+        ).where(IndexFingerprintORM.collection == collection)
+        row = (await self._session.execute(statement)).one_or_none()
+        if row is None or not row.indexer_version:
+            return _NOT_INDEXED
+        switches = RetrievalSwitches.model_validate(row.switches)
+        on = [name for name, is_on in (("embeddings", switches.embeddings), ("graph", switches.graph), ("sql", switches.sql)) if is_on]
+        build = f"{row.indexer_version} {row.embed_model} vocabulary {row.vocabulary_hash[:_VOCABULARY_CHARS]}"
+        return f"{build} switches {'+'.join(on)}" if on else build
 
     async def page_ids(self, *, collection: str) -> frozenset[str]:
         """The ids of every page now in a knowledge base, which a top-up checks gold pages against.

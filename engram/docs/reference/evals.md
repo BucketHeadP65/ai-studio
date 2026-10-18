@@ -27,7 +27,8 @@ verbatim quote-checking. Authoring the knowledge base belongs to [indexing](inde
 
 | Surface | Entry | Defined in |
 |---|---|---|
-| CLI | `studio evals run [--model M] [--dataset YAML] [--instructions S] [--retrieval-strategy S] [--code-mode] [--thinking low\|medium\|high\|xhigh] [--disclosure] [--max-concurrency N] [--max-tool-calls N] [--results PATH [--resume]]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_run_cmd`) |
+| CLI | `studio evals run [--model M] [--dataset YAML] [--instructions S] [--retrieval-strategy S] [--code-mode] [--thinking low\|medium\|high\|xhigh] [--disclosure] [--max-concurrency N] [--max-tool-calls N] [--results PATH [--source-level] [--resume]]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_run_cmd`) |
+| CLI | `studio evals compare --pair BASE.jsonl,CANDIDATE.jsonl [--pair …] --out REPORT.md` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_compare_cmd`) |
 | CLI | `studio evals gen-dataset [--archetype A …] [--collection C] [--count N] [--page PAGE_ID] [--model M] [--out YAML] [--top-up current\|PATH] [--dry-run] [--salt S] [--push]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_gen_dataset_cmd`) |
 | CLI | `studio evals coverage [--collection C] [--dataset PATH\|current] [--out DIR]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_coverage_cmd`) |
 | CLI | `studio evals freshness [--collection C] [--dataset PATH\|current] [--out DIR]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_freshness_cmd`) |
@@ -65,7 +66,15 @@ the program's calls too, under the same header, so a code-mode variant is run ag
 rather than resumed from such a file.
 
 `studio evals run --results PATH` writes the results file: a header line that records how the run
-was set up, then one line per case. The header's `search_date_range` says whether `search` took
+was set up, then one line per case. The header's `index_build` records the index build the run read
+from `kb.index_fingerprint`: the stored indexer version, which carries the chunk sizes and the chunk
+planner, the embedding model, the first twelve characters of the vocabulary hash, and the embeddings,
+SQL and graph switches that are on, such as
+`6+400-800 text-embedding-3-small vocabulary 0123456789ab switches embeddings+graph`. The switches
+part is left out when no switch is on, as for a fixed-mode knowledge base, and a knowledge base never
+indexed reads `not indexed`. The knowledge base fingerprint hashes the knowledge base's schema, not its index, so
+two runs over the same files before and after the chunk sizes change share a fingerprint and differ
+only in their index build. A header written before the key was recorded reads it as unknown. The header's `search_date_range` says whether `search` took
 `since` and `until`. Every run writes true. A header written before the key was recorded reads it as
 the opposite of `pinned_search`, because a pinned search then took no date range, so `studio evals
 compare` refuses an older pinned run beside a pinned run now, and `--resume` refuses to continue an
@@ -85,10 +94,13 @@ connection failures through `engram.evals.harness.infrastructure.database_failur
 `--resume` continues that file after a run lost cases to transient failures. When the file exists
 and its header matches the run on every field the paired comparison holds (strategy, SQL switch,
 code mode, model, thinking level, instructions hash, tool-call budget, search pinning, search date
-range, dataset hash and knowledge base), the run keeps every case line that was not a transient failure, runs only the
+range, dataset hash and knowledge base) and on the index build, the run keeps every case line that was not a transient failure, runs only the
 missing cases and the transient failures, and rewrites the file under the earlier header in
 dataset order, every kept line exactly as it was. A header that differs is refused before any case
-runs, and the message names each differing field with both values. With no file there yet, every
+runs, and the message names each differing field with both values, such as
+`index_build (6+400-800 text-embedding-3-small vocabulary 0123456789ab in the file, 6+300-600 text-embedding-3-small vocabulary 0123456789ab now)`.
+A header with no index build is refused against any build the run reads, named as `unknown in the
+file`, so a file written before the key was recorded is run again from scratch. With no file there yet, every
 case runs. Without `--resume`, an existing file is replaced. The file is always replaced whole,
 never truncated in place. After a resumed run the CLI prints how many cases it kept and ran and a
 summary over every case in the file, and the `--source-level` line covers every case too. A resume
@@ -99,6 +111,73 @@ says. A later resume does not run them again for that alone. A line written befo
 failures were recorded reads whether it was one from its error text. A line that recorded its
 `transient` key before 2026-10-18 recorded a database connection failure as not transient and
 keeps that value, so a resume runs that case again only once its line is dropped from the file.
+
+`--source-level` (`EvaluationRunConfig.hit_sources`) scores each line against the dataset's gold
+source ids. A cited ref is read as the bare unit id it names first, so `page:<collection>/<id>`,
+`section:` and `unit:` refs map like their bare ids. The cited ids map to sources through
+`kb.pages.source_id` for a page, or an anchor on one, and to the id before the last `:` for anything
+else, so a raw chunk maps to the source it was cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
+those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
+gold sources that any tool result the model received during the case named, and `seen_gold`, those
+gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
+and did not cite it. A case with a seen recall of 0 never received it, which is a retrieval miss.
+
+The units seen are read from the run's own messages, never from Logfire
+(`engram.evals.harness.seen_units`, filled per case by `capture_run_messages`, so a failed case
+keeps what it saw before it failed). A unit counts only when a result carries something of it,
+never when it carries a bare id that points at it. A `search` names each hit's `id`, a `fetch` the
+unit it read, a leveled `fetch` its own unit and every child it lists, and `graph_expand` and
+`find_paths` each node, never an edge's provenance claim. A `run_sql` row names the units in its
+`id`, `page_id`, `section_id`, `claim_id` and `source_id` columns, the row's own unit or the unit
+that holds it. The other end of a relation, such as `src_id`, `dst_id` or `subject_id`, never
+counts, and nor does any other column, a title or a body for example, even when it mentions an id.
+A claim counts for its page only when its text came with it: a claim hit with its snippet, a fetched
+claim with its body, or a SQL row with a `text`, `quote`, `snippet` or `body` beside its claim id. A
+bare claim id or a provenance pointer never counts. The SQL side has two limits. A claims row that
+selects `claim_id` and `page_id` without the claim's text still counts its page through `page_id`,
+which is the claim's own page and source. A row whose `id` column holds a claim with no `hit_level`
+or `level` beside it, such as `SELECT id, page_title FROM api.search(...)`, counts that claim as a
+bare id, because nothing in the row marks it as a claim. A SQL row that carries a text excerpt but no
+unit column, such as `SELECT substr(body, 1200, 1800) AS excerpt FROM api.raw_chunks WHERE ...`,
+names no unit, so it never counts, though the model received that source's text.
+
+Under `--code-mode` seen recall reads the `run_code` output the model reads, never the program's
+own tool returns directly. The candidates are every unit that any tool call of any program in the
+case returned so far, as code mode records them on each call's return (`metadata["tool_returns"]`)
+and read by the same rules as a direct call, so a search in one call that a later call prints
+counts. A unit's text is a hit's snippet, a fetched unit's body, a leveled fetch's content, a
+child's summary, or a SQL row's `text`, `quote`, `snippet` or `body` (`api.claims` serves a claim's
+text and quote as `text` and `quote`). A candidate counts when an output carries the first 60 characters of its text, or all of it
+when shorter. Whitespace is collapsed on both sides, and the escapes a printed Python value or a
+JSON text writes are read first: `\'`, `\"`, `\\`, `\uXXXX` and a surrogate pair as the character
+they stand for, and `\n`, `\r` and `\t` as spaces, so `print(u)`, `print(json.dumps(u))` and
+`print(json.dumps(u['body']))` all match. Every text any tool call of the case returned that the
+output carries, in any of those fields and from a SQL row with or without a unit column, is then cut
+out of it, and a candidate also counts when what remains carries its id, its ref or its page id as a
+word, `=` splitting words like whitespace. So a program that prints a hit list counts its hits, a
+program that prints a fetched body counts that unit, and a link inside a returned text the output
+carries never counts, even when a search also returned the linked unit. A program that searches and
+prints only a count sees nothing. A body printed from its middle counts only by an id printed beside
+it, and a link inside such a fragment can count the linked unit when a tool call returned it. A body
+the program changes while it prints it, such as its quotes swapped or a prefix put on every line,
+matches only up to the first change, so the rest stays in the output where its links can count. A
+program that prints and then raises reaches the model as a retry prompt that carries its printed
+output but no tool returns, because code mode records none for a failed call. So what such a program
+showed never counts, and a unit it returned never becomes a candidate, so a later call that shows
+values the failed call assigned counts none of them. Every
+unit seen maps to its source the way the cited ids map, in the same one page lookup and one source
+lookup. Reading a tool result never raises, whatever its shape, so the measure never changes how a
+case ends or whether its failure is transient. A run without
+`--source-level`, or whose source lookup failed, writes null for both keys.
+
+After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen
+recall, overall and then per query type, the cases with no query type last. `studio evals compare`
+reports both runs' mean seen recall and the mean paired difference over the cases both runs
+scored, overall and per query type, in a table of its own. A results file written before seen
+recall was recorded holds none, and the report shows it as `missing` for that run, never as 0. Two
+runs on different index builds are compared like two runs on different knowledge base fingerprints,
+and the report names each run's index build beside its fingerprint, `unknown` for a header that did
+not record it.
 
 ## Public contract
 

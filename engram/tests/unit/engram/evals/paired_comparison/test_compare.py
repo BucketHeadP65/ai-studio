@@ -34,6 +34,7 @@ from engram.evals.paired_comparison.contracts import (
     paired_comparisons,
     read_results,
     source_level_retrieval,
+    source_level_retrieval_per_query_type,
     write_paired_comparison,
 )
 from engram.evals.tuning.contracts import RetrievalStrategy
@@ -58,6 +59,7 @@ class ResultsHeaderFactory(ModelFactory[ResultsHeader]):
     dataset_sha256 = "b" * 64
     collection = "notes"
     knowledge_base_fingerprint = "hash:notes"
+    index_build = "7+500-1000 test-embedding"
     started = "2026-10-13T09:00:00+00:00"
     source_lookup_error = None
 
@@ -71,6 +73,7 @@ def _line(
     official: bool = False,
     sources: tuple[str, ...] | None = None,
     retrieval: tuple[float, float, float] | None = None,
+    seen: float | None = None,
 ) -> ResultsLine:
     recall_at_4, recall_at_10, mrr = retrieval if retrieval is not None else (None, None, None)
     return ResultsLine(
@@ -84,6 +87,7 @@ def _line(
         recall_at_10=recall_at_10,
         mrr=mrr,
         other_collection=False,
+        seen_recall=seen,
     )
 
 
@@ -385,6 +389,91 @@ def test_a_pair_carries_each_side_s_source_level_retrieval_overall_and_per_query
     assert beta.candidate_retrieval == SourceLevelRetrieval(cases=1, recall_at_4=0.5, recall_at_10=1.0, mrr=0.5)
 
 
+def test_source_level_retrieval_carries_the_mean_seen_recall_a_failed_case_counting_what_it_saw():
+    lines = (
+        _line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0), seen=1.0),
+        _line("c2", strict=False, sources=("s3",), retrieval=(0.0, 0.0, 0.0), seen=0.5),
+        _line("c3", strict=False, failed=True, sources=(), retrieval=(0.0, 0.0, 0.0), seen=0.0),
+    )
+
+    retrieval = source_level_retrieval(lines)
+
+    assert retrieval is not None
+    assert retrieval.seen_recall == pytest.approx(0.5)
+
+
+def test_a_run_whose_lines_hold_no_seen_recall_has_none_rather_than_zero():
+    retrieval = source_level_retrieval((_line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0)),))
+
+    assert retrieval is not None
+    assert retrieval.seen_recall is None
+
+
+def test_source_level_retrieval_per_query_type_orders_by_name_with_the_cases_that_have_none_last():
+    lines = (
+        _line("c1", strict=True, query_type=None, sources=("s1",), retrieval=(1.0, 1.0, 1.0), seen=1.0),
+        _line("c2", strict=True, query_type="beta", sources=("s2",), retrieval=(0.0, 0.0, 0.0), seen=0.5),
+        _line("c3", strict=True, query_type="alpha", sources=("s3",), retrieval=(0.5, 1.0, 0.5), seen=1.0),
+        _line("c4", strict=True, query_type="gamma"),
+    )
+
+    per_type = source_level_retrieval_per_query_type(lines)
+
+    assert [(row.query_type, row.retrieval.cases, row.retrieval.seen_recall) for row in per_type] == [
+        ("alpha", 1, 1.0),
+        ("beta", 1, 0.5),
+        (None, 1, 1.0),
+    ]
+
+
+def test_a_pair_reports_both_seen_recall_means_and_their_paired_difference_overall_and_per_query_type():
+    baseline = _run(
+        "a.jsonl",
+        _line("c1", strict=True, sources=("s1",), retrieval=(0.0, 0.0, 0.0), seen=0.0),
+        _line("c2", strict=True, query_type="beta", sources=("s2",), retrieval=(0.0, 0.0, 0.0), seen=0.5),
+    )
+    candidate = _run(
+        "b.jsonl",
+        _line("c1", strict=True, sources=("s1",), retrieval=(0.0, 0.0, 0.0), seen=1.0),
+        _line("c2", strict=True, query_type="beta", sources=("s2",), retrieval=(0.0, 0.0, 0.0), seen=0.5),
+    )
+
+    comparison = _only_pair(baseline, candidate)
+
+    overall = comparison.overall
+    assert overall.baseline_retrieval is not None
+    assert overall.candidate_retrieval is not None
+    assert (overall.baseline_retrieval.seen_recall, overall.candidate_retrieval.seen_recall) == (0.25, 0.75)
+    assert overall.seen_recall_difference == pytest.approx(0.5)
+    alpha, beta = (row.scores for row in comparison.query_types)
+    assert (alpha.seen_recall_difference, beta.seen_recall_difference) == (pytest.approx(1.0), pytest.approx(0.0))
+    markdown = paired_comparison_markdown([comparison])
+    assert "| Query type | Baseline seen recall | Candidate seen recall | Seen recall difference |" in markdown
+    assert "| all cases | 0.250 | 0.750 | +0.500 |" in markdown
+    assert "| beta | 0.500 | 0.500 | +0.000 |" in markdown
+
+
+def test_an_older_results_file_has_no_seen_recall_and_the_report_shows_it_missing_never_zero(tmp_path: Path):
+    path = tmp_path / "older.jsonl"
+    scored = dataclasses.replace(_written_line("c1", strict=True), sources=("s1",), recall_at_4=1.0, recall_at_10=1.0, mrr=1.0)
+    write_results(path, _WRITTEN_HEADER, [scored])
+    header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
+    older_rows = [json.loads(row) for row in case_rows]
+    for row in older_rows:
+        del row["seen_recall"], row["seen_gold"]
+    path.write_text("\n".join([header_row, *(json.dumps(row) for row in older_rows)]) + "\n", encoding="utf-8")
+    older = read_results(path)
+    candidate = _run("b.jsonl", _line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0), seen=0.75), header=older.header)
+
+    comparison = _only_pair(older, candidate)
+
+    assert older.lines[0].seen_recall is None
+    assert comparison.overall.baseline_retrieval is not None
+    assert comparison.overall.baseline_retrieval.seen_recall is None
+    assert comparison.overall.seen_recall_difference is None
+    assert "| all cases | missing | 0.750 | missing |" in paired_comparison_markdown([comparison])
+
+
 def test_a_side_whose_source_lookup_failed_has_no_source_level_retrieval():
     failed = ResultsHeaderFactory.build(source_lookup_error="LookupError: no sources")
     baseline = _run("a.jsonl", _line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0)))
@@ -496,6 +585,7 @@ _WRITTEN_HEADER = WrittenHeader(
     dataset_sha256="b" * 64,
     collection="notes",
     knowledge_base_fingerprint="hash:notes",
+    index_build="7+500-1000 test-embedding",
     started="2026-10-13T09:00:00+00:00",
     source_lookup_error=None,
 )
@@ -563,6 +653,32 @@ def test_an_older_unpinned_run_pairs_with_a_run_now(tmp_path: Path):
     comparison = _only_pair(older, newer)
 
     assert (comparison.overall.cases, comparison.overall.baseline_only) == (1, 1)
+
+
+def test_a_header_written_before_the_index_build_was_recorded_reads_it_as_unknown(tmp_path: Path):
+    path = tmp_path / "a.jsonl"
+    write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
+    header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
+    older = json.loads(header_row)
+    del older["header"]["index_build"]
+    path.write_text("\n".join([json.dumps(older), *case_rows]) + "\n", encoding="utf-8")
+
+    results = read_results(path)
+
+    assert results.header.index_build is None
+    assert "knowledge base hash:notes, index build unknown." in paired_comparison_markdown(paired_comparisons([(results, results)]))
+
+
+def test_two_runs_on_different_index_builds_are_compared_like_two_fingerprints_and_the_report_shows_both():
+    lines = (_line("c1", strict=True),)
+    rechunked = ResultsHeaderFactory.build(index_build="7+300-600 test-embedding")
+
+    comparison = _only_pair(_run("a.jsonl", *lines), _run("b.jsonl", *lines, header=rechunked))
+
+    markdown = paired_comparison_markdown([comparison])
+    assert comparison.overall.cases == 1
+    assert "Baseline: strategy search-hybrid, SQL off, code mode off, no thinking level, knowledge base hash:notes, index build 7+500-1000 test-embedding." in markdown
+    assert "Candidate: strategy search-hybrid, SQL off, code mode off, no thinking level, knowledge base hash:notes, index build 7+300-600 test-embedding." in markdown
 
 
 def test_the_reader_keeps_a_failed_source_lookup(tmp_path: Path):
@@ -673,9 +789,9 @@ def test_the_markdown_shows_each_side_s_code_mode_and_thinking_level():
         paired_comparisons([(_run("a.jsonl", *lines, header=unset), _run("b.jsonl", *lines, header=unset))])
     )
 
-    assert "Baseline: strategy search-hybrid, SQL on, code mode off, thinking xhigh, knowledge base hash:notes." in shown
-    assert "Candidate: strategy search-hybrid, SQL on, code mode on, thinking xhigh, knowledge base hash:notes." in shown
-    assert "Baseline: strategy search-hybrid, SQL off, code mode off, no thinking level, knowledge base hash:notes." in default
+    assert "Baseline: strategy search-hybrid, SQL on, code mode off, thinking xhigh, knowledge base hash:notes, index build 7+500-1000 test-embedding." in shown
+    assert "Candidate: strategy search-hybrid, SQL on, code mode on, thinking xhigh, knowledge base hash:notes, index build 7+500-1000 test-embedding." in shown
+    assert "Baseline: strategy search-hybrid, SQL off, code mode off, no thinking level, knowledge base hash:notes, index build 7+500-1000 test-embedding." in default
 
 
 def test_the_markdown_notes_each_side_whose_source_lookup_failed():

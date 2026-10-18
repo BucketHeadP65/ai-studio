@@ -2,9 +2,11 @@
 
 A case that failed is written as incorrect with its error and whether it failed transiently, so two runs of one
 dataset always pair case by case. Each line scores recall@4, recall@10 and MRR against the case's gold ids, over the
-source ids its citations map to when the run mapped them, and over its cited page ids otherwise. A file written by an
-older run reads back with code mode off, the thinking level unset, `search_date_range` as the opposite of
-`pinned_search`, and whether each failure was transient read from its error text.
+source ids its citations map to when the run mapped them, and over its cited page ids otherwise. When the run mapped
+sources, each line also carries its seen recall: the share of its gold ids among the sources its tool results named. A
+file written by an older run reads back with code mode off, the thinking level unset, `search_date_range` as the
+opposite of `pinned_search`, the index build unknown, no seen recall, and whether each failure was transient read from
+its error text.
 """
 
 from __future__ import annotations
@@ -70,6 +72,8 @@ class ResultsHeader:
     """The knowledge base the run read."""
     knowledge_base_fingerprint: str
     """The knowledge base's index fingerprint and its name."""
+    index_build: str | None = None
+    """The index build the run read: its indexer version, embedding model, vocabulary and switches. None, read as unknown, in a header that did not record it."""
     started: str
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
@@ -111,6 +115,11 @@ class ResultsLine:
 
     False for an answered case. A line written before it was recorded reads it from its error text.
     """
+    seen_recall: float | None = None
+    """The share of the gold ids among the sources the case's tool results named, or None for a case with no gold ids, a run
+    that mapped no sources or a line written before it was recorded."""
+    seen_gold: tuple[str, ...] | None = None
+    """The gold ids among the sources the case's tool results named, in gold order, or None whenever `seen_recall` is."""
 
 
 @dataclass(frozen=True)
@@ -148,6 +157,7 @@ def results_lines(  # noqa: PLR0913 (the report, its sources, its flags, the ord
     report: EvaluationReport[QaInput, RetrievalAnswer, QaCaseMeta],
     *,
     sources: Mapping[str, Sequence[str]] | None,
+    seen: Mapping[str, Collection[str]] | None = None,
     other_collection: Collection[str],
     case_order: Sequence[str],
     source_lookup_failed: bool = False,
@@ -160,11 +170,13 @@ def results_lines(  # noqa: PLR0913 (the report, its sources, its flags, the ord
         report: The run's report.
         sources: The ranked source ids each answered case's citations map to, keyed by case name, or None when the
             run mapped none. An answered case missing here maps to no source.
+        seen: The source ids each case's tool results named, answered and failed cases alike, keyed by case name. It is
+            read only when `sources` is not None, and a case missing here saw no source.
         other_collection: The names of the cases whose SQL rows named another knowledge base.
         case_order: The dataset's case names in order. A case missing here comes last.
-        source_lookup_failed: Whether this run's lookup of the cited pages' sources failed. It leaves the sources, recall
-            and MRR of every line of `report` null, rather than scoring the cited page ids in their place. The kept lines
-            keep theirs.
+        source_lookup_failed: Whether this run's lookup of the cited pages' sources failed. It leaves the sources, recall,
+            MRR and seen recall of every line of `report` null, rather than scoring the cited page ids in their place. The
+            kept lines keep theirs.
         transient: The names of the failed cases that failed transiently.
         kept: The lines an earlier run of the same variant wrote for the cases `report` did not run, kept as they are.
 
@@ -172,15 +184,18 @@ def results_lines(  # noqa: PLR0913 (the report, its sources, its flags, the ord
         The lines.
     """
     position = {name: index for index, name in enumerate(case_order)}
+    seen_sources = None if sources is None else (seen if seen is not None else {})
     run_now = [
-        *(_answered_line(case, sources=sources, other_collection=other_collection) for case in report.cases),
+        *(_answered_line(case, sources=sources, seen=seen_sources, other_collection=other_collection) for case in report.cases),
         *(
-            _failed_line(failure, mapped=sources is not None, other_collection=other_collection, transient=transient)
+            _failed_line(failure, seen=seen_sources, other_collection=other_collection, transient=transient)
             for failure in report.failures
         ),
     ]
     if source_lookup_failed:
-        run_now = [replace(line, sources=None, recall_at_4=None, recall_at_10=None, mrr=None) for line in run_now]
+        run_now = [
+            replace(line, sources=None, recall_at_4=None, recall_at_10=None, mrr=None, seen_recall=None, seen_gold=None) for line in run_now
+        ]
     return sorted([*kept, *run_now], key=lambda line: position.get(line.case, len(position)))
 
 
@@ -204,8 +219,9 @@ def read_results(path: Path) -> tuple[ResultsHeader, tuple[ResultsLine, ...]]:
 
     Lines end at a newline alone, so a line separator inside an answer stays in its line. Blank lines are skipped. A
     header that did not record code mode or the thinking level reads them as off and unset, one that did not record
-    `search_date_range` reads it as the opposite of `pinned_search`, and a case line that did not record whether it
-    failed transiently reads it from its error text.
+    `search_date_range` reads it as the opposite of `pinned_search`, and one that did not record the index build reads
+    it as None. A case line that did not record whether it failed transiently reads it from its error text, and one that
+    did not record seen recall reads it as None.
 
     Args:
         path: The results file.
@@ -274,7 +290,11 @@ def dataset_sha256(dataset: EvaluationDataset) -> str:
 
 
 def _answered_line(
-    case: ReportCase[QaInput, RetrievalAnswer, QaCaseMeta], *, sources: Mapping[str, Sequence[str]] | None, other_collection: Collection[str]
+    case: ReportCase[QaInput, RetrievalAnswer, QaCaseMeta],
+    *,
+    sources: Mapping[str, Sequence[str]] | None,
+    seen: Mapping[str, Collection[str]] | None,
+    other_collection: Collection[str],
 ) -> ResultsLine:
     """The line of a case that answered."""
     expected = case.expected_output.answer if case.expected_output is not None else ""
@@ -282,6 +302,7 @@ def _answered_line(
     cited = tuple(case.output.cited_source_ids)
     mapped = None if sources is None else tuple(sources.get(case.name, ()))
     recall_at_4, recall_at_10, mrr = _retrieval_scores(cited, mapped, gold)
+    seen_gold, seen_recall = _seen_scores(case.name, seen, gold)
     answered = bool(expected.strip())
     return ResultsLine(
         case=case.name,
@@ -298,14 +319,23 @@ def _answered_line(
         mrr=mrr,
         other_collection=case.name in other_collection,
         transient=False,
+        seen_recall=seen_recall,
+        seen_gold=seen_gold,
     )
 
 
 def _failed_line(
-    failure: ReportCaseFailure[QaInput, RetrievalAnswer, QaCaseMeta], *, mapped: bool, other_collection: Collection[str], transient: Collection[str]
+    failure: ReportCaseFailure[QaInput, RetrievalAnswer, QaCaseMeta],
+    *,
+    seen: Mapping[str, Collection[str]] | None,
+    other_collection: Collection[str],
+    transient: Collection[str],
 ) -> ResultsLine:
-    """The line of a case that raised, written as incorrect with nothing cited."""
-    recall_at_4, recall_at_10, mrr = _retrieval_scores((), () if mapped else None, _gold_of(failure.expected_output))
+    """The line of a case that raised, written as incorrect with nothing cited and with what its tool results named."""
+    mapped = seen is not None
+    gold = _gold_of(failure.expected_output)
+    recall_at_4, recall_at_10, mrr = _retrieval_scores((), () if mapped else None, gold)
+    seen_gold, seen_recall = _seen_scores(failure.name, seen, gold)
     return ResultsLine(
         case=failure.name,
         query_type=failure.metadata.query_type if failure.metadata is not None else None,
@@ -321,12 +351,24 @@ def _failed_line(
         mrr=mrr,
         other_collection=failure.name in other_collection,
         transient=failure.name in transient,
+        seen_recall=seen_recall,
+        seen_gold=seen_gold,
     )
 
 
 def _gold_of(expected: RetrievalAnswer | None) -> tuple[str, ...]:
     """The case's gold ids, empty when it has no expected output."""
     return tuple(expected.cited_source_ids) if expected is not None else ()
+
+
+def _seen_scores(case: str, seen: Mapping[str, Collection[str]] | None, gold: Sequence[str]) -> tuple[tuple[str, ...] | None, float | None]:
+    """The gold ids among the sources the case's tool results named and their share of its gold, or None for both when unscored."""
+    if seen is None or not gold:
+        return None, None
+    named = seen.get(case, frozenset())
+    distinct = tuple(dict.fromkeys(gold))
+    seen_gold = tuple(identifier for identifier in distinct if identifier in named)
+    return seen_gold, len(seen_gold) / len(distinct)
 
 
 def _retrieval_scores(cited: Sequence[str], mapped: Sequence[str] | None, gold: Sequence[str]) -> tuple[float | None, float | None, float | None]:
@@ -353,6 +395,7 @@ def _header_json(header: ResultsHeader) -> dict[str, JsonValue]:
         "dataset_sha256": header.dataset_sha256,
         "collection": header.collection,
         "knowledge_base_fingerprint": header.knowledge_base_fingerprint,
+        "index_build": header.index_build,
         "started": header.started,
         "source_lookup_error": header.source_lookup_error,
     }
@@ -375,4 +418,6 @@ def _line_json(line: ResultsLine) -> dict[str, JsonValue]:
         "mrr": line.mrr,
         "other_collection": line.other_collection,
         "transient": line.transient,
+        "seen_recall": line.seen_recall,
+        "seen_gold": list(line.seen_gold) if line.seen_gold is not None else None,
     }

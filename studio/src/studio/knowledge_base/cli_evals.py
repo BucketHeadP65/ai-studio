@@ -66,6 +66,7 @@ from engram.evals.paired_comparison.contracts import (
     paired_comparisons,
     read_results,
     source_level_retrieval,
+    source_level_retrieval_per_query_type,
     write_paired_comparison,
 )
 from engram.evals.rca.contracts import (
@@ -119,7 +120,7 @@ if TYPE_CHECKING:
         TracedEvaluationRun,
         VariantEvaluator,
     )
-    from engram.evals.paired_comparison.contracts import PairedComparison, PairedScores, ResultsFile
+    from engram.evals.paired_comparison.contracts import PairedComparison, PairedScores, ResultsFile, SourceLevelRetrieval
 
 
 # The default model: pydantic-ai's `TestModel`, which needs no network, deployment or credentials.
@@ -268,7 +269,9 @@ def evals_run_cmd(
     source_level: bool = typer.Option(
         default=False,
         help="Map each cited id to its source document and score recall@4, recall@10 and mrr against the dataset's gold "
-        "source ids. The scores land in the results file, so it needs --results, and their means print after the table.",
+        "source ids, and score seen recall: the share of the gold sources that any tool result the model received named. "
+        "The scores land in the results file, so it needs --results, and their means print after the table, overall and "
+        "per query type.",
     ),
     results: str | None = typer.Option(
         None, "--results", help="Write the results file here: a header line, then one JSON line per case, failed cases included."
@@ -277,8 +280,8 @@ def evals_run_cmd(
         default=False,
         help="Continue the --results file: keep every case that did not fail transiently (a model connection error, a timeout, "
         "an HTTP 429 or 5xx, or a refused or closed database connection), run only the missing cases and those, and rewrite "
-        "the file under the earlier header. A file written with other settings is refused before any case runs. With no file "
-        "there yet, every case runs.",
+        "the file under the earlier header. A file written with other settings or on another index build is refused before "
+        "any case runs. With no file there yet, every case runs.",
     ),
     knowledge_base: str | None = typer.Option(default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."),
 ) -> None:
@@ -296,14 +299,15 @@ def evals_run_cmd(
     `--code-mode`, and `--pinned-search` keeps search in the knowledge base, its date range kept.
     `--results` writes one line per case, and `--source-level` scores that file's retrieval against source ids, so it
     is refused without `--results`. It then prints the mean source-level recall@4, recall@10 and mrr over the cases with
-    gold ids, because the table's recall, precision and mrr compare cited page ids and do not apply to source-id gold.
-    `--resume` continues the `--results` file, so it is refused without `--results`. It keeps every case that did not
-    fail transiently, runs only the missing cases and the transient failures, and rewrites the file under the earlier
-    header. It then prints how many cases it kept and ran and a summary over every case in the file, and the source-level
-    line covers every case too. It warns when the knowledge base was indexed again since the file was started, and says
-    when the cases run now miss their source scores because the source lookup failed. A file written with other settings
-    is refused before any case runs. A failed run, such as a missing dataset, an unreachable model or database, or an
-    unknown strategy, exits 1 with a message.
+    gold ids, beside the mean seen recall, the share of the gold sources that any tool result the model received named,
+    cited or not, overall and per query type. The table's recall, precision and mrr compare cited page ids and do not
+    apply to source-id gold. `--resume` continues the `--results` file, so it is refused without `--results`. It keeps
+    every case that did not fail transiently, runs only the missing cases and the transient failures, and rewrites the
+    file under the earlier header. It then prints how many cases it kept and ran and a summary over every case in the
+    file, and the source-level lines cover every case too. It warns when the knowledge base was indexed again since the
+    file was started, and says when the cases run now miss their source scores because the source lookup failed. A file
+    written with other settings, or on another index build, is refused before any case runs. A failed run, such as a
+    missing dataset, an unreachable model or database, or an unknown strategy, exits 1 with a message.
     """
     if source_level and results is None:
         _fail("--source-level writes its scores to the results file, so pass --results PATH with it.")
@@ -379,21 +383,28 @@ def _echo_resumed(written: ResultsFile, *, ran: int, knowledge_base_fingerprint:
 
 
 def _echo_source_level_retrieval(written: ResultsFile) -> None:
-    """Print the run's mean source-level retrieval from its results file, then why the table above does not apply."""
+    """Print the run's mean source-level retrieval and seen recall, overall and per query type, then why the table above does not apply."""
     retrieval = source_level_retrieval(written.lines)
     if written.header.source_lookup_error is not None:
         typer.echo(f"source-level retrieval: none, the source lookup failed ({written.header.source_lookup_error})")
     elif retrieval is None:
         typer.echo("source-level retrieval: none, no case has gold ids")
     else:
-        typer.echo(
-            f"source-level retrieval over {retrieval.cases} case(s) with gold ids: recall@4 {retrieval.recall_at_4:.3f}, "
-            f"recall@10 {retrieval.recall_at_10:.3f}, mrr {retrieval.mrr:.3f}"
-        )
+        typer.echo(f"source-level retrieval over {retrieval.cases} case(s) with gold ids: {_retrieval_text(retrieval)}")
+        for row in source_level_retrieval_per_query_type(written.lines):
+            label = row.query_type if row.query_type is not None else "no query type"
+            typer.echo(f"  {label}: {row.retrieval.cases} case(s), {_retrieval_text(row.retrieval)}")
+        typer.echo("Seen recall is the share of each case's gold sources that any tool result the model received named, cited or not.")
     typer.echo(
         "The recall, precision and mrr in the table above compare cited page ids with the gold ids, "
         "so they do not apply when the gold ids are source ids."
     )
+
+
+def _retrieval_text(retrieval: SourceLevelRetrieval) -> str:
+    """Mean recall@4, recall@10, mrr and seen recall as the run summary prints them, the seen recall missing when no line holds one."""
+    seen = f"{retrieval.seen_recall:.3f}" if retrieval.seen_recall is not None else "missing"
+    return f"recall@4 {retrieval.recall_at_4:.3f}, recall@10 {retrieval.recall_at_10:.3f}, mrr {retrieval.mrr:.3f}, seen recall {seen}"
 
 
 def _dataset_slug(page_id: str) -> str:
@@ -860,14 +871,17 @@ def evals_compare_cmd(
     For each pair it reports the cases, both strict accuracies, the difference with its 95 percent interval, the
     cases only one run answered correctly, McNemar's exact p value and the p value Holm's method adjusts across
     every pair of the call. It reports the same per query type, with both official accuracies, both failed-case
-    counts, the cases that read another knowledge base, and each run's mean source-level recall@4, recall@10 and MRR
-    over the cases with gold ids. A failed case counts as incorrect. Two runs whose dataset, model, thinking level,
-    instructions, tool-call budget, search pinning, search date range or knowledge base differ are refused. Two runs under one strategy may
+    counts, the cases that read another knowledge base, each run's mean source-level recall@4, recall@10 and MRR
+    over the cases with gold ids, and each run's mean seen recall with the mean paired difference. A seen recall a
+    results file does not hold, as in a file written before it was recorded, shows as missing, never as zero. A failed
+    case counts as incorrect. Two runs whose dataset, model, thinking level, instructions, tool-call budget, search
+    pinning, search date range or knowledge base differ are refused. Two runs may differ in the knowledge base
+    fingerprint and in the index build, and the report shows both runs' values. Two runs under one strategy may
     differ in the SQL switch or in code mode, not in both, and two runs under different strategies must share both and
     the candidate must be the baseline plus the graph leg. A results file written before code mode and the thinking
-    level were recorded reads them as off and unset, and one written before the search date range was recorded reads it
-    as the opposite of its search pinning. A refusal exits 1 naming the case or the field, and nothing is
-    written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
+    level were recorded reads them as off and unset, one written before the search date range was recorded reads it
+    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. A
+    refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
     before any file is read.
     """
     pairs = [_compared_pair(value) for value in pair]

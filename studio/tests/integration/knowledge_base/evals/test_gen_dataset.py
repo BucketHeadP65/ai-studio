@@ -41,7 +41,13 @@ from engram.evals.generation.infrastructure.seeds import SeedQueries
 from engram.evals.generation.infrastructure.stratum_inventory import StratumInventoryQueries
 from engram.evals.handlers import GenerateEvalDatasetHandler
 from engram.evals.shared.domain import DEFAULT_DIFFICULTY_THRESHOLDS, Archetype
-from engram.indexing.contracts import FilesystemKnowledgeBaseReader, IndexKnowledgeBase, IndexKnowledgeBaseHandler, KnowledgeBaseReader
+from engram.indexing.contracts import (
+    INDEXER_VERSION,
+    FilesystemKnowledgeBaseReader,
+    IndexKnowledgeBase,
+    IndexKnowledgeBaseHandler,
+    KnowledgeBaseReader,
+)
 from engram.indexing.infrastructure import orm
 from engram.kb.contracts import load_knowledge_base_schema
 from engram.testing.fakes.embedding import FakeEmbedding
@@ -271,6 +277,29 @@ async def _read_inventory(admin_url: str) -> StratumInventory:
         await engine.dispose()
 
 
+async def _read_index_build(admin_url: str, collection: str) -> str:
+    """Read a knowledge base's index build over a real owner session (the results-file header's key)."""
+    engine = create_async_engine(admin_url, poolclass=NullPool)
+    await orm.register_pgvector(engine)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            reader = StratumInventoryQueries(session, research_spec(), DEFAULT_DIFFICULTY_THRESHOLDS)
+            return await reader.index_build(collection=collection)
+    finally:
+        await engine.dispose()
+
+
+async def _store_fingerprint(admin_url: str, fingerprint: orm.IndexFingerprintORM) -> None:
+    """Store one index fingerprint row over a real owner session, as an index of that knowledge base would."""
+    engine = create_async_engine(admin_url, poolclass=NullPool)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            session.add(fingerprint)
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
 async def _read_page_ids(admin_url: str) -> frozenset[str]:
     """Read the indexed knowledge base's current page-id set over a real owner session (the top-up gold check)."""
     engine = create_async_engine(admin_url, poolclass=NullPool)
@@ -330,6 +359,34 @@ class TestGenerateHandlerOverIndexedDb:
         # page is present, so a top-up would never flag its gold `gold_gone` (other meta stubs may ride
         # along, the check only cares that a case's gold pages are still there).
         assert _PAPER_ID in asyncio.run(_read_page_ids(indexed))
+
+    def test_reader_reads_the_index_build_as_the_indexer_version_the_embedding_model_and_the_vocabulary(self, indexed: str):
+        indexer, model, label, vocabulary = asyncio.run(_read_index_build(indexed, _COLLECTION)).split(" ")
+
+        assert indexer.startswith(f"{INDEXER_VERSION}+")
+        assert model == FakeEmbedding().model_id
+        assert label == "vocabulary"
+        assert len(vocabulary) == 12
+
+    def test_reader_names_the_retrieval_switches_that_are_on_and_never_the_private_flag(self, indexed: str):
+        asyncio.run(
+            _store_fingerprint(
+                indexed,
+                orm.IndexFingerprintORM(
+                    collection="auto-notes",
+                    indexer_version="7+500-1000",
+                    spec_hash="spec-auto",
+                    vocabulary_hash="0123456789abcdef0123",
+                    embed_model="test-embedding",
+                    switches={"embeddings": False, "sql": True, "graph": True, "private": True},
+                ),
+            )
+        )
+
+        assert asyncio.run(_read_index_build(indexed, "auto-notes")) == "7+500-1000 test-embedding vocabulary 0123456789ab switches graph+sql"
+
+    def test_reader_reads_a_knowledge_base_never_indexed_as_not_indexed(self, indexed: str):
+        assert asyncio.run(_read_index_build(indexed, "never-indexed")) == "not indexed"
 
 
 # -- top-up drill over a real indexed DB -------------------------------------

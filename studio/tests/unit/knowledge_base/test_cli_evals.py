@@ -133,10 +133,13 @@ def _settings(tmp_path: Path) -> ApplicationSettings:
 
 
 class _FakeCoverageReader:
-    """Answers a knowledge base fingerprint of `spec-hash:{collection}`, the shape the real reader reads."""
+    """Answers a knowledge base fingerprint of `spec-hash:{collection}`, the shape the real reader reads, and one index build."""
 
     async def knowledge_base_fingerprint(self, *, collection: str) -> str:
         return f"spec-hash:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        return "7+500-1000 test-embedding"
 
 
 class _FakeInventoryReaders:
@@ -148,10 +151,13 @@ class _FakeInventoryReaders:
 
 
 class _ReindexedCoverageReader:
-    """Answers the fingerprint of a knowledge base indexed again since the first run."""
+    """Answers the fingerprint of a knowledge base indexed again since the first run, on the same index build."""
 
     async def knowledge_base_fingerprint(self, *, collection: str) -> str:
         return f"reindexed-hash:{collection}"
+
+    async def index_build(self, *, collection: str) -> str:
+        return "7+500-1000 test-embedding"
 
 
 class _ReindexedInventoryReaders:
@@ -380,10 +386,40 @@ class TestEvalsRun:
         )
 
         assert result.exit_code == 0, result.stdout
-        assert "source-level retrieval over 1 case(s) with gold ids: recall@4 0.000, recall@10 0.000, mrr 0.000\n" in result.stdout
+        assert (
+            "source-level retrieval over 1 case(s) with gold ids: recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
+            "  no query type: 1 case(s), recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
+        ) in result.stdout
+        assert "Seen recall is the share of each case's gold sources that any tool result the model received named, cited or not.\n" in result.stdout
         assert (
             "The recall, precision and mrr in the table above compare cited page ids with the gold ids, "
             "so they do not apply when the gold ids are source ids.\n"
+        ) in result.stdout
+
+    def test_source_level_prints_the_seen_recall_of_each_query_type_beside_its_cited_recall(self, tmp_path: Path):
+        records = [
+            AuthoredCase(
+                question=QaInput(question=f"Which note covers topic {letter}?"),
+                expected=ExpectedQa(answer=f"note {letter}", expected_source_ids=(f"src-{letter}",)),
+                meta=QaCaseMeta(query_type=query_type),
+                case_name=f"case-{letter}",
+            )
+            for letter, query_type in (("a", "comparison"), ("b", "inference"), ("c", "comparison"))
+        ]
+        dataset_path = tmp_path / "typed.yaml"
+        save_dataset(build_dataset(records), dataset_path)
+
+        result = runner.invoke(
+            app,
+            ["evals", "run", "--model", "test-model", "--dataset", str(dataset_path), "--source-level", "--results", str(tmp_path / "r.jsonl")],
+            obj=_factory(tmp_path),
+        )
+
+        assert result.exit_code == 0, result.stdout
+        assert (
+            "source-level retrieval over 3 case(s) with gold ids: recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
+            "  comparison: 2 case(s), recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
+            "  inference: 1 case(s), recall@4 0.000, recall@10 0.000, mrr 0.000, seen recall 0.000\n"
         ) in result.stdout
 
     def test_source_level_says_when_the_source_lookup_failed(self, tmp_path: Path):
@@ -542,6 +578,23 @@ class TestEvalsRunResume:
         assert result.exit_code == 1
         assert "evals run failed: the results file" in result.stdout
         assert "max_tool_calls (4 in the file, 6 now)" in " ".join(result.stdout.split())
+        assert results.read_text(encoding="utf-8") == written
+
+    def test_resume_refuses_a_results_file_from_another_index_build_naming_it(self, tmp_path: Path):
+        dataset_path = _write_three_cases(tmp_path)
+        results = tmp_path / "results.jsonl"
+        command = ["evals", "run", "--model", "test-model", "--dataset", str(dataset_path), "--results", str(results)]
+        first = runner.invoke(app, command, obj=_factory(tmp_path))
+        assert first.exit_code == 0, first.stdout
+        header, *rows = (json.loads(line) for line in results.read_text(encoding="utf-8").splitlines())
+        header["header"]["index_build"] = "7+300-600 test-embedding"
+        results.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
+        written = results.read_text(encoding="utf-8")
+
+        result = runner.invoke(app, [*command, "--resume"], obj=_factory(tmp_path))
+
+        assert result.exit_code == 1
+        assert "index_build (7+300-600 test-embedding in the file, 7+500-1000 test-embedding now)" in " ".join(result.stdout.split())
         assert results.read_text(encoding="utf-8") == written
 
 
