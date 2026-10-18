@@ -45,7 +45,7 @@ services:
   # 5433 (ParadeDB) and 5434 (the local Postgres), and two projects fighting over a port is a
   # confusing way to find out you started the wrong database.
   temporal-postgresql:
-    image: postgres:17.6
+    image: postgres:18.6
     container_name: workflows-temporal-postgres
     profiles:
       - persistent
@@ -88,7 +88,7 @@ services:
 
   # The standalone UI, for the persistent profile only — the default stack serves its own on 8233.
   temporal-ui:
-    image: temporalio/ui:2.42.1
+    image: temporalio/ui:2.56.0
     container_name: workflows-temporal-ui
     profiles:
       - persistent
