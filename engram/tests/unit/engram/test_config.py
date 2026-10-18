@@ -14,8 +14,9 @@ import pytest
 from pydantic import ValidationError
 
 from engram.config import IngestionSettings, KnowledgeBaseEntry, resolve_active_knowledge_base_path
-from engram.indexing.contracts import DEFAULT_CHUNK_SIZES
+from engram.indexing.contracts import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.mirror_chunks import MIRROR_CHUNK_TOKEN_BUDGET
+from engram.indexing.service.cut_plan_stage import DEFAULT_PLANNER_CONCURRENCY, DEFAULT_PLANNER_DEADLINE_SECONDS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -128,3 +129,23 @@ class TestIngestionChunkSizes:
         assert IngestionSettings(chunk_max_tokens=MIRROR_CHUNK_TOKEN_BUDGET).chunk_max_tokens == MIRROR_CHUNK_TOKEN_BUDGET
         with pytest.raises(ValidationError, match="chunk_max_tokens"):
             IngestionSettings(chunk_max_tokens=MIRROR_CHUNK_TOKEN_BUDGET + 1)
+
+
+class TestIngestionChunkPlanner:
+    def test_the_chunk_planner_runs_on_a_named_deployment_by_default(self) -> None:
+        assert IngestionSettings().chunk_planner_model == "gpt-6-luna"
+
+    def test_the_chunk_planner_limits_default_to_the_indexers_own(self) -> None:
+        settings = IngestionSettings()
+
+        assert settings.chunk_planner_ceiling_tokens == DEFAULT_PLANNER_CEILING_TOKENS
+        assert settings.chunk_planner_deadline_seconds == DEFAULT_PLANNER_DEADLINE_SECONDS
+        assert settings.chunk_planner_concurrency == DEFAULT_PLANNER_CONCURRENCY
+
+    def test_an_empty_chunk_planner_model_is_accepted(self) -> None:
+        assert IngestionSettings(chunk_planner_model="").chunk_planner_model == ""
+
+    @pytest.mark.parametrize("field", ["chunk_planner_ceiling_tokens", "chunk_planner_deadline_seconds", "chunk_planner_concurrency"])
+    def test_a_chunk_planner_limit_that_is_not_positive_is_refused(self, field: str) -> None:
+        with pytest.raises(ValidationError, match=field):
+            IngestionSettings.model_validate({field: 0})
