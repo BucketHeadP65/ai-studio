@@ -394,7 +394,7 @@ a database, or every knowledge base's schema file.
 | `WorkRegistry`, `WorkflowSpec`, `TaskSpec`, `CodeSpec`, `WorkerSpec`, `BroughtStep`, `tasks` (YAML key) | `StepRegistry`, `Workflow`, `Briefing`, `Program`, `AgentStep`, `InlineStep`, `inline` | core, harness, saved workflows on disk and in the library | L |
 | `build_world`, `RunFingerprint`, `RunFingerprint.world` (orchestrator model id inside) | `build_environment`, `WorkflowFingerprint`, `.environment` without the orchestrator's model | core, harness, saved fingerprints (a re-stamp on next save) | L |
 | attestation, AttestationLedger, trust tier, TrustRecord | evidence, RunEvidence, trust level, TrustLevel | core, harness, SPA, the evidence file on disk | L |
-| session journal, `session-journal.jsonl`, journal event, run journal, RunJournal | session log, `session-log.jsonl`, log entry, run log, RunLog | harness, docs, the file name on disk (a rename on boot) | L |
+| session journal, `session-journal.jsonl`, journal event, run journal, RunJournal | session log, `session-log.jsonl`, log entry, run log, RunLog | harness, docs, the file name on disk | L |
 | step log, step store (prose), model record | transcript | harness docs | S |
 | loadout, authored artifact, author_work_leaf, `author_*` tools | setup, custom item, write_custom_step, `write_custom_*` | harness, SPA control room, skills text | M |
 | seat (nowhere yet), `TierKey` | model tier, delegation tier | prose only | S |
