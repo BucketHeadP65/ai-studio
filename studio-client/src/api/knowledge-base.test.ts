@@ -44,7 +44,7 @@ const SCHEMA = {
 
 // The vitest env pins NEXT_PUBLIC_KNOWLEDGE_BASE_API_URL to http://api.test (vitest.config.ts),
 // so knowledgeBaseApi's base URL is that origin. Each test owns its surface via server.use;
-// any unmocked request is a hard failure (onUnhandledRequest: "error").
+// any unmocked request is a hard failure (onUnhandledFrame: "error").
 const BASE = "http://api.test";
 
 // One `coordination.jobs` row as GET /api/jobs/{id} answers it (core.cqrs.ports.Job).

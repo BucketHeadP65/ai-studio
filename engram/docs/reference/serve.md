@@ -69,7 +69,8 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `find_paths`, the MCP server also registers `search` / `fetch` (ADR-0011), defined once in
   `src/engram/retrieval/tools.py` and shared with the eval agent, when the full retrieval handler
   set is wired. Which pair it registers depends on how many knowledge bases the host handed it. With
-  no `read_surfaces`, the single-source pair, scoped to this server's own collection. With them, the
+  no `read_surfaces`, the single-source pair, scoped to this server's own collection: its `search`
+  refuses a `collection` other than that one, naming it. With them, the
   **routed** pair (`register_routed_mcp_tools`): `search`'s `collection` selects one of the
   registered knowledge bases and `fetch` reads the one its `unit_id` names, each answering through
   its own handlers, its own envelope and its own freshness stamp, so every ref an answer carries is
@@ -84,6 +85,20 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   each knowledge base's schema, so a key filters only a base that declares it. A key the searched
   base does not declare fails the call naming that base's keys, and the shipped description names
   every served base's keys.
+- **Every id form `fetch` takes:** whichever `fetch` a surface registers (the flat read
+  `flat_fetch`, the leveled read `leveled_fetch`, the routed pair, or `RetrievalKnowledgeBase` under
+  either dial) reads a `page:<collection>/<id>`, `section:<collection>/<id>` or
+  `unit:<collection>/<id>` ref exactly as `search`, a listing or a graph answer returned it, and the
+  bare id, and both read one unit. No surface hands out a ref its own `fetch` refuses: a
+  single-source `search` reads only its own collection, a `search` offers the map only when the
+  `fetch` beside it opens one (never beside the flat read, never on a `search_only` knowledge base),
+  and the eval guard rebuilds a search answer under the same rule. The flat read refuses a
+  `collection:` or `group:` ref. A ref naming another collection is refused naming both on a
+  single-source surface, and on the routed pair opens in that knowledge base when it is registered,
+  else is refused naming the registered ones. An id that names no unit is refused, and the refusal
+  names the forms `fetch` takes. Every refusal sends the agent only to tools the surface registers
+  (`reground_phrase`). The tool descriptions name the forms too (`fetchable_forms`,
+  `src/engram/retrieval/envelope.py`).
 - **Facets over several knowledge bases:** `RetrievalKnowledgeBase` (the capability
   `embedded_read_tools` builds, each surface's keys read from its spec) checks `facets` against the
   bases a call searches. A call naming one base is refused a key that base does not declare, naming

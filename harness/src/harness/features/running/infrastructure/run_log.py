@@ -582,17 +582,17 @@ def revive_values(spec: Workflow, registry: StepRegistry, values: dict[str, obje
         if annotation is None:
             continue
         try:
-            revived[node_id] = TypeAdapter(annotation).validate_python(raw)
+            revived[node_id] = TypeAdapter[object](annotation).validate_python(raw)
         except ValidationError:
             continue  # the run log predates a change to this step, so the node re-runs
     return revived
 
 
-def _output_types(spec: Workflow, registry: StepRegistry) -> dict[str, object]:
+def _output_types(spec: Workflow, registry: StepRegistry) -> dict[str, type]:
     """What type each node's recorded value must satisfy to be replayed, with one more entry per turn of a multi-turn map."""
     by_id = {node.id: node for node in spec.nodes}
 
-    def type_of(node_id: str) -> object | None:
+    def type_of(node_id: str) -> type | None:
         match by_id.get(node_id):
             case RunNode() as node:
                 impl = registry.get(node.work)

@@ -301,7 +301,7 @@ Trade-offs / Revisit-when rather than smoothed over.
 ## Vitest + MSW + Playwright, **rationale partially recorded**
 
 - **What:** unit/component tests in Vitest with MSW network interception
-  (`onUnhandledRequest: "error"`). e2e in Playwright. Shared test lifecycle in
+  (`onUnhandledFrame: "error"`). e2e in Playwright. Shared test lifecycle in
   `client-core` `test-support`.
 - **Why:** the MSW discipline *is* recorded, root `CLAUDE.md` section "No shared MSW
   handlers (the empty default handler set is load-bearing: every test states

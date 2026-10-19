@@ -314,10 +314,7 @@ async def migrate(state: StateSettings) -> Report:
     Returns:
         What the run did.
     """
-    from harness.adapters.contracts import (  # noqa: PLC0415 (the write path stays off this module's import path)
-        store_connection,
-        store_ingest,
-    )
+    from harness.adapters.contracts import store_connection, store_ingest  # noqa: PLC0415 (the write path stays off this module's import path)
 
     report = Report()
     migrate_state_files(state, report=report)

@@ -72,6 +72,9 @@ updates:
       postgres-image:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "docker-compose"
     directory: "/engram"
     schedule:
@@ -81,6 +84,9 @@ updates:
       engram-compose:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "docker-compose"
     directory: "/harness"
     schedule:
@@ -90,3 +96,6 @@ updates:
       harness-compose:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]

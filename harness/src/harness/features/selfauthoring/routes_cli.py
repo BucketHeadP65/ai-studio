@@ -60,9 +60,7 @@ def fail(message: str) -> NoReturn:
 
 def _activations(state: StateSettings) -> ActivationLog:
     """Where a console verb's own act is recorded, under `state`'s home."""
-    from harness.features.selfauthoring.infrastructure.activation_log import (  # noqa: PLC0415 (the activation log loads only when a verb runs)
-        activations_under,
-    )
+    from harness.features.selfauthoring.infrastructure.activation_log import activations_under  # noqa: PLC0415 (the activation log loads only when a verb runs)
 
     return activations_under(state)
 
@@ -199,10 +197,7 @@ def profile_cmd(
     if name or clear:
         # Printing the selection is a read. Changing it governs every session afterwards.
         _refuse_without_a_person()
-    from harness.features.selfauthoring.service import (  # noqa: PLC0415 (the service loads only when a verb runs)
-        select_profile,
-        selected_profile_name,
-    )
+    from harness.features.selfauthoring.service import select_profile, selected_profile_name  # noqa: PLC0415 (the service loads only when a verb runs)
 
     settings = HarnessSettings()
     root = custom_root(settings.self_authoring)
@@ -235,9 +230,7 @@ def promote_cmd(
     _refuse_without_a_person()
     if kind != "capability":
         fail(f"promotion applies only to capabilities, not {kind!r}. There is nothing to promote here yet.")
-    from harness.features.selfauthoring.infrastructure.promotion import (  # noqa: PLC0415 (promotion loads only when a verb runs)
-        promote_capability,
-    )
+    from harness.features.selfauthoring.infrastructure.promotion import promote_capability  # noqa: PLC0415 (promotion loads only when a verb runs)
 
     try:
         record = promote_capability(_custom_capabilities(), name)
@@ -258,9 +251,7 @@ def demote_cmd(
     _refuse_without_a_person()
     if kind != "capability":
         fail(f"promotion applies only to capabilities, not {kind!r}. There is nothing to demote here yet.")
-    from harness.features.selfauthoring.infrastructure.promotion import (  # noqa: PLC0415 (promotion loads only when a verb runs)
-        demote_capability,
-    )
+    from harness.features.selfauthoring.infrastructure.promotion import demote_capability  # noqa: PLC0415 (promotion loads only when a verb runs)
 
     if not demote_capability(_custom_capabilities(), name):
         fail(f"Capability {name!r} is not currently promoted.")

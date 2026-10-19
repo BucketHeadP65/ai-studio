@@ -11,7 +11,11 @@
     "embedding_batch_tokens": 50000,
     "embedding_concurrency": 4,
     "chunk_target_tokens": 400,
-    "chunk_max_tokens": 800
+    "chunk_max_tokens": 800,
+    "chunk_planner_model": "",
+    "chunk_planner_ceiling_tokens": 12000,
+    "chunk_planner_deadline_seconds": 60.0,
+    "chunk_planner_concurrency": 4
   },
   "sources": {
     "zotero": {

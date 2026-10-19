@@ -64,9 +64,7 @@ from core.ai.workflows.infrastructure.temporal import (
     step_activities,
 )
 from core.ai.workflows.infrastructure.temporal import bind as bind_registry
-from engram.testing.infrastructure.knowledge_base_db import (
-    pg,  # noqa: F401 -- imported to be used as a pytest fixture, never called directly
-)
+from engram.testing.infrastructure.knowledge_base_db import pg  # noqa: F401 -- imported to be used as a pytest fixture, never called directly
 from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
 from pydantic_ai_harness.step_persistence import ToolEffectRecord
 from temporalio import activity

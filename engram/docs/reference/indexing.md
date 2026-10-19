@@ -53,8 +53,9 @@ wraps it in a `JobRegistry` job (`JobKind.INDEX`) for async tracking.
 - **Outputs:** `IndexReport` (`src/engram/indexing/domain/models.py`), counts,
   embedding metadata, duration, an embedded `ValidationReport` of `ValidationIssue`s, the run
   `mode` (`"incremental"` | `"full"`), `skipped` (pages the manifest hit left
-  untouched this run), and a `dry_run` preview (`DryRunPreview`, `None` on a real
-  run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
+  untouched this run), `cut_plans` (the cut plans reused and chosen and the heading sections filled, see
+  [The chunk planner and cut plans](#the-chunk-planner-and-cut-plans)), and a `dry_run` preview
+  (`DryRunPreview`, `None` on a real run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
 - **Events:** the handler emits the pipeline `Event`s as it advances. After `PagesLoaded`
   it emits `CitingPagesChanged{paper_ids}` (`src/engram/indexing/domain/models.py`), consumed by the
   evals QA-generation subscriber to enqueue papers whose datasets may need
@@ -88,7 +89,8 @@ wraps it in a `JobRegistry` job (`JobKind.INDEX`) for async tracking.
   every issue stored for the collection once the load committed, and the exit code reads that.
 - **Config:** knowledge base path via `KnowledgeBaseSettings`. Embedding provider via
   `EmbeddingProviderSettings` (both resolved by wireup in `deps.py`). Chunk sizes via
-  `IngestionSettings.chunk_target_tokens` and `chunk_max_tokens`, see
+  `IngestionSettings.chunk_target_tokens` and `chunk_max_tokens`, and the chunk planner via
+  `IngestionSettings.chunk_planner_model` and its three limits, see
   [Chunking source mirrors](#chunking-source-mirrors).
 
 ## Runtime flow
@@ -143,12 +145,22 @@ shape picks the step:
 2. **Headings.** A mirror with headings (`#` to `####`) is cut at them into heading sections. Every
    heading opens one, even with an empty body, and the text before the first heading is one when it
    holds text. A heading section within the maximum is one chunk. A short mirror with several
-   headings is still cut at each of them, so every section keeps its own locator.
-3. **Filling.** Text over the maximum, a headless mirror or one heading section, is filled: whole
-   paragraphs (split at blank lines outside code fences) go into a chunk until the next would pass
-   the target. A paragraph over the maximum is cut at its sentence ends, a sentence over it at its
-   line breaks, so table rows and code lines stay whole, a line over it at its last word break within
-   the maximum, and a single word over it inside the word. No chunk passes the maximum.
+   headings is still cut at each of them, so every section keeps its own locator. A `#` line inside a
+   code fence (between two lines opening with three backticks) is text, never a heading, so a shell or
+   Python comment in a fenced block opens no heading section. Indexer version 7 brought this in, so an
+   index stored at 6 rebuilds in full.
+3. **Chunk planner.** Text over the maximum, a mirror with no heading or one heading section, of at
+   least two paragraphs and within the planner ceiling (12,000 tokens by default), is cut where the
+   chunk planner says its topic changes. The planner is shown the text as paragraphs numbered from 1
+   and answers the numbers of the paragraphs where a new chunk starts, never text, so every chunk is
+   the mirror's own text. An answer that is not strictly increasing paragraph numbers is refused and
+   the text is filled. A chunk of an accepted answer that passes the maximum is filled on its own.
+4. **Filling.** Any other text over the maximum is filled, and so is text the chunk planner gave no
+   accepted answer for: whole paragraphs (split at blank lines outside code fences) go into a chunk
+   until the next would pass the target. A paragraph over the maximum is cut at its sentence ends, a
+   sentence over it at its line breaks, so table rows and code lines stay whole, a line over it at its
+   last word break within the maximum, and a single word over it inside the word. No chunk passes the
+   maximum.
 
 Every chunk of a heading section keeps its heading and section path, so claim locators and the
 `raw_chunks.section_path` join keep working, and its embed input keeps the source title and heading
@@ -160,8 +172,53 @@ The sizes are `IngestionSettings.chunk_target_tokens` (400 by default) and `chun
 by default, at most 7,500, the embedding budget less room for the breadcrumb). The studio's index
 handler reads them from the `ingestion` settings section. A library caller passes `ChunkSizes` to
 `IndexKnowledgeBaseHandler`, or gets `DEFAULT_CHUNK_SIZES`. The fingerprint stores the indexer version
-with the sizes (`indexer_version`, such as `6+400-800`), so the next index after a size change is a
-full one, and `studio status` names it stale until then.
+with the sizes and the chunk planner (`indexer_version`, such as `7+400-800`, or
+`7+400-800+12000+gpt-6-luna/prompt-1/thinking-low/paragraphs-1` with a chunk planner), so the next index
+after a change of sizes, of chunk planner (its deployment, prompt version or thinking level), of the
+paragraph numbering or of the planner ceiling is a full one, and `studio status` names it stale until
+then. `indexer_version` is the one place the version is put together: the handler calls it with its
+`CutPlanStage`'s identity and ceiling, and the studio (`ingestion_indexer_version`) with the identity it
+reads from the settings, with no model built.
+
+### The chunk planner and cut plans
+
+The chunk planner is a port, `ChunkPlanner` (`src/engram/indexing/internal_contracts.py`): its
+`identity` names its model, prompt version and thinking level (`PydanticAiChunkPlanner.identity_for(deployment)`
+gives it with no model built), and `chunk_starts(paragraphs)` answers paragraph numbers. Plans are stored
+under the cut plan identity, `cut_plan_identity(identity)`, which adds the paragraph numbering version
+(`PARAGRAPH_NUMBERING_VERSION`, kept beside the code that splits paragraphs). `CutPlanStage` (`src/engram/indexing/service/cut_plan_stage.py`) runs on the full and the
+incremental path before the rows are built, and only when the schema stores source chunks. For each
+heading section the chunk planner may cut (`heading_sections_for_planner`) it reads the cut plan stored
+under the knowledge base, the sha256 of the section's text and the cut plan identity, and shows the
+planner only the heading sections with none, at most `chunk_planner_concurrency` at once. Each accepted answer is stored in `kb.cut_plans`
+(migration 0069), so indexing the same text again with the same chunk planner calls no model and cuts it
+the same way. A planner call that raises, runs past `chunk_planner_deadline_seconds` or answers refused
+numbers fills its text, is not stored, and never fails the index, so the next index asks again. The
+report carries how many cut plans the index reused and chose, and how many heading sections it filled for
+want of an accepted answer (`IndexReport.cut_plans`, distinct section texts), and `studio index` prints
+them as `Cut plans: 3 reused, 5 chosen, 1 filled` whenever one is not zero. The plans reach the chunker on the mirror itself
+(`MirrorDoc.cut_plans`, by text hash), so the raw chunk rows and their embed inputs are cut alike.
+
+The chunk planner is off by default. To turn it on, set `ingestion.chunk_planner_model` to a chat
+deployment on the Azure OpenAI resource `infrastructure.azure_openai.endpoint` names (this project runs
+`gpt-6-luna`), or `APP_INGESTION__CHUNK_PLANNER_MODEL`. The next plain index is then a full one, since
+the stored indexer version names the planner. The studio wires `PydanticAiChunkPlanner`
+(`src/engram/indexing/infrastructure/chunk_planner.py`) over that deployment, on the resource the
+disclosure summaries use, at a low thinking level. Its prompt asks for the paragraphs
+that open a new topic and its structured output is a list of paragraph numbers. An empty
+`chunk_planner_model`, or no `infrastructure.azure_openai.endpoint`, indexes with no chunk planner, and
+every such heading section is filled. A library caller passes `cut_plan_stage=CutPlanStage(planner, plans, queries)`
+to `IndexKnowledgeBaseHandler`, with `SqlAlchemyCutPlans(engine)` as both stores, or passes nothing.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `ingestion.chunk_planner_model` | empty | The Azure OpenAI deployment the chunk planner runs on. Empty, the default, leaves the chunk planner off. |
+| `ingestion.chunk_planner_ceiling_tokens` | 12,000 | The most tokens of text the chunk planner is shown at once. Longer text is filled. |
+| `ingestion.chunk_planner_deadline_seconds` | 60 | How long one chunk planner call may take before its text is filled. |
+| `ingestion.chunk_planner_concurrency` | 4 | How many chunk planner calls may run at once in one index. |
+
+`kb.cut_plans` is never pruned: a plan for text the knowledge base no longer holds stays until the table
+is cleared by hand, which only makes the next index ask the planner again.
 
 `read_source` answers a mirror's `chunk_count` and its `section_count`, the heading sections it holds,
 counted as the chunks whose heading or section path differs from the chunk before. The schema's
@@ -384,4 +441,8 @@ See the glossary at `../../CONTEXT.md` for slice, port, and mirror definitions.
   `TestModel`/`FunctionModel` (`tests/unit/engram/indexing/test_summarizer.py`), `studio summaries
   list|approve` over the `ctx.obj` seam (`tests/unit/test_cli_summaries.py`), and the real
   `kb.unit_summaries` DDL (`tests/integration/indexing/test_unit_summaries_table.py`,
-  testcontainers).
+  testcontainers). The chunk planner: `FakeChunkPlanner` and `FakeCutPlans` (`engram.testing.fakes.chunk_planner`)
+  drive `CutPlanStage` through the handler with no model (`tests/unit/engram/indexing/test_cut_plans_in_the_index.py`),
+  the domain's cut plans are pinned in `test_mirror_chunks.py`, `PydanticAiChunkPlanner` runs against
+  `TestModel`/`FunctionModel` (`test_chunk_planner.py`), and `kb.cut_plans` with a real index on top
+  of it runs in `tests/integration/indexing/test_cut_plans_db.py` (testcontainers).

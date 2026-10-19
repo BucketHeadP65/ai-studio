@@ -65,6 +65,8 @@ class GuardedTracingToolset[AgentDepsT](WrapperToolset[AgentDepsT]):
     would otherwise have to guess from the hits, and a forced-hybrid search whose every hit came off
     the keyword leg would be restated as a keyword-only search.
     """
+    browsable: bool = False
+    """Whether the wrapped `fetch` opens a map. A rebuilt `search` answer offers the map only when it does."""
 
     async def call_tool(self, name: str, tool_args: dict[str, object], ctx: RunContext[AgentDepsT], tool: ToolsetTool[AgentDepsT]) -> object:
         """Run one wrapped tool call, storing what it delivers before the model can read it.
@@ -99,6 +101,7 @@ class GuardedTracingToolset[AgentDepsT](WrapperToolset[AgentDepsT]):
                 tool_args=tool_args,
                 served_tools=frozenset(await self.wrapped.get_tools(ctx)),
                 search_hybrid=self.search_hybrid,
+                browsable=self.browsable,
             )
             return await self._deliver(name, ordinal, _without_withheld(value, scrub), started)
         except Exception:
@@ -170,6 +173,7 @@ class _Scrub:
     tool_args: Mapping[str, object]
     served_tools: frozenset[str]
     search_hybrid: bool | None = None
+    browsable: bool = False
 
     @property
     def searched_collection(self) -> str:
@@ -262,7 +266,7 @@ def _search_without_withheld(value: SearchResult, scrub: _Scrub) -> SearchResult
                 knowledge_base=collection,
                 hybrid=_ran_hybrid(value.hits, scrub),
                 status=status,
-                map_collection=collection,
+                map_collection=collection if scrub.browsable else None,
             ),
         }
     )

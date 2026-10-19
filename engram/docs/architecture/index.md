@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 20,832 tokens.
+Sections: 10 · whole document ≈ 20,985 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -55,7 +55,7 @@ Sections: 10 · whole document ≈ 20,832 tokens.
 - **Load when:** ingestion, connectors, zotero, conversion, mirror, sync, source queue, watch list, sources, pdf, arxiv, mirrors, paper import, entry point, registry, scanners, refresh
 
 ### 04 — Knowledge (bounded context)
-[sections/04-knowledge-bounded-context.md](sections/04-knowledge-bounded-context.md) · ~2,223 tokens
+[sections/04-knowledge-bounded-context.md](sections/04-knowledge-bounded-context.md) · ~2,272 tokens
 - **TL;DR:** The wikinote kernel is the note grammar (a parser ⟷ renderer pair over one set of domain models, shared by the indexer and authoring), and indexing is the five-stage rebuild (parse to resolve to validate to load to embed) with a true-incremental path that indexes again only a provably minimal dirty set.
 - **Load when:** knowledge, knowledge base, wikinote, note grammar, index, indexing, parse, resolve, validate, validation, embed, incremental, claims, pipeline
 
@@ -80,8 +80,8 @@ Sections: 10 · whole document ≈ 20,832 tokens.
 - **Load when:** cross-cutting, cqrs bus, unit of work, db base, wikibase, wireup, composition root, settings, observability, cli, dependency injection
 
 ### 09 — System data model (ERD)
-[sections/09-system-data-model-erd.md](sections/09-system-data-model-erd.md) · ~2,114 tokens
-- **TL;DR:** The single system ERD, 17 tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
+[sections/09-system-data-model-erd.md](sections/09-system-data-model-erd.md) · ~2,218 tokens
+- **TL;DR:** The single system ERD, 18 of the 21 `kb` tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
 - **Load when:** erd, schema, tables, data model, entity relationship, database tables, identity, composite key, containment, citation, facets, tenancy
 
 ### 10 — Quality, risks, tech debt

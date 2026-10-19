@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 from core.cqrs.contracts import UnitOfWork
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
     from pathlib import Path
 
     from core.ai.embedding import BatchEmbedder
@@ -836,6 +836,61 @@ class Summarizer(Protocol):
 
         Returns:
             The summary.
+        """
+        ...
+
+
+@runtime_checkable
+class ChunkPlanner(Protocol):
+    """The model that chooses where a heading section of a mirror changes topic, answering paragraph numbers only."""
+
+    @property
+    def identity(self) -> str:
+        """What decides the planner's answers: its model name, prompt version and thinking level, named by each cut plan it chooses and by the index fingerprint."""
+        ...
+
+    async def chunk_starts(self, paragraphs: Sequence[str]) -> Sequence[int]:
+        """Answer the numbers of the paragraphs where a new chunk starts, paragraphs numbered from 1 by their place.
+
+        The caller refuses an answer that is not strictly increasing paragraph numbers and fills the text instead.
+        A call may fail or run late, and the caller then fills the text.
+
+        Args:
+            paragraphs: The text's paragraphs in reading order.
+
+        Returns:
+            The paragraph numbers where a new chunk starts, in increasing order.
+        """
+        ...
+
+
+class CutPlans(Protocol):
+    """The write side of the stored cut plans: plans are added and never changed."""
+
+    async def insert(self, collection: str, planner: str, plans: Mapping[str, tuple[int, ...]]) -> None:
+        """Store cut plans in one transaction of their own, keeping any plan already stored under the same key.
+
+        Args:
+            collection: The knowledge base the plans belong to.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
+            plans: The paragraph numbers where a new chunk starts, by the content hash of the text each cuts.
+        """
+        ...
+
+
+class CutPlanQueries(Protocol):
+    """The read side of the stored cut plans."""
+
+    async def cut_plans(self, collection: str, planner: str, text_hashes: Collection[str]) -> dict[str, tuple[int, ...]]:
+        """The stored cut plans of one knowledge base and one chunk planner for the text hashes asked.
+
+        Args:
+            collection: The knowledge base the plans belong to.
+            planner: The cut plan identity (`cut_plan_identity`) the plans are stored under.
+            text_hashes: The content hashes of the texts asked for.
+
+        Returns:
+            The paragraph numbers by text hash, leaving out each hash with no stored plan.
         """
         ...
 

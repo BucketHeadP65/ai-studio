@@ -57,10 +57,10 @@ studio = "studio.knowledge_base.cli:app"
 
 [dependency-groups]
 dev = [
-    "pyright (>=1.1.411,<2.0.0)",
+    "pyright (>=1.1.414,<2.0.0)",
     # Pinned to the same minor as every other project in the monorepo so ``select = ["ALL"]``
     # resolves to the same rule set everywhere.
-    "ruff (>=0.16.0,<0.17.0)",
+    "ruff (>=0.17.1,<0.18.0)",
     "types-pyyaml>=6.0.12.20260724",
 ]
 test = [

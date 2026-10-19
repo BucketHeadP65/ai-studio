@@ -901,6 +901,7 @@ C4Component
         Component(vocab, "_vocab_rows", "service/vocab.py", "VocabularyIndex to kb.vocab rows")
         Component(uow, "SqlAlchemyWikiUnitOfWork", "infrastructure/uow.py + infrastructure/repository.py", "One rebuild txn, per-aggregate repos, hash-gated upsert + collection-scoped prune")
         Component(embedder, "PydanticAiEmbedder", "infrastructure/embedder.py", "BatchEmbedder, batched embed_documents, embedding IS NULL queue")
+        Component(cutplans, "CutPlanStage", "service/cut_plan_stage.py", "Cut plans for a heading section over the maximum: stored in kb.cut_plans, else asked of the ChunkPlanner port, else filled")
 
         Component(manifest, "compute_diff / identity_hash", "domain/manifest.py", "Re-hash files vs stored manifest to ManifestDiff")
         Component(closure, "compute_closure", "domain/manifest.py", "Diff to DirtySet (reparse ∪ inbound-closure ∪ mirror-citers) + targeted deletes")
@@ -919,6 +920,8 @@ C4Component
     Rel(uow, pg, "INSERT … ON CONFLICT / DELETE … collection-scoped")
     Rel(handler, embedder, "Embed stage (hash-gated)")
     Rel(embedder, aoai, "embed_documents")
+    Rel(handler, cutplans, "before Load, on both paths")
+    Rel(cutplans, aoai, "PydanticAiChunkPlanner: paragraph numbers only")
 
     Rel(handler, manifest, "incremental? re-hash + diff")
     Rel(manifest, closure, "ManifestDiff")
@@ -927,7 +930,7 @@ C4Component
     Rel(handler, incremental, "_can_incremental to run_incremental, else _full_path")
 ```
 
-Source: `src/engram/indexing/service/index.py`, `src/engram/indexing/infrastructure/knowledge_base_reader.py`, `src/engram/indexing/domain/resolver.py`, `src/engram/indexing/domain/validator.py`, `src/engram/indexing/domain/card.py`, `src/engram/indexing/service/vocab.py`, `src/engram/indexing/infrastructure/uow.py`, `src/engram/indexing/infrastructure/repository.py`, `src/engram/indexing/infrastructure/embedder.py`, `src/engram/indexing/domain/manifest.py`, `src/engram/indexing/service/incremental.py`
+Source: `src/engram/indexing/service/index.py`, `src/engram/indexing/service/cut_plan_stage.py`, `src/engram/indexing/infrastructure/knowledge_base_reader.py`, `src/engram/indexing/domain/resolver.py`, `src/engram/indexing/domain/validator.py`, `src/engram/indexing/domain/card.py`, `src/engram/indexing/service/vocab.py`, `src/engram/indexing/infrastructure/uow.py`, `src/engram/indexing/infrastructure/repository.py`, `src/engram/indexing/infrastructure/embedder.py`, `src/engram/indexing/domain/manifest.py`, `src/engram/indexing/service/incremental.py`
 
 The domain layer (`domain.py`) is one command, one report, ports, and the
 loadable-row models whose field names mirror the `kb.*` ORM columns 1:1 so the Load
@@ -2149,11 +2152,12 @@ Every *other* command is late-registered from `studio/src/studio/knowledge_base/
 cross-cutting domain class diagram, these are infrastructure ports, not entities.
 
 ## 9. System data model (ERD)
-> **TL;DR:** The single system ERD, 17 tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
+> **TL;DR:** The single system ERD, 18 of the 21 `kb` tables across five clusters (Sources, Knowledge, Ops, Indexing-private, Evals), every knowledge-base-owned table keyed by composite `(collection, id)` with containment FKs (same-collection, CASCADE) and citation FKs (own target-collection column, null-paired CHECK, no cascade), as one `erDiagram`. The agent-visible `api` schema is a read-only projection over these base tables, none of which are granted to `kb_reader`.
 <!-- load-when: erd, schema, tables, data model, entity relationship, database tables, identity, composite key, containment, citation, facets, tenancy -->
 
 This is engram's **one canonical data model**. Every table lives in the single
-`kb` schema. There are **17** base tables across five logical clusters. The
+`kb` schema. There are **21** base tables across five logical clusters, and the diagram draws 18 of
+them: `page_type_contracts`, `reader_scopes` and `retrieval_tuning` are left out. The
 agent-visible `api` schema (the views + `SECURITY DEFINER` functions whose SQL
 COMMENTs form the M-Schema) is a **read-only projection** over these base tables.
 `kb_reader` is granted the `api` schema only and never any `memory.*` table
@@ -2334,6 +2338,12 @@ erDiagram
         text embed_model
         timestamptz indexed_at
     }
+    cut_plans {
+        text collection PK
+        text text_hash PK "sha256 of one heading section's text"
+        text planner PK "cut plan identity"
+        int_array starts "paragraph numbers, 1 left out"
+    }
     evaluation_runs {
         text id PK
         text dataset
@@ -2366,7 +2376,7 @@ erDiagram
     evaluation_runs     ||--o{ evaluation_case_results : "case scores"
 ```
 
-Source: `alembic/versions/0001_wiki_schema.py`, `alembic/versions/0005_eval_runs.py`, `alembic/versions/0006_compile_state.py`, `alembic/versions/0024_spine_maturation.py`, `alembic/versions/0025_corpus_qualified_identity.py`, `src/engram/indexing/infrastructure/orm.py`, `src/engram/evals/shared/infrastructure/orm.py`
+Source: `alembic/versions/0001_wiki_schema.py`, `alembic/versions/0005_eval_runs.py`, `alembic/versions/0006_compile_state.py`, `alembic/versions/0024_spine_maturation.py`, `alembic/versions/0025_corpus_qualified_identity.py`, `alembic/versions/0069_cut_plans.py`, `src/engram/indexing/infrastructure/orm.py`, `src/engram/evals/shared/infrastructure/orm.py`
 
 **The five clusters.** Mermaid ER is flat. The tables group as follows.
 
@@ -2410,7 +2420,9 @@ Source: `alembic/versions/0001_wiki_schema.py`, `alembic/versions/0005_eval_runs
   whole-knowledge-base report reassembly), and `index_fingerprint` (the single
   per-collection global invalidator). These four are **indexing-private**:
   `index` is the only writer, and they appear in **no** `api` view/function,
-  distinct from the `api`-exposed Knowledge tables.
+  distinct from the `api`-exposed Knowledge tables. `cut_plans` (migration `0069`)
+  is indexing-private too: the paragraph numbers a chunk planner chose for one heading
+  section of a mirror, keyed by `collection`, the text's hash and the cut plan identity.
 - **Evals** (run summary, D10, migration `0005`): `evaluation_runs` (one summary row
   per tuning/evaluation run) and `evaluation_case_results` (per-case scores, FK to
   `evaluation_runs`). These are a thin Postgres summary. Logfire is the deep store, and

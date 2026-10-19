@@ -32,6 +32,7 @@ _HEADER = ResultsHeader(
     dataset_sha256="b" * 64,
     collection="notes",
     knowledge_base_fingerprint="hash:notes",
+    index_build="7+500-1000 test-embedding",
     started="2026-10-13T09:00:00+00:00",
     source_lookup_error=None,
 )
@@ -51,6 +52,8 @@ _LINE_KEYS = {
     "mrr",
     "other_collection",
     "transient",
+    "seen_recall",
+    "seen_gold",
 }
 
 
@@ -116,6 +119,7 @@ async def test_the_file_opens_with_the_header_and_holds_one_line_per_case(tmp_pa
             "dataset_sha256": "b" * 64,
             "collection": "notes",
             "knowledge_base_fingerprint": "hash:notes",
+            "index_build": "7+500-1000 test-embedding",
             "started": "2026-10-13T09:00:00+00:00",
             "source_lookup_error": None,
         }
@@ -145,6 +149,8 @@ async def test_an_answered_case_carries_its_answer_scores_and_page_level_retriev
         "mrr": 1.0,
         "other_collection": False,
         "transient": False,
+        "seen_recall": None,
+        "seen_gold": None,
     }
 
 
@@ -185,13 +191,44 @@ async def test_mapped_sources_are_scored_against_the_gold_ids() -> None:
     assert failed.sources == ()
 
 
+async def test_seen_sources_score_each_case_against_its_gold_ids_a_failed_case_keeping_what_it_saw() -> None:
+    seen = {"case-a": frozenset({"note.beta", "note.zeta"}), "case-b": frozenset({"note.gamma"}), "case-c": frozenset({"note.alpha"})}
+
+    lines = results_lines(await _report(), sources={}, seen=seen, other_collection=frozenset(), case_order=_ORDER)
+
+    by_case = {line.case: line for line in lines}
+    assert (by_case["case-a"].seen_gold, by_case["case-a"].seen_recall) == (("note.beta",), 0.5)
+    assert (by_case["case-a"].recall_at_4, by_case["case-a"].recall_at_10) == (0.0, 0.0)
+    assert (by_case["case-b"].failed, by_case["case-b"].seen_gold, by_case["case-b"].seen_recall) == (True, ("note.gamma",), 1.0)
+    assert (by_case["case-c"].seen_gold, by_case["case-c"].seen_recall) == (None, None)
+
+
+async def test_a_mapped_case_whose_tool_results_named_nothing_has_seen_recall_zero() -> None:
+    lines = results_lines(await _report(), sources={}, seen={}, other_collection=frozenset(), case_order=_ORDER)
+
+    answered = next(line for line in lines if line.case == "case-a")
+    assert (answered.seen_gold, answered.seen_recall) == ((), 0.0)
+
+
+async def test_a_run_that_mapped_no_sources_has_no_seen_recall() -> None:
+    lines = results_lines(await _report(), sources=None, other_collection=frozenset(), case_order=_ORDER)
+
+    assert all((line.seen_gold, line.seen_recall) == (None, None) for line in lines)
+
+
 async def test_a_failed_source_lookup_leaves_every_source_and_retrieval_score_null() -> None:
     lines = results_lines(
-        await _report(), sources=None, other_collection=frozenset(), case_order=("case-a", "case-b", "case-c"), source_lookup_failed=True
+        await _report(),
+        sources=None,
+        seen={"case-a": frozenset({"note.beta"})},
+        other_collection=frozenset(),
+        case_order=("case-a", "case-b", "case-c"),
+        source_lookup_failed=True,
     )
 
     assert all(line.sources is None for line in lines)
     assert all((line.recall_at_4, line.recall_at_10, line.mrr) == (None, None, None) for line in lines)
+    assert all((line.seen_gold, line.seen_recall) == (None, None) for line in lines)
     assert next(line for line in lines if line.case == "case-a").strict is True
 
 
@@ -224,7 +261,14 @@ async def test_a_failure_not_named_transient_is_not_transient() -> None:
 
 
 async def test_the_file_reads_back_as_written(tmp_path: Path) -> None:
-    lines = results_lines(await _report(), sources=None, other_collection=frozenset({"case-c"}), case_order=_ORDER, transient=frozenset({"case-b"}))
+    lines = results_lines(
+        await _report(),
+        sources={"case-a": ["note.alpha"]},
+        seen={"case-a": frozenset({"note.alpha", "note.beta"})},
+        other_collection=frozenset({"case-c"}),
+        case_order=_ORDER,
+        transient=frozenset({"case-b"}),
+    )
     path = tmp_path / "results.jsonl"
     write_results(path, _HEADER, lines)
 
@@ -289,7 +333,9 @@ def test_an_older_file_reads_code_mode_off_thinking_unset_and_each_failure_from_
     header, lines = read_results(path)
 
     assert (header.code_mode, header.thinking, header.model) == (False, None, "test-model")
+    assert header.index_build is None
     assert {line.case: line.transient for line in lines} == {"case-a": False, "case-b": True, "case-c": False}
+    assert all((line.seen_gold, line.seen_recall) == (None, None) for line in lines)
     assert lines[1].error == "ModelAPIError: Connection error."
 
 

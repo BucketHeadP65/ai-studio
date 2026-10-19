@@ -168,9 +168,10 @@ class SeedRepositoryFactory(Protocol):
 
 @runtime_checkable
 class SupportsCoverageReader(Protocol):
-    """The knowledge base reads the generate handler needs: the stratum census, the fingerprint and the page ids.
+    """The knowledge base reads the generate handler and a results file need: the census, the fingerprint, the index build and the page ids.
 
-    A fresh run never reads `page_ids`. A top-up reads it to retire each case whose gold page is gone as `gold_gone`.
+    A fresh run never reads `page_ids`. A top-up reads it to retire each case whose gold page is gone as `gold_gone`. Only
+    an evaluation run's results file reads `index_build`.
     """
 
     async def inventory(self, *, collection: str) -> StratumInventory:
@@ -192,6 +193,17 @@ class SupportsCoverageReader(Protocol):
 
         Returns:
             The fingerprint.
+        """
+        ...
+
+    async def index_build(self, *, collection: str) -> str:
+        """The index build `collection` was last indexed into: its indexer version, embedding model, vocabulary and switches on.
+
+        Args:
+            collection: The knowledge base to read.
+
+        Returns:
+            The parts separated by spaces, or `not indexed` for a knowledge base never indexed.
         """
         ...
 

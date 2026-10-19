@@ -403,7 +403,7 @@ Pytest `asyncio_mode=auto`, tiers `unit/integration/e2e`, polyfactory
 factories, hand-written `Fake*` over mocks. The library's integration tier and
 the app's integration/e2e tiers run a real database via testcontainers
 (auto-skip without Docker). TS: Biome, Vitest + MSW
-(`onUnhandledRequest: "error"`, deliberately empty default handlers),
+(`onUnhandledFrame: "error"`, deliberately empty default handlers),
 Playwright e2e. Ruff `ALL` @ 140, Google docstrings, no `Any`/`# noqa`
 masking across every Python project.
 

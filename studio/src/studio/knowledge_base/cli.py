@@ -57,7 +57,6 @@ from engram.indexing.contracts import (
     PendingSummary,
     RetrievalSwitches,
     SummaryGovernance,
-    indexer_version,
 )
 from engram.init.contracts import SchemaRevisionError, assert_schema_at_head
 from engram.kb import contracts as kb
@@ -126,6 +125,7 @@ from studio.knowledge_base.refresh.contracts import (
 )
 from studio.knowledge_base.reindex import SubprocessReindex
 from studio.knowledge_base.settings import (
+    AzureOpenAiSettings,
     DatabaseSettings,
     EvalsSettings,
     IngestionSettings,
@@ -139,7 +139,7 @@ from studio.knowledge_base.settings import (
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
-from studio.knowledge_base.wiring.indexing import ingestion_chunk_sizes
+from studio.knowledge_base.wiring.indexing import ingestion_indexer_version
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
@@ -775,14 +775,14 @@ def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int
             f"at {fingerprint.indexed_at}"
         )
     if stale:
-        lines.append("Manifest stale ⇒ next run is --full (cold start, or an indexer-version or chunk-size change).")
+        lines.append("Manifest stale ⇒ next run is --full (cold start, or an indexer-version, chunk-size or chunk-planner change).")
     return lines
 
 
 async def _print_status(container: Resolver, *, collection: str) -> None:
     """Print the table row counts, embedding metadata, last query time and index drift of `collection`, writing nothing."""
     engine = await container.get(AsyncEngine)
-    current_version = indexer_version(ingestion_chunk_sizes(await container.get(IngestionSettings)))
+    current_version = ingestion_indexer_version(await container.get(AzureOpenAiSettings), await container.get(IngestionSettings))
     async with engine.connect() as conn:
         typer.echo("Row counts:")
         for table in _STATUS_TABLES:
@@ -1497,9 +1497,7 @@ def serve_http_cmd(
 
 def _migrate_knowledge_base_words() -> None:
     """Rewrite any registered knowledge base still written in the old words, logging and continuing on failure."""
-    from studio.migrations.contracts import (  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
-        BOOT_MIGRATIONS,
-    )
+    from studio.migrations.contracts import BOOT_MIGRATIONS  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
 
     for name, needed, run in BOOT_MIGRATIONS:
         try:

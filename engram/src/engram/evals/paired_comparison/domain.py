@@ -3,8 +3,8 @@
 A case is correct when its answer matched strictly and it did not fail. The difference is the candidate's strict
 accuracy minus the baseline's, with a normal 95 percent interval over the per-case differences. McNemar's exact
 two-sided test reads the cases only one run answered correctly. Holm's method adjusts the p values across the pairs of
-one call, over all cases and within each query type. Each side also carries its failed cases and its mean source-level
-retrieval.
+one call, over all cases and within each query type. Each side also carries its failed cases, its mean source-level
+retrieval and its mean seen recall, with the paired difference of the seen recalls.
 """
 
 from __future__ import annotations
@@ -31,12 +31,16 @@ INTERVAL_Z = 1.96
 _SHOWN_CASES = 5
 """How many case names a refusal lists before it counts the rest."""
 
+_MISSING = "missing"
+"""What a report cell shows for a seen recall the results file does not hold."""
+
 
 class ResultsHeader(BaseModel):
     """How one evaluation run was set up, as the first line of its results file records it.
 
     A header written before code mode and the thinking level were recorded reads them as off and unset. One written before
-    `search_date_range` was recorded reads it as the opposite of `pinned_search`.
+    `search_date_range` was recorded reads it as the opposite of `pinned_search`, and one written before the index build
+    was recorded reads it as None.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -67,6 +71,8 @@ class ResultsHeader(BaseModel):
     """The knowledge base the run read."""
     knowledge_base_fingerprint: str
     """The knowledge base's index fingerprint and its name."""
+    index_build: str | None = None
+    """The index build the run read, its indexer version, embedding model, vocabulary and switches, or None, shown as unknown, when unrecorded."""
     started: str
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
@@ -106,6 +112,9 @@ class ResultsLine(BaseModel):
     """The reciprocal rank of the case's first gold id, or None for a case with no gold ids."""
     other_collection: bool
     """Whether a row the case's SQL statements returned from a view of knowledge base content named another knowledge base."""
+    seen_recall: float | None = None
+    """The share of the case's gold sources its tool results named, or None for a case with no gold ids, a run that mapped no
+    sources or a line written before it was recorded."""
 
 
 class ResultsFile(BaseModel):
@@ -153,6 +162,18 @@ class SourceLevelRetrieval(BaseModel):
     """The mean recall at 10, from 0 to 1."""
     mrr: float
     """The mean reciprocal rank of the first gold source, from 0 to 1."""
+    seen_recall: float | None = None
+    """The mean seen recall over the scored cases whose lines carry one, from 0 to 1, or None when none does."""
+
+
+class QueryTypeRetrieval(BaseModel):
+    """One query type's mean source-level retrieval in one run."""
+
+    model_config = ConfigDict(frozen=True)
+
+    query_type: str | None
+    """The query type, or None for the cases with none."""
+    retrieval: SourceLevelRetrieval
 
 
 class PairedScores(BaseModel):
@@ -194,6 +215,8 @@ class PairedScores(BaseModel):
     """The baseline's mean source-level retrieval over these cases, or None when it scored none at the source level."""
     candidate_retrieval: SourceLevelRetrieval | None
     """The candidate's mean source-level retrieval over these cases, or None when it scored none at the source level."""
+    seen_recall_difference: float | None
+    """The mean over the cases both runs scored a seen recall for of the candidate's minus the baseline's, or None when no case has both."""
 
 
 class QueryTypeScores(BaseModel):
@@ -283,10 +306,12 @@ def holm_adjusted(p_values: Sequence[float]) -> tuple[float, ...]:
 
 
 def source_level_retrieval(lines: Iterable[ResultsLine]) -> SourceLevelRetrieval | None:
-    """The mean recall@4, recall@10 and MRR over the lines scored against gold source ids.
+    """The mean recall@4, recall@10, MRR and seen recall over the lines scored against gold source ids.
 
     A line counts when its run mapped its citations to sources and its case has gold ids. A failed case counts with
-    the zero scores its line carries.
+    the zero scores its line carries, and with the seen recall of what its tool results named before it failed. The
+    seen recall is the mean over the counted lines that carry one, so a results file written before it was recorded has
+    none rather than zero.
 
     Args:
         lines: The case lines of one run, all of them or any subset.
@@ -295,27 +320,49 @@ def source_level_retrieval(lines: Iterable[ResultsLine]) -> SourceLevelRetrieval
         The means and how many lines they cover, or None when no line counts.
     """
     scored = [
-        (line.recall_at_4, line.recall_at_10, line.mrr)
+        (line.recall_at_4, line.recall_at_10, line.mrr, line.seen_recall)
         for line in lines
         if line.sources is not None and line.recall_at_4 is not None and line.recall_at_10 is not None and line.mrr is not None
     ]
     if not scored:
         return None
     count = len(scored)
+    seen = [seen_recall for _, _, _, seen_recall in scored if seen_recall is not None]
     return SourceLevelRetrieval(
         cases=count,
-        recall_at_4=sum(recall_at_4 for recall_at_4, _, _ in scored) / count,
-        recall_at_10=sum(recall_at_10 for _, recall_at_10, _ in scored) / count,
-        mrr=sum(mrr for _, _, mrr in scored) / count,
+        recall_at_4=sum(recall_at_4 for recall_at_4, _, _, _ in scored) / count,
+        recall_at_10=sum(recall_at_10 for _, recall_at_10, _, _ in scored) / count,
+        mrr=sum(mrr for _, _, mrr, _ in scored) / count,
+        seen_recall=sum(seen) / len(seen) if seen else None,
     )
+
+
+def source_level_retrieval_per_query_type(lines: Iterable[ResultsLine]) -> tuple[QueryTypeRetrieval, ...]:
+    """Each query type's mean source-level retrieval, as `source_level_retrieval` scores it over that type's lines.
+
+    Args:
+        lines: The case lines of one run.
+
+    Returns:
+        One row per query type with a scored line, ordered by name, with the cases that have none last.
+    """
+    groups: dict[str | None, list[ResultsLine]] = defaultdict(list)
+    for line in lines:
+        groups[line.query_type].append(line)
+    rows = (
+        (query_type, source_level_retrieval(group))
+        for query_type, group in sorted(groups.items(), key=lambda item: (item[0] is None, item[0] or ""))
+    )
+    return tuple(QueryTypeRetrieval(query_type=query_type, retrieval=retrieval) for query_type, retrieval in rows if retrieval is not None)
 
 
 def paired_comparisons(pairs: Sequence[tuple[ResultsFile, ResultsFile]]) -> tuple[PairedComparison, ...]:
     """Compare each pair of runs case by case, with Holm's method across all the pairs.
 
     Two runs are compared only when they agree on the dataset, the model, the thinking level, the instructions, the
-    tool-call budget, the search pinning, whether the search took a date range and the knowledge base. Two runs under one strategy may differ in the knowledge
-    base fingerprint and in either the SQL switch or code mode, never in both. Two runs under different strategies must
+    tool-call budget, the search pinning, whether the search took a date range and the knowledge base. Two runs may differ
+    in the knowledge base fingerprint and in the index build. Two runs under one strategy may differ in either the SQL
+    switch or code mode, never in both. Two runs under different strategies must
     share the SQL switch and code mode, and the graph verdict must call the candidate the baseline plus the graph leg.
     Every pair is checked before any is scored. A side whose source lookup failed carries no source-level retrieval.
 
@@ -382,7 +429,11 @@ def paired_comparison_markdown(comparisons: Sequence[PairedComparison]) -> str:
             "base content named another knowledge base, and the failed columns count the cases that raised instead of answering. "
             "The retrieval table gives each run's mean source-level recall@4, recall@10 and MRR over the cases it scored: those "
             "whose citations it mapped to sources and that have gold source ids, a failed case scoring 0. None means the run "
-            "scored no case there."
+            "scored no case there. The seen recall table gives each run's mean share of the gold sources that any tool result "
+            "the model received named, a failed case counting what it saw before it failed, and the mean per-case difference "
+            "over the cases both runs scored. Missing means the run's results file holds no seen recall there, as a file "
+            "written before it was recorded does, never that the run saw nothing. Each run's index build is shown beside "
+            "its knowledge base fingerprint, unknown for a results file written before it was recorded."
         ),
     ]
     for comparison in comparisons:
@@ -503,6 +554,11 @@ def _scores(lines: Sequence[_CasePair], *, p_value: float, holm_p_value: float, 
     count = len(lines)
     differences = _differences(lines)
     baseline_mapped, candidate_mapped = mapped
+    seen_differences = [
+        candidate.seen_recall - baseline.seen_recall
+        for baseline, candidate in lines
+        if baseline_mapped and candidate_mapped and baseline.seen_recall is not None and candidate.seen_recall is not None
+    ]
     return PairedScores(
         cases=count,
         baseline_strict=sum(_is_correct(baseline) for baseline, _ in lines) / count,
@@ -521,11 +577,12 @@ def _scores(lines: Sequence[_CasePair], *, p_value: float, holm_p_value: float, 
         candidate_failed=sum(candidate.failed for _, candidate in lines),
         baseline_retrieval=source_level_retrieval(baseline for baseline, _ in lines) if baseline_mapped else None,
         candidate_retrieval=source_level_retrieval(candidate for _, candidate in lines) if candidate_mapped else None,
+        seen_recall_difference=sum(seen_differences) / len(seen_differences) if seen_differences else None,
     )
 
 
 def _pair_section(comparison: PairedComparison) -> list[str]:
-    """One pair's heading, its two variants, a note for each failed source lookup and its three tables."""
+    """One pair's heading, its two variants, a note for each failed source lookup and its four tables."""
     baseline, candidate = comparison.baseline_header, comparison.candidate_header
     rows = [("all cases", comparison.overall), *((_query_type_label(row.query_type), row.scores) for row in comparison.query_types)]
     lookup_notes = [
@@ -567,7 +624,20 @@ def _pair_section(comparison: PairedComparison) -> list[str]:
         ),
         "|---|---|---|---|---|---|---|---|---|",
         *(f"| {label} | {_retrieval_cells(scores.baseline_retrieval, scores.candidate_retrieval)} |" for label, scores in rows),
+        "",
+        "| Query type | Baseline seen recall | Candidate seen recall | Seen recall difference |",
+        "|---|---|---|---|",
+        *(f"| {label} | {_seen_cells(scores)} |" for label, scores in rows),
     ]
+
+
+def _seen_cells(scores: PairedScores) -> str:
+    """Both sides' mean seen recall and their paired difference, each missing when no case carries one."""
+    means = (retrieval.seen_recall if retrieval is not None else None for retrieval in (scores.baseline_retrieval, scores.candidate_retrieval))
+    cells = [f"{mean:.3f}" if mean is not None else _MISSING for mean in means]
+    difference = scores.seen_recall_difference
+    cells.append(f"{difference:+.3f}" if difference is not None else _MISSING)
+    return " | ".join(cells)
 
 
 def _retrieval_cells(baseline: SourceLevelRetrieval | None, candidate: SourceLevelRetrieval | None) -> str:
@@ -586,11 +656,12 @@ def _mean_cells(retrieval: SourceLevelRetrieval | None) -> tuple[str, str, str]:
 
 
 def _variant(header: ResultsHeader) -> str:
-    """A run's strategy, SQL switch, code mode, thinking level and knowledge base fingerprint, as the report prints them."""
+    """A run's strategy, SQL switch, code mode, thinking level, knowledge base fingerprint and index build, as the report prints them."""
     thinking = f"thinking {header.thinking}" if header.thinking is not None else "no thinking level"
+    index_build = header.index_build if header.index_build is not None else "unknown"
     return (
         f"strategy {header.strategy.value}, SQL {'on' if header.sql else 'off'}, code mode {'on' if header.code_mode else 'off'}, "
-        f"{thinking}, knowledge base {header.knowledge_base_fingerprint}"
+        f"{thinking}, knowledge base {header.knowledge_base_fingerprint}, index build {index_build}"
     )
 
 

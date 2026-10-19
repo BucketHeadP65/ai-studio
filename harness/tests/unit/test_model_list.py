@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
@@ -54,6 +55,15 @@ async def test_with_no_listing_a_pinned_entry_is_priced_by_the_registry_or_not_a
     assert priced[0].price_out_per_m is not None
     assert unpriced[0].price_in_per_m is None
     assert unpriced[0].price_out_per_m is None
+
+
+async def test_a_pinned_entry_takes_the_registry_price_in_force_on_the_wall_clock_date() -> None:
+    promotion = await ModelList(listing=None, wall_clock=lambda: datetime(2026, 9, 1, tzinfo=UTC)).entries()
+    list_price = await ModelList(listing=None, wall_clock=lambda: datetime(2026, 10, 1, tzinfo=UTC)).entries()
+
+    assert promotion[0].id == list_price[0].id == "glm-5.3-flash"
+    assert (promotion[0].price_in_per_m, promotion[0].price_out_per_m) == (Decimal("0.075"), Decimal("0.25"))
+    assert (list_price[0].price_in_per_m, list_price[0].price_out_per_m) == (Decimal("0.15"), Decimal("0.5"))
 
 
 async def test_with_no_openrouter_credential_every_pinned_entry_routes_through_the_gateway() -> None:

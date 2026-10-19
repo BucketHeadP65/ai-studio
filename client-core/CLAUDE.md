@@ -14,4 +14,6 @@ Its surface today: `api/client` (the typed fetch + zod boundary), the `ui/*` pri
 
 **Tailwind (v4) must scan client-core.** Tailwind v4 auto-detects sources from the project tree but **deliberately skips `node_modules`**, and `client-core` is copy-installed *into* `node_modules/client-core`. Without an explicit `@source`, every utility class used only by a `client-core` primitive (e.g. the `Button`'s `bg-slate-900 text-white`) gets **purged** and the component renders unstyled (looks like plain text). Each consumer's `globals.css` must register it: `@source "../../node_modules/client-core/src/**/*.{ts,tsx}";` (path relative to the CSS file). Applies to `studio-client/`.
 
+**jsdom pin and undici override.** `jsdom` is pinned to `~30.0.1`, and `overrides` holds jsdom's `undici` at `~8.11.2`. undici 8.12 calls `zlib.createZstdDecompress` when it loads, which the Node 22.14 this stack runs lacks, so no test file starts. jsdom 30.1.3 requires undici 8.12, and without the override any jsdom 30 resolves to it. Both go once Node is at 22.19.0 or later, the floor in undici's `engines` field: drop the override and take the current jsdom.
+
 **Ownership rule: a change in `client-core/` must keep its consumers green.** Run typecheck plus the full suites in `studio-client/` before claiming it done.
