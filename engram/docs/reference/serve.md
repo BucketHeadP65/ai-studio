@@ -287,9 +287,9 @@ together), never on the items alone. One fitter does the measuring for all of th
 | `SQL_RESULT_CHARS` | 16,000 | The complete `{"rows": ..., "note": ...}` envelope, its `note` counted in | `src/engram/retrieval/sql_tools.py` |
 
 **Folded units go first.** When a `search` answer does not fit whole, its hits' folded units give way one at a time,
-from the lowest-ranked hit's last one up: each keeps the longest snippet that lets the answer fit, and is dropped only
-when not even an empty snippet fits. Only after every folded unit has given way is any hit's title or snippet cut or
-any hit left out.
+from the lowest-ranked hit's last one up: each keeps the longest snippet that lets the answer fit, never its ellipsis
+alone, keeps no snippet when only that fits, and is dropped when not even that fits. Only after every folded unit has
+given way is any hit's title or snippet cut or any hit left out.
 
 **Identity never shortens.** Only display text is cut: a hit's `page_title` and `snippet`, a graph
 node's `title`, the strings inside a `run_sql` cell. An `id`, a `ref`, a `provenance_ref` and a score
@@ -377,7 +377,8 @@ the name. Each distinct text is embedded once, all of them within 10 s
 A statement that passes `query_vec` or `query_model` itself is refused, since only the rewrite writes
 them.
 
-**Search legs are bounded and tuned from one row** (engram ADR-0048). Every keyword leg ranks by its
+**Search legs are bounded and tuned from a default row and one row per knowledge base** (engram ADR-0048, amended by
+migration 0071). Every keyword leg ranks by its
 BM25 index and every semantic leg by exact distance, and each stops at the leg budget before the fusion.
 `api.search` reads its numbers from `kb.retrieval_tuning`, a table the reader cannot read or write, as its owner,
 and holds each to a bound generated into the function. The table holds a default row, whose `collection` is null, and
@@ -421,7 +422,8 @@ words its description without sending the agent to `fetch` at all, and the next 
 `fetch` either: they offer judging the hits by their snippets and searching again, and no map.
 `api.search_hits_per_document(collection)` answers the cap the search applies to one knowledge base, read from its own
 row, else the default row, over the same default and bound, 0 when every hit is kept. With no collection it answers for
-the reader session's own knowledge base. A host reads it once for each knowledge base, when it opens one
+the reader session's own knowledge base. For a knowledge base the session cannot see (`api.visible_collection`) it reads
+the default row only, so a reader learns nothing of a private knowledge base's own row. A host reads it once for each knowledge base, when it opens one
 (`read_hits_per_document`, which reads 0 when the database cannot answer, as below migration 0071, whose function takes
 no collection), and every `search` description states it: a cap of 1 says each hit is a distinct document, a higher cap
 says how many hits one document may have, and 0 says nothing about documents. Where it states a cap, it also says each

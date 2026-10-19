@@ -379,6 +379,16 @@ class TestTheResponseBudgetCutsAFoldedSnippetBeforeDroppingItsUnit:
         assert kept.snippet.endswith("\u2026")
         assert answer.hits[0].snippet == "z" * 300
 
+    def test_a_folded_snippet_is_never_cut_to_its_ellipsis_alone(self):
+        hits, status, steps = _one_folding_hit()
+        unit = hits[0].folded_units[0]
+        ellipsis_only = _size((hits[0].model_copy(update={"folded_units": (unit.model_copy(update={"snippet": "\u2026"}),)}),), status, steps)
+
+        answer = bound_search_result(hits, status=status, next_steps=steps, knowledge_base=None, max_chars=ellipsis_only)
+
+        assert all(folded.snippet != "\u2026" for folded in answer.hits[0].folded_units)
+        assert answer.hits[0].snippet == "z" * 300
+
     def test_a_folded_unit_that_fits_with_no_snippet_at_all_is_dropped_before_any_hit_snippet_is_cut(self):
         hits, status, steps = _one_folding_hit()
         alone = _size((hits[0].model_copy(update={"folded_units": ()}),), status, steps)

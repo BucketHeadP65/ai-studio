@@ -28,7 +28,8 @@ What this pins:
   ends inside it.
 * the tuning table holds a default row and at most one row per knowledge base, which sets only the cap and the folded
   snippet length and wins over the default row for that knowledge base's hits, also in a search over every knowledge
-  base, and the reader reads one knowledge base's cap, its session's own by default.
+  base, and the reader reads one knowledge base's cap, its session's own by default, and only the default for a
+  private knowledge base it cannot see.
 * 0071 makes the single row the default row, and one step down puts 0070's search, single row, cap function and
   comments back.
 """
@@ -49,7 +50,7 @@ from engram.retrieval.contracts import read_hits_per_document
 from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway
 from engram.retrieval.queries import SearchHandler
 from engram.testing.fakes.embedding import FakeEmbedding
-from engram.testing.infrastructure.knowledge_base_db import run_downgrade, run_upgrade_head
+from engram.testing.infrastructure.knowledge_base_db import provision_private_reader, run_downgrade, run_upgrade_head
 from tests.integration.test_migrations import _asyncpg_dsn, _load_migration_module
 
 if TYPE_CHECKING:
@@ -506,6 +507,27 @@ async def test_the_reader_reads_one_knowledge_bases_cap_its_sessions_own_by_defa
     session = await reader.fetchval("SELECT api.search_hits_per_document()")
 
     assert (named, other, unnamed, session) == (2, 1, 1, 2)
+
+
+async def test_a_private_knowledge_bases_cap_is_read_only_by_a_session_that_can_see_it(
+    migrated: str, admin: asyncpg.Connection, reader: asyncpg.Connection
+):
+    hidden = "hidden-kb"
+    await admin.execute(
+        "INSERT INTO kb.index_fingerprint (collection, indexer_version, spec_hash, vocabulary_hash, embed_model, switches)"
+        """ VALUES ($1, '1', 's', 'r', 'm', '{"private": true}'::jsonb)""",
+        hidden,
+    )
+    await _knowledge_base_tuning(admin, hidden, {"max_hits_per_document": 3})
+    own = await asyncpg.connect(_asyncpg_dsn(await provision_private_reader(migrated, hidden)))
+    try:
+        seen_by_its_own_role = await own.fetchval("SELECT api.search_hits_per_document($1)", hidden)
+    finally:
+        await own.close()
+
+    seen_by_the_shared_reader = await reader.fetchval("SELECT api.search_hits_per_document($1)", hidden)
+
+    assert (seen_by_the_shared_reader, seen_by_its_own_role) == (1, 3)
 
 
 async def test_the_tuning_table_keys_one_default_row_and_one_row_per_knowledge_base(admin: asyncpg.Connection):

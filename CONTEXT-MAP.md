@@ -57,7 +57,7 @@ silence. A future docs indexer walks this file as its root.
 |---|---|
 | [A private knowledge base is read through its own login role](engram/docs/adr/0046-private-knowledge-base-read-through-its-own-login-role.md) | engram ADR 0046: visibility keyed by `session_user` through `kb.reader_scopes`, derived reader passwords, the reader connection checked at startup |
 | [The agent's SQL is checked before it runs](engram/docs/adr/0047-the-agents-sql-is-checked-before-it-runs.md) | engram ADR 0047: the statement guard, the row cap inside the query, `vector_query` found by tokens and bounded, pinned search paths, the reader lock timeout |
-| [Search legs are bounded, tuned and read from one snapshot](engram/docs/adr/0048-search-legs-are-bounded-tuned-and-read-from-one-snapshot.md) | engram ADR 0048: leg budgets, the tuning row, the title pin and group cap, meta pages before `k`, merge by rank, one snapshot per tool call |
+| [Search legs are bounded, tuned and read from one snapshot](engram/docs/adr/0048-search-legs-are-bounded-tuned-and-read-from-one-snapshot.md) | engram ADR 0048: leg budgets, the tuning rows (a default row and one per knowledge base since migration 0071), the title pin and group cap, meta pages before `k`, merge by rank, one snapshot per tool call |
 | [Graph walks keep the set of reached nodes](engram/docs/adr/0049-graph-walks-keep-the-set-of-reached-nodes.md) | engram ADR 0049: hop-by-hop walks on both backends, the deepening route search, `api.graph_reach` and the `reach` field |
 
 ## Claim grammar

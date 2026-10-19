@@ -25,9 +25,10 @@ Every leg stops at a budget and the fusion weighs each tier's leg. Those numbers
 hashed lookup, never a join, so a keyword leg reads its BM25 index in score order, and reads its title from the pool.
 After the fusion a card whose title is the query goes first when no other candidate holds that title, and each page or
 source keeps at most `rows_per_group` hits. Then each document keeps at most `max_hits_per_document` hits, 1 by default,
-and lists its next few matching units under its best hit as `folded_units`, each with a snippet cut at a whole word to
-`folded_snippet_chars`, 160 by default. A knowledge base's own row of `kb.retrieval_tuning` may set those two numbers for
-its hits. A unit's document is the source it was made from when it has one, so a page made from a source, its sections,
+and lists its next few matching units under its best hit as `folded_units`, each with its snippet cut to
+`folded_snippet_chars`, 160 by default, with an ellipsis when cut. A knowledge base's own row of `kb.retrieval_tuning`
+may set those two numbers for its hits, and the cap function reads that row only for a session that may see the
+knowledge base. A unit's document is the source it was made from when it has one, so a page made from a source, its sections,
 its claims and the source's raw chunks are one document, and otherwise its own page.
 """
 
@@ -179,5 +180,11 @@ KB_SEARCH_SCHEMA = SearchSchema(
     collection_facet="collection",
     embedding_sql_type="halfvec(1024)",
     partition_result_col="src_collection",
-    tuning=SearchTuning(relation="kb.retrieval_tuning", max_hits_per_document=1, folded_snippet_chars=160, partition_col="collection"),
+    tuning=SearchTuning(
+        relation="kb.retrieval_tuning",
+        max_hits_per_document=1,
+        folded_snippet_chars=160,
+        partition_col="collection",
+        partition_visible="api.visible_collection({partition})",
+    ),
 )

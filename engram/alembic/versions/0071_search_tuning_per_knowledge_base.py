@@ -6,8 +6,8 @@ Create Date: 2026-10-19 00:00:00.000000
 
 0070's folded units carried an id and a hit level and no text, so an agent shown a document's best hit could not judge
 the document's other matching units without fetching each one. Each folded unit now carries a snippet: its own snippet
-cut at a whole word to `folded_snippet_chars`, 160 by default and bound to 20 to 2000, with an ellipsis when cut, so it
-is never longer than a hit's snippet.
+cut to `folded_snippet_chars`, 160 by default and bound to 20 to 2000, at the last whole word inside that length where
+one ends there, with an ellipsis when cut, so it is never longer than a hit's snippet.
 
 `kb.retrieval_tuning` held one row, `id = 1`, that every knowledge base in the database shared. It now holds a default
 row, whose `collection` is null, and at most one row per knowledge base, keyed by its collection. A knowledge base's
@@ -19,7 +19,8 @@ gaining `folded_snippet_chars` at 160 unless it already names one.
 knowledge bases caps each document by its own. Its arguments do not change and its columns do not either, so the
 function is dropped and created again under the same signature, EXECUTE is granted again and the comment is set again.
 `api.search_hits_per_document(collection)` answers one knowledge base's cap, the reader session's own when no
-collection is passed, and replaces the function that took no argument.
+collection is passed, and the database's cap for a knowledge base the session cannot see. It replaces the function
+that took no argument.
 
 Downgrade restores 0070's search, its cap function and both comments, deletes every knowledge base's row, gives the
 default row `id = 1` back without `folded_snippet_chars`, and restores 0070's checks and table comment. What this
@@ -59,8 +60,8 @@ _CAP_COMMENT = (
     "The most hits one document of a knowledge base keeps in api.search, as the owner's max_hits_per_document in "
     "kb.retrieval_tuning sets it for that knowledge base, else for the whole database, 1 unless the owner sets "
     "another. 0 means api.search keeps every hit of that knowledge base and folds nothing. collection names the "
-    "knowledge base and defaults to the reader session's own. A document is the source a unit was made from, or its "
-    "own page when it was made from none."
+    "knowledge base and defaults to the reader session's own. A knowledge base the session cannot see answers the "
+    "database's cap. A document is the source a unit was made from, or its own page when it was made from none."
 )
 
 # 0070's cap comment, byte-identical: what `downgrade` restores.
@@ -164,7 +165,13 @@ def _search_schema(*, folded_snippets: bool) -> SearchSchema:
     )
     page_cols = ("p.collection", "p.id", "p.title", "p.card_text", "p.embedding", "p.source_id")
     tuning = (
-        SearchTuning(relation="kb.retrieval_tuning", max_hits_per_document=1, folded_snippet_chars=160, partition_col="collection")
+        SearchTuning(
+            relation="kb.retrieval_tuning",
+            max_hits_per_document=1,
+            folded_snippet_chars=160,
+            partition_col="collection",
+            partition_visible="api.visible_collection({partition})",
+        )
         if folded_snippets
         else SearchTuning(relation="kb.retrieval_tuning", max_hits_per_document=1)
     )
@@ -347,9 +354,9 @@ _COMMENT_TEXT = (
     "is the source it was made from when it has one, so a page made from a source, its sections, its claims and the "
     "source's raw chunks are one document, and otherwise its own page. folded_units lists the next matching units of "
     "a document under its best hit, best first and at most 3, as a jsonb array of {id, hit_level, snippet}, and is "
-    "an empty array on every other hit. A folded unit's snippet is its matched text cut at a whole word to the "
-    "owner's folded snippet length for that knowledge base (160 characters unless the owner sets another, never "
-    "longer than a hit's snippet) with a trailing ellipsis when the text is longer. Fetch a folded unit's id to read "
+    "an empty array on every other hit. A folded unit's snippet is its matched text, cut to the owner's folded "
+    "snippet length for that knowledge base (160 characters unless the owner sets another, never longer than a hit's "
+    "snippet) with a trailing ellipsis when the text is longer. Fetch a folded unit's id to read "
     "the whole unit. lexical_rank and vector_rank are each leg's own rank for the hit and vector_distance the "
     "semantic leg's raw distance. A NULL rank means that leg did not select this row, so the pair says which "
     "components support a hit rather than how good it is. Example: SELECT * FROM api.search('<query>', k => 8, "

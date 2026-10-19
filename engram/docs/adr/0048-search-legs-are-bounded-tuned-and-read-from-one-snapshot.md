@@ -12,6 +12,15 @@ title: "0048: Search legs are bounded and tuned from one row, results follow ran
 
 **Status:** Accepted (2026-10-11)
 
+> **Amended by migration 0071 (2026-10-19):** decision 2's single row is now a default row, whose `collection` is null,
+> and at most one row per knowledge base, keyed by its collection. A knowledge base's row may set only
+> `max_hits_per_document` and `folded_snippet_chars` (the longest snippet a folded unit carries), and what it sets wins
+> over the default row for that knowledge base's hits. Every other number still comes from the default row.
+> `api.search_hits_per_document(collection)` answers one knowledge base's cap, and the default row's for a knowledge
+> base the session cannot see. The serve reference (`engram/docs/reference/serve.md`, "Search legs are bounded and
+> tuned") describes the table as it is now. The bounded legs, the rank policies and the snapshot, the substance of this
+> ADR, are unchanged.
+
 **Context.** `api.search` had no limit on any leg. Every hybrid search computed a distance and a rank for every embedded row
 of every tier and handed all of them to the fusion. Its numbers were constants in code: the fusion constant 60, the `k`
 ceiling 50, snippets of 480 characters, and no tier or leg had a weight. A long page's sections and claims could fill all

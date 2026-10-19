@@ -235,12 +235,13 @@ indexer creates and lists in `kb.reader_scopes` with a password derived from `in
 secret a private knowledge base reads as empty (engram ADR-0046). `run_sql` passes `core.ai.retrieval.statement.single_statement`
 and runs inside `SELECT * FROM (...) AS q LIMIT cap + 1` (engram ADR-0047). A tool call wraps its reads in `read_snapshot()`, one
 read-only `REPEATABLE READ` transaction, released before any model call. `api.search` reads its numbers from
-`kb.retrieval_tuning` (engram ADR-0048): a default row for the database and at most one row per knowledge base, which
-sets only `max_hits_per_document` and `folded_snippet_chars` for its own hits. It keeps the best hit of each document
-(the source a unit was made from, else its page) up to `max_hits_per_document`, 1 by default and 0 for every hit, and
-lists the document's next matching units under that hit as `folded_units`, each with a snippet cut at a whole word to
-`folded_snippet_chars` (160 by default), which the search tools give the refs that fetch them.
-A `search` description states the cap a process read once per knowledge base through `api.search_hits_per_document(collection)`, with the exceptions `docs/reference/serve.md` lists (a failed read, bases that disagree, a tuned override). The graph walks keep a reached-node set on both backends, and
+`kb.retrieval_tuning` (engram ADR-0048, amended by migration 0071): a default row for the database and at most one row
+per knowledge base, which sets only `max_hits_per_document` and `folded_snippet_chars` for its own hits. It keeps the
+best hit of each document (the source a unit was made from, else its page) up to `max_hits_per_document`, 1 by default
+and 0 for every hit, and lists the document's next matching units under that hit as `folded_units`, each with its
+snippet cut to `folded_snippet_chars` (160 by default) when longer, which the search tools give the refs that fetch them.
+A `search` description states the cap a process read once per knowledge base through `api.search_hits_per_document(collection)`,
+which answers the database's cap for a knowledge base the session cannot see, with the exceptions `docs/reference/serve.md` lists (a failed read, bases that disagree, a tuned override). The graph walks keep a reached-node set on both backends, and
 `api.graph_reach` says how far a walk can go (engram ADR-0049).
 
 ## Chunking source mirrors

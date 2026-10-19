@@ -107,8 +107,13 @@ async def test_a_snippet_length_below_the_bound_is_held_at_the_bound(admin: asyn
 async def test_the_reader_can_neither_read_nor_change_the_row(reader: asyncpg.Connection):
     with pytest.raises(asyncpg.InsufficientPrivilegeError):
         await reader.fetch("SELECT * FROM kb.retrieval_tuning")
-    with pytest.raises((asyncpg.InsufficientPrivilegeError, asyncpg.ReadOnlySQLTransactionError)):
-        await reader.execute("INSERT INTO kb.retrieval_tuning (collection, tuning) VALUES ($1, '{}'::jsonb)", _COLLECTION)
+    # The reader's sessions are read-only by default, which would refuse the write before any privilege is checked.
+    await reader.execute("BEGIN READ WRITE")
+    try:
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await reader.execute("INSERT INTO kb.retrieval_tuning (collection, tuning) VALUES ($1, '{}'::jsonb)", _COLLECTION)
+    finally:
+        await reader.execute("ROLLBACK")
 
 
 async def test_the_row_refuses_a_value_that_is_not_a_number(admin: asyncpg.Connection):

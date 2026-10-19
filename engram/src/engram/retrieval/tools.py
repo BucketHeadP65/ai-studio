@@ -801,8 +801,12 @@ def _fitted(
 
 
 def _folded_shortened(unit: FoldedUnit, limit: int) -> FoldedUnit:
-    """`unit` with its snippet bounded to `limit`: the id, the level and the ref are untouched."""
-    return unit.model_copy(update={"snippet": _clip(unit.snippet, limit)})
+    """`unit` with its snippet bounded to `limit`, or none below room for one character and the ellipsis."""
+    return unit.model_copy(update={"snippet": _clip(unit.snippet, limit) if limit >= _SHORTEST_FOLDED_SNIPPET else None})
+
+
+_SHORTEST_FOLDED_SNIPPET = 2
+"""The shortest folded snippet a response budget leaves: one character of text and the ellipsis."""
 
 
 def _with_last_folded_unit_fitted(
