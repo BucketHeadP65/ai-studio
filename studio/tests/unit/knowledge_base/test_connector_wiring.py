@@ -92,8 +92,8 @@ def _spec(connector: str, *, slug: str = "test-knowledge-base") -> KnowledgeBase
 
 
 def _knowledge_base_settings(tmp_path: Path) -> KnowledgeBaseSettings:
-    for required in ("Units", "_meta"):
-        (tmp_path / required).mkdir(parents=True)
+    (tmp_path / "_meta").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return KnowledgeBaseSettings(path=tmp_path)
 
 
@@ -105,8 +105,8 @@ def _sources(knowledge_base_root: Path, *, xai_key: str = "") -> SourceSettings:
 
 
 def _application_settings(knowledge_base_root: Path, *, spec_json: str | None = None, xai_key: str = "") -> ApplicationSettings:
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     if spec_json is not None:
         (knowledge_base_root / "knowledge-base-schema.json").write_text(spec_json, encoding="utf-8")
     return ApplicationSettings(sources=_sources(knowledge_base_root, xai_key=xai_key))

@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
 
 def _knowledge_base(root: Path) -> Path:
-    for sub in ("Units", "_meta"):
-        (root / sub).mkdir(parents=True, exist_ok=True)
+    (root / "_meta").mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return root
 
 

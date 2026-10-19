@@ -3,8 +3,8 @@
 A :class:`KnowledgeBaseBuilder` rooted at a ``tmp_path`` writes ``Units/<Type>/`` page notes,
 `Sources/` raw mirrors, `_meta/vocabulary/*.md` vocabularies copied from the golden
 mini-vocabularies, and the three `_meta/` orientation stubs (`schema`, `purpose`,
-`retrieval-policy`) the `api.about` content row is built from. The tree contains `Units/` and
-`_meta/`, so it satisfies `KnowledgeBaseSettings`.
+`retrieval-policy`) the `api.about` content row is built from. `KnowledgeBaseSettings` accepts the tree once
+`add_knowledge_base_schema` has written its schema file.
 
 `add_unit_document` accepts raw markdown text or an :class:`~engram.kb.contracts.AuthoringPayload`,
 which it renders with the shared note renderer.

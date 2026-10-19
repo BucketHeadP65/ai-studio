@@ -30,9 +30,9 @@ if TYPE_CHECKING:
 
 
 def _knowledge_base(root: Path) -> KnowledgeBaseSettings:
-    """A `KnowledgeBaseSettings` over a minimal legacy-shaped knowledge base directory (`Units/` + `_meta/`)."""
-    (root / "Units").mkdir(parents=True)
-    (root / "_meta").mkdir(parents=True)
+    """A `KnowledgeBaseSettings` over a minimal knowledge base directory (`_meta/` and a schema file)."""
+    (root / "_meta").mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return KnowledgeBaseSettings(path=root)
 
 

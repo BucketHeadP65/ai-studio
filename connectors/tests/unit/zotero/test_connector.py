@@ -218,8 +218,7 @@ class TestBuild:
     """`SqliteZoteroConnector.build` reads the `SourceResources` object's `zotero` settings block."""
 
     async def test_the_block_points_the_connector_at_that_library(self, tmp_path: Path, seeded: SeededZotero):
-        for required in ("Units", "_meta"):
-            (tmp_path / required).mkdir(parents=True)
+        (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
         block = {
             "data_dir": str(seeded.data_dir),
             "base_attachment_dir": str(seeded.base_attachment_dir),
@@ -232,8 +231,7 @@ class TestBuild:
         assert keys == {seeded.linked_abs_key}
 
     def test_no_block_still_builds_a_connector(self, tmp_path: Path):
-        for required in ("Units", "_meta"):
-            (tmp_path / required).mkdir(parents=True)
+        (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
 
         connector = SqliteZoteroConnector.build(SourceResources(knowledge_base=KnowledgeBaseSettings(path=tmp_path)))
 

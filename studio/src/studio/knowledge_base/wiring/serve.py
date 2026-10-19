@@ -284,7 +284,6 @@ def knowledge_base_registry_provider(
     indexed_knowledge_bases: KnowledgeBasesHandler,
     validation: KnowledgeBaseValidationHandler,
     admin: AdminSqlGateway,
-    reader: ReaderSqlGateway,
     jobs: Jobs,
     job_queries: JobQueries,
 ) -> KnowledgeBaseRegistry:
@@ -296,7 +295,6 @@ def knowledge_base_registry_provider(
         indexed_knowledge_bases: Reads the indexed vitals of every knowledge base.
         validation: Reads the standing validation issues of one knowledge base.
         admin: The admin gateway a knowledge base's identity is read through.
-        reader: The read-only gateway an indexed schema is read through.
         jobs: The writes to the jobs table.
         job_queries: The reads of the jobs table.
 
@@ -311,7 +309,6 @@ def knowledge_base_registry_provider(
         indexed_knowledge_bases=indexed_knowledge_bases,
         validation=validation,
         admin=admin,
-        reader=reader,
         jobs=jobs,
         job_queries=job_queries,
     )

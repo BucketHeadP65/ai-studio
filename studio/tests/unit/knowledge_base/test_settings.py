@@ -5,9 +5,8 @@ over the JSON source), so the tests are self-contained — no real environment,
 no committed-config dependency. The `ApplicationSettings` source tests point the
 single :class:`~pydantic_settings.JsonConfigSettingsSource` at a throwaway file via
 the `json_file=` init seam, so they never read the repo's
-`config/application_settings.json`. The `KnowledgeBaseSettings` validator needs a directory declaring
-either a `knowledge-base-schema.json` or the legacy `Units/` + `_meta/` pair, so a mini knowledge base is built in
-`tmp_path`.
+`config/application_settings.json`. The `KnowledgeBaseSettings` validator needs a directory holding a
+`knowledge-base-schema.json`, so a mini knowledge base is built in `tmp_path`.
 
 There is no `.env` mechanism here: `APP_*` env vars are the override seam and
 the local JSON is the structured secret tier.
@@ -50,7 +49,6 @@ from studio.knowledge_base.settings import (
     SourceSettings,
     TuningSettings,
     fetch_application_settings,
-    read_registry,
 )
 from tests.support.http_app import INFRASTRUCTURE_JSON, SETTINGS_JSON
 
@@ -65,8 +63,8 @@ _READER_URL = "postgresql+asyncpg://kb_reader:kb_reader@localhost:5433/knowledge
 
 def _make_knowledge_base(root: Path) -> Path:
     """A minimal directory that passes the `KnowledgeBaseSettings` shape validator."""
-    (root / "Units").mkdir(parents=True)
-    (root / "_meta").mkdir()
+    (root / "_meta").mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return root
 
 
@@ -96,7 +94,7 @@ def _app_json(**overrides: object) -> dict[str, object]:
 
 
 class TestKnowledgeBaseSettings:
-    def test_accepts_a_directory_with_memory_and_meta(self, tmp_path: Path):
+    def test_accepts_a_directory_with_a_knowledge_base_schema_json(self, tmp_path: Path):
         knowledge_base = _make_knowledge_base(tmp_path)
 
         settings = KnowledgeBaseSettings(path=knowledge_base)
@@ -107,25 +105,12 @@ class TestKnowledgeBaseSettings:
         with pytest.raises(ValidationError):
             KnowledgeBaseSettings(path=tmp_path / "does-not-exist")
 
-    def test_rejects_a_directory_without_memory_or_meta(self, tmp_path: Path):
-        with pytest.raises(ValidationError):
+    def test_rejects_a_directory_with_no_schema_and_names_the_file(self, tmp_path: Path):
+        (tmp_path / "Units").mkdir()
+        (tmp_path / "_meta").mkdir()
+
+        with pytest.raises(ValidationError, match=r"knowledge-base-schema\.json"):
             KnowledgeBaseSettings(path=tmp_path)
-
-    def test_accepts_a_directory_with_only_a_knowledge_base_schema_json(self, tmp_path: Path):
-        (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
-
-        settings = KnowledgeBaseSettings(path=tmp_path)
-
-        assert settings.path == tmp_path
-
-    def test_rejects_a_directory_with_neither_shape_and_names_both_in_the_message(self, tmp_path: Path):
-        with pytest.raises(ValidationError) as exc_info:
-            KnowledgeBaseSettings(path=tmp_path)
-
-        message = str(exc_info.value)
-        assert "knowledge-base-schema.json" in message
-        assert "Units" in message
-        assert "_meta" in message
 
     def test_sources_subdir_defaults_to_sources(self, tmp_path: Path):
         settings = KnowledgeBaseSettings(path=_make_knowledge_base(tmp_path))

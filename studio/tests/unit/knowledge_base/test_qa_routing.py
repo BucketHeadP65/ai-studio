@@ -141,11 +141,13 @@ class TestKnowledgeBaseQaRouter:
         assert "elsewhere" in caplog.text
         assert outbox.closed == {event.event_id}  # dropped, not retried forever
 
-    async def test_a_registered_root_with_no_knowledge_base_schema_is_skipped_and_every_other_knowledge_base_still_routes(self, tmp_path: Path, caplog):
+    async def test_a_registered_root_whose_schema_does_not_load_is_skipped_and_every_other_knowledge_base_still_routes(
+        self, tmp_path: Path, caplog
+    ):
         alpha = _knowledge_base(tmp_path / "alpha", "alpha")
         unconfigured = tmp_path / "unconfigured"
-        for sub in ("Units", "_meta"):  # knowledge_base-shaped enough to pass registry-row validation, no knowledge-base-schema.json
-            (unconfigured / sub).mkdir(parents=True)
+        unconfigured.mkdir(parents=True)
+        (unconfigured / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")  # passes registry-row validation, never loads
         settings_path = _registry(tmp_path / "application_settings.json", {"alpha": alpha, "unconfigured": unconfigured})
         outbox = MemoryOutbox()
         bus = _bus(_router(tmp_path, settings_path, alpha), outbox)
@@ -155,7 +157,7 @@ class TestKnowledgeBaseQaRouter:
         with caplog.at_level(logging.WARNING, logger="studio.knowledge_base.qa_routing"):
             await _deliver(bus, outbox)
 
-        assert _pending(tmp_path, "alpha") == ["paper.a"]  # the spec-less root does not stop routing for a healthy one
+        assert _pending(tmp_path, "alpha") == ["paper.a"]  # the broken root does not stop routing for a healthy one
         assert str(unconfigured) in caplog.text
 
     async def test_autogen_off_never_enqueues(self, tmp_path: Path):

@@ -10,6 +10,7 @@ from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import ScanError, Scanner, WatchEntry, WatchListFile, known_scanners
 from engram.sources.infrastructure.xml_scanner import XML_SCANNER, XmlScanner
 from engram.testing.fakes.watch_list import FakePageFetcher, FakeScanner
+from engram.testing.specs import minimal_spec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -128,8 +129,7 @@ def test_known_scanners_with_nothing_registered_is_the_built_in_name_alone() -> 
 
 
 def test_the_built_in_scanner_builds_from_the_resources_bundle_it_needs_nothing_from(tmp_path: Path) -> None:
-    (tmp_path / "Units").mkdir()
-    (tmp_path / "_meta").mkdir()
+    (tmp_path / "knowledge-base-schema.json").write_text(minimal_spec().model_dump_json(), encoding="utf-8")
 
     scanner = XmlScanner.build(SourceResources(knowledge_base=KnowledgeBaseSettings(path=tmp_path)))
 

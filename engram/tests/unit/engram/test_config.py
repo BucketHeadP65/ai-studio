@@ -1,8 +1,7 @@
 """Unit tests for `KnowledgeBaseEntry` — the vocabulary-member shape `ApplicationSettings.knowledge_bases` holds.
 
-Entry paths carry the same shape check `KnowledgeBaseSettings.path` enforces (a `knowledge-base-schema.json`, or the
-legacy `Units/` + `_meta/` pair), so a mini knowledge base is built in `tmp_path` exactly like the settings
-tests do.
+Entry paths carry the same shape check `KnowledgeBaseSettings.path` enforces (a `knowledge-base-schema.json` at the
+root), so a mini knowledge base is built in `tmp_path` exactly like the settings tests do.
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from engram.config import IngestionSettings, KnowledgeBaseEntry, resolve_active_knowledge_base_path
+from engram.config import IngestionSettings, KnowledgeBaseEntry
 from engram.indexing.contracts import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.mirror_chunks import MIRROR_CHUNK_TOKEN_BUDGET
 from engram.indexing.service.cut_plan_stage import DEFAULT_PLANNER_CONCURRENCY, DEFAULT_PLANNER_DEADLINE_SECONDS
@@ -23,13 +22,13 @@ from engram.indexing.service.cut_plan_stage import DEFAULT_PLANNER_CONCURRENCY, 
 
 def _make_knowledge_base(root: Path) -> Path:
     """A minimal directory that passes the knowledge base shape validator."""
-    (root / "Units").mkdir(parents=True)
-    (root / "_meta").mkdir()
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return root
 
 
 class TestKnowledgeBaseEntry:
-    def test_accepts_a_directory_with_units_and_meta(self, tmp_path: Path):
+    def test_accepts_a_directory_with_a_knowledge_base_schema_json(self, tmp_path: Path):
         knowledge_base = _make_knowledge_base(tmp_path)
 
         entry = KnowledgeBaseEntry(path=knowledge_base)
@@ -37,12 +36,12 @@ class TestKnowledgeBaseEntry:
         assert entry.path == knowledge_base
         assert entry.description == ""
 
-    def test_accepts_a_directory_with_only_a_knowledge_base_schema_json(self, tmp_path: Path):
-        (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
+    def test_rejects_a_directory_with_units_and_meta_but_no_schema(self, tmp_path: Path):
+        (tmp_path / "Units").mkdir()
+        (tmp_path / "_meta").mkdir()
 
-        entry = KnowledgeBaseEntry(path=tmp_path)
-
-        assert entry.path == tmp_path
+        with pytest.raises(ValidationError, match=r"knowledge-base-schema\.json"):
+            KnowledgeBaseEntry(path=tmp_path)
 
     def test_rejects_a_missing_path(self, tmp_path: Path):
         with pytest.raises(ValidationError):
@@ -67,46 +66,6 @@ class TestKnowledgeBaseEntry:
 
         with pytest.raises(ValidationError):
             entry.description = "changed"
-
-
-class TestResolveActiveKnowledgeBasePath:
-    """The raw-mapping resolver: the one rule both apps read the settings file's active knowledge base by."""
-
-    def test_old_shape_reads_knowledge_base_path_directly(self):
-        settings = {"knowledge_base": {"path": "/kb/primary"}}
-
-        assert resolve_active_knowledge_base_path(settings) == "/kb/primary"
-
-    def test_an_empty_registry_behaves_like_the_old_shape(self):
-        settings = {"knowledge_base": {"path": "/kb/primary"}, "knowledge_bases": {}}
-
-        assert resolve_active_knowledge_base_path(settings) == "/kb/primary"
-
-    def test_a_registry_prefers_the_entry_matching_knowledge_base_path(self):
-        settings = {"knowledge_base": {"path": "/kb/primary"}, "knowledge_bases": {"primary": {"path": "/kb/primary"}, "other": {"path": "/kb/other"}}}
-
-        assert resolve_active_knowledge_base_path(settings) == "/kb/primary"
-
-    def test_a_registry_falls_back_to_the_sole_entry_when_knowledge_base_path_is_stale(self):
-        settings = {"knowledge_base": {"path": "/kb/stale"}, "knowledge_bases": {"primary": {"path": "/kb/primary"}}}
-
-        assert resolve_active_knowledge_base_path(settings) == "/kb/primary"
-
-    def test_a_multi_entry_registry_with_no_match_raises(self):
-        settings = {"knowledge_base": {"path": "/kb/stale"}, "knowledge_bases": {"primary": {"path": "/kb/primary"}, "other": {"path": "/kb/other"}}}
-
-        with pytest.raises(ValueError, match=r"knowledge_base\.path"):
-            resolve_active_knowledge_base_path(settings)
-
-    def test_a_named_multi_entry_registry_with_no_knowledge_base_key_resolves_by_name(self):
-        settings = {"knowledge_bases": {"primary": {"path": "/kb/primary"}, "research": {"path": "/kb/research"}}}
-
-        assert resolve_active_knowledge_base_path(settings, name="research") == "/kb/research"
-
-    def test_an_unknown_name_falls_through_to_the_existing_behavior(self):
-        settings = {"knowledge_base": {"path": "/kb/primary"}, "knowledge_bases": {"primary": {"path": "/kb/primary"}}}
-
-        assert resolve_active_knowledge_base_path(settings, name="research") == "/kb/primary"
 
 
 class TestIngestionChunkSizes:

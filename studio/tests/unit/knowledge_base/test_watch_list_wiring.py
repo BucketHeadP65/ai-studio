@@ -53,8 +53,8 @@ class _RefusingScanner:
 
 
 def _resources(knowledge_base_root: Path) -> SourceResources:
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return SourceResources(knowledge_base=KnowledgeBaseSettings(path=knowledge_base_root))
 
 

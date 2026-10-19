@@ -107,7 +107,7 @@ async def test_get_answers_one_document(tmp_path: Path) -> None:
 
 
 def test_build_reads_the_dataset_from_the_knowledge_base_folder(tmp_path: Path) -> None:
-    (tmp_path / "Units").mkdir()
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     (tmp_path / "_meta").mkdir()
     (tmp_path / "_meta" / "beir.yaml").write_text("dataset: scifact\nsplit: test\n", encoding="utf-8")
 
@@ -118,7 +118,7 @@ def test_build_reads_the_dataset_from_the_knowledge_base_folder(tmp_path: Path) 
 
 
 def test_a_missing_settings_file_is_refused_by_name(tmp_path: Path) -> None:
-    (tmp_path / "Units").mkdir()
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     (tmp_path / "_meta").mkdir()
 
     with pytest.raises(BeirSettingsError, match=r"_meta/beir\.yaml"):

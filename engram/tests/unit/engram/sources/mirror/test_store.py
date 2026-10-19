@@ -22,6 +22,7 @@ from engram.config import KnowledgeBaseSettings
 from engram.sources.contracts import MirrorFile, MirrorStatus
 from engram.sources.infrastructure.mirror import ObsidianMirrorStore
 from engram.testing.factories.mirror import MirrorFrontmatterFactory
+from engram.testing.specs import minimal_spec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -36,10 +37,8 @@ def _write_note(tmp_path: Path, name: str, frontmatter: dict[str, object]) -> No
 
 
 def _store(tmp_path: Path) -> ObsidianMirrorStore:
-    # `KnowledgeBaseSettings`'s shape-validator requires `Memory/` + `_meta/` under the root; seed the two
-    # markers so the settings construct over the throwaway knowledge_base.
-    (tmp_path / "Units").mkdir(exist_ok=True)
-    (tmp_path / "_meta").mkdir(exist_ok=True)
+    # `KnowledgeBaseSettings`'s shape-validator requires a schema file at the root.
+    (tmp_path / "knowledge-base-schema.json").write_text(minimal_spec().model_dump_json(), encoding="utf-8")
     return ObsidianMirrorStore(KnowledgeBaseSettings(path=tmp_path))
 
 

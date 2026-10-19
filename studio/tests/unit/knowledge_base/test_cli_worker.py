@@ -56,8 +56,8 @@ def _write_registry(settings_path: Path, knowledge_bases: dict[str, dict[str, Js
 
 def _knowledge_base_dir(path: Path) -> Path:
     """A minimal knowledge base tree satisfying `KnowledgeBaseEntry.path` validation."""
-    for sub in ("Units", "_meta"):
-        (path / sub).mkdir(parents=True, exist_ok=True)
+    (path / "_meta").mkdir(parents=True, exist_ok=True)
+    (path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return path
 
 

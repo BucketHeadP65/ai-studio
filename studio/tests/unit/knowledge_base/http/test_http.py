@@ -48,8 +48,8 @@ if TYPE_CHECKING:
 
 def _knowledge_base(tmp_path: Path) -> Path:
     """A minimal knowledge base tree satisfying `KnowledgeBaseSettings.path` validation."""
-    for sub in ("Units", "_meta"):
-        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "_meta").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return tmp_path
 
 
@@ -919,7 +919,7 @@ class TestKnowledgeBaseDetail:
         assert identity["root"] == str(knowledge_base_path)
         assert identity["collection"] == "tube"
 
-    async def test_a_registered_knowledge_base_with_no_knowledge_base_schema_carries_no_identity_and_logs_the_studio_init_fix(
+    async def test_a_registered_knowledge_base_whose_schema_will_not_load_carries_no_identity_and_logs_why(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         bare = _knowledge_base(tmp_path / "bare")
@@ -927,31 +927,13 @@ class TestKnowledgeBaseDetail:
         _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
         settings = _settings_at(settings_path)
 
-        with caplog.at_level("INFO", logger="studio.knowledge_base.http.service"):
+        with caplog.at_level("WARNING", logger="studio.knowledge_base.http.service"):
             async with _client(settings, wiring(), settings_path=settings_path) as client:
                 response = await client.get("/api/knowledge-bases/bare")
 
         assert response.status_code == 200
         assert response.json()["identity"] is None
-        assert "studio init --template" in caplog.text  # the actionable message, no longer silently swallowed
-
-    async def test_a_registered_knowledge_base_with_no_knowledge_base_schema_reads_its_identity_off_the_indexed_spec(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-        container = wiring()
-        container.gateway.routed = {
-            "api.indexed_schema": SqlResult(rows=({"spec": _minimal_spec_payload("bare")},), columns=("spec",))
-        }
-
-        async with _client(settings, container, settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare")
-
-        assert response.status_code == 200
-        identity = response.json()["identity"]
-        assert identity is not None
-        assert identity["collection"] == "bare"
+        assert "could not be read" in caplog.text
 
     async def test_a_indexed_only_name_carries_no_identity(self, tmp_path: Path):
         settings, settings_path = _knowledge_bases_app_settings(tmp_path)
@@ -1197,37 +1179,6 @@ class TestKnowledgeBaseDecisions:
         assert response.status_code == 404
         assert response.json()["error"] == "unknown_knowledge_base"
 
-    async def test_decisions_on_a_registered_knowledge_base_with_no_knowledge_base_schema_names_the_studio_init_fix(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-
-        async with _client(settings, wiring(), settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare/decisions")
-
-        assert response.status_code == 404
-        body = response.json()
-        assert body["error"] == "spec_not_found"
-        assert "studio init --template" in body["detail"]
-        assert "knowledge-base-schema.json" in body["detail"]
-
-    async def test_decisions_on_a_registered_knowledge_base_with_no_knowledge_base_schema_falls_back_to_the_indexed_spec(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-        container = wiring()
-        container.gateway.routed = {
-            "api.indexed_schema": SqlResult(rows=({"spec": _minimal_spec_payload("bare")},), columns=("spec",))
-        }
-
-        async with _client(settings, container, settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare/decisions")
-
-        assert response.status_code == 200
-        assert response.json() == {"rows": [], "skipped": [], "outcomes_by_page_type": {}}
-
     async def test_decisions_on_a_registered_knowledge_base_with_a_broken_spec_keeps_the_generic_message(self, tmp_path: Path) -> None:
         broken = _knowledge_base(tmp_path / "broken")
         (broken / "knowledge-base-schema.json").write_text("not json", encoding="utf-8")
@@ -1289,7 +1240,7 @@ class TestKnowledgeBaseDecisions:
         assert missing.status_code == 404
         assert missing.json()["error"] == "unknown_page"
 
-    async def test_the_patch_route_on_a_registered_knowledge_base_with_no_knowledge_base_schema_names_the_studio_init_fix(self, tmp_path: Path) -> None:
+    async def test_the_patch_route_on_a_registered_knowledge_base_whose_schema_will_not_load_refuses(self, tmp_path: Path) -> None:
         bare = _knowledge_base(tmp_path / "bare")
         settings_path = tmp_path / "application_settings.json"
         _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
@@ -1301,7 +1252,6 @@ class TestKnowledgeBaseDecisions:
         assert response.status_code == 404
         body = response.json()
         assert body["error"] == "spec_not_found"
-        assert "studio init --template" in body["detail"]
 
     async def test_an_invalid_status_is_a_409_invalid_decision(self, app_client: AsyncClient, knowledge_base_path: Path) -> None:
         (knowledge_base_path / "Wiki" / "Flags").mkdir(parents=True)

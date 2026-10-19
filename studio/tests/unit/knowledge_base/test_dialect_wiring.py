@@ -80,8 +80,8 @@ class TestDialectSetting:
     def test_app_retrieval_dialect_env_seam_resolves_to_the_enum(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         # The APP_ override seam: APP_RETRIEVAL__DIALECT maps onto retrieval.dialect and coerces.
         knowledge_base_root = tmp_path / "knowledge_base"
-        for required in ("Units", "_meta"):
-            (knowledge_base_root / required).mkdir(parents=True)
+        (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
+        (knowledge_base_root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
         monkeypatch.setenv("APP_RETRIEVAL__DIALECT", "pg_textsearch")
 
         settings = ApplicationSettings()
@@ -250,8 +250,8 @@ class TestGraphHandlerProviders:
 def _knowledge_base_root(tmp_path: Path) -> Path:
     """A knowledge base on disk, the shape `KnowledgeBaseSettings` accepts."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return knowledge_base_root
 
 
