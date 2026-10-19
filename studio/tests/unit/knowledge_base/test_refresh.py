@@ -11,7 +11,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+import pytest
+
 from core.cqrs.contracts import Job
+from pydantic import ValidationError
 
 from studio.knowledge_base.refresh.contracts import (
     RefreshAbandoned,
@@ -62,6 +65,11 @@ def _job(
     )
 
 
+def _document(detail: str) -> str:
+    """The result a clean pass stores: its detail and no counts."""
+    return RefreshResult(detail=detail).model_dump_json()
+
+
 class TestRefreshCounts:
     def test_two_counts_add_label_by_label(self):
         first = RefreshCounts(sources_created=6, requested_by_entry={"x:a": 6}, created_by_connector={"queue": 6})
@@ -74,7 +82,7 @@ class TestRefreshCounts:
 
 class TestRefreshFacts:
     def test_a_done_job_carries_a_start_and_a_completion(self):
-        started, completed = refresh_facts(_job("done", result="indexed 3 pages, 3 embedded"))
+        started, completed = refresh_facts(_job("done", result=_document("indexed 3 pages, 3 embedded")))
 
         assert isinstance(started, RefreshStarted)
         assert isinstance(completed, RefreshCompleted)
@@ -89,11 +97,9 @@ class TestRefreshFacts:
         assert isinstance(completed, RefreshCompleted)
         assert (completed.detail, completed.counts) == ("indexed 6 pages", counts)
 
-    def test_a_done_job_written_before_the_counts_reads_its_text_as_the_detail(self):
-        _, completed = refresh_facts(_job("done", result="indexed 3 pages, 3 embedded"))
-
-        assert isinstance(completed, RefreshCompleted)
-        assert (completed.detail, completed.counts) == ("indexed 3 pages, 3 embedded", RefreshCounts())
+    def test_a_done_job_whose_result_is_not_the_pass_document_is_refused(self):
+        with pytest.raises(ValidationError):
+            refresh_facts(_job("done", result="indexed 3 pages, 3 embedded"))
 
     def test_an_abandoned_job_carries_the_last_error_as_the_reason(self):
         started, abandoned = refresh_facts(_job("abandoned", last_error="RuntimeError: index validation failed: 2 error(s)"))
@@ -103,19 +109,19 @@ class TestRefreshFacts:
         assert abandoned.reason == "RuntimeError: index validation failed: 2 error(s)"
 
     def test_the_payloads_trigger_rides_onto_both_facts(self):
-        started, ending = refresh_facts(_job("done", result="ok", trigger="schedule"))
+        started, ending = refresh_facts(_job("done", result=_document("ok"), trigger="schedule"))
 
         assert (started.trigger, ending.trigger) == ("schedule", "schedule")
 
     def test_a_payload_with_no_trigger_the_shape_recognises_reads_as_manual(self):
-        job = _job("done", result="ok").model_copy(update={"payload": {"knowledge_base": "demo", "trigger": "cron"}})
+        job = _job("done", result=_document("ok")).model_copy(update={"payload": {"knowledge_base": "demo", "trigger": "cron"}})
 
         started, _ending = refresh_facts(job)
 
         assert started.trigger == "manual"
 
     def test_a_job_that_never_started_falls_back_to_when_it_was_created(self):
-        started, ending = refresh_facts(_job("done", result="ok", started=False, finished=False))
+        started, ending = refresh_facts(_job("done", result=_document("ok"), started=False, finished=False))
 
         assert (started.occurred_at, ending.occurred_at) == (CREATED, CREATED)
 
@@ -179,12 +185,12 @@ class TestRefreshRuns:
 
 class TestRefreshHistory:
     def test_keeps_the_job_order_and_drops_the_unfinished(self):
-        jobs = [_job("running", job_id=3, finished=False), _job("done", job_id=2, result="second"), _job("done", job_id=1, result="first")]
+        jobs = [_job("running", job_id=3, finished=False), _job("done", job_id=2, result=_document("second")), _job("done", job_id=1, result=_document("first"))]
 
         assert [run.detail for run in refresh_history(jobs)] == ["second", "first"]
 
     def test_caps_at_the_limit(self):
-        jobs = [_job("done", job_id=n, result=str(n)) for n in range(5)]
+        jobs = [_job("done", job_id=n, result=_document(str(n))) for n in range(5)]
 
         assert [run.detail for run in refresh_history(jobs, limit=2)] == ["0", "1"]
 

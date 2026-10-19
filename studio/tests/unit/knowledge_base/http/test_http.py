@@ -33,7 +33,7 @@ from httpx import ASGITransport, AsyncClient
 from studio.knowledge_base.http.api import create_app
 from studio.knowledge_base.http.api_models import error_response
 from studio.knowledge_base.http.exceptions import KnowledgeBaseRefusal, unknown_knowledge_base_error
-from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob
+from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob, RefreshResult
 from studio.knowledge_base.settings import ApplicationSettings
 from tests.support.fakes.topics import FakeListener, FakeNotifier
 from tests.support.http_app import AppWiring, raw_stream, stop_stream, wiring, write_settings_json
@@ -1424,13 +1424,13 @@ def _register_plain_knowledge_base(tmp_path: Path, name: str) -> tuple[Applicati
     return _settings_at(settings_path), knowledge_base_path, settings_path
 
 
-async def _finished_run(jobs: MemoryJobs, name: str, *, result: str) -> None:
+async def _finished_run(jobs: MemoryJobs, name: str, *, detail: str) -> None:
     """Put one completed `kb.refresh` job on the ledger, as the worker would have left it."""
     answer = await jobs.enqueue(REFRESH_KIND, name, RefreshJob(knowledge_base=name, trigger="schedule"), policy=JobPolicy())
     claimed = await jobs.claim([REFRESH_KIND], worker="test")
     assert claimed is not None
     assert claimed.id == answer.job_id
-    await jobs.complete(answer.job_id, result=result)
+    await jobs.complete(answer.job_id, result=RefreshResult(detail=detail).model_dump_json())
 
 
 class TestIngestRun:
@@ -1535,8 +1535,8 @@ class TestKnowledgeBaseRefreshRuns:
     async def test_lists_finished_runs_newest_first(self, tmp_path: Path):
         settings, _knowledge_base_path, settings_path = _register_plain_knowledge_base(tmp_path, "demo")
         jobs = MemoryJobs()
-        await _finished_run(jobs, "demo", result="first")
-        await _finished_run(jobs, "demo", result="second")
+        await _finished_run(jobs, "demo", detail="first")
+        await _finished_run(jobs, "demo", detail="second")
 
         async with _client(settings, wiring(), settings_path=settings_path, jobs=jobs) as client:
             response = await client.get("/api/knowledge-bases/demo/refresh-runs")
@@ -1579,7 +1579,7 @@ class TestKnowledgeBaseRefreshRuns:
         container = wiring()
         container.gateway.routed = {"kb.pages": SqlResult(rows=(), columns=()), "validation_store": SqlResult(rows=(), columns=())}
         jobs = MemoryJobs()
-        await _finished_run(jobs, "demo", result="indexed 3 pages, 3 embedded")
+        await _finished_run(jobs, "demo", detail="indexed 3 pages, 3 embedded")
 
         async with _client(settings, container, settings_path=settings_path, jobs=jobs) as client:
             response = await client.get("/api/knowledge-bases/demo")

@@ -2063,8 +2063,8 @@ class TestCutPlansMigration:
         assert not await _relation_exists(target_url, "kb.cut_plans")
 
 
-class TestScheduleGateModeOnlyMigration:
-    """Revision 0071: a schedule's gate behaviour lives in `gate_mode` alone, and `auto_approve_gates` folds into it and goes."""
+class TestGateModeAndRefreshResultsMigration:
+    """Revision 0071: a schedule's gate behaviour lives in `gate_mode` alone, and a refresh result stored as text becomes its pass document."""
 
     def test_the_revision_sits_directly_on_0070(self) -> None:
         module = _load_migration_module("0071")
@@ -2107,3 +2107,33 @@ class TestScheduleGateModeOnlyMigration:
             ("wf.waiting", "wait", "False"),
         ]
         assert await _rows(target_url, comment_query) == comment_before
+
+    async def test_a_refresh_result_stored_as_text_becomes_the_pass_document(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0070")
+        document = '{"detail":"indexed 2 pages","counts":{"sources_created":2,"requested_by_entry":{},"created_by_connector":{}}}'
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.executemany(
+                "INSERT INTO coordination.jobs (kind, key, state, result) VALUES ($1, $2, $3, $4)",
+                [
+                    ("kb.refresh", "text", "done", "scanned 0 entries, synced 1 created, indexed 3 pages"),
+                    ("kb.refresh", "document", "done", document),
+                    ("kb.refresh", "queued", "queued", None),
+                    ("kb.ingest", "other", "done", "left as written"),
+                ],
+            )
+        finally:
+            await connection.close()
+
+        run_upgrade(target_url, "0071")
+
+        rows = dict(await _rows(target_url, "SELECT key, result FROM coordination.jobs ORDER BY key"))
+        assert json.loads(str(rows["text"])) == {
+            "detail": "scanned 0 entries, synced 1 created, indexed 3 pages",
+            "counts": {"sources_created": 0, "requested_by_entry": {}, "created_by_connector": {}},
+        }
+        assert rows["document"] == document
+        assert rows["queued"] is None
+        assert rows["other"] == "left as written"
+
