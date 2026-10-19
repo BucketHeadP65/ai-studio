@@ -219,32 +219,32 @@ class WaitingRun:
     spec: Workflow
     params: WorkflowArguments
     values: dict[str, object]
-    retry_feedback: dict[str, list[RetryFeedback]] = field(default_factory=dict)
-    """Node id -> the rejections that node owes a repair to. Empty when the log holds none."""
-    gate_decisions: list[GateDecisionFact] = field(default_factory=list)
-    """Every decision this run's gates received, in order. Empty when the log holds none."""
-    gate_generations: dict[str, int] = field(default_factory=dict)
-    """Gate id -> how many values that gate has reviewed. Empty when the log holds none."""
-    work_facts: list[WorkItemFact] = field(default_factory=list)
-    """Every disposition this run settled, of every generation. Empty when the log holds none,
-    which reads as unknown, never as work that was never attempted."""
-    batches: dict[str, MapBatch] = field(default_factory=dict)
-    """Node id -> the input that node is on, and the identities it owes a disposition. Empty when
-    the log holds none, and then a primary work missing here can be classified as nothing at all."""
-    run_id: str = ""
+    retry_feedback: dict[str, list[RetryFeedback]]
+    """Node id -> the rejections that node owes a repair to."""
+    gate_decisions: list[GateDecisionFact]
+    """Every decision this run's gates received, in order."""
+    gate_generations: dict[str, int]
+    """Gate id -> how many values that gate has reviewed."""
+    work_facts: list[WorkItemFact]
+    """Every disposition this run settled, of every generation. Empty reads as unknown, never as work that was never
+    attempted."""
+    batches: dict[str, MapBatch]
+    """Node id -> the input that node is on, and the identities it owes a disposition. A primary work missing here can be
+    classified as nothing at all."""
+    run_id: str
     """The run whose reviewed values sit beside this log."""
-    run_title: str = ""
+    run_title: str
     """What the run this log belongs to was called. `""` for a run nobody named, and a resume
     then carries the run on unnamed."""
-    gate_mode: GateMode = DEFAULT_GATE_MODE
+    gate_mode: GateMode
     """What the run's person gates did."""
-    gate_timeout: float | None = DEFAULT_GATE_TIMEOUT
+    gate_timeout: float | None
     """How long a gate waited for a person before rejecting, `None` for forever."""
-    runner: str = DEFAULT_RUNNER
+    runner: str
     """The launcher the run named."""
-    session_kind: SessionType = DEFAULT_SESSION_TYPE
+    session_kind: SessionType
     """The kind of session the run lived in."""
-    started_at: str = ""
+    started_at: str
     """When the launch started the run, as ISO 8601 text."""
 
 
@@ -348,12 +348,12 @@ class RunLog:
     spec: Workflow
     params: WorkflowArguments
     state: WorkflowState
+    started_at: str
     run_title: str = ""
     gate_mode: GateMode = DEFAULT_GATE_MODE
     gate_timeout: float | None = DEFAULT_GATE_TIMEOUT
     runner: str = DEFAULT_RUNNER
     session_kind: SessionType = DEFAULT_SESSION_TYPE
-    started_at: str = ""
 
     @classmethod
     def begin(  # noqa: PLR0913 (the facts a launched run is, plus its resume seed, and a holder object would rename the arity, not reduce it)
@@ -371,7 +371,7 @@ class RunLog:
         gate_timeout: float | None = DEFAULT_GATE_TIMEOUT,
         runner: str = DEFAULT_RUNNER,
         session_kind: SessionType = DEFAULT_SESSION_TYPE,
-        started_at: str = "",
+        started_at: str,
     ) -> RunLog:
         """A run log for one run about to start, seeded with whatever `memo` already settled.
 

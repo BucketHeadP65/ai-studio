@@ -97,7 +97,7 @@ async def _session_with_a_live_line(model: FunctionModel, tmp_path: Path, *, nod
         await implementation.function(ledger={"net": 400})  # populates active.conversations.conversations[(node_id, "")]
 
     session = Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", object()), active=active, session_log=NoSessionLog(), state=a_state(tmp_path))
-    run_log = RunLog.begin(path=run_log_path(session), run_id="a-run", workflow_id="wf.weigh", spec=spec, params={"ledger": "400"})
+    run_log = RunLog.begin(path=run_log_path(session), run_id="a-run", workflow_id="wf.weigh", spec=spec, params={"ledger": "400"}, started_at="2026-08-22T12:00:00+00:00")
     run_log.started(node_id)  # snapshots the spec to disk, which is what message_worker reads back
     if pending:
         session.active.pending = PendingReview(gate_id="approve", workflow="wf.weigh", reviewing="net: 400", rejection_reruns=node_id)
@@ -130,7 +130,7 @@ async def _session_with_a_live_map(model: FunctionModel, tmp_path: Path, *, node
     registry = await build_environment(model, engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records_under(tmp_path), web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
     spec = _map_spec(node_id=node_id, work=work)
     session = Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", object()), active=active, session_log=NoSessionLog(), state=a_state(tmp_path))
-    run_log = RunLog.begin(path=run_log_path(session), run_id="a-run", workflow_id="wf.digest", spec=spec, params={"items": "[]"})
+    run_log = RunLog.begin(path=run_log_path(session), run_id="a-run", workflow_id="wf.digest", spec=spec, params={"items": "[]"}, started_at="2026-08-22T12:00:00+00:00")
     run_log.started(node_id)  # snapshots the spec to disk, which is what message_worker reads back
     session.active.pending = PendingReview(gate_id="approve", workflow="wf.digest", reviewing="digesting", rejection_reruns=node_id)
     return session
@@ -157,7 +157,7 @@ async def _pooled_session_with_a_live_line(model: FunctionModel, tmp_path: Path,
     with bind_active(pooled.active), performing_step(StepIdentity(node_id=node_id)):
         await implementation.function(ledger={"net": 400})  # populates pooled.active.conversations.conversations[(node_id, "")]
 
-    run_log = RunLog.begin(path=run_log_path(pooled), run_id="a-run", workflow_id="wf.weigh", spec=spec, params={"ledger": "400"})
+    run_log = RunLog.begin(path=run_log_path(pooled), run_id="a-run", workflow_id="wf.weigh", spec=spec, params={"ledger": "400"}, started_at="2026-08-22T12:00:00+00:00")
     run_log.started(node_id)  # snapshots the spec to disk, which is what message_worker reads back
     pooled.active.pending = PendingReview(gate_id="approve", workflow="wf.weigh", reviewing="net: 400", rejection_reruns=node_id)
     return default, pooled

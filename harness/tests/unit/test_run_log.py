@@ -57,7 +57,7 @@ class ApproveEverything:
 
 
 def begun(path: Path, spec: Workflow) -> RunLog:
-    return RunLog.begin(path=path, run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=spec, params={"quarter": "Q2"})
+    return RunLog.begin(path=path, run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=spec, params={"quarter": "Q2"}, started_at="2026-08-22T12:00:00+00:00")
 
 
 def test_snapshot_survives_and_revives(tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry) -> None:
@@ -333,7 +333,7 @@ def test_the_values_a_run_reviewed_are_readable_back_as_a_set_and_cleared_for_th
     assert {json.loads(value.canonical)["text"] for value in kept} == {"net: 400", "net: 500"}
     assert {value.ref.run_id for value in kept} == {LAUNCHED_RUN}
 
-    second = RunLog.begin(path=path, run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={})
+    second = RunLog.begin(path=path, run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={}, started_at="2026-08-22T12:00:00+00:00")
 
     assert second.reviewed() == (), "a new run starts with nothing beside its log -- nothing could read the old values anyway"
     assert not list((path.parent / "reviewed").glob("*.json"))
@@ -358,12 +358,14 @@ def test_an_ending_reads_what_was_refused_before_the_log_closes_and_takes_it_wit
 def test_one_sessions_run_never_deletes_another_sessions_captured_values(tmp_path: Path, quarterly_report: Workflow) -> None:
     """Two pooled sessions keep their run logs side by side, so their reviewed values must not share a home."""
     first = RunLog.begin(
-        path=tmp_path / "sess-a.waiting-run.json", run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-a.waiting-run.json", run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     held = first.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 400"})
 
     second = RunLog.begin(
-        path=tmp_path / "sess-b.waiting-run.json", run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-b.waiting-run.json", run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     second.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 900"})
 
@@ -389,11 +391,12 @@ def test_the_boot_sweep_removes_every_reviewed_subtree_no_run_log_still_names(tm
     running.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 400"})
     running.started("draft_report")
     pooled = RunLog.begin(
-        path=tmp_path / "sess-a.waiting-run.json", run_id="pooled-run", workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-a.waiting-run.json", run_id="pooled-run", workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     pooled.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 900"})
     pooled.started("draft_report")
-    orphan = RunLog.begin(path=tmp_path / "gone.json", run_id="dead-run", workflow_id="wf.report", spec=quarterly_report, params={})
+    orphan = RunLog.begin(path=tmp_path / "gone.json", run_id="dead-run", workflow_id="wf.report", spec=quarterly_report, params={}, started_at="2026-08-22T12:00:00+00:00")
     orphan.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 000"})
     orphan.started("draft_report")
     (tmp_path / "gone.json").unlink()  # the process died here, so nothing ever closed that run
@@ -416,6 +419,7 @@ def test_a_run_log_keeps_the_gate_mode_timeout_and_runner_it_was_launched_with(t
         gate_timeout=None,
         runner="schedule:nightly",
         session_kind="runner",
+        started_at="2026-08-22T12:00:00+00:00",
     )
     log.started("fetch_costs")
 
