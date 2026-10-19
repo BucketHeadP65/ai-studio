@@ -12,6 +12,7 @@ import pytest
 
 from engram.evals.generation.contracts import AuthoredCase, EvaluationDataset, build_dataset, load_dataset, save_dataset
 from engram.evals.harness.infrastructure.results import ResultsHeader, dataset_sha256, read_results, results_lines, write_results
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION
 from engram.evals.shared.domain import ExpectedQa, QaCaseMeta, QaInput, RetrievalAnswer
 
 if TYPE_CHECKING:
@@ -36,6 +37,7 @@ _HEADER = ResultsHeader(
     index_build="7+500-1000 test-embedding",
     started="2026-10-13T09:00:00+00:00",
     source_lookup_error=None,
+    source_scoring_version=SOURCE_SCORING_VERSION,
 )
 
 _LINE_KEYS = {
@@ -123,6 +125,7 @@ async def test_the_file_opens_with_the_header_and_holds_one_line_per_case(tmp_pa
             "index_build": "7+500-1000 test-embedding",
             "started": "2026-10-13T09:00:00+00:00",
             "source_lookup_error": None,
+            "source_scoring_version": SOURCE_SCORING_VERSION,
         }
     }
     assert [line["case"] for line in written[1:]] == ["case-a", "case-b", "case-c"]
@@ -349,12 +352,24 @@ def test_a_header_key_this_reader_does_not_know_is_ignored(tmp_path: Path) -> No
     path = tmp_path / "results.jsonl"
     write_results(path, _HEADER, [])
     row = json.loads(path.read_text(encoding="utf-8"))
-    row["header"]["source_scoring_version"] = 1
+    row["header"]["a_key_a_newer_writer_adds"] = 1
     path.write_text(f"{json.dumps(row)}\n", encoding="utf-8")
 
     header, lines = read_results(path)
 
     assert (header, lines) == (_HEADER, ())
+
+
+def test_a_header_with_no_source_scoring_version_reads_it_as_one(tmp_path: Path) -> None:
+    path = tmp_path / "results.jsonl"
+    write_results(path, _HEADER, [])
+    row = json.loads(path.read_text(encoding="utf-8"))
+    del row["header"]["source_scoring_version"]
+    path.write_text(f"{json.dumps(row)}\n", encoding="utf-8")
+
+    header, _lines = read_results(path)
+
+    assert header.source_scoring_version == 1
 
 
 def test_an_empty_file_is_refused(tmp_path: Path) -> None:

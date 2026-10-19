@@ -167,7 +167,8 @@ uv run studio fetch ID
 on several values or keys. The server caps `-k` at the `k_ceiling` of `kb.retrieval_tuning`, 50 at
 most, keeps at most `rows_per_group` hits of one page, 3 by default, and at most `max_hits_per_document`
 hits of one document (a source with the pages made from it, or a page made from no source), 1 by
-default, so `-k` counts documents. See the
+default, so `-k` counts documents. The owner may set that cap for one knowledge base. A hit's other
+matching units print indented under it, each with its snippet. See the
 [serve reference](../reference/serve.md) for the full surface.
 
 ## Step 6: Serve it to tools (optional)

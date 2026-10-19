@@ -22,9 +22,10 @@ if TYPE_CHECKING:
 T0 = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
 
-def _broadcaster(**kwargs: float) -> tuple[Broadcaster, FakeNotifier, FakeListener]:
+def _broadcaster(*, coalesce_seconds: float = 0.1) -> tuple[Broadcaster, FakeNotifier, FakeListener]:
     notifier, listener = FakeNotifier(), FakeListener()
-    return Broadcaster("postgresql://u:p@h/db", notifier=notifier, listener=listener, **kwargs), notifier, listener
+    broadcaster = Broadcaster("postgresql://u:p@h/db", notifier=notifier, listener=listener, coalesce_seconds=coalesce_seconds)
+    return broadcaster, notifier, listener
 
 
 def _job(kind: str, key: str) -> Job:
@@ -179,6 +180,34 @@ class TestReconnect:
         listener.arrive("kb.research")
         assert (await asyncio.wait_for(reader, timeout=1)).topic == "kb.research"
         assert listener.open_count == 4
+        await stream.aclose()
+        await broadcaster.stop()
+
+    async def test_a_long_outage_doubles_the_wait_up_to_the_cap_and_a_reopen_resets_it(self):
+        waits: list[float] = []
+
+        async def record(seconds: float) -> None:
+            waits.append(seconds)
+            await asyncio.sleep(0)
+
+        listener = FakeListener()
+        broadcaster = Broadcaster(
+            "postgresql://u:p@h/db", notifier=FakeNotifier(), listener=listener, coalesce_seconds=0.01, backoff_cap_seconds=0.08, sleep=record
+        )
+        await broadcaster.start()
+        for _ in range(6):
+            listener.fail_next_open(OSError("connection refused"))
+        stream = broadcaster.subscribe()
+        reader = asyncio.create_task(anext(stream))
+        listener.arrive("kb.research")
+        assert (await asyncio.wait_for(reader, timeout=1)).topic == "kb.research"
+        assert waits == [0.01, 0.02, 0.04, 0.08, 0.08, 0.08]
+
+        listener.fail_next(ConnectionError("listener connection lost"))
+        reader = asyncio.create_task(anext(stream))
+        listener.arrive("kb.research")
+        assert (await asyncio.wait_for(reader, timeout=1)).topic == "kb.research"
+        assert waits[-1] == 0.01
         await stream.aclose()
         await broadcaster.stop()
 

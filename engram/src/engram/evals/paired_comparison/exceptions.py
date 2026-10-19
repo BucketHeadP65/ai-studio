@@ -12,7 +12,8 @@ class ResultsFileUnreadableError(Exception):
 class RunsNotComparableError(ValueError):
     """Two evaluation runs cannot be compared case by case.
 
-    Their variants differ in a held field or in both the SQL switch and code mode, their strategies make a pair the graph
-    verdict calls unfair, a case is in one run only, or they hold no cases. The message names the field, gives the
-    verdict's reason or names the case.
+    Their variants differ in a held field or in both the SQL switch and code mode, both carry source-level scores under
+    different source scoring versions, their strategies make a pair the graph verdict calls unfair, a case is in one run
+    only, or they hold no cases. The message names the field, names the run to run again, gives the verdict's reason or
+    names the case.
     """

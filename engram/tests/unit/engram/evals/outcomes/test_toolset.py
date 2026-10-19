@@ -448,13 +448,17 @@ class TestWithheldReferences:
         assert [hit.ref for hit in value.hits] == [_SAFE, _WITHHELD]
 
 
+_WITHHELD_SNIPPET = "The held back passage says the vote count moved."
+_KEPT_SNIPPET = "The kept passage says the count was set."
+
+
 def _folding(spelling: str | None) -> SearchResult:
     """A search answer whose one kept hit folds the withheld unit, its ref spelled `spelling` or absent, and one safe unit."""
     hit = _hit(_SAFE).model_copy(
         update={
             "folded_units": (
-                FoldedUnit(id="withheld", hit_level="section", ref=spelling),
-                FoldedUnit(id="other", hit_level="section", ref="section:research/other"),
+                FoldedUnit(id="withheld", hit_level="section", ref=spelling, snippet=_WITHHELD_SNIPPET),
+                FoldedUnit(id="other", hit_level="section", ref="section:research/other", snippet=_KEPT_SNIPPET),
             )
         }
     )
@@ -492,6 +496,18 @@ class TestAWithheldFoldedUnitLeavesItsHit:
         assert row.status == "ok"
         assert not row.withheld_exposure
         assert row.returned_unit_refs == (_SAFE,)
+
+    async def test_the_withheld_folded_units_snippet_leaves_with_it(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))
+        trial.tools.search_result = _folding(_WITHHELD)
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, SearchResult)
+        assert [unit.snippet for unit in value.hits[0].folded_units] == [_KEPT_SNIPPET]
+        stored = await trial.stored()
+        assert _WITHHELD_SNIPPET not in stored
+        assert _KEPT_SNIPPET in stored
 
     async def test_a_bare_hit_list_loses_its_withheld_folded_unit_too(self, tmp_path: Path):
         trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))

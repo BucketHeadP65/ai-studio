@@ -35,7 +35,12 @@ import sqlalchemy.exc
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from core.ai.retrieval.contracts import AgeGraphTraversalBuilder, CteGraphTraversalBuilder, ParadeDBHybridSearchBuilder
+from core.ai.retrieval.contracts import (
+    AgeGraphTraversalBuilder,
+    CteGraphTraversalBuilder,
+    ParadeDBHybridSearchBuilder,
+    hits_per_document_body,
+)
 from core.ai.retrieval.search_builder import SEARCH_SNIPPET_CHARS
 
 from engram.retrieval.graph_schema import kb_graph_schema
@@ -578,14 +583,40 @@ class TestSearchSignatureDriftGuard:
     def test_0070_restores_exactly_the_shape_0066_published(self) -> None:
         assert _load_migration_module("0070")._search_schema(documented=False) == _load_migration_module("0066")._search_schema(page_dated=True)
 
-    def test_0070_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
-        assert _load_migration_module("0070")._search_schema(documented=True) == KB_SEARCH_SCHEMA
-
     def test_0070_restores_the_comment_0066_set(self) -> None:
         assert _load_migration_module("0070")._PREVIOUS_COMMENT_TEXT == _load_migration_module("0066")._COMMENT_TEXT
 
     def test_0070_restores_the_table_comment_0061_set(self) -> None:
         assert _load_migration_module("0070")._PREVIOUS_TUNING_COMMENT == _load_migration_module("0061")._TUNING_COMMENT
+
+    def test_0071_frozen_schemas_match_their_hardcoded_signature_constant(self) -> None:
+        module = _load_migration_module("0071")
+
+        for folded_snippets in (True, False):
+            rendered = _bare_type_signature("api.search", module._search_schema(folded_snippets=folded_snippets))
+            assert _canonical_types(rendered) == _canonical_types(module._SEARCH_SIGNATURE)
+
+    def test_0071_restores_exactly_the_shape_0070_published(self) -> None:
+        assert _load_migration_module("0071")._search_schema(folded_snippets=False) == _load_migration_module("0070")._search_schema(documented=True)
+
+    def test_0071_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
+        assert _load_migration_module("0071")._search_schema(folded_snippets=True) == KB_SEARCH_SCHEMA
+
+    def test_0071_restores_the_comments_and_the_check_0070_set(self) -> None:
+        module, previous = _load_migration_module("0071"), _load_migration_module("0070")
+
+        assert module._PREVIOUS_COMMENT_TEXT == previous._COMMENT_TEXT
+        assert module._PREVIOUS_CAP_COMMENT == previous._CAP_COMMENT
+        assert module._PREVIOUS_TUNING_COMMENT == previous._TUNING_COMMENT
+        assert module._numbers_check(folded=False) == previous._numbers_check(capped=True)
+
+    def test_0071_names_the_cap_function_it_creates_by_its_argument(self) -> None:
+        module = _load_migration_module("0071")
+
+        body = hits_per_document_body(module._search_schema(folded_snippets=True), function_name=module._CAP_FUNCTION)
+
+        assert body.startswith(f"CREATE FUNCTION {module._CAP_FUNCTION}(collection text ")
+        assert f"{module._CAP_FUNCTION}(text)" == module._CAP_SIGNATURE
 
 
 class TestGraphSignatureDriftGuard:
@@ -2064,17 +2095,17 @@ class TestCutPlansMigration:
 
 
 class TestGateModeAndRefreshResultsMigration:
-    """Revision 0071: a schedule's gate behaviour lives in `gate_mode` alone, and a refresh result stored as text becomes its pass document."""
+    """Revision 0072: a schedule's gate behaviour lives in `gate_mode` alone, and a refresh result stored as text becomes its pass document."""
 
-    def test_the_revision_sits_directly_on_0070(self) -> None:
-        module = _load_migration_module("0071")
+    def test_the_revision_sits_directly_on_0071(self) -> None:
+        module = _load_migration_module("0072")
 
-        assert module.revision == "0071"
-        assert module.down_revision == "0070"
+        assert module.revision == "0072"
+        assert module.down_revision == "0071"
 
     async def test_the_switch_folds_into_gate_mode_and_the_downgrade_derives_it_back(self, pg: str):
         target_url = await new_test_database(pg)
-        run_upgrade(target_url, "0070")
+        run_upgrade(target_url, "0071")
         comment_query = "SELECT col_description('public.schedules'::regclass, attnum) FROM pg_attribute WHERE attrelid = 'public.schedules'::regclass AND attname = 'gate_mode'"
         comment_before = await _rows(target_url, comment_query)
         connection = await asyncpg.connect(_asyncpg_dsn(target_url))
@@ -2087,7 +2118,7 @@ class TestGateModeAndRefreshResultsMigration:
         finally:
             await connection.close()
 
-        run_upgrade(target_url, "0071")
+        run_upgrade(target_url, "0072")
 
         assert "auto_approve_gates" not in await _column_names(target_url, "public.schedules")
         assert await _rows(target_url, "SELECT workflow_id, gate_mode FROM public.schedules ORDER BY workflow_id") == [
@@ -2098,7 +2129,7 @@ class TestGateModeAndRefreshResultsMigration:
         ], "a row whose switch said auto runs auto, and every other row keeps its mode"
         assert "auto_approve_gates" not in str(await _rows(target_url, comment_query))
 
-        run_downgrade(target_url, "0070")
+        run_downgrade(target_url, "0071")
 
         assert await _rows(target_url, "SELECT workflow_id, gate_mode, auto_approve_gates FROM public.schedules ORDER BY workflow_id") == [
             ("wf.auto", "auto", "True"),
@@ -2110,7 +2141,7 @@ class TestGateModeAndRefreshResultsMigration:
 
     async def test_a_refresh_result_stored_as_text_becomes_the_pass_document(self, pg: str):
         target_url = await new_test_database(pg)
-        run_upgrade(target_url, "0070")
+        run_upgrade(target_url, "0071")
         document = '{"detail":"indexed 2 pages","counts":{"sources_created":2,"requested_by_entry":{},"created_by_connector":{}}}'
         connection = await asyncpg.connect(_asyncpg_dsn(target_url))
         try:
@@ -2126,7 +2157,7 @@ class TestGateModeAndRefreshResultsMigration:
         finally:
             await connection.close()
 
-        run_upgrade(target_url, "0071")
+        run_upgrade(target_url, "0072")
 
         rows = {str(key): result for key, result in await _rows(target_url, "SELECT key, result FROM coordination.jobs ORDER BY key")}
         assert json.loads(str(rows["text"])) == {
@@ -2140,19 +2171,19 @@ class TestGateModeAndRefreshResultsMigration:
 
     async def test_the_indexed_schema_function_is_dropped_and_the_downgrade_restores_it(self, pg: str):
         target_url = await new_test_database(pg)
-        run_upgrade(target_url, "0070")
+        run_upgrade(target_url, "0071")
         definition_before = await _function_definition(target_url, _INDEXED_SCHEMA)
         comment_before = await _function_comment(target_url, schema="api", name="indexed_schema")
         column_comment_before = await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT)
         assert definition_before is not None
         assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
 
-        run_upgrade(target_url, "0071")
+        run_upgrade(target_url, "0072")
 
         assert not await _function_exists(target_url, _INDEXED_SCHEMA)
         assert "indexed_schema" not in str(await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT))
 
-        run_downgrade(target_url, "0070")
+        run_downgrade(target_url, "0071")
 
         assert await _function_definition(target_url, _INDEXED_SCHEMA) == definition_before
         assert await _function_comment(target_url, schema="api", name="indexed_schema") == comment_before

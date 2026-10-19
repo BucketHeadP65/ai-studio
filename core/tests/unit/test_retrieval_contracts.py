@@ -105,6 +105,18 @@ def test_a_search_hit_reads_its_folded_units_best_first_from_its_row() -> None:
     assert hit.folded_units[0].ref is None
 
 
+def test_a_folded_unit_reads_the_snippet_its_row_carries() -> None:
+    row = {"id": "p1", "hit_level": "card", "score": 1.5, "folded_units": [{"id": "p1#s2", "hit_level": "section", "snippet": "The cache keeps…"}]}
+
+    hit = SearchHit.model_validate(row)
+
+    assert hit.folded_units[0].snippet == "The cache keeps…"
+
+
+def test_a_folded_unit_from_a_row_listing_no_snippet_has_none() -> None:
+    assert FoldedUnit(id="p1#s2", hit_level="section").snippet is None
+
+
 def test_search_hit_carries_which_knowledge_base_it_came_from() -> None:
     hit = SearchHit(id="p1", hit_level="doc", score=1.5, knowledge_base="repo-docs")
     assert hit.knowledge_base == "repo-docs"

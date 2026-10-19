@@ -9,11 +9,7 @@ import pytest
 from asyncpg.exceptions import (
     AdminShutdownError,
     CannotConnectNowError,
-    ClientCannotConnectError,
     ConnectionDoesNotExistError,
-    ConnectionFailureError,
-    ConnectionRejectionError,
-    CrashShutdownError,
     InsufficientPrivilegeError,
     PostgresError,
     PostgresSyntaxError,
@@ -31,7 +27,6 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import DBAPIError
 
-from engram.evals.harness.infrastructure.database_failures import DATABASE_CONNECTION_ERRORS
 from engram.evals.harness.transient_failures import TRANSIENT_MODEL_MESSAGES, TRANSIENT_STATUS_CODES, is_transient_failure
 
 
@@ -41,23 +36,6 @@ def test_the_rule_names_429_and_every_server_error() -> None:
 
 def test_the_rule_names_the_connection_error_and_the_request_timeout() -> None:
     assert frozenset({"Connection error.", "Request timed out."}) == TRANSIENT_MODEL_MESSAGES
-
-
-def test_the_rule_names_the_errors_of_a_refused_failed_or_closed_database_connection() -> None:
-    assert (
-        ConnectionError,
-        BrokenPipeError,
-        ConnectionAbortedError,
-        ConnectionRefusedError,
-        ConnectionResetError,
-        ClientCannotConnectError,
-        ConnectionDoesNotExistError,
-        ConnectionRejectionError,
-        ConnectionFailureError,
-        AdminShutdownError,
-        CrashShutdownError,
-        CannotConnectNowError,
-    ) == DATABASE_CONNECTION_ERRORS
 
 
 _ASYNCPG_DBAPI = AsyncAdapt_asyncpg_dbapi(asyncpg)

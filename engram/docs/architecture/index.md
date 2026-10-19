@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 20,999 tokens.
+Sections: 10 · whole document ≈ 21,091 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -45,7 +45,7 @@ Sections: 10 · whole document ≈ 20,999 tokens.
 - **Load when:** orientation, scope, what is engram, bounded contexts, how to navigate, arc42
 
 ### 02 — Container & component overview (C4 L2)
-[sections/02-container-component-overview-c4-l2.md](sections/02-container-component-overview-c4-l2.md) · ~893 tokens
+[sections/02-container-component-overview-c4-l2.md](sections/02-container-component-overview-c4-l2.md) · ~899 tokens
 - **TL;DR:** `engram/src/` holds exactly one package, the `engram` library. The application over it is `studio.knowledge_base`, a separate project whose three entry points (the Typer CLI, the FastAPI Studio API on :8100, the FastMCP stdio server) drive engram. Write-side intents (index, sync, export) flow through a CQRS bus to slice handlers, while the read path (search/fetch/graph) bypasses the bus and goes straight through query handlers + a read-only SQL gateway to Postgres. Azure OpenAI supplies embeddings.
 - **Load when:** containers, components, C4 L2, entry points, CQRS bus, data flow, overview, how it fits together, package layout, engram library vs studio application, library, application
 
@@ -60,12 +60,12 @@ Sections: 10 · whole document ≈ 20,999 tokens.
 - **Load when:** knowledge, knowledge base, wikinote, note grammar, index, indexing, parse, resolve, validate, validation, embed, incremental, claims, pipeline
 
 ### 05 — Retrieval (bounded context)
-[sections/05-retrieval-bounded-context.md](sections/05-retrieval-bounded-context.md) · ~2,401 tokens
+[sections/05-retrieval-bounded-context.md](sections/05-retrieval-bounded-context.md) · ~2,475 tokens
 - **TL;DR:** The serve slice is the read-only query surface, one shared retrieval toolset (search/fetch/graph_expand/find_paths) over dialect (BM25) and graph seams, hitting only the `api` schema through the read-only `kb_reader` role (a private knowledge base through its own login role), one snapshot per tool call, exposed identically over the CLI, the Studio API, and the MCP server.
 - **Load when:** retrieval, serve, search, fetch, graph, mcp, http api, dialect seam, graph backend, kb_reader, read path, read tools, SQL tools, private knowledge base, statement guard, tuning, snapshot, graph reach
 
 ### 06 — Evaluation (bounded context)
-[sections/06-evaluation-bounded-context.md](sections/06-evaluation-bounded-context.md) · ~3,859 tokens
+[sections/06-evaluation-bounded-context.md](sections/06-evaluation-bounded-context.md) · ~3,871 tokens
 - **TL;DR:** The evals slice generates judge-free retrieval ground-truths from the knowledge base's own structure, maintains them as immutable freshness-swept dataset versions with a frozen yardstick, runs a tuning loop that adjusts a unified RetrievalPolicy against them (human-gated everywhere except one machine rung that may write the per-knowledge-base `_meta/active-policy.yaml` behind four guardrails), diagnoses failures with deterministic detectors plus a gated LLM reflector, proposes gated structural-schema recommendations, scores runs with recall@k/precision@k/MRR over a Logfire-instrumented harness, and grades an answer's support, contradiction handling and abstention from the immutable evidence one blind, tool-guarded trial retained.
 - **Load when:** evaluation, evals, tuning, retrieval policy, gold dataset, recall, precision, mrr, rca, structural seed, coverage, freshness, staleness, frozen split, freeze, runtime policy, rollback, reflection, recommend, evaluation run, tuning run, dataset, recommendation, quote check, freshness check, outcome evaluation, answer grading, answer criterion, delivered evidence, blind trial, abstention, counterevidence, answer support, trial trace
 

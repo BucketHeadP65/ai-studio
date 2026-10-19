@@ -9,15 +9,15 @@ failed transiently again and keeps every other case line.
 
 from __future__ import annotations
 
+from core.connection_failures import is_database_connection_failure
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
-
-from engram.evals.harness.infrastructure.database_failures import is_database_connection_failure
 
 TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, *range(500, 600)})
 """The HTTP statuses from the model that make a failure transient: 429, too many requests, and every server error."""
 
 TRANSIENT_MODEL_MESSAGES: frozenset[str] = frozenset({"Connection error.", "Request timed out."})
 """The messages of the model errors that report a connection error and a request timeout, as the OpenAI client words them."""
+
 
 def is_transient_failure(error: BaseException) -> bool:
     """Whether `error`, raised by a case's task, is a transient failure.

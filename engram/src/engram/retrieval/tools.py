@@ -53,7 +53,7 @@ from pydantic_ai.exceptions import ModelRetry
 
 # These domain types are constructed at runtime by the tools below.
 from .budget import fits_budget, longest_fitting, with_fallback_steps
-from .domain import FetchResult, NextSteps, Period, Row, Search, SearchHit, SearchResult, period_end, period_start
+from .domain import FetchResult, FoldedUnit, NextSteps, Period, Row, Search, SearchHit, SearchResult, period_end, period_start
 from .envelope import EnvelopeHandler, fetchable_forms, normalize_ref, parse_ref, qualify_ref
 from .envelope import fetch_description as leveled_fetch_description
 from .exceptions import _REGROUND_WITH_SEARCH, BadRefError, RefRefusedError, WrongCollectionError
@@ -171,10 +171,13 @@ DATE_RANGE_CLAUSE = (
 _DOCUMENT = "a source together with every page made from it, or a page made from no source"
 """What one document is, as a `search` description says it."""
 
-_FOLDED = "best first, each with the `ref` that fetches it, so `fetch` one directly rather than searching again."
+_FOLDED = (
+    "best first, each with a short `snippet` of the text it matched and the `ref` that fetches it, so `fetch` one "
+    "directly rather than searching again."
+)
 """How a `search` description says a hit's folded units are listed and read, where the surface serves `fetch`."""
 
-_FOLDED_UNREAD = "best first, each with its `ref`."
+_FOLDED_UNREAD = "best first, each with a short `snippet` of the text it matched and its `ref`."
 """How a `search` description says a hit's folded units are listed, where the surface serves no `fetch`."""
 
 _SCORE_SENTENCE_END = "a relevance `score`."
@@ -185,7 +188,7 @@ def document_clause(hits_per_document: int, *, can_fetch: bool = True) -> str:
     """What a `search` description says about documents under the cap on hits per document the database applies.
 
     Args:
-        hits_per_document: The most hits one document keeps, as the database's tuning row sets it. 0 keeps every hit.
+        hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it. 0 keeps every hit.
         can_fetch: Whether the surface serves `fetch`, which the sentences then send the agent to with a folded unit's ref.
 
     Returns:
@@ -536,7 +539,7 @@ def search_description(
             sentences. `None` (the default) describes a search that takes no `facets`.
         takes_collection: Whether the tool takes a `collection` argument. `False` drops every
             sentence about it, for a search that has none.
-        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the
+        hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the
             description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
@@ -704,7 +707,8 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
     makes it `hybrid`, its absence makes it `lexical`. A row from a database that publishes no
     component ranks has no per-leg facts to read, so it keeps the leg this call ran and no support
     label. Snippets are bounded here as well as in the generated SQL, so a hit is an excerpt
-    whichever database answered. Each folded unit carries the ref a hit of its level would carry.
+    whichever database answered. Each folded unit carries the ref a hit of its level would carry, and its snippet
+    bounded as a hit's.
 
     Args:
         rows: The search handler's rows, in rank order.
@@ -724,7 +728,13 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
         leg: Literal["lexical", "hybrid"] = "hybrid" if selected_semantically else "lexical"
         snippet = _clip(hit.snippet, SEARCH_SNIPPET_CHARS)
         folded = tuple(
-            unit.model_copy(update={"ref": qualify_ref(f"{search_ref_type(unit.hit_level)}:{unit.id}", collection)}) for unit in hit.folded_units
+            unit.model_copy(
+                update={
+                    "ref": qualify_ref(f"{search_ref_type(unit.hit_level)}:{unit.id}", collection),
+                    "snippet": _clip(unit.snippet, SEARCH_SNIPPET_CHARS),
+                }
+            )
+            for unit in hit.folded_units
         )
         projected.append(
             hit.model_copy(
@@ -790,6 +800,32 @@ def _fitted(
     return longest_fitting(candidate, shorten=_shortened, fits=fits, longest=max(len(candidate.page_title or ""), len(candidate.snippet or "")))
 
 
+def _folded_shortened(unit: FoldedUnit, limit: int) -> FoldedUnit:
+    """`unit` with its snippet bounded to `limit`, or none below room for one character and the ellipsis."""
+    return unit.model_copy(update={"snippet": _clip(unit.snippet, limit) if limit >= _SHORTEST_FOLDED_SNIPPET else None})
+
+
+_SHORTEST_FOLDED_SNIPPET = 2
+"""The shortest folded snippet a response budget leaves: one character of text and the ellipsis."""
+
+
+def _with_last_folded_unit_fitted(
+    hits: tuple[SearchHit, ...], position: int, fits: Callable[[tuple[SearchHit, ...]], bool]
+) -> SearchHit | None:
+    """The hit at `position` with its last folded unit's snippet as long as `fits` allows, or `None` when even none fits."""
+    hit = hits[position]
+    *kept, last = hit.folded_units
+
+    def placed(unit: FoldedUnit) -> SearchHit:
+        return hit.model_copy(update={"folded_units": (*kept, unit)})
+
+    def fits_placed(unit: FoldedUnit) -> bool:
+        return fits((*hits[:position], placed(unit), *hits[position + 1 :]))
+
+    fitted = longest_fitting(last, shorten=_folded_shortened, fits=fits_placed, longest=len(last.snippet or ""))
+    return placed(fitted) if fitted is not None else None
+
+
 def _without_folded_units_past_the_budget(
     hits: tuple[SearchHit, ...],
     *,
@@ -798,19 +834,21 @@ def _without_folded_units_past_the_budget(
     knowledge_base: KnowledgeBaseStamp | None,
     max_chars: int,
 ) -> tuple[SearchHit, ...]:
-    """`hits` with folded units dropped from the lowest-ranked hit's last one up, until all the hits fit whole or no folded unit is left."""
-    trimmed = list(hits)
+    """`hits` with folded units cut to the longest snippet that fits, else dropped, from the lowest-ranked hit's last one up."""
 
-    def fits_whole() -> bool:
-        whole = _windowed(tuple(trimmed), status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
+    def fits_whole(candidate: tuple[SearchHit, ...]) -> bool:
+        whole = _windowed(candidate, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
         return fits_budget(whole, max_chars)
 
+    trimmed = hits
     for position in range(len(trimmed) - 1, -1, -1):
         while trimmed[position].folded_units:
-            if fits_whole():
-                return tuple(trimmed)
-            trimmed[position] = trimmed[position].model_copy(update={"folded_units": trimmed[position].folded_units[:-1]})
-    return tuple(trimmed)
+            fitted = _with_last_folded_unit_fitted(trimmed, position, fits_whole)
+            if fitted is not None:
+                return (*trimmed[:position], fitted, *trimmed[position + 1 :])
+            dropped = trimmed[position].model_copy(update={"folded_units": trimmed[position].folded_units[:-1]})
+            trimmed = (*trimmed[:position], dropped, *trimmed[position + 1 :])
+    return trimmed
 
 
 def bound_search_result(
@@ -824,7 +862,8 @@ def bound_search_result(
     """The largest prefix of `hits` whose complete serialized result fits `max_chars`.
 
     Rank order is kept and a hit's id and ref are never shortened. When the hits do not all fit whole, folded units go
-    first, one at a time from the lowest-ranked hit's last one up, before any title or snippet is cut. Then a hit is
+    first, one at a time from the lowest-ranked hit's last one up, each cut to a shorter snippet when that fits and
+    dropped when it does not, before any hit's title or snippet is cut. Then a hit is
     added whole when it fits, else with its title and snippet bounded, else not at all, and then every later hit is
     left out too. The window counts what was left out. When not even the top hit's id and ref fit, the answer is an
     empty `budget_refused` result with a fixed next move.
@@ -1608,7 +1647,7 @@ def build_retrieval_toolset(
             these keys only and refuses any other key with a `ModelRetry` naming them. Its shipped
             description names them, and a `descriptions` override replaces that sentence with the rest.
             Empty (the default) refuses every key, saying the knowledge base declares no facets.
-        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+        hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the shipped
             `search` description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
@@ -1722,7 +1761,7 @@ def register_mcp_tools(
         facet_keys: The facet keys the knowledge base's schema declares, which `search` takes in
             `facets` as in `build_retrieval_toolset`. Any other key fails the call with a tool error
             naming them. Empty (the default) refuses every key.
-        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+        hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the shipped
             `search` description states. 0 (the default) keeps every hit and states nothing about documents.
     """
     resolved_hybrid = _resolve_search_hybrid(search_hybrid, switches)

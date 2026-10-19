@@ -351,9 +351,6 @@ class EvalsSettings(BaseModel):
     autogen: Literal["queue", "inline", "off"] = "queue"
     datasets_dir: Path = Path("evals/datasets")
     rca_queries_path: Path = Path("evals/rca/queries.sql")
-    # The chat-model specs AI Factory Studio offers in its run form: Azure chat deployment names that
-    # exist on `infrastructure.azure_openai.endpoint`, and `test-model` (network-free).
-    models: tuple[str, ...] = ("gpt-4.1", "test-model")
     generation: GenerationSettings = Field(default_factory=GenerationSettings)
     tuning: TuningSettings = Field(default_factory=TuningSettings)
     recommendation: RecommendationSettings = Field(default_factory=RecommendationSettings)

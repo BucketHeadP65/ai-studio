@@ -1,7 +1,7 @@
 """`public.schedules` keeps a schedule's gate behaviour in `gate_mode` alone, every finished refresh stores its pass document, and `api.indexed_schema` goes.
 
-Revision ID: 0071
-Revises: 0070
+Revision ID: 0072
+Revises: 0071
 Create Date: 2026-10-19 00:00:00.000000
 
 `auto_approve_gates` said only what `gate_mode = 'auto'` says. A row whose switch is on runs auto, so its `gate_mode`
@@ -13,7 +13,7 @@ A finished `kb.refresh` job stores its result as the JSON document a clean pass 
 leaves the documents as they are.
 
 `api.indexed_schema` served the schema an index ran with to readers, and nothing reads it. It is dropped, and the comment
-on `kb.index_fingerprint.spec` stops naming a reader. Downgrade creates the function again as 0070 held it, with its
+on `kb.index_fingerprint.spec` stops naming a reader. Downgrade creates the function again as 0071 holds it, with its
 comment and its grant, and restores the column's comment.
 """
 
@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from alembic import op
 
-revision: str = "0071"
-down_revision: str | None = "0070"
+revision: str = "0072"
+down_revision: str | None = "0071"
 branch_labels: str | tuple[str, ...] | None = None
 depends_on: str | tuple[str, ...] | None = None
 
@@ -49,7 +49,7 @@ _SPEC_COLUMN_COMMENT = (
     "until the collection is indexed. No reader is granted it.'"
 )
 
-# 0070's function, comment and column comment, byte-identical: what `downgrade` restores.
+# 0071's function, comment and column comment, byte-identical: what `downgrade` restores.
 _PREVIOUS_INDEXED_SCHEMA_FUNCTION = """
 CREATE FUNCTION api.indexed_schema(p_collection text)
   RETURNS jsonb

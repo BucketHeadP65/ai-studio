@@ -194,22 +194,23 @@ def switch_source(gateway: SqlGateway, collection: str) -> Callable[[], Awaitabl
     return read_switches
 
 
-async def read_hits_per_document(search: SearchHandler, *, knowledge_base: str) -> int:
-    """Read the most hits one document keeps in `search`'s search, the number its tool description states.
+async def read_hits_per_document(search: SearchHandler, *, knowledge_base: str, collection: str) -> int:
+    """Read the most hits one document of a knowledge base keeps in `search`'s search, the number its tool description states.
 
-    A database error, an unreachable database or a database without the cap's function reads as 0, so no
-    description states a cap the host could not read. That failure is logged as a warning naming the knowledge base
+    A database error, an unreachable database or a database whose cap function takes no knowledge base reads as 0, so
+    no description states a cap the host could not read. That failure is logged as a warning naming the knowledge base
     and the error.
 
     Args:
         search: The search handler whose database is read.
         knowledge_base: What the host calls the knowledge base `search` reads, named in the warning.
+        collection: That knowledge base's collection, whose cap is read.
 
     Returns:
         The cap, 0 when the search keeps every hit or the cap could not be read.
     """
     try:
-        return await search.hits_per_document()
+        return await search.hits_per_document(collection)
     except (SQLAlchemyError, PostgresError, OSError) as error:
         _logger.warning(
             "reading the cap on hits per document for {knowledge_base!r} failed ({failure}). Its search description states no cap",
@@ -366,7 +367,9 @@ async def embedded_read_tools(
                     if knowledge_base_spec.retrieval.mode == "auto"
                     else None,
                     facet_keys=tuple(facet.key for facet in knowledge_base_spec.facets),
-                    hits_per_document=await read_hits_per_document(search, knowledge_base=knowledge_base_spec.slug),
+                    hits_per_document=await read_hits_per_document(
+                        search, knowledge_base=knowledge_base_spec.slug, collection=knowledge_base_spec.retrieval.collection
+                    ),
                 )
             )
         yield RetrievalKnowledgeBase[AgentDepsT](

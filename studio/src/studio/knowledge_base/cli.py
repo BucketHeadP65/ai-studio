@@ -16,7 +16,7 @@ import signal
 import socket
 import sys
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -106,6 +106,7 @@ from studio.knowledge_base.cli_support import (
     read_feedback,
     resolve_knowledge_base_root,
     resolve_partition,
+    run_naming_connection_failures,
     settings_knowledge_base_path,
     unreachable_line,
 )
@@ -137,7 +138,7 @@ from studio.knowledge_base.settings import (
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
-from studio.knowledge_base.wiring.indexing import ingestion_indexer_version
+from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
@@ -346,15 +347,10 @@ def _read_surfaces(
     active_hybrid: bool,
     notes: list[str],
     rerank: Reranking | None,
-    hits_per_document: int = 0,
 ) -> tuple[ReadSurface, ...]:
     """Every knowledge base this server may read, the served one first. `notes` names each public one that fails to load or clashes."""
     active = active_root.expanduser().resolve()
-    surfaces = [
-        _read_surface(
-            active, active_schema, reader_gateway, admin_gateway, embedder, hybrid=active_hybrid, rerank=rerank, hits_per_document=hits_per_document
-        )
-    ]
+    surfaces = [_read_surface(active, active_schema, reader_gateway, admin_gateway, embedder, hybrid=active_hybrid, rerank=rerank)]
     rows = [row for row in _registered_roots(settings_path, notes=notes) if row.root != active]
     loaded = [(row, _registered_schema(row.name, row.root, notes=[] if row.private else notes)) for row in rows]
     claimed = {claim for surface in surfaces for claim in (surface.name, surface.collection)} | _withheld_claims(loaded)
@@ -365,9 +361,7 @@ def _read_surfaces(
             notes.append(f"Knowledge base {row.name!r} repeats a name or collection already claimed here, so it is not searchable.")
             continue
         hybrid = resolve_strategy(schema.retrieval.profile).search_hybrid is not False
-        surfaces.append(
-            _read_surface(row.root, schema, reader_gateway, admin_gateway, embedder, hybrid=hybrid, rerank=rerank, hits_per_document=hits_per_document)
-        )
+        surfaces.append(_read_surface(row.root, schema, reader_gateway, admin_gateway, embedder, hybrid=hybrid, rerank=rerank))
         claimed |= {schema.slug, schema.retrieval.collection}
     return tuple(surfaces)
 
@@ -427,7 +421,6 @@ def _read_surface(
     *,
     hybrid: bool,
     rerank: Reranking | None,
-    hits_per_document: int = 0,
 ) -> ReadSurface:
     """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
     collection = schema.retrieval.collection
@@ -462,7 +455,6 @@ def _read_surface(
         hybrid=hybrid,
         switch_source=switch_source(gateway, collection) if schema.retrieval.mode == "auto" else None,
         facet_keys=tuple(facet.key for facet in schema.facets),
-        hits_per_document=hits_per_document,
     )
 
 
@@ -529,8 +521,6 @@ async def _build_mcp_server(
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
     # `admin_gateway`, which the reader role cannot see, and is read again on every tool call.
     read_notes: list[str] = []
-    # Every read route shares this database, so its cap on hits per document is read once, here, for every `search` description.
-    hits_per_document = await read_hits_per_document(search_handler, knowledge_base=schema.slug)
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,
@@ -541,7 +531,13 @@ async def _build_mcp_server(
         active_hybrid=profile.search_hybrid is not False,
         notes=read_notes,
         rerank=rerank,
-        hits_per_document=hits_per_document,
+    )
+    # Each read route's knowledge base has its own cap on hits per document, read once, here, for every `search` description.
+    surfaces = tuple(
+        [
+            replace(surface, hits_per_document=await read_hits_per_document(search_handler, knowledge_base=surface.name, collection=surface.collection))
+            for surface in surfaces
+        ]
     )
     stamp = surfaces[0].stamp
     # The graph tools are mounted once, so an auto-mode knowledge base's graph switch is read once, here.
@@ -606,7 +602,7 @@ async def _build_mcp_server(
         stamp=stamp,
         doc_authoring_tools=doc_authoring_tools,
         read_surfaces=surfaces,
-        hits_per_document=hits_per_document,
+        hits_per_document=surfaces[0].hits_per_document,
     )
     # The admin engine pools connections and `stamp` reads through it. Disposing it before this loop closes
     # makes the served loop open fresh connections instead of reusing ones bound to this loop.
@@ -759,10 +755,10 @@ class _IndexFingerprint:
 _HASH_DISPLAY_LEN = 12
 
 
-def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, current_version: str) -> list[str]:
+def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, version_changed: bool) -> list[str]:
     """The index drift lines of `studio status`: mode, tracked files, fingerprint, and a hint when the next index runs full."""
     tracked = fingerprint is not None and files_tracked > 0
-    stale = files_tracked == 0 or (fingerprint is not None and fingerprint.indexer_version != current_version)
+    stale = files_tracked == 0 or version_changed
     lines = [f"Index mode (last run): {'incremental' if tracked else 'full'}", f"Files tracked (manifest): {files_tracked}"]
     if fingerprint is None:
         lines.append("Fingerprint: none yet")
@@ -780,7 +776,8 @@ def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int
 async def _print_status(container: Resolver, *, collection: str) -> None:
     """Print the table row counts, embedding metadata, last query time and index drift of `collection`, writing nothing."""
     engine = await container.get(AsyncEngine)
-    current_version = ingestion_indexer_version(await container.get(AzureOpenAiSettings), await container.get(IngestionSettings))
+    azure_openai = await container.get(AzureOpenAiSettings)
+    ingestion = await container.get(IngestionSettings)
     async with engine.connect() as conn:
         typer.echo("Row counts:")
         for table in _STATUS_TABLES:
@@ -803,7 +800,8 @@ async def _print_status(container: Resolver, *, collection: str) -> None:
             )
         ).first()
         fingerprint = _IndexFingerprint.from_row(fingerprint_row) if fingerprint_row is not None else None
-        for line in _index_drift_lines(fingerprint, files_tracked or 0, current_version=current_version):
+        version_changed = indexer_version_changed(fingerprint.indexer_version if fingerprint is not None else None, azure_openai, ingestion)
+        for line in _index_drift_lines(fingerprint, files_tracked or 0, version_changed=version_changed):
             typer.echo(line)
 
 
@@ -863,7 +861,7 @@ async def _fetch_with_identity(container: Resolver, settings: ActiveKnowledgeBas
 
 
 def _print_search_hits(result: SqlResult) -> None:
-    """Echo the ranked hits as `score  id  [level]  title/snippet` lines, each folded unit indented under its hit, or a no-hits note."""
+    """Echo the ranked hits as `score  id  [level]  title/snippet` lines, each folded unit and its snippet indented under its hit, or a no-hits note."""
     if not result.rows:
         typer.echo("No hits.")
         return
@@ -873,6 +871,9 @@ def _print_search_hits(result: SqlResult) -> None:
         typer.echo(f"{hit.score:.3f}  {hit.id}  [{hit.hit_level}]  {label}".rstrip())
         for unit in hit.folded_units:
             typer.echo(f"       {unit.id}  [{unit.hit_level}]")
+            snippet = " ".join((unit.snippet or "").split())
+            if snippet:
+                typer.echo(f"         {snippet}")
     if result.truncated_message:
         typer.echo(result.truncated_message)
 
@@ -973,7 +974,9 @@ def index_cmd(
         collection=partition, embed=embed, full=full, dry_run=dry_run, summaries=summaries, collection_named=collection is not None
     )
     try:
-        identity, report = asyncio.run(_index_after_identity(container, settings, command, collection=partition))
+        identity, report = run_naming_connection_failures(
+            _index_after_identity(container, settings, command, collection=partition), on_error="index failed", database=settings.database
+        )
     except CollectionIsForeignError as exc:
         typer.echo(
             f"collection {exc.collection} was indexed from {exc.stored_root}, this knowledge base is at {exc.knowledge_base_root}. "
@@ -1059,8 +1062,10 @@ def ingest_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    result = asyncio.run(
-        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema)
+    result = run_naming_connection_failures(
+        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema),
+        on_error="ingest failed",
+        database=settings.database,
     )
     typer.echo(
         f"ingested {result.page_id} into {result.collection}: "
@@ -1113,7 +1118,7 @@ def summaries_list_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     rows = _run_command(
-        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed"
+        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed", database=settings.database
     )
     _print_pending_summaries(rows, collection=partition)
 
@@ -1153,7 +1158,7 @@ def summaries_approve_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     count = _run_command(
-        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed"
+        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed", database=settings.database
     )
     typer.echo(f"Approved {count} pending summary(ies) for collection {partition!r}.")
 
@@ -1219,7 +1224,8 @@ def search_cmd(
 
     Each `--facet key=value` narrows the search on that facet key. Repeat it to accumulate several values
     under one key or to filter on several keys at once. A hit's folded units, more matching units of its
-    document, print indented under it as `id  [level]`, and `studio fetch ID` reads one. `--bm25-only` never embeds the query, so it needs
+    document, print indented under it as `id  [level]`, each with its snippet on the line below, and `studio fetch ID`
+    reads one. `--bm25-only` never embeds the query, so it needs
     no embedding provider. An omitted `--collection` uses the knowledge base's own declared collection. A
     failed read, such as an unreachable database or a query the role refuses, exits 1 with a message.
     """
@@ -1228,7 +1234,7 @@ def search_cmd(
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     message = Search(query=query, k=k, level=level, facets=_parse_facets(facet), collection=partition, hybrid=not bm25_only)
     result = _run_command(
-        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed"
+        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed", database=settings.database
     )
     _print_search_hits(result)
 
@@ -1253,7 +1259,7 @@ def fetch_cmd(
     settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
-    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed")
+    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed", database=settings.database)
     _print_fetch_unit(result, unit_id)
 
 
@@ -1331,8 +1337,10 @@ def sync_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    scan, report = asyncio.run(
-        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection)
+    scan, report = run_naming_connection_failures(
+        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection),
+        on_error="sync failed",
+        database=settings.database,
     )
     if scan is not None:
         _print_scan_report(scan)
@@ -1365,7 +1373,7 @@ def export_okf_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed"
+        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed", database=settings.database
     )
     _print_export_report(report)
 

@@ -1228,7 +1228,7 @@ library cannot read answers 503, records nothing, and the studio delivers again.
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
 workflow the row names (the library's `current`), resolved on every read and every fire. The row keeps the id it was
-written with. `gate_mode` is the one stored gate switch (alembic `0071` folded the earlier flag into it).
+written with. `gate_mode` is the one stored gate switch (alembic `0072` folded the earlier flag into it).
 
 `spend_today_usd` and `spend_week_usd` are `schedule_spend`'s own two figures (`features/running/spend.py`), computed
 fresh the same way as `live` rather than stored. Each counts only a fire whose spend record names this schedule's own

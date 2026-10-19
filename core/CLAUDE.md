@@ -9,6 +9,8 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
   and `SessionScopedFactory` (one fresh session per call)
 - `core.files`, `core.markdown`: file and markdown utilities (atomic writes, the cooperative `exclusive_lock`,
   `has_hidden_component`, heading slugs, the paragraph split of a section body)
+- `core.connection_failures`: whether an error is a database connection failure, and the message that names the service a
+  failed connection reached (an embedding endpoint, a model endpoint or the database)
 - `core.fingerprints`: SHA-256 fingerprints of text and of models, and the canonical text of a set of names
 - `core.statistics`: the seeded paired bootstrap lower bound
 - `core.column_types`: the SQLAlchemy `LTREE` and asyncpg-bound `halfvec` column types

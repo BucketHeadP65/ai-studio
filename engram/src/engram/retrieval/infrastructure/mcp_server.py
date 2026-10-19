@@ -402,7 +402,7 @@ def create_mcp_server(
             takes in `facets`, inside `run_code` too. Any other key fails the call naming them. Empty (the
             default) refuses every key. Unread with `read_surfaces`, whose `search` filters each surface by
             its own `facet_keys`.
-        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the
+        hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the
             single-base `search` description states, inside `run_code` too. 0 (the default) keeps every hit and
             states nothing about documents. Unread with `read_surfaces`, each of which carries its own.
 

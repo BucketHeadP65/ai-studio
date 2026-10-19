@@ -36,6 +36,7 @@ import typer
 
 from core.ai.embedding import BatchEmbedder
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
+from core.db import redact_db
 from core.wiring.contracts import ContainerResolver
 from engram.evals.commands import (
     CheckGenerator,
@@ -58,7 +59,7 @@ from engram.evals.generation.domain.datasets import RetirementRecord
 from engram.evals.generator_check.contracts import RANK_DECIMALS, generator_check
 from engram.evals.handlers import GenerateEvalDatasetHandler, RollbackPolicyHandler
 from engram.evals.harness.contracts import ExperimentAxes, ExperimentVariant, expand_variants, run_experiment
-from engram.evals.scoring.contracts import HitSources
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION, HitSources
 from engram.evals.shared.domain import Archetype, ExpectedQa, QaCaseMeta, QaInput
 from engram.evals.tuning.policy import DEFAULT_INSTRUCTIONS, baseline_policy, load_policy, save_policy
 from engram.evals.tuning.strategy import DEFAULT_STRATEGY
@@ -89,8 +90,16 @@ from studio.knowledge_base.cli_evals import (
     _skill_md_path,
     _variant_evaluator,
 )
-from studio.knowledge_base.settings import ApplicationSettings, EvalsSettings, KnowledgeBaseSettings, LogfireSettings, TuningSettings
+from studio.knowledge_base.settings import (
+    ApplicationSettings,
+    EvalsSettings,
+    KnowledgeBaseSettings,
+    LogfireSettings,
+    TuningSettings,
+    fetch_application_settings,
+)
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, EvaluationSqlTools, ReaderSqlGateway
+from tests.support.connection_errors import endpoint_connection_error
 from tests.support.http_app import write_settings_json
 
 if TYPE_CHECKING:
@@ -146,6 +155,15 @@ class _FakeInventoryReaders:
 
     @asynccontextmanager
     async def __call__(self) -> AsyncGenerator[_FakeCoverageReader]:
+        yield _FakeCoverageReader()
+
+
+class _UnreachableInventoryReaders:
+    """Fails to open the owner session, the way a refused database connection fails."""
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncGenerator[_FakeCoverageReader]:
+        raise ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)")
         yield _FakeCoverageReader()
 
 
@@ -577,6 +595,23 @@ class TestEvalsRunResume:
         assert "evals run failed: the results file" in result.stdout
         assert "max_tool_calls (4 in the file, 6 now)" in " ".join(result.stdout.split())
         assert results.read_text(encoding="utf-8") == written
+
+    def test_a_refused_database_connection_names_the_database(self, tmp_path: Path):
+        dataset_path = _write_golden(tmp_path)
+        build = _factory(tmp_path)
+
+        def unreachable() -> object:
+            container = build()
+            assert isinstance(container, AsyncContainer)
+            container.override.set(target=InventoryReaderFactory, new=_UnreachableInventoryReaders())
+            return container
+
+        command = ["evals", "run", "--model", "test-model", "--dataset", str(dataset_path), "--results", str(tmp_path / "results.jsonl")]
+        result = runner.invoke(app, command, obj=unreachable)
+
+        assert result.exit_code == 1
+        database = redact_db(fetch_application_settings().infrastructure.database.url)
+        assert result.stdout.splitlines()[-1] == f"evals run failed: database {database}: [Errno 61] Connect call failed ('10.0.0.5', 5434)"
 
     def test_resume_refuses_a_results_file_from_another_index_build_naming_it(self, tmp_path: Path):
         dataset_path = _write_three_cases(tmp_path)
@@ -1618,8 +1653,10 @@ class TestImportJudgmentsCli:
         assert "evals import-judgments failed" in result.stdout
 
 
-def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "test-model") -> None:
-    header = {
+def _write_results_file(
+    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int | None = None, scored: bool = False
+) -> None:
+    header: dict[str, object] = {
         "strategy": "search-hybrid",
         "sql": False,
         "code_mode": False,
@@ -1637,6 +1674,8 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
         "started": "2026-10-13T09:00:00+00:00",
         "source_lookup_error": None,
     }
+    if source_scoring_version is not None:
+        header["source_scoring_version"] = source_scoring_version
     lines = [
         {
             "case": f"c{index}",
@@ -1647,10 +1686,10 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
             "error": None,
             "answer": "yes",
             "cited": [],
-            "sources": None,
-            "recall@4": None,
-            "recall@10": None,
-            "mrr": None,
+            "sources": ["s1"] if scored else None,
+            "recall@4": 1.0 if scored else None,
+            "recall@10": 1.0 if scored else None,
+            "mrr": 1.0 if scored else None,
             "other_collection": False,
             "transient": False,
             "seen_recall": None,
@@ -1705,6 +1744,20 @@ class TestCompareCli:
         assert "differ in model" in result.stdout
         assert not out.exists()
 
+    def test_runs_scored_under_different_source_scoring_versions_are_refused_saying_which_to_run_again(self, tmp_path: Path):
+        older, newer = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
+        _write_results_file(older, strict=(True, False), scored=True)
+        _write_results_file(newer, strict=(True, True), scored=True, source_scoring_version=SOURCE_SCORING_VERSION)
+        out = tmp_path / "compare.md"
+
+        result = runner.invoke(app, ["evals", "compare", "--pair", f"{older},{newer}", "--out", str(out)])
+
+        assert result.exit_code == 1
+        message = " ".join(result.stdout.split())
+        assert f"differ in source_scoring_version (1 and {SOURCE_SCORING_VERSION})" in message
+        assert f"Run {older} again with --source-level to score it under version {SOURCE_SCORING_VERSION}" in message
+        assert not out.exists()
+
     @pytest.mark.parametrize("value", ["a.jsonl", "a.jsonl,b.jsonl,c.jsonl", "a.jsonl,", ",b.jsonl"])
     def test_a_pair_that_is_not_two_comma_separated_paths_is_a_usage_error(self, tmp_path: Path, value: str):
         out = tmp_path / "compare.md"
@@ -1723,6 +1776,18 @@ class TestCompareCli:
         assert result.exit_code == 2
         assert "--out must end in .md" in " ".join(result.stderr.replace("│", " ").split())
         assert not out.exists()
+
+
+class _FailingHandler:
+    """A command handler that raises the scripted error for every command."""
+
+    def __init__(self, error: Exception) -> None:
+        self.events: list[Event] = []
+        self.error = error
+
+    async def __call__(self, command: Command) -> object:
+        del command
+        raise self.error
 
 
 class TestScoreCli:
@@ -1772,6 +1837,27 @@ class TestScoreCli:
         assert f"  gold ids that name a page with no source document: {unmappable_gold}\n" in result.stdout
         assert f"  cases left out because no gold id names a source document: {cases_without_gold}\n" in result.stdout
 
+    @pytest.mark.parametrize(
+        ("error", "service"),
+        [
+            (endpoint_connection_error("embeddings"), "embedding endpoint example.openai.azure.com"),
+            (endpoint_connection_error("responses"), "model endpoint example.openai.azure.com"),
+        ],
+        ids=["embedding endpoint", "model endpoint"],
+    )
+    def test_a_failed_endpoint_connection_names_the_endpoint_and_its_host(self, tmp_path: Path, error: Exception, service: str):
+        result = self._invoke(tmp_path, _FailingHandler(error))
+
+        assert result.exit_code == 1
+        assert result.stdout.splitlines()[-1] == f"evals score failed: {service}: Connection error."
+
+    def test_a_refused_database_connection_names_the_database(self, tmp_path: Path):
+        result = self._invoke(tmp_path, _FailingHandler(ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)")))
+
+        assert result.exit_code == 1
+        database = redact_db(fetch_application_settings().infrastructure.database.url)
+        assert result.stdout.splitlines()[-1] == f"evals score failed: database {database}: [Errno 61] Connect call failed ('10.0.0.5', 5434)"
+
     def test_it_prints_no_gold_lines_when_every_gold_id_named_a_source(self, tmp_path: Path):
         result = self._scored(tmp_path, unmappable_gold=0, cases_without_gold=0)
 
@@ -1800,7 +1886,7 @@ class TestScoreCli:
         )
 
     @staticmethod
-    def _invoke(tmp_path: Path, handler: RecordingCommandHandler, *extra: str) -> Result:
+    def _invoke(tmp_path: Path, handler: RecordingCommandHandler | _FailingHandler, *extra: str) -> Result:
         knowledge_base = tmp_path / "research"
         knowledge_base.mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")

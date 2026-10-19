@@ -36,12 +36,15 @@ bit-for-bit identical to a full rebuild (ADR
 |---|---|---|
 | CLI | `studio index [--full] [--dry-run] [--no-embed] [--summaries] [--collection <name>]` | `studio/src/studio/knowledge_base/cli.py` (`index_cmd`) |
 | CLI | `studio summaries list [--collection <name>]`, `studio summaries approve [--collection <name>]` | `studio/src/studio/knowledge_base/cli.py` (`summaries_app`) |
-| HTTP | `POST /api/jobs/compile` (body `{embed, full}`) | `studio/src/studio/knowledge_base/http/api.py` (`start_index`) |
+| HTTP | `POST /api/knowledge-bases/{name}/refresh` queues a `kb.refresh` job and answers 202 with its id, or 409 with the id of the one already live. `GET /api/jobs/{job_id}` reads it | `studio/src/studio/knowledge_base/http/controllers/refresh.py` (`start_refresh`) |
 | Bus | `IndexKnowledgeBase` command to `IndexKnowledgeBaseHandler` | `src/engram/indexing/service/index.py` |
 
 Both surfaces dispatch the same `IndexKnowledgeBase` command through the CQRS
-`MessageBus`. The CLI runs it inline and prints a report, while the HTTP route
-wraps it in a `JobRegistry` job (`JobKind.INDEX`) for async tracking.
+`MessageBus`. The CLI runs it inline and prints a report. The HTTP route runs nothing itself: it
+queues a `kb.refresh` job in `coordination.jobs`, and `studio worker` claims it and runs
+`RefreshKnowledgeBaseJob` (`studio/src/studio/knowledge_base/refresh/service.py`). When the knowledge
+base's schema turns sources on, that job scans the watch list if there is one and syncs the mirrors.
+It then dispatches `IndexKnowledgeBase` incremental, with embeddings on and no summaries.
 
 ## Public contract
 

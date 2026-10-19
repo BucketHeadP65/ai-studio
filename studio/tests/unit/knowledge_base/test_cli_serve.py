@@ -221,6 +221,26 @@ class TestSearch:
         assert [line.strip() for line in lines[hit + 1 : hit + 3]] == ["paper.lightrag-2025#s2  [section]", "src.lightrag:4  [raw]"]
         assert all(line.startswith(" ") for line in lines[hit + 1 : hit + 3])
 
+    def test_each_folded_units_snippet_prints_under_its_line_on_one_line(self):
+        folded = [
+            {"id": "paper.lightrag-2025#s2", "hit_level": "section", "snippet": "The graph index\n  costs fewer tokens\u2026"},
+            {"id": "src.lightrag:4", "hit_level": "raw"},
+        ]
+        row = {**_search_result().rows[0], "folded_units": folded}
+        factory = _Factory(gateway=_gateway(SqlResult(rows=(row,), columns=(*_search_result().columns, "folded_units"))))
+
+        result = runner.invoke(app, ["search", "graph rag", "--bm25-only"], obj=factory)
+
+        lines = result.stdout.splitlines()
+        hit = next(index for index, line in enumerate(lines) if "paper.lightrag-2025#c1" in line)
+        assert result.exit_code == 0, result.stdout
+        assert [line.strip() for line in lines[hit + 1 : hit + 4]] == [
+            "paper.lightrag-2025#s2  [section]",
+            "The graph index costs fewer tokens\u2026",
+            "src.lightrag:4  [raw]",
+        ]
+        assert len(lines[hit + 2]) - len(lines[hit + 2].lstrip()) > len(lines[hit + 1]) - len(lines[hit + 1].lstrip())
+
     def test_default_search_is_hybrid_and_embeds_the_query_once(self):
         factory = _Factory(gateway=_gateway(_search_result()))
 

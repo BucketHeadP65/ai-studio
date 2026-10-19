@@ -27,7 +27,9 @@ from typer.testing import CliRunner
 
 from studio.knowledge_base.cli import _read_surfaces, app
 from studio.knowledge_base.cli_support import announce_knowledge_base
+from studio.knowledge_base.settings import fetch_application_settings
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
+from studio.knowledge_base.wiring.indexing import ingestion_indexer_version
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -38,6 +40,12 @@ if TYPE_CHECKING:
 runner = CliRunner()
 INDEXED = datetime(2026, 8, 26, 23, 50, tzinfo=UTC)
 HEAD = code_head_revision()
+
+
+def _current_indexer_version() -> str:
+    """The indexer version an index under the test's settings stores, the one the command compares against."""
+    settings = fetch_application_settings()
+    return ingestion_indexer_version(settings.infrastructure.azure_openai, settings.ingestion)
 
 
 def _local(when: datetime) -> str:
@@ -54,15 +62,20 @@ def _schema_at_head(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _gateway(
-    *, revision: str | None = HEAD, indexed_at: datetime | None = INDEXED, manifest: dict[str, str] | None = None
+    *,
+    revision: str | None = HEAD,
+    indexed_at: datetime | None = INDEXED,
+    indexer_version: str | None = None,
+    manifest: dict[str, str] | None = None,
 ) -> FakeSqlGateway:
     present = revision is not None
+    fingerprint = {"indexed_at": indexed_at, "indexer_version": indexer_version if indexer_version is not None else _current_indexer_version()}
     return FakeSqlGateway(
         routed={
             "to_regclass": SqlResult(rows=({"present": present},), columns=("present",)),
             "alembic_version": SqlResult(rows=({"version_num": revision},) if present else (), columns=("version_num",)),
             "index_fingerprint": SqlResult(
-                rows=({"indexed_at": indexed_at},) if indexed_at is not None else (), columns=("indexed_at",)
+                rows=(fingerprint,) if indexed_at is not None else (), columns=("indexed_at", "indexer_version")
             ),
             "index_manifest": SqlResult(
                 rows=tuple({"path": path, "content_hash": digest} for path, digest in (manifest or {}).items()),
@@ -243,6 +256,50 @@ class TestTheChangedCountTail:
         assert result.stdout.splitlines()[1].endswith("1 file awaiting index")
 
 
+
+
+class TestTheTailSaysWhenTheNextIndexRebuildsEverything:
+    """A stored indexer version that differs from the one the code and settings produce now makes the next index a full rebuild."""
+
+    def test_nothing_changed_when_the_stored_indexer_version_is_the_current_one(self, tmp_path: Path):
+        root = _knowledge_base(tmp_path / "alpha", "alpha")
+        reader = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha")])
+        gateway = _gateway(manifest=disk_content_hashes(reader), indexer_version=_current_indexer_version())
+
+        result = runner.invoke(app, ["status", "--knowledge-base", str(root)], obj=FakeContainerFactory(gateway, reader=reader))
+
+        assert result.stdout.splitlines()[1].endswith(", nothing changed since")
+
+    def test_changed_files_under_the_current_indexer_version_name_only_the_files(self, tmp_path: Path):
+        root = _knowledge_base(tmp_path / "alpha", "alpha")
+        before = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha")])
+        after = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha edited")])
+        gateway = _gateway(manifest=disk_content_hashes(before), indexer_version=_current_indexer_version())
+
+        result = runner.invoke(app, ["status", "--knowledge-base", str(root)], obj=FakeContainerFactory(gateway, reader=after))
+
+        assert result.stdout.splitlines()[1].endswith(", 1 file changed since")
+
+    def test_a_changed_indexer_version_says_the_next_index_rebuilds_everything(self, tmp_path: Path):
+        root = _knowledge_base(tmp_path / "alpha", "alpha")
+        reader = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha")])
+        gateway = _gateway(manifest=disk_content_hashes(reader), indexer_version="0+1-2")
+
+        result = runner.invoke(app, ["status", "--knowledge-base", str(root)], obj=FakeContainerFactory(gateway, reader=reader))
+
+        assert result.stdout.splitlines()[1].endswith(", the indexer or its chunk settings changed since, the next index rebuilds everything")
+
+    def test_changed_files_and_a_changed_indexer_version_are_both_stated(self, tmp_path: Path):
+        root = _knowledge_base(tmp_path / "alpha", "alpha")
+        before = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha"), ("Units/b.md", "beta")])
+        after = FakeKnowledgeBaseReader(units=[("Units/a.md", "alpha edited"), ("Units/b.md", "beta edited")])
+        gateway = _gateway(manifest=disk_content_hashes(before), indexer_version="0+1-2")
+
+        result = runner.invoke(app, ["status", "--knowledge-base", str(root)], obj=FakeContainerFactory(gateway, reader=after))
+
+        assert result.stdout.splitlines()[1].endswith(
+            ", 2 files and the indexer or its chunk settings changed since, the next index rebuilds everything"
+        )
 
 
 class _UnreadableReader(FakeKnowledgeBaseReader):

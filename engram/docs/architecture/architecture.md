@@ -110,7 +110,7 @@ C4Container
 
     System_Boundary(engram, "studio.knowledge_base (application) over the engram library") {
         Container(cli, "Typer CLI", "studio/src/studio/knowledge_base/cli.py (+ cli_evals/cli_note/cli_init)", "index, status, search, fetch, sync, export okf, serve-http, mcp, evals/note/init groups")
-        Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Read routes + job/prefs/evals, studio-client backend")
+        Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Knowledge base registry, graph, refresh jobs and events, studio-client backend")
         Container(mcp, "FastMCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
 
         Container(container, "Composition root", "studio/src/studio/knowledge_base/container.py, wireup", "Wires every slice, owns cross-slice routing")
@@ -1063,8 +1063,8 @@ knowledge base is read only through its own login role, a member of `kb_reader`
 that `kb.reader_scopes` names
 ([ADR-0046](../adr/0046-private-knowledge-base-read-through-its-own-login-role.md)).
 Base `kb.*` tables are never granted. The
-Studio's `JobRegistry` (job triggers) and runtime prefs sit app-side under
-`studio/src/studio/knowledge_base/http/`, over this surface rather than in it. The retrieval
+studio HTTP API sits app-side under `studio/src/studio/knowledge_base/http/`, over this surface rather than in it,
+and serves no search or fetch route. The retrieval
 contract lives in [serve.md](../reference/serve.md).
 
 ### serve (retrieval)
@@ -1114,9 +1114,7 @@ C4Component
 
     Component_Boundary(app, "studio.knowledge_base, the entry points over it") {
         Component(cli, "CLI search/fetch + mcp", "studio/src/studio/knowledge_base/cli.py", "Resolves handlers, builds the MCP server")
-        Component(http, "FastAPI app :8100", "studio/src/studio/knowledge_base/http/api.py, create_app", "/api/search,fetch,graph,graph/expand,graph/paths,schema,status,prefs,jobs")
-        Component(jobs, "JobRegistry", "studio/src/studio/knowledge_base/http/jobs.py", "One async HTTP job at a time (index/sync/eval)")
-        Component(prefs, "PrefsStore", "studio/src/studio/knowledge_base/http/prefs.py", "Studio runtime defaults (.dashboard-prefs.json)")
+        Component(http, "FastAPI app :8100", "studio/src/studio/knowledge_base/http/api.py, create_app", "/api/knowledge-bases/*, /api/graph, /api/events, /api/jobs/{job_id}, /api/templates")
     }
 
     Rel(agent, cli, "search / fetch / mcp")
@@ -1125,7 +1123,7 @@ C4Component
     Rel(evals, tools, "build_retrieval_toolset")
     Rel(cli, tools, "register_mcp_tools (+ active-policy override)")
     Rel(mcp, tools, "register_mcp_tools")
-    Rel(http, queries, "_resolve(Handler), NOT via the bus")
+    Rel(http, queries, "GraphHandler for /api/graph, NOT via the bus")
     Rel(cli, queries, "resolves handlers")
     Rel(tools, queries, "RetrievalHandlers ports to handler.__call__")
     Rel(queries, reader_gw, "rows(api.*) / api_objects")
@@ -1134,11 +1132,9 @@ C4Component
     Rel(admin_gw, pg, "SELECT kb.* (admin URL)")
     Rel(dialects, pg, "api.search BM25 SQL (migration-time DDL)")
     Rel(backends, pg, "api.graph_* traversal SQL (migration-time DDL)")
-    Rel(http, jobs, "trigger index/sync/eval")
-    Rel(http, prefs, "/api/prefs")
 ```
 
-Source: `src/engram/retrieval/tools.py`, `src/engram/retrieval/queries.py`, `src/engram/retrieval/infrastructure/gateway.py`, `studio/src/studio/knowledge_base/wiring/serve.py`, `studio/src/studio/knowledge_base/http/api.py`, `src/engram/retrieval/infrastructure/mcp_server.py`, `studio/src/studio/knowledge_base/http/jobs.py`, `studio/src/studio/knowledge_base/http/prefs.py`, `src/engram/retrieval/search_dialect/registry.py`, `src/engram/retrieval/graph_backend/registry.py`, `studio/src/studio/knowledge_base/cli.py`
+Source: `src/engram/retrieval/tools.py`, `src/engram/retrieval/queries.py`, `src/engram/retrieval/infrastructure/gateway.py`, `studio/src/studio/knowledge_base/wiring/serve.py`, `studio/src/studio/knowledge_base/http/api.py`, `src/engram/retrieval/infrastructure/mcp_server.py`, `src/engram/retrieval/search_dialect/registry.py`, `src/engram/retrieval/graph_backend/registry.py`, `studio/src/studio/knowledge_base/cli.py`
 
 The domain model is the read-side contract (`domain.py`): frozen query `Message`s
 (reads, **not** `Command`s, the CQS asymmetry), result models, and the `SqlGateway`
@@ -1261,18 +1257,22 @@ These hold on both dialects and both graph backends, for the read tools and for 
 - **Bounded, tuned search.** `api.search` keys every row by `(collection, id)` and returns `src_collection`. Each leg of
   each surface ranks at most a budget of rows: a keyword leg reads its BM25 index in score order, a semantic leg orders
   by exact distance. The budget, the RRF constant, the `k` ceiling, the snippet length, the rows per group, the hits per
-  document and a weight per surface and leg come from `kb.retrieval_tuning`, one row the function reads as its owner and
-  no reader may read, clamped by bounds generated into the function. The defaults are a budget of 50, an RRF constant of
-  60, `k` at most 50, snippets of 480 characters, 3 rows per group and 1 hit per document.
+  document, the folded snippet length and a weight per surface and leg come from the default row of
+  `kb.retrieval_tuning`, which the function reads as its owner and no reader may read, clamped by bounds generated into
+  the function. A knowledge base's own row may set the hits per document and the folded snippet length for its hits.
+  The defaults are a budget of 50, an RRF constant of 60, `k` at most 50, snippets of 480 characters, 3 rows per group,
+  1 hit per document and folded snippets of 160 characters.
 - **Rank policies.** A card whose title equals the query, ignoring case and surrounding spaces, goes first when no other
   candidate holds that title. Then each page keeps its best `rows_per_group` hits across its card, sections and claims,
   and each source its best raw chunks. Then each document keeps its best `max_hits_per_document` hits, the pinned card
   its best, so `k` counts documents. A unit's document is the source it was made from when it has one, otherwise its own
-  page. The document's next three matching units ride under its best hit as `folded_units`, each with its id and hit
-  level, and the search tools give each one the ref that fetches it. A cap of 0 or null keeps every hit.
-  `api.search_hits_per_document()` answers the cap, and a `search` description states the cap its process read, with
-  the exceptions the serve reference lists. When an answer runs over its size budget, folded units go first, from the
-  lowest-ranked hit up. `meta.` pages leave before `k` applies.
+  page. The document's next three matching units ride under its best hit as `folded_units`, each with its id, its hit
+  level and its snippet cut to the folded snippet length when longer, and the search tools give each one the ref that
+  fetches it. A cap of 0 or null keeps every hit. `api.search_hits_per_document(collection)` answers one knowledge
+  base's cap, the database's for a knowledge base the session cannot see, and a `search` description states the cap its
+  process read, with the exceptions the serve reference lists. When an answer runs over its size budget, folded units go
+  first, from the lowest-ranked hit up, each cut to a shorter snippet, never its ellipsis alone, before it loses its
+  snippet and then the unit. `meta.` pages leave before `k` applies.
 - **Several knowledge bases merge by rank.** Each hit keeps its fused `score`, and a re-rank adds `rerank_score`. A
   search over several knowledge bases merges by re-rank probability when every hit has one, else rank by rank.
 - **Graph walks say how far they go.** An expansion walks at most 6 hops and a route at most 8. `api.graph_reach` walks
@@ -1332,9 +1332,9 @@ plus the one guardrailed ADR-0032 machine rung), and scores runs with `Retrieval
 (recall@k / precision@k / MRR) over a Logfire-instrumented harness. The slice is
 organised into five sub-packages
 (`generation/`, `tuning/`, `rca/`, `harness/`, `recommendation/`, plus `shared/` value
-objects and the slice-level `commands.py` / `handlers.py` bus surface. Its wiring and
-HTTP routes are app-side, in `studio/src/studio/knowledge_base/wiring/evals.py` and
-`studio/src/studio/knowledge_base/http/evals.py`) and gets **two** C4 L3 component sub-diagrams.
+objects and the slice-level `commands.py` / `handlers.py` bus surface. Its wiring is
+app-side, in `studio/src/studio/knowledge_base/wiring/evals.py`, and the `studio evals` CLI is its only
+entry point, with no HTTP route) and gets **two** C4 L3 component sub-diagrams.
 
 **Generation, the dataset lifecycle, and the tuning loop.** Generation seeds
 cases whose gold ids are known by construction (`SeedQueries` reads `kb.*` over
