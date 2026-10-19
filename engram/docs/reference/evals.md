@@ -184,7 +184,7 @@ not record it.
 - **Inputs:** the frozen value objects in `src/engram/evals/shared/domain.py`: `QaInput`
   (the agent's input: `question` + optional `task` hint), `ExpectedQa` (ground truth:
   `answer`, `expected_source_ids` page ids, optional `expected_claim_anchors`), and
-  `QaCaseMeta` (`anchor_page_id`, a file saying `paper_id` still loads, + closed-set `page_type`/`difficulty`). The HTTP body is
+  `QaCaseMeta` (`anchor_page_id`, + closed-set `page_type`/`difficulty`). The HTTP body is
   `EvalRunRequest` (`dataset`, `model`, `instructions_id?`, `variant?`, the retrieval-surface axes
   `retrieval_strategy?` + `code_mode`, plus `reasoning_effort?`)
   in `studio/src/studio/knowledge_base/http/evals.py`.
@@ -1121,9 +1121,7 @@ the pricing scope its label admits to.
 |---|---|---|
 | `task_success` | task success | not applicable |
 | `measured_generative_model_cost` | measured generative-model response cost | measured generative-model response charges only, never embeddings or third-party calls |
-| `cost` (legacy) | legacy cost | unknown |
 
-The legacy spelling stays readable under its own label and is never relabeled as the measured one.
 The measured cost comparison itself reads `unknown` the moment one model turn on either side carries
 no price, and an unknown price is never read as zero. Deciding a comparison on money is not done
 here: the measure is reported, and a plan carrying that objective reports rather than recommends.

@@ -22,7 +22,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+import pytest
+
 from core.cqrs.contracts import ImmediateWake, MemoryJobs, MemoryOutbox, MessageBus, Worker
+from pydantic import ValidationError
 
 from engram.evals.generation.contracts import QaGenerationSubscriber
 from engram.indexing.contracts import (
@@ -435,10 +438,9 @@ class TestTheEventField:
         assert event.page_ids == ("paper.a",)
         assert "page_ids" in event.model_dump(mode="json")
 
-    def test_an_outbox_row_written_with_the_old_field_still_decodes(self):
-        event = CitingPagesChanged.model_validate({"collection": "research", "paper_ids": ["paper.a"]})
-
-        assert event.page_ids == ("paper.a",)
+    def test_a_payload_naming_its_pages_under_another_key_is_refused(self):
+        with pytest.raises(ValidationError, match="page_ids"):
+            CitingPagesChanged.model_validate({"collection": "research", "paper_ids": ["paper.a"]})
 
 
 class TestDigestPageIds:

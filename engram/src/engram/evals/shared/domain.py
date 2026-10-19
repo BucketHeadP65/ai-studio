@@ -8,7 +8,7 @@ Every model is frozen and does no I/O. `QaInput`, `ExpectedQa` and `QaCaseMeta` 
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 QaDifficulty = Literal["easy", "medium", "hard"]
 """The difficulty band of a case, derived from the structural shape of its seed."""
@@ -104,14 +104,10 @@ class ExpectedQa(BaseModel):
 class QaCaseMeta(BaseModel):
     """A QA case's provenance: its anchor page and difficulty when generated, its relevance judgments when human-judged."""
 
-    model_config = ConfigDict(frozen=True, serialize_by_alias=True)
+    model_config = ConfigDict(frozen=True)
 
-    anchor_page_id: str | None = Field(
-        default=None, validation_alias=AliasChoices("anchor_page_id", "paper_id"), serialization_alias="anchor_page_id"
-    )
-    """The id of the anchor page, None for a human-judged case.
-
-    Dataset files carry it under `anchor_page_id`, and a file that says `paper_id` still loads."""
+    anchor_page_id: str | None = None
+    """The id of the anchor page, None for a human-judged case."""
     difficulty: QaDifficulty | None = None
     """The case's difficulty band, None for a human-judged case."""
     judgments: dict[str, int] = Field(default_factory=dict)

@@ -79,7 +79,7 @@ class TestQaCaseMeta:
     def test_rejects_out_of_set_difficulty(self):
         # An out-of-set label can only arrive as raw payload data, so validate it.
         with pytest.raises(pydantic.ValidationError):
-            QaCaseMeta.model_validate({"paper_id": "p", "difficulty": "trivial"})
+            QaCaseMeta.model_validate({"anchor_page_id": "p", "difficulty": "trivial"})
 
     def test_is_frozen(self):
         meta = QaCaseMetaFactory.build()
@@ -212,16 +212,19 @@ class TestSeed:
 
 
 class TestQaCaseMetaArchetypeFields:
-    def test_a_case_is_saved_under_anchor_page_id_and_an_old_file_still_loads(self):
+    def test_a_case_is_saved_under_anchor_page_id(self):
         saved = QaCaseMeta(anchor_page_id="x", difficulty="easy").model_dump()
-        old = QaCaseMeta.model_validate({"paper_id": "x", "difficulty": "easy"})
 
         assert saved["anchor_page_id"] == "x"
         assert "paper_id" not in saved
-        assert old.anchor_page_id == "x"
 
-    def test_back_compat_load_defaults_new_fields(self):
-        meta = QaCaseMeta.model_validate({"paper_id": "p", "difficulty": "easy"})
+    def test_paper_id_is_not_read_as_the_anchor_page(self):
+        meta = QaCaseMeta.model_validate({"paper_id": "x", "difficulty": "easy"})
+
+        assert meta.anchor_page_id is None
+
+    def test_a_case_with_no_archetype_or_anchors_loads_with_none(self):
+        meta = QaCaseMeta.model_validate({"anchor_page_id": "p", "difficulty": "easy"})
 
         assert meta.archetype is None
         assert meta.anchors == ()
@@ -235,9 +238,8 @@ class TestQaCaseMetaArchetypeFields:
         assert meta.anchors[0].unit_id == "p#^c1"
         assert meta.anchors[0].body_hash == "abc"
 
-    def test_legacy_mirrorless_load_defaults_mirror_hash_to_none(self):
-        # An old (pre-mirror) YAML case carries no mirror_hash; it must still load, defaulting to None.
-        meta = QaCaseMeta.model_validate({"paper_id": "p", "difficulty": "easy"})
+    def test_a_case_drafted_without_a_mirror_hash_loads_with_none(self):
+        meta = QaCaseMeta.model_validate({"anchor_page_id": "p", "difficulty": "easy"})
 
         assert meta.mirror_hash is None
 

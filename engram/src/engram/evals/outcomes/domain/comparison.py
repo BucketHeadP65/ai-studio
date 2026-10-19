@@ -8,8 +8,7 @@ exposes `search` and no graph tool, the candidate is exactly the baseline plus `
 A strategy with no `search` tool on either side is refused as an endpoint-discovery confound, and that
 surface is declared as the `endpoint_discovery_ablation` type, which reports its measures and recommends nothing.
 `EvaluationThresholds` is the conservative gate, where every unknown blocks acceptance rather than passing.
-`objective_reading` names the pricing scope each objective admits to, and the legacy `cost` spelling keeps
-its own label with an unknown pricing scope.
+`objective_reading` names the pricing scope each objective admits to.
 """
 
 from __future__ import annotations
@@ -38,13 +37,7 @@ from engram.evals.tuning.contracts import EVAL_STRATEGY_NAMES, RetrievalStrategy
 ComparisonObjective = Literal["task_success", "measured_generative_model_cost"]
 """What a new comparison is decided on. Money means measured generative-model response charges."""
 
-LegacyComparisonObjective = Literal["cost"]
-"""The objective spelling older reports carry, kept readable and never relabeled."""
-
-RecordedObjective = ComparisonObjective | LegacyComparisonObjective
-"""Every objective a stored report may name, new or legacy."""
-
-PricingScope = Literal["not_applicable", "measured_generative_model_response", "unknown"]
+PricingScope = Literal["not_applicable", "measured_generative_model_response"]
 """Which charges an objective's money claim actually covers."""
 
 StrategyComparisonType = Literal["graph_incremental_value", "endpoint_discovery_ablation", "descriptive_only"]
@@ -114,31 +107,29 @@ class StrategyRejection(StrEnum):
 class ObjectiveReading(EvaluationModel):
     """What a report's objective is called, and which charges its money claim covers."""
 
-    objective: RecordedObjective
+    objective: ComparisonObjective
     label: Nonempty
     pricing_scope: PricingScope
 
 
-_OBJECTIVE_READINGS: dict[RecordedObjective, ObjectiveReading] = {
+_OBJECTIVE_READINGS: dict[ComparisonObjective, ObjectiveReading] = {
     "task_success": ObjectiveReading(objective="task_success", label="task success", pricing_scope="not_applicable"),
     "measured_generative_model_cost": ObjectiveReading(
         objective="measured_generative_model_cost",
         label="measured generative-model response cost",
         pricing_scope="measured_generative_model_response",
     ),
-    "cost": ObjectiveReading(objective="cost", label="legacy cost", pricing_scope="unknown"),
 }
 
 
-def objective_reading(objective: RecordedObjective) -> ObjectiveReading:
-    """How `objective` is labeled in a report, including the legacy spelling.
+def objective_reading(objective: ComparisonObjective) -> ObjectiveReading:
+    """How `objective` is labeled in a report.
 
     Args:
-        objective: The objective a plan or a stored report carries.
+        objective: The objective a plan carries.
 
     Returns:
-        Its label and the pricing scope that label admits to. The legacy `cost` spelling keeps its
-        own label and an unknown pricing scope rather than being read as the measured objective.
+        Its label and the pricing scope that label admits to.
     """
     return _OBJECTIVE_READINGS[objective]
 

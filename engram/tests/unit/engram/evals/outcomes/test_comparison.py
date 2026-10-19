@@ -108,7 +108,6 @@ class _Scenario:
     candidate_strategy: RetrievalStrategy = RetrievalStrategy.FULL
     objective: ComparisonObjective = "task_success"
     arm_change: _ArmChange | None = None
-    legacy_objective: bool = False
     candidate_graph: bool = True
     graph_readable: bool = True
     baseline_surfaces_graph_page: bool = False
@@ -220,9 +219,9 @@ def _strategy_plan(scenario: _Scenario) -> StrategyComparisonPlan:
     )
 
 
-def _comparison_plan(*, objective: Literal["task_success", "cost"] = "task_success") -> ComparisonPlan:
+def _comparison_plan() -> ComparisonPlan:
     """The core paired-comparison plan every scenario runs: one held-out case, three repetitions."""
-    return ComparisonPlan(dataset=_DATASET, evaluation_case_ids=(_CASE,), repetitions=_REPETITIONS, objective=objective)
+    return ComparisonPlan(dataset=_DATASET, evaluation_case_ids=(_CASE,), repetitions=_REPETITIONS)
 
 
 def _model_turn(scenario: _Scenario, variant: Variant, repetition: int) -> ModelTurnTrace:
@@ -404,9 +403,6 @@ async def _trials(
 
 async def _observe(scenario: _Scenario, root: Path) -> _Observed:
     """Run one row end to end and report only the facts the table asserts."""
-    if scenario.legacy_objective:
-        reading = objective_reading(_comparison_plan(objective="cost").objective)
-        return _Observed(plan_valid=True, label=reading.label, pricing_scope=reading.pricing_scope)
     try:
         plan = _strategy_plan(scenario)
     except pydantic.ValidationError as error:
@@ -508,11 +504,6 @@ _TABLE = (
             pricing_scope="measured_generative_model_response",
         ),
         id="the new objective is measured_generative_model_cost",
-    ),
-    pytest.param(
-        _Scenario(legacy_objective=True),
-        _Expected(plan_valid=True, label="legacy cost", pricing_scope="unknown"),
-        id="the legacy objective is cost",
     ),
 )
 
@@ -645,12 +636,6 @@ class TestObjectiveReading:
 
         assert reading.label == "measured generative-model response cost"
         assert reading.pricing_scope == "measured_generative_model_response"
-
-    def test_the_legacy_objective_keeps_its_own_label(self):
-        reading = objective_reading("cost")
-
-        assert reading.label == "legacy cost"
-        assert reading.pricing_scope == "unknown"
 
 
 class TestResourceGuardrail:
