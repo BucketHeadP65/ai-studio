@@ -873,15 +873,13 @@ def evals_compare_cmd(
     every pair of the call. It reports the same per query type, with both official accuracies, both failed-case
     counts, the cases that read another knowledge base, each run's mean source-level recall@4, recall@10 and MRR
     over the cases with gold ids, and each run's mean seen recall with the mean paired difference. A seen recall a
-    results file does not hold, as in a file written before it was recorded, shows as missing, never as zero. A failed
+    results file does not hold, as for a run that mapped no sources, shows as missing, never as zero. A failed
     case counts as incorrect. Two runs whose dataset, model, thinking level, instructions, tool-call budget, search
     pinning, search date range or knowledge base differ are refused. Two runs may differ in the knowledge base
     fingerprint and in the index build, and the report shows both runs' values. Two runs under one strategy may
     differ in the SQL switch or in code mode, not in both, and two runs under different strategies must share both and
-    the candidate must be the baseline plus the graph leg. A results file written before code mode and the thinking
-    level were recorded reads them as off and unset, one written before the search date range was recorded reads it
-    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. A
-    refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
+    the candidate must be the baseline plus the graph leg. A results file missing a field the run writes predates the
+    current format and is refused. A refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
     before any file is read.
     """
     pairs = [_compared_pair(value) for value in pair]

@@ -74,11 +74,10 @@ SQL and graph switches that are on, such as
 part is left out when no switch is on, as for a fixed-mode knowledge base, and a knowledge base never
 indexed reads `not indexed`. The knowledge base fingerprint hashes the knowledge base's schema, not its index, so
 two runs over the same files before and after the chunk sizes change share a fingerprint and differ
-only in their index build. A header written before the key was recorded reads it as unknown. The header's `search_date_range` says whether `search` took
-`since` and `until`. Every run writes true. A header written before the key was recorded reads it as
-the opposite of `pinned_search`, because a pinned search then took no date range, so `studio evals
-compare` refuses an older pinned run beside a pinned run now, and `--resume` refuses to continue an
-older pinned file. A failed case is written as incorrect, and its `transient` key
+only in their index build. The header's `search_date_range` says whether `search` took `since` and
+`until`. Every run writes true. A results file whose header or case line is missing a key the run writes
+predates the current format: `studio evals compare` and `--resume` refuse it, naming the line and the
+missing keys, and the evaluation is run again to write it anew. A failed case is written as incorrect, and its `transient` key
 says whether it was a transient failure: a model connection error, a model request timeout, an
 HTTP 429 or 5xx from the model, or a database connection failure. A database connection failure is
 a connection to the knowledge base's database that was refused, could not be opened or closed under
@@ -99,18 +98,16 @@ missing cases and the transient failures, and rewrites the file under the earlie
 dataset order, every kept line exactly as it was. A header that differs is refused before any case
 runs, and the message names each differing field with both values, such as
 `index_build (6+400-800 text-embedding-3-small vocabulary 0123456789ab in the file, 6+300-600 text-embedding-3-small vocabulary 0123456789ab now)`.
-A header with no index build is refused against any build the run reads, named as `unknown in the
-file`, so a file written before the key was recorded is run again from scratch. With no file there yet, every
+With no file there yet, every
 case runs. Without `--resume`, an existing file is replaced. The file is always replaced whole,
 never truncated in place. After a resumed run the CLI prints how many cases it kept and ran and a
 summary over every case in the file, and the `--source-level` line covers every case too. A resume
 reads the current knowledge base fingerprint and prints one warning line when it differs from the
 header's, without refusing. A source lookup that fails on a resumed run leaves the header and the
 kept lines as they were, and only the lines run now carry null sources and scores, which the CLI
-says. A later resume does not run them again for that alone. A line written before transient
-failures were recorded reads whether it was one from its error text. A line that recorded its
-`transient` key before 2026-10-18 recorded a database connection failure as not transient and
-keeps that value, so a resume runs that case again only once its line is dropped from the file.
+says. A later resume does not run them again for that alone. A line that recorded its `transient` key
+before 2026-10-18 recorded a database connection failure as not transient and keeps that value, so a
+resume runs that case again only once its line is dropped from the file.
 
 `--source-level` (`EvaluationRunConfig.hit_sources`) scores each line against the dataset's gold
 source ids. A cited ref is read as the bare unit id it names first, so `page:<collection>/<id>`,
@@ -173,11 +170,10 @@ case ends or whether its failure is transient. A run without
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen
 recall, overall and then per query type, the cases with no query type last. `studio evals compare`
 reports both runs' mean seen recall and the mean paired difference over the cases both runs
-scored, overall and per query type, in a table of its own. A results file written before seen
-recall was recorded holds none, and the report shows it as `missing` for that run, never as 0. Two
-runs on different index builds are compared like two runs on different knowledge base fingerprints,
-and the report names each run's index build beside its fingerprint, `unknown` for a header that did
-not record it.
+scored, overall and per query type, in a table of its own. A run that mapped no sources holds no seen
+recall, and the report shows it as `missing` for that run, never as 0. Two runs on different index
+builds are compared like two runs on different knowledge base fingerprints, and the report names each
+run's index build beside its fingerprint.
 
 ## Public contract
 

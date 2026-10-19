@@ -28,6 +28,7 @@ _HEADER = ResultsHeader(
     instructions_sha256="a" * 64,
     max_tool_calls=8,
     pinned_search=True,
+    search_date_range=True,
     dataset="sample",
     dataset_sha256="b" * 64,
     collection="notes",
@@ -279,7 +280,7 @@ async def test_the_file_reads_back_as_written(tmp_path: Path) -> None:
 
 
 def _older_line(case: str, *, error: str | None = None) -> dict[str, object]:
-    """A case line as a results file written before transient failures were recorded holds it."""
+    """A case line as a results file written before transient failures and seen recall were recorded holds it."""
     return {
         "case": case,
         "query_type": None,
@@ -326,27 +327,34 @@ def _write_older_file(path: Path) -> None:
     path.write_text("".join(f"{json.dumps(row)}\n" for row in rows), encoding="utf-8")
 
 
-def test_an_older_file_reads_code_mode_off_thinking_unset_and_each_failure_from_its_error_text(tmp_path: Path) -> None:
+def test_an_older_file_is_refused_as_predating_the_current_format_naming_what_its_header_lacks(tmp_path: Path) -> None:
     path = tmp_path / "older.jsonl"
     _write_older_file(path)
 
+    with pytest.raises(ValueError, match=r"line 1 of .* predates the current results format: its header has no code_mode, index_build, search_date_range, thinking\."):
+        read_results(path)
+
+
+async def test_a_case_line_missing_a_field_the_writer_writes_is_refused_as_predating_the_current_format(tmp_path: Path) -> None:
+    path = tmp_path / "results.jsonl"
+    write_results(path, _HEADER, [])
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{json.dumps(_older_line('case-a'))}\n")
+
+    with pytest.raises(ValueError, match=r"line 2 of .* predates the current results format: it has no seen_gold, seen_recall, transient\."):
+        read_results(path)
+
+
+def test_a_header_key_this_reader_does_not_know_is_ignored(tmp_path: Path) -> None:
+    path = tmp_path / "results.jsonl"
+    write_results(path, _HEADER, [])
+    row = json.loads(path.read_text(encoding="utf-8"))
+    row["header"]["source_scoring_version"] = 1
+    path.write_text(f"{json.dumps(row)}\n", encoding="utf-8")
+
     header, lines = read_results(path)
 
-    assert (header.code_mode, header.thinking, header.model) == (False, None, "test-model")
-    assert header.index_build is None
-    assert {line.case: line.transient for line in lines} == {"case-a": False, "case-b": True, "case-c": False}
-    assert all((line.seen_gold, line.seen_recall) == (None, None) for line in lines)
-    assert lines[1].error == "ModelAPIError: Connection error."
-
-
-@pytest.mark.parametrize("pinned_search", [True, False])
-def test_a_header_that_did_not_record_the_date_range_reads_it_as_the_opposite_of_pinned_search(tmp_path: Path, pinned_search: bool) -> None:
-    path = tmp_path / "older.jsonl"
-    path.write_text(f"{json.dumps({'header': _older_header(pinned_search=pinned_search)})}\n{json.dumps(_older_line('case-a'))}\n", encoding="utf-8")
-
-    header, _lines = read_results(path)
-
-    assert header.search_date_range is (not pinned_search)
+    assert (header, lines) == (_HEADER, ())
 
 
 def test_an_empty_file_is_refused(tmp_path: Path) -> None:
@@ -436,8 +444,10 @@ async def test_a_case_line_whose_answer_holds_a_line_separator_reads_back(tmp_pa
 
 def test_a_repeated_case_is_refused_naming_it(tmp_path: Path) -> None:
     path = tmp_path / "results.jsonl"
-    rows = [{"header": _older_header()}, _older_line("case-a"), _older_line("case-a")]
-    path.write_text("".join(f"{json.dumps(row)}\n" for row in rows), encoding="utf-8")
+    write_results(path, _HEADER, [])
+    current = {**_older_line("case-a"), "transient": False, "seen_recall": None, "seen_gold": None}
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"{json.dumps(current)}\n{json.dumps(current)}\n")
 
     with pytest.raises(ValueError, match=r"line 3 of .* repeats the case case-a"):
         read_results(path)

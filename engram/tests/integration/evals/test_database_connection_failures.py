@@ -8,7 +8,7 @@ import pytest
 
 from core.db import build_reader_engine
 
-from engram.evals.harness.transient_failures import is_transient_error_text, is_transient_failure
+from engram.evals.harness.transient_failures import is_transient_failure
 
 
 def _refused_port() -> int:
@@ -35,4 +35,3 @@ async def test_a_database_that_refuses_the_connection_fails_the_case_transiently
     error = await _connection_failure(host)
 
     assert is_transient_failure(error) is True
-    assert is_transient_error_text(f"{type(error).__name__}: {error}") is True

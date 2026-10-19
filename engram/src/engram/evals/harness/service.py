@@ -618,14 +618,9 @@ def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
         ("search_date_range", written.search_date_range, run.search_date_range),
         ("dataset_sha256", written.dataset_sha256, run.dataset_sha256),
         ("collection", written.collection, run.collection),
-        ("index_build", _build_or_unknown(written.index_build), _build_or_unknown(run.index_build)),
+        ("index_build", written.index_build, run.index_build),
     )
     return [f"{name} ({in_file} in the file, {now} now)" for name, in_file, now in held if in_file != now]
-
-
-def _build_or_unknown(index_build: str | None) -> str:
-    """The index build as a refusal names it, `unknown` for a header that did not record one."""
-    return index_build if index_build is not None else "unknown"
 
 
 def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp: _RunStamp) -> _KeptResults | None:

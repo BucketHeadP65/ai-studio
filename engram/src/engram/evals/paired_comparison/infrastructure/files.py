@@ -29,7 +29,8 @@ def read_results(path: Path) -> ResultsFile:
     """Read the results file of an evaluation run: its header line, then one line per case.
 
     Lines end at a newline alone, so a line separator inside an answer stays in its line. Blank lines are skipped, and
-    the keys a paired comparison does not read are ignored.
+    the keys a paired comparison does not read are ignored. A header or a case line missing a field the writer writes is
+    refused as predating the current format.
 
     Args:
         path: The results file.
@@ -38,8 +39,8 @@ def read_results(path: Path) -> ResultsFile:
         The file's header and its case lines, in file order.
 
     Raises:
-        ResultsFileUnreadableError: When the file cannot be read or is empty, or when a line does not parse or repeats a case. The
-            message names the line.
+        ResultsFileUnreadableError: When the file cannot be read, is empty or predates the current format, or when a line does
+            not parse or repeats a case. The message names the line.
     """
     try:
         rows = path.read_text(encoding="utf-8").split("\n")
@@ -54,7 +55,13 @@ def read_results(path: Path) -> ResultsFile:
     try:
         header = _HeaderLine.model_validate_json(header_row).header
     except ValidationError as error:
-        msg = f"line {header_number} of {path} is not a results header: {error}"
+        missing = _missing_keys(error, under=("header",))
+        msg = (
+            f"line {header_number} of {path} predates the current results format: its header has no {', '.join(missing)}. "
+            "Run the evaluation again to write it in the current format."
+            if missing
+            else f"line {header_number} of {path} is not a results header: {error}"
+        )
         raise ResultsFileUnreadableError(msg) from error
     lines: list[ResultsLine] = []
     seen: set[str] = set()
@@ -62,7 +69,13 @@ def read_results(path: Path) -> ResultsFile:
         try:
             line = ResultsLine.model_validate_json(row)
         except ValidationError as error:
-            msg = f"line {number} of {path} is not a case line: {error}"
+            missing = _missing_keys(error, under=())
+            msg = (
+                f"line {number} of {path} predates the current results format: it has no {', '.join(missing)}. "
+                "Run the evaluation again to write it in the current format."
+                if missing
+                else f"line {number} of {path} is not a case line: {error}"
+            )
             raise ResultsFileUnreadableError(msg) from error
         if line.case in seen:
             msg = f"line {number} of {path} repeats the case {line.case}"
@@ -70,6 +83,15 @@ def read_results(path: Path) -> ResultsFile:
         seen.add(line.case)
         lines.append(line)
     return ResultsFile(path=str(path), header=header, lines=tuple(lines))
+
+
+def _missing_keys(error: ValidationError, *, under: tuple[str, ...]) -> tuple[str, ...]:
+    """The keys a line lacks directly under the path `under`, sorted, when every complaint is one of those, else nothing."""
+    complaints = error.errors()
+    depth = len(under) + 1
+    if not complaints or any(complaint["type"] != "missing" or len(complaint["loc"]) != depth or tuple(complaint["loc"][:-1]) != under for complaint in complaints):
+        return ()
+    return tuple(sorted({str(complaint["loc"][-1]) for complaint in complaints}))
 
 
 def write_paired_comparison(comparisons: Sequence[PairedComparison], *, out: Path) -> tuple[Path, Path]:

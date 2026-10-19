@@ -1625,14 +1625,18 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
     header = {
         "strategy": "search-hybrid",
         "sql": False,
+        "code_mode": False,
         "model": model,
+        "thinking": None,
         "instructions_sha256": "a" * 64,
         "max_tool_calls": 8,
         "pinned_search": True,
+        "search_date_range": True,
         "dataset": "sample",
         "dataset_sha256": "b" * 64,
         "collection": "notes",
         "knowledge_base_fingerprint": "hash:notes",
+        "index_build": "7+500-1000 test-embedding",
         "started": "2026-10-13T09:00:00+00:00",
         "source_lookup_error": None,
     }
@@ -1651,6 +1655,9 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
             "recall@10": None,
             "mrr": None,
             "other_collection": False,
+            "transient": False,
+            "seen_recall": None,
+            "seen_gold": None,
         }
         for index, correct in enumerate(strict)
     ]
