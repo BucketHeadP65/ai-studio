@@ -616,7 +616,7 @@ _VERSION_NUMBER = re.compile(r"\.v(\d+)$")
 
 
 def _dataset_version_number(dataset_path: Path) -> int:
-    """The 1-based version number parsed from a `<name>.v{N}.yaml` path (0 for a legacy unnumbered file)."""
+    """The 1-based version number parsed from a `<name>.v{N}.yaml` path (0 for an unnumbered file)."""
     match = _VERSION_NUMBER.search(dataset_path.stem)
     return int(match.group(1)) if match else 0
 

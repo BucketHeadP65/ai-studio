@@ -338,7 +338,7 @@ def test_covered_by_band_recounts_cases_per_archetype_difficulty_band():
     assert covered_by_band(dataset) == {(Archetype.PINPOINT, "easy"): 2, (Archetype.SURVEY, "hard"): 1}
 
 
-def test_covered_by_band_skips_unlabelled_legacy_cases():
+def test_covered_by_band_skips_unlabelled_cases():
     # A case with no archetype has no stratum to attribute it to, so it is not counted.
     assert covered_by_band(build_dataset([_authored(None, "easy")])) == {}
 

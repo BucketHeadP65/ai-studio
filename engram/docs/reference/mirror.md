@@ -186,7 +186,7 @@ source-of-truth definitions.
 - **Factory:** `engram/src/engram/testing/factories/mirror.py` builds `MirrorFrontmatter` /
   `MirrorFile` fixtures (polyfactory).
 - **Tests:** the real adapter's title-naming, collision suffix, atomic rename,
-  asset-path rejection, legacy-key read and soft-delete in
+  asset-path rejection, the skip of a note with no `source_key` and soft-delete in
   `engram/tests/unit/engram/sources/mirror/test_store.py`. The
   value objects in the sibling `test_domain.py`. The `decide` policy that
   drives the store in `engram/tests/unit/engram/sources/sync/test_handlers.py` (over

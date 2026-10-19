@@ -184,7 +184,7 @@ def normalize_ref(unit_id: str, collection: str, *, reground: str = _REGROUND_WI
 
 
 def parse_ref(ref: str, default_collection: str, *, reground: str = _REGROUND_WITH_SEARCH) -> ResolvedRef:
-    """Accept a legacy or collection-qualified retrieval handle and separate its identity fields.
+    """Accept a bare or collection-qualified retrieval handle and separate its identity fields.
 
     Args:
         ref: The handle to parse.
@@ -202,7 +202,7 @@ def parse_ref(ref: str, default_collection: str, *, reground: str = _REGROUND_WI
         _bad_ref(ref, reground=reground)
     prefix, separator, raw = ref.partition(":")
     if not separator or prefix not in _REF_TYPES:
-        return _legacy_ref(ref, default_collection, reground=reground)
+        return _bare_ref(ref, default_collection, reground=reground)
     if prefix == "collection":
         return _collection_ref(ref, raw, reground=reground)
     if prefix == "group":
@@ -210,7 +210,7 @@ def parse_ref(ref: str, default_collection: str, *, reground: str = _REGROUND_WI
     return _unit_ref(ref, prefix, raw, default_collection, reground=reground)
 
 
-def _legacy_ref(ref: str, default_collection: str, *, reground: str) -> ResolvedRef:
+def _bare_ref(ref: str, default_collection: str, *, reground: str) -> ResolvedRef:
     """Parse an unprefixed id using the caller's knowledge base as its owner."""
     if not ref:
         _bad_ref(ref, reground=reground)

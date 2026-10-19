@@ -110,9 +110,9 @@ def test_stamp_round_trips_through_model_validate(tmp_path) -> None:
     assert loaded.retired[0].reason == "gold_gone"
 
 
-def test_load_stamp_returns_none_for_a_legacy_dataset(tmp_path) -> None:
-    # A pre-coverage dataset has no sidecar stamp; loading its stamp is a clean None, not an error.
-    path = tmp_path / "legacy.yaml"
+def test_load_stamp_returns_none_for_an_unversioned_dataset(tmp_path) -> None:
+    # An unversioned dataset has no sidecar stamp; loading its stamp is a clean None, not an error.
+    path = tmp_path / "unversioned.yaml"
     save_dataset(build_dataset([_authored()]), path)
 
     assert stamp_path(path).exists() is False
@@ -130,10 +130,10 @@ def test_stamp_defaults_are_a_fresh_v1(tmp_path) -> None:
     assert loaded.retired == ()
 
 
-def test_stamp_defaults_governance_fields_for_a_legacy_sidecar(tmp_path) -> None:
-    # A pre-governance sidecar carries neither key, so both read back as their backward-compatible default.
+def test_stamp_defaults_governance_fields_for_a_sidecar_without_them(tmp_path) -> None:
+    # A sidecar with no held-out claim and no audit carries neither key, so both read back as their default.
     path = dataset_version_path(tmp_path, "research", 1)
-    legacy_json = json.dumps(
+    sidecar_json = json.dumps(
         {
             "salt": "s1",
             "knowledge_base_fingerprint": "spec-abc/research",
@@ -143,7 +143,7 @@ def test_stamp_defaults_governance_fields_for_a_legacy_sidecar(tmp_path) -> None
             "retired": [],
         }
     )
-    stamp_path(path).write_text(legacy_json, encoding="utf-8")
+    stamp_path(path).write_text(sidecar_json, encoding="utf-8")
 
     loaded = load_stamp(path)
 

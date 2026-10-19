@@ -4,8 +4,8 @@ The snapshot holds the current page ids, the page body hashes and the recomputed
 snapshot always gives the same verdicts. A case's `AnchorEra` follows from the provenance it carries, and decides
 which verdicts apply:
 
-* `legacy` cases carry no anchors and a positional name with no parseable seed key, so they are only ever
-  `unanchored`.
+* `unanchored` cases carry no anchors and a positional name with no parseable seed key, so their only verdict
+  is `unanchored`.
 * `page_anchored` cases carry per-page `AnchorHash`es but no drafting text hash, so a page whose card text moved
   flags `page_drifted`.
 * `mirror_anchored` cases also carry a `mirror_hash` of the exact text their support quotes were checked against,
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from engram.evals.generation.domain.datasets import EvaluationCase
 
 FreshnessVerdict = Literal["fresh", "page_drifted", "mirror_stale", "gold_gone", "unanchored"]
-AnchorEra = Literal["legacy", "page_anchored", "mirror_anchored"]
+AnchorEra = Literal["unanchored", "page_anchored", "mirror_anchored"]
 
 # A seed-derived case name is `{seed_key}#{draft_ordinal}`. A positional name, `{anchor_page_id}-{index}`, has no `#`.
 _ORDINAL_SEPARATOR = "#"
@@ -50,11 +50,11 @@ class CaseFreshnessRef(BaseModel):
 
     Attributes:
         case_name: The case's name, its identity in the report and the retirement record.
-        seed_key: The seed the case was drafted from, or None for a legacy positional name.
-        archetype: The case's structural archetype, or None for an unlabelled legacy case.
+        seed_key: The seed the case was drafted from, or None for a positional name.
+        archetype: The case's structural archetype, or None for an unlabelled case.
         gold_ids: The case's gold page ids, checked against the knowledge base for `gold_gone` attribution.
-        anchors: The case's per-page provenance anchors (empty for a legacy case).
-        mirror_hash: The drafting-text hash for a mirror-era case, None for a page-anchored or legacy one.
+        anchors: The case's per-page provenance anchors (empty for an unanchored case).
+        mirror_hash: The drafting-text hash for a mirror-era case, None for a page-anchored or unanchored one.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -119,8 +119,7 @@ class FreshnessReport(BaseModel):
         counts: The number of cases per verdict (every verdict present, zeros included).
         staleness_fraction: The stale fraction over the cases that can take a verdict, judged by each case's era.
         stale_by_page: A page id to the number of cases that page invalidated (its attribution tally).
-        structural: The per-case structural premises, which are only reported. Empty for an older report
-            saved without them, which still loads.
+        structural: The per-case structural premises, which are only reported. Empty when none were checked.
         n_premise_broken: How many checked premises are broken.
     """
 
@@ -132,8 +131,8 @@ class FreshnessReport(BaseModel):
     counts: Mapping[FreshnessVerdict, int]
     staleness_fraction: float
     stale_by_page: Mapping[str, int]
-    structural: tuple[CasePremise, ...] = ()
-    n_premise_broken: int = 0
+    structural: tuple[CasePremise, ...]
+    n_premise_broken: int
 
 
 def case_era(ref: CaseFreshnessRef) -> AnchorEra:
@@ -143,13 +142,13 @@ def case_era(ref: CaseFreshnessRef) -> AnchorEra:
         ref: The case reference to classify.
 
     Returns:
-        `mirror_anchored` when a `mirror_hash` is present, `legacy` when the case carries neither
+        `mirror_anchored` when a `mirror_hash` is present, `unanchored` when the case carries neither
         anchors nor a parseable seed key, and `page_anchored` otherwise.
     """
     if ref.mirror_hash is not None:
         return "mirror_anchored"
     if not ref.anchors and ref.seed_key is None:
-        return "legacy"
+        return "unanchored"
     return "page_anchored"
 
 
@@ -158,7 +157,7 @@ def evaluate_case(
 ) -> CaseFreshness:
     """Score one case against a knowledge base snapshot, applying the verdict precedence.
 
-    The precedence is `unanchored` (legacy) then `gold_gone` then `mirror_stale` (mirror era) then
+    The precedence is `unanchored` then `gold_gone` then `mirror_stale` (mirror era) then
     `page_drifted` then `fresh`, so a case stale on several axes reports its most severe reason. A
     mirror-era case whose drafting text could not be recomputed (`recomputed_mirror_hash` is None) is
     `mirror_stale` even when its gold pages are intact.
@@ -175,7 +174,7 @@ def evaluate_case(
         The case's `CaseFreshness`, with `moved_page_ids` attributing any detectable drift or absence.
     """
     era = case_era(ref)
-    if era == "legacy":
+    if era == "unanchored":
         return CaseFreshness(case_name=ref.case_name, era=era, verdict="unanchored", moved_page_ids=())
     missing = tuple(gold_id for gold_id in ref.gold_ids if gold_id not in current_ids)
     if missing:
@@ -216,7 +215,7 @@ def evaluate_freshness(
 def staleness_fraction(verdicts: Sequence[CaseFreshness]) -> float:
     """The fraction of the cases that can take a verdict which are stale by their era's rule.
 
-    Legacy `unanchored` cases are left out of the denominator. The numerator is the retiring set
+    `unanchored` cases are left out of the denominator. The numerator is the retiring set
     (`gold_gone`, `mirror_stale` and page-anchored `page_drifted`), so a mirror-era drift that is only
     reported never raises the fraction.
 
@@ -252,7 +251,7 @@ def retiring_names(verdicts: Sequence[CaseFreshness]) -> frozenset[str]:
 def case_freshness_refs(cases: Iterable[EvaluationCase]) -> list[CaseFreshnessRef]:
     """Extract a `CaseFreshnessRef` from each of a loaded dataset's cases.
 
-    Legacy and unlabelled cases are kept. A case with no name is skipped, since no report could identify it.
+    Unanchored and unlabelled cases are kept. A case with no name is skipped, since no report could identify it.
 
     Args:
         cases: The dataset's cases (each an `EvaluationCase` carrying a name and optional metadata).
@@ -399,7 +398,7 @@ def _fan_key(seed_key: str, prefix: str) -> tuple[str, str] | None:
 def premise_reads(refs: Sequence[CaseFreshnessRef]) -> PremiseReads:
     """Collect the lookup keys the premise check needs, in one pass over the seed-keyed refs.
 
-    Legacy refs, which have no seed key, and pinpoint and passage refs, whose basis is the mirror hash, add nothing.
+    Positional refs, which have no seed key, and pinpoint and passage refs, whose basis is the mirror hash, add nothing.
 
     Args:
         refs: The checked cases' freshness refs.
@@ -469,7 +468,7 @@ def evaluate_premises(
 ) -> tuple[CasePremise, ...]:
     """Recompute every seed-keyed case's structural premise against the live knowledge base reads.
 
-    Legacy refs, unlabelled refs and unknown seed-key shapes are skipped, never guessed at. Pinpoint and
+    Positional refs, unlabelled refs and unknown seed-key shapes are skipped, never guessed at. Pinpoint and
     passage cases are always intact, since the mirror hash covers their drafting text. No premise ever
     changes a freshness verdict.
 

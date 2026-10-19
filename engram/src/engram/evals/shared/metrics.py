@@ -1,7 +1,7 @@
 """The `@k` metric keys every evals reader picks its headline number from, and the closed set of known keys.
 
 `primary_at_k_key` answers `{prefix}{PREFERRED_K}` when a run carries it, otherwise the smallest numeric cutoff present.
-`is_known_metric_key` answers whether a key is one the evaluators can emit, legacy or namespaced by layer.
+`is_known_metric_key` answers whether a key is one the evaluators can emit, unprefixed or namespaced by layer.
 """
 
 from __future__ import annotations
@@ -65,9 +65,9 @@ def at_k_cutoff(name: str, *, prefix: str) -> tuple[int, str]:
 
 
 def is_known_metric_key(name: str) -> bool:
-    """Whether `name` names a metric the project's evaluators can emit, legacy or namespaced.
+    """Whether `name` names a metric the project's evaluators can emit, unprefixed or namespaced.
 
-    Covers the legacy unprefixed citation-layer keys (`recall@{k}`, `precision@{k}`, `ndcg@{k}`, `mrr`) and
+    Covers the unprefixed citation-layer keys (`recall@{k}`, `precision@{k}`, `ndcg@{k}`, `mrr`) and
     every layer's namespaced keys (`{layer}_recall@{k}` and the rest, for `layer` in `METRIC_LAYERS`).
 
     Args:

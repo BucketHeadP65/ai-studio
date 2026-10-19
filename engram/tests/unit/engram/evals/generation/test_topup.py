@@ -461,7 +461,7 @@ class TestParentCaseRefs:
         assert refs[0].difficulty == "hard"
         assert refs[0].gold_ids == ("paper.x", "paper.y")
 
-    def test_skips_unlabelled_legacy_cases(self):
+    def test_skips_unlabelled_cases(self):
         cases = [
             EvaluationCase(
                 name="paper.x-0",

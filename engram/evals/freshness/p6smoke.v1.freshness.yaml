@@ -45,3 +45,5 @@ counts:
   unanchored: 0
 staleness_fraction: 0.0
 stale_by_page: {}
+structural: []
+n_premise_broken: 0

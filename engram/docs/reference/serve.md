@@ -121,8 +121,8 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `src/engram/retrieval/tools.py`) also carries `unit:<collection>/<id>` for a unit below the
   leveled surface (a claim, a raw chunk), which `fetch` answers from the flat read. Every ref an
   answer carries, its own and its children's, is collection-qualified and fetchable exactly as
-  returned. The legacy unqualified forms (a bare `search`-hit id, `page:<id>`, `section:<id>`,
-  `group:<collection>/`, `group:<collection>//<page-type>`) are still accepted and come back
+  returned. The unqualified forms (a bare `search`-hit id, `page:<id>`, `section:<id>`,
+  `group:<collection>/`, `group:<collection>//<page-type>`) are accepted and come back
   canonical. There is no separate `disclose` tool: when an `EnvelopeHandler` is wired, the
   ordinary `fetch` tool becomes this leveled read. `fetch(unit_id)` returns the unit's own content
   plus one-line summaries of everything directly inside it, each carrying the id to fetch next.

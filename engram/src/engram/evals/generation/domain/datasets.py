@@ -212,9 +212,9 @@ class DatasetStamp(BaseModel):
             kept, which a coverage audit reports.
         retired: The retirement record: the cases dropped from the parent version.
         held_out_case_ids: The case names in this version sealed as independently withheld. Empty for
-            an older version or one with no held-out claim.
+            a version with no held-out claim.
         independent_holdout_verified: The last custody audit's verdict on this version's held-out
-            claims, or None for an older version or one never audited.
+            claims, or None for a version never audited.
     """
 
     model_config = ConfigDict(frozen=True)

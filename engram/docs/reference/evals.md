@@ -291,8 +291,8 @@ not record it.
     is a `<name>.v{N}.yaml` chain, each carrying a `<name>.v{N}.stamp.json` sidecar (salt, knowledge base
     fingerprint, budget, `parent_version`, coverage summary, retirement record) with a one-line
     `<name>.current` pointer at the live version. A case is named `{seed_key}#{ordinal}` (stable across
-    inserts, retirement, and version chains). Pre-coverage datasets keep their legacy positional
-    `{anchor_page_id}-{index}` names and load with no stamp. `gen-dataset --top-up` writes the next version
+    inserts, retirement, and version chains). An unversioned dataset keeps its positional
+    `{anchor_page_id}-{index}` names and loads with no stamp. `gen-dataset --top-up` writes the next version
     and retires the deterministically displaced cases into the new retirement record. It never mutates the parent,
     so a run that recorded which version it scored can always re-run exactly that baseline.
   - **The tuning loop decides on a fixed decision core with a paired-bootstrap guard (Phase 5, ADR-0029):**
@@ -446,9 +446,9 @@ targeted stratum meets target, monotone in gaps (over-representation is reported
 
 Case identity is **seed-derived**: `case_name(seed_key, ordinal)` = `{seed_key}#{ordinal}` (e.g.
 `survey:builds_on:page.x#2`), stable across inserts, retirement, and version chains (the `#` cannot
-collide with a seed key's `:` / `>`). **Legacy positional names (`{anchor_page_id}-{index}`) persist on
-pre-coverage datasets**, `load_stamp` returns `None` for an unstamped dataset, so old
-`kb.evaluation_case_results` history joins are left unbroken and the new scheme applies from the first
+collide with a seed key's `:` / `>`). **Positional names (`{anchor_page_id}-{index}`) stay on an
+unversioned dataset**, and `load_stamp` returns `None` for an unstamped dataset, so
+`kb.evaluation_case_results` history joins are left unbroken and the seed-derived scheme applies from the first
 coverage-stamped version forward.
 
 ### Top-up and the retirement record
@@ -546,7 +546,7 @@ over-claimed against:
 
 | Anchor era | Provenance carried | Strongest signal |
 |---|---|---|
-| `legacy` | positional `{anchor_page_id}-{index}` name, no anchors | existence is uncheckable, becomes `unanchored` |
+| `unanchored` | positional `{anchor_page_id}-{index}` name, no anchors | existence is uncheckable, becomes `unanchored` |
 | `page_anchored` (Phase 5) | per-gold-page card-hash `AnchorHash`es | `page_drifted` |
 | `mirror_anchored` (Phase 6+) | anchors + a `mirror_hash` of the drafting text | `mirror_stale` |
 
@@ -559,11 +559,11 @@ reason:
 | `mirror_stale` | a mirror-era case whose mirror recomputes to a different hash, or cannot be rebuilt at all (D10, the drafting basis is gone) | yes |
 | `page_drifted` | an anchored page's card `body_hash` moved | only page-anchored cases (report-only for a mirror-era case whose mirror is intact) |
 | `fresh` | nothing detectable moved | no |
-| `unanchored` | a legacy case with no checkable anchors | no (also excluded from the staleness-fraction denominator) |
+| `unanchored` | a case with no checkable anchors | no (also excluded from the staleness-fraction denominator) |
 
 The **staleness fraction** is the era-authoritative retiring set (`gold_gone` + `mirror_stale` +
 page-anchored `page_drifted`) over the **verdict-able** cases (all but `unanchored`), so a report-only
-mirror-era drift never inflates it and a legacy-only dataset reports `0.0`. Freshness measures
+mirror-era drift never inflates it and a dataset of unanchored cases only reports `0.0`. Freshness measures
 **drafting-basis drift**, not arbitrary content drift: the mirror hash covers the exact text a case's
 support quotes were verified against (fixing the latent defect that non-pinpoint seeds carried empty
 `source_bodies` from Phase 1 through Phase 5), assembled by one shared `generation/domain/mirror.py` recipe used
@@ -601,9 +601,8 @@ on `SqlFreshnessQueries`: a `trace:a>b>c` case checks every consecutive edge pai
 `synthesis` check the hub's fan-in / fan-out against the seeder thresholds (`MIN_SURVEY_FANOUT` /
 `MIN_SYNTHESIS_FANOUT`, imported from `domain/seed_shapes.py` so the check can never drift from the draw).
 `pinpoint` is always intact (the
-mirror hash already covers its basis). A legacy/unparseable name is skipped. The result is **report-only**:
-`FreshnessReport` gains an additive `structural: tuple[CasePremise, ...]` + `n_premise_broken` (old
-report files still load), the markdown gains a `## Structural integrity (report-only)` section, and the CLI
+mirror hash already covers its basis). A positional or unparseable name is skipped. The result is **report-only**:
+`FreshnessReport` carries `structural: tuple[CasePremise, ...]` + `n_premise_broken`, the markdown gains a `## Structural integrity (report-only)` section, and the CLI
 echoes `structural premises (report-only): checked N, broken M`. A broken premise never changes the
 freshness verdict and never retires a case, the verdict ladder stays era-authoritative. The premise says
 the question's structural *ground* moved, which is a human's re-generation signal, not a machine's.
@@ -887,7 +886,7 @@ land. `ranked_metrics` (`RankedMetrics`: `recall`, `precision`, `reciprocal_rank
 * **citation**: the agent's own `cited_source_ids` against the case's expected ids. Reads nothing
   about tool calls, so it is always `measured`, computed by
   `engram.evals.harness.contracts.RetrievalMetrics` itself (`citation_source_metrics`) and readable
-  under both its legacy unprefixed keys and the namespaced `citation_` ones.
+  under both its unprefixed keys and the namespaced `citation_` ones.
 * **surfaced**: the union of `returned_unit_refs` across the trial's *ok* tool calls, in first-seen
   order, each ref resolved back to its bare unit id (`bare_unit_id`, off the
   `{kind}:{collection}/{unit_id}` qualification `returned_unit_refs` is stored under) before scoring.
@@ -921,19 +920,17 @@ never collapsed away, the rollup sits beside it.
 
 | Metric key | Layer | Input | Denominator |
 |---|---|---|---|
-| `recall@{k}` (legacy) | citation | Agent's `cited_source_ids` vs the case's expected ids | `max(1, \|want\|)` |
-| `precision@{k}` (legacy) | citation | Agent's `cited_source_ids` vs the case's expected ids | `max(1, min(k, \|got\|))` |
-| `mrr` (legacy) | citation | Agent's `cited_source_ids` vs the case's expected ids | rank of first relevant citation |
-| `citation_recall@{k}` / `citation_precision@{k}` / `citation_mrr` | citation | identical to the legacy keys above, namespaced | identical to the legacy keys above |
+| `recall@{k}` | citation | Agent's `cited_source_ids` vs the case's expected ids | `max(1, \|want\|)` |
+| `precision@{k}` | citation | Agent's `cited_source_ids` vs the case's expected ids | `max(1, min(k, \|got\|))` |
+| `mrr` | citation | Agent's `cited_source_ids` vs the case's expected ids | rank of first relevant citation |
+| `citation_recall@{k}` / `citation_precision@{k}` / `citation_mrr` | citation | identical to the unprefixed keys above, namespaced | identical to the unprefixed keys above |
 | `surfaced_recall@{k}` / `surfaced_precision@{k}` / `surfaced_mrr` | surfaced | Union of `returned_unit_refs` across the trial's *ok* tool calls, first-seen order, debased to bare ids | same formulas, over the surfaced sequence. `unknown`/`not_applicable` per `SurfacedSourceMetrics.status` rather than a value |
 | `ranking_recall@{k}` / `ranking_precision@{k}` / `ranking_mrr` | ranking | `SearchRankingMetrics.rollup`: the mean of every measured `search` call's own `RankedMetrics`, per key, over the calls whose `SearchCallRanking.status` is `measured` | mean over the measured calls (`sum / count of measured calls`, unmeasured calls excluded from both). `unknown`/`not_applicable` per `SearchRankingRollup.status` rather than a value |
 
-The legacy keys and their `citation_`-namespaced twins are always equal (same core, same page
-granularity), kept apart only so old artifacts and the RCA reader (`primary_at_k_key`, matching the
-bare `recall@` / `precision@` prefix) never need to change. `TuningObjective.primary_metric` is
+The unprefixed keys and their `citation_`-namespaced twins are always equal (same core, same page
+granularity). The RCA reader (`primary_at_k_key`) matches the bare `recall@` / `precision@` prefix. `TuningObjective.primary_metric` is
 validated against this whole key vocabulary (`engram.evals.shared.metrics.is_known_metric_key`) at
-construction, so a policy can name any layer (its default stays the legacy `recall@5` for
-compatibility) and a misspelled or unknown metric name fails immediately rather than silently reading
+construction, so a policy can name any layer (its default is the unprefixed `recall@5`) and a misspelled or unknown metric name fails immediately rather than silently reading
 `0.0` at accept time.
 
 ## Blind trials and answer grading

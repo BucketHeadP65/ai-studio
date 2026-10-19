@@ -676,8 +676,8 @@ class TestGenerateEvalDatasetTopUp:
         assert [record.seed_key for record in gone] == ["pinpoint:paper.p2"]  # only the case whose gold page vanished
 
     async def test_top_up_requires_a_stamped_parent(self, tmp_path: Path):
-        # A legacy dataset saved without a stamp cannot be topped up: a clean error, not a silent guess.
-        legacy = build_dataset(
+        # A dataset saved without a stamp cannot be topped up: a clean error, not a silent guess.
+        unstamped = build_dataset(
             [
                 AuthoredCase(
                     question=QaInput(question="q"),
@@ -687,7 +687,7 @@ class TestGenerateEvalDatasetTopUp:
             ]
         )
         version_path = dataset_version_path(tmp_path, "research", 1)
-        save_dataset(legacy, version_path)  # no stamp sidecar
+        save_dataset(unstamped, version_path)  # no stamp sidecar
         write_current(tmp_path, "research", version_path)
         repo = FakeSeedQueries({Archetype.PINPOINT: [_pinpoint_seed("0")]})
         handler, _, _ = _handler(repo, config=_config(total_cases=3))
@@ -1923,7 +1923,7 @@ class TestCheckFreshnessHandler:
         assert via_explicit.dataset_version == "research.v1.yaml"
         assert {via_none.counts["fresh"], via_current.counts["fresh"], via_explicit.counts["fresh"]} == {1}
 
-    async def test_legacy_cases_are_unanchored_and_excluded_from_the_fraction(self, tmp_path: Path):
+    async def test_unanchored_cases_are_excluded_from_the_fraction(self, tmp_path: Path):
         cases = [
             _freshness_case(
                 "pe",
@@ -1931,7 +1931,7 @@ class TestCheckFreshnessHandler:
                 anchors=(AnchorHash(unit_id="pe", body_hash="he"),),
                 mirror_hash_value=mirror_hash(("e",)),
             ),
-            _freshness_case("leg"),  # no anchors, no mirror hash, positional name -> legacy era
+            _freshness_case("leg"),  # no anchors, no mirror hash, positional name -> unanchored era
         ]
         path = _save_freshness_version(tmp_path, "research", 1, cases)
         reader = FakeFreshnessReader(hashes={"pe": "he", "leg": "hleg"}, sources={"pe-0": ("e",)})
