@@ -30,8 +30,7 @@ _DATASETS = "evals/datasets"
 
 def _knowledge_base(root: Path, collection: str) -> Path:
     """A knowledge base tree carrying its own spec, indexing into `collection`."""
-    for sub in ("Units", "_meta"):
-        (root / sub).mkdir(parents=True, exist_ok=True)
+    (root / "_meta").mkdir(parents=True, exist_ok=True)
     payload: dict[str, JsonValue] = {
         "slug": collection,
         "page_types": [{"page_type": "concept", "id_prefix": "c-"}],

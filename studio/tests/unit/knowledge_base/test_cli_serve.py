@@ -300,8 +300,7 @@ class TestSearch:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         named = tmp_path / "named"
-        (named / "Units").mkdir(parents=True)
-        (named / "_meta").mkdir()
+        (named / "_meta").mkdir(parents=True)
         (named / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         cwd = tmp_path / "alpha-cwd"
         cwd.mkdir()
@@ -320,8 +319,7 @@ class TestSearchUnreachableDatabase:
 
     def test_prints_the_knowledge_base_and_unreachable_lines_and_exits_one_with_no_search_failed_text(self, tmp_path: Path) -> None:
         named = tmp_path / "named"
-        (named / "Units").mkdir(parents=True)
-        (named / "_meta").mkdir()
+        (named / "_meta").mkdir(parents=True)
         (named / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
 
         result = runner.invoke(app, ["search", "graph rag", "--knowledge-base", str(named)], obj=_unreachable_factory())
@@ -369,8 +367,7 @@ class TestFetch:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         named = tmp_path / "named"
-        (named / "Units").mkdir(parents=True)
-        (named / "_meta").mkdir()
+        (named / "_meta").mkdir(parents=True)
         (named / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         cwd = tmp_path / "alpha-cwd"
         cwd.mkdir()
@@ -443,8 +440,7 @@ class TestHelp:
 
 def _make_knowledge_base(tmp_path: Path) -> KnowledgeBaseSettings:
     """A real `KnowledgeBaseSettings` over a minimal on-disk knowledge base carrying the research template's own schema (slug `research`)."""
-    (tmp_path / "Units").mkdir()
-    (tmp_path / "_meta").mkdir()
+    (tmp_path / "_meta").mkdir(parents=True)
     (tmp_path / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return KnowledgeBaseSettings(path=tmp_path)
 

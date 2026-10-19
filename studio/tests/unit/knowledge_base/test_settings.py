@@ -106,8 +106,7 @@ class TestKnowledgeBaseSettings:
             KnowledgeBaseSettings(path=tmp_path / "does-not-exist")
 
     def test_rejects_a_directory_with_no_schema_and_names_the_file(self, tmp_path: Path):
-        (tmp_path / "Units").mkdir()
-        (tmp_path / "_meta").mkdir()
+        (tmp_path / "_meta").mkdir(parents=True)
 
         with pytest.raises(ValidationError, match=r"knowledge-base-schema\.json"):
             KnowledgeBaseSettings(path=tmp_path)

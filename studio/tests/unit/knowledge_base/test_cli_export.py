@@ -144,8 +144,7 @@ class TestExportOkf:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         named = tmp_path / "named"
-        (named / "Units").mkdir(parents=True)
-        (named / "_meta").mkdir()
+        (named / "_meta").mkdir(parents=True)
         (named / "knowledge-base-schema.json").write_text(json.dumps({"slug": "named", "page_types": [{"page_type": "note"}]}), encoding="utf-8")
         cwd = tmp_path / "alpha-cwd"
         cwd.mkdir()

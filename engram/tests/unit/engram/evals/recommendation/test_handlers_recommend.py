@@ -242,8 +242,7 @@ def _dataset_path(tmp_path: Path) -> Path:
 def _knowledge_base(tmp_path: Path) -> Path:
     """A knowledge base root carrying the research bundle's own knowledge-base-schema.json, so `load_knowledge_base_schema` resolves it."""
     root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (root / required).mkdir(parents=True)
+    (root / "_meta").mkdir(parents=True)
     (root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return root
 

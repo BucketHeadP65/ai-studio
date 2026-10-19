@@ -125,11 +125,9 @@ def _payload_file(tmp_path: Path) -> str:
 
 
 def _invoke(tmp_path: Path, factory: FakeContainerFactory, *, collection: str = "workflows") -> Result:
-    # `--knowledge-base` resolves through `KnowledgeBaseSettings`, which shape-checks the path: the legacy
-    # `Units/` + `_meta/` pair must exist. The payload's own frontmatter validates against a real
-    # spec on construction, so the knowledge base also carries the research template's own `knowledge-base-schema.json`.
-    (tmp_path / "Units").mkdir(exist_ok=True)
-    (tmp_path / "_meta").mkdir(exist_ok=True)
+    # `--knowledge-base` resolves through `KnowledgeBaseSettings`, which needs the path to hold a schema. The payload's
+    # own frontmatter validates against a real spec on construction, so the knowledge base carries the research
+    # template's own `knowledge-base-schema.json`.
     (tmp_path / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return runner.invoke(
         app,

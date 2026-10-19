@@ -73,7 +73,6 @@ def _spec(slug: str) -> dict[str, JsonValue]:
 
 def _knowledge_base(root: Path, slug: str = KNOWLEDGE_BASE) -> Path:
     """A registered knowledge base on disk: the directory shape, and its own schema."""
-    (root / "Units").mkdir(parents=True, exist_ok=True)
     (root / "_meta").mkdir(parents=True, exist_ok=True)
     (root / "knowledge-base-schema.json").write_text(json.dumps(_spec(slug)), encoding="utf-8")
     return root

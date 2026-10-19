@@ -144,8 +144,7 @@ def _evals_settings() -> EvalsSettings:
 def _knowledge_base_root(tmp_path: Path) -> Path:
     """A research knowledge base on disk, the shape `KnowledgeBaseSettings` accepts."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True)
     (knowledge_base_root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return knowledge_base_root
 
@@ -627,8 +626,7 @@ class TestKnowledgeBaseGatewayFactoryProvider:
 def _knowledge_base(tmp_path: Path) -> Path:
     """A knowledge base root carrying the research template's own knowledge-base-schema.json."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True)
     (knowledge_base_root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return knowledge_base_root
 

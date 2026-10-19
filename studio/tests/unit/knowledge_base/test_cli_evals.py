@@ -121,8 +121,7 @@ def _ambient_knowledge_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 def _knowledge_base_root(tmp_path: Path) -> Path:
     """A research knowledge base on disk, the shape `KnowledgeBaseSettings` accepts."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
     (knowledge_base_root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return knowledge_base_root
 
@@ -237,8 +236,7 @@ class TestEvalsRun:
 
     def test_an_explicit_knowledge_base_is_the_one_resolved(self, tmp_path: Path):
         named_knowledge_base = tmp_path / "named-knowledge-base"
-        for required in ("Units", "_meta"):
-            (named_knowledge_base / required).mkdir(parents=True)
+        (named_knowledge_base / "_meta").mkdir(parents=True)
         (named_knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         dataset_path = _write_golden(tmp_path)
 
@@ -1526,7 +1524,7 @@ class TestRollbackPolicyCli:
         knowledge_base = tmp_path / "pkb"
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "A"}), knowledge_base_path=knowledge_base)
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "B"}), knowledge_base_path=knowledge_base)
-        (knowledge_base / "Units").mkdir(parents=True, exist_ok=True)
+        knowledge_base.mkdir(parents=True, exist_ok=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
 
         result = runner.invoke(app, ["evals", "rollback-policy", "--knowledge-base", str(knowledge_base)], obj=_RollbackFactory())
@@ -1537,7 +1535,6 @@ class TestRollbackPolicyCli:
 
     def test_rollback_without_history_exits_cleanly(self, tmp_path: Path):
         empty = tmp_path / "empty"
-        (empty / "Units").mkdir(parents=True)
         (empty / "_meta").mkdir(parents=True)
         (empty / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
 
@@ -1550,7 +1547,7 @@ class TestRollbackPolicyCli:
         knowledge_base = tmp_path / "alpha"
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "A"}), knowledge_base_path=knowledge_base)
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "B"}), knowledge_base_path=knowledge_base)
-        (knowledge_base / "Units").mkdir(parents=True, exist_ok=True)
+        knowledge_base.mkdir(parents=True, exist_ok=True)
         # slug "alpha" (not the research template's own) so the announced identity is this test's,
         # proving the banner reads the flag knowledge base's own spec, not some other one.
         (knowledge_base / "knowledge-base-schema.json").write_text(
@@ -1805,7 +1802,7 @@ class TestScoreCli:
     @staticmethod
     def _invoke(tmp_path: Path, handler: RecordingCommandHandler, *extra: str) -> Result:
         knowledge_base = tmp_path / "research"
-        (knowledge_base / "Units").mkdir(parents=True)
+        knowledge_base.mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         bus = MessageBus({ScoreDataset: handler}, {})
         arguments = ["evals", "score", "--dataset", "set.yaml", "--out", str(tmp_path / "scores"), "--knowledge-base", str(knowledge_base)]
@@ -1895,7 +1892,7 @@ class TestCheckGeneratorCli:
     @staticmethod
     def _invoke(tmp_path: Path, handler: RecordingCommandHandler | _RefusingHandler) -> Result:
         knowledge_base = tmp_path / "research"
-        (knowledge_base / "Units").mkdir(parents=True)
+        knowledge_base.mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         bus = MessageBus({CheckGenerator: handler}, {})
         arguments = [
