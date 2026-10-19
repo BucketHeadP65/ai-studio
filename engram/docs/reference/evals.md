@@ -1143,13 +1143,16 @@ flowchart LR
     BA --> EV["dataset.evaluate(make_task(agent))"]
     EV -->|per case: ctx.output + ctx.span_tree| RM["RetrievalMetrics.evaluate<br/>recall@k / precision@k / mrr / n_tool_calls"]
     RM --> RP["EvaluationReport"]
-    RP --> SUM["EvaluationRunSummary + EvaluationCaseResultRow<br/>to owner AsyncSession (infrastructure/postgres.py)"]
+    RP --> RF["results file, with --results<br/>(infrastructure/results.py)"]
     BA -.instrumented spans.-> LF[(Logfire, deep store<br/>only with a write token)]
 ```
 
 The model dispatch, toolset resolution, best-effort Logfire-or-local-span fallback,
 agent build, dataset evaluate, and per-metric averaging all live once in `run_eval` /
-`average_metrics` (`service.py`). The CLI calls it.
+`average_metrics` (`service.py`). The CLI calls it. An evaluation run writes no Postgres row. Only the
+tune, recommend and verify-recommendation handlers save an `EvaluationRunSummary` with its
+`EvaluationCaseResultRow`s to `kb.evaluation_runs` and `kb.evaluation_case_results`, through the owner
+session (`infrastructure/postgres.py`).
 
 ## Examples
 

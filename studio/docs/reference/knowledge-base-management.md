@@ -167,7 +167,7 @@ validation (`KnowledgeBaseValidationHandler`, empty when never indexed), its sou
 `resolved`, `failed`, `skipped` or `seen`, populated only when `intake` is among the declared connectors), its watch list
 (`watch_list`, from `_meta/watch-list.yaml`), its most recent refresh (`last_refresh_run`, `None` before the first
 `POST .../refresh`), its declared
-`schedule` (`None` when unset), and its `identity` (which database, at what revision, last indexed when, `None` for a name
+`schedule` (`None` when unset), and its `identity` (which database, at what revision, last indexed when, and the indexer version that index stored, `None` for a name
 neither registered nor indexed, see section 7). `KnowledgeBaseDetail` is declared as a `KnowledgeBaseListEntry` subclass carrying exactly these eight
 additions, so the two shapes can never drift apart field-by-field. The knowledge base's open decisions are their own route,
 `GET .../decisions` (below), never a `KnowledgeBaseDetail` field.
