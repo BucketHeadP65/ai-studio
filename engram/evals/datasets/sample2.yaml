@@ -8,7 +8,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.raptor-2024
-    kind: benchmark
     difficulty: medium
   expected_output:
     answer: RAPTOR with GPT-4 reaches 55.7% answer-F1 on QASPER, surpassing CoLT5
@@ -22,7 +21,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.lightrag-2025
-    kind: comparative
     difficulty: medium
   expected_output:
     answer: No. On the Mix subset the two are effectively tied, with GraphRAG slightly
