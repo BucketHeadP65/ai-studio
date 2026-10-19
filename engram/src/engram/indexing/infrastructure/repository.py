@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import QueryableAttribute
 
 
-
 def _utc_now() -> datetime:
     """The current time in UTC."""
     return datetime.now(tz=UTC)
