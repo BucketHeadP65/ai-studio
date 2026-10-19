@@ -39,7 +39,7 @@ an init-kwarg one process supplies for its own single knowledge base (a CLI comm
 serve-http` and `studio worker` build their `ApplicationSettings` with no knowledge base path at all
 (`fetch_application_settings`), so both hold `knowledge_base: None` for their whole run. They serve the registry and hold no knowledge
 base of their own (section 7's identity lines reflect this: neither process has a single knowledge base to report on before a request
-or a job names one). A non-empty registry is validated (`ApplicationSettings._check_corpora`): every name is non-empty and every
+or a job names one). A non-empty registry is validated (`ApplicationSettings._check_knowledge_bases`): every name is non-empty and every
 path is unique. Nothing checks `knowledge_base.path` against the registry, since a registry-serving process has no `knowledge_base.path` to
 check. `active_knowledge_base_name()` still serves a process that does carry one (a CLI command's own scoped run): it returns the
 registry name whose path matches `knowledge_base.path`, `None` when there is no active knowledge base or no match.
@@ -574,7 +574,7 @@ The text comes from `core.connection_failures.connection_failure_message`, the s
 a failed case. Any other failure keeps its own text unchanged.
 
 **A collection belongs to the knowledge base root that indexed it.** Each indexing run stamps its knowledge base root onto
-`memory.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
+`kb.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
 before writing a single row and exits 2, because the indexing run's prune would delete everything the owning knowledge base put there.
 Two knowledge base roots whose schemas name the same collection meet this refusal:
 
@@ -585,7 +585,8 @@ to take the collection over, or index the knowledge base that owns it.
 
 Passing `--collection <name>` explicitly is the deliberate takeover (`resolve_partition`'s standing contract): the index
 runs as a full index and re-stamps the root. A `--dry-run` never refuses, its preview of the would-be prune is the
-warning. Rows from before the column existed read as unclaimed and are claimed by their next indexing run.
+warning. A row whose root is empty, such as one a retrieval switch write created before any indexing run, reads as
+unclaimed and is claimed by its next indexing run.
 
 **`status`, `search`, and `fetch` no longer default `--collection` to the literal `"research"`.** Each now resolves an
 omitted `--collection` from the knowledge base's own declared `retrieval.collection` (`resolve_partition`, the same partition
