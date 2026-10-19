@@ -32,10 +32,11 @@ runner = CliRunner()
 
 def _seed_conversations(tmp_path: Path) -> None:
     a_session_log(tmp_path).record(Booted(resumed_run_id=None))
-    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=12))
-    a_session_log(tmp_path).record(TurnSettled(run_id="harness-author-abc123"))
-    a_session_log(tmp_path).record(ConversationForgotten())
-    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=7))
+    a_session_log(tmp_path).record(SessionStarted(session_id="a", session_kind="chat"))
+    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=12, session_id="a", prompt_excerpt=None))
+    a_session_log(tmp_path).record(TurnSettled(run_id="harness-author-abc123", started_seq=3))
+    a_session_log(tmp_path).record(ConversationForgotten(session_id="a"))
+    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=7, session_id="b", prompt_excerpt=None))
 
 
 def test_list_shows_each_conversation_span_with_its_turn_count(tmp_path: Path) -> None:
@@ -50,9 +51,9 @@ def test_list_shows_each_conversation_span_with_its_turn_count(tmp_path: Path) -
 
 def test_list_shows_the_sessions_own_id_and_title(tmp_path: Path) -> None:
     session_id = "11111111-1111-1111-1111-111111111111"
-    a_session_log(tmp_path).record(SessionStarted(session_id=session_id))
-    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=4, session_id=session_id))
-    a_session_log(tmp_path).record(TurnSettled(run_id="run-1"))
+    a_session_log(tmp_path).record(SessionStarted(session_id=session_id, session_kind="chat"))
+    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=4, session_id=session_id, prompt_excerpt=None))
+    a_session_log(tmp_path).record(TurnSettled(run_id="run-1", started_seq=2))
     a_session_log(tmp_path).record(SessionRenamed(session_id=session_id, title="Quarterly Ledger Review"))
 
     result = runner.invoke(app, ["sessions", "list"], env={"APP_STATE__HOME": str(tmp_path)})

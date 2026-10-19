@@ -119,12 +119,12 @@ def _row(response: httpx.Response, session_id: str) -> dict[str, object]:
 
 async def test_listing_hides_archived_by_default_and_shows_them_with_the_flag(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=ALPHA))
-    session_log.record(TurnStarted(entry="spa", chars=3, session_id=ALPHA))
-    session_log.record(TurnSettled(run_id="run-a"))
-    session_log.record(SessionStarted(session_id=BETA))
-    session_log.record(TurnStarted(entry="spa", chars=3, session_id=BETA))
-    session_log.record(TurnSettled(run_id="run-b"))
+    session_log.record(SessionStarted(session_id=ALPHA, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=3, session_id=ALPHA, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-a", started_seq=2))
+    session_log.record(SessionStarted(session_id=BETA, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=3, session_id=BETA, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-b", started_seq=5))
     session_log.record(SessionArchived(session_id=BETA, archived=True))
 
     async with _api(projection_pool) as (client, _pool, pg_pool):
@@ -163,13 +163,13 @@ async def test_answering_reflects_the_pools_lock_not_a_stored_column(projection_
 
 async def test_detail_returns_turns_in_seq_order(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=SESSION))
-    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-1"))
-    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-2"))
-    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-3"))
+    session_log.record(SessionStarted(session_id=SESSION, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
+    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-2", started_seq=4))
+    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-3", started_seq=6))
 
     async with _api(projection_pool) as (client, _pool, pg_pool):
         await rebuild(pg_pool, session_log.events(), InMemoryStepStore(), project_root=tmp_path)
@@ -187,9 +187,9 @@ async def test_detail_returns_turns_in_seq_order(tmp_path: Path, projection_pool
 
 async def test_transcript_returns_payload_and_text(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=SESSION))
-    session_log.record(TurnStarted(entry="spa", chars=5, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-1"))
+    session_log.record(SessionStarted(session_id=SESSION, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
     store = InMemoryStepStore()
     request = ModelRequest(parts=[UserPromptPart(content="hello there")])
     response = ModelResponse(parts=[TextPart(content="hi back")], usage=RequestUsage(input_tokens=1, output_tokens=1))
@@ -223,9 +223,9 @@ async def test_transcript_serves_every_reply_exactly_as_it_was_written(tmp_path:
     the payload's text part is what the chat bubble renders. The person's own prompt comes back as typed.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=SESSION))
-    session_log.record(TurnStarted(entry="spa", chars=5, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-1"))
+    session_log.record(SessionStarted(session_id=SESSION, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
     store = InMemoryStepStore()
     usage = RequestUsage(input_tokens=1, output_tokens=1)
     await store.save_snapshot(
@@ -265,13 +265,13 @@ async def test_detail_and_transcript_honor_the_forget_watermark(tmp_path: Path, 
     session log. Both plugins must agree with the session summary: one turn, one run's messages.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=SESSION))
-    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION))
+    session_log.record(SessionStarted(session_id=SESSION, session_kind="chat"))
+    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-1", started_seq=started_1.seq))
-    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION))
+    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-2", started_seq=started_2.seq))
     session_log.record(ConversationForgotten(session_id=SESSION))
-    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION))
+    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-after", started_seq=started_3.seq))
 
     store = InMemoryStepStore()
@@ -305,9 +305,9 @@ async def test_detail_and_transcript_honor_the_forget_watermark(tmp_path: Path, 
 
 async def test_flags_filter_by_kind_target_and_session(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=SESSION))
-    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION))
-    session_log.record(TurnSettled(run_id="run-1"))
+    session_log.record(SessionStarted(session_id=SESSION, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=1, session_id=SESSION, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
     session_log.record(
         FrictionFlagged(target_kind="tool", target="shell", note="slow", tool_call_id=None, source="live", subject_session_id=None)
     )
@@ -329,12 +329,12 @@ async def test_flags_filter_by_kind_target_and_session(tmp_path: Path, projectio
 
 async def test_search_returns_only_matching_sessions_ranked(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
-    session_log.record(SessionStarted(session_id=ALPHA))
-    session_log.record(TurnStarted(entry="spa", chars=5, session_id=ALPHA))
-    session_log.record(TurnSettled(run_id="run-alpha"))
-    session_log.record(SessionStarted(session_id=BETA))
-    session_log.record(TurnStarted(entry="spa", chars=5, session_id=BETA))
-    session_log.record(TurnSettled(run_id="run-beta"))
+    session_log.record(SessionStarted(session_id=ALPHA, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, session_id=ALPHA, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-alpha", started_seq=2))
+    session_log.record(SessionStarted(session_id=BETA, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, session_id=BETA, prompt_excerpt=None))
+    session_log.record(TurnSettled(run_id="run-beta", started_seq=5))
     store = InMemoryStepStore()
     await store.save_snapshot(
         ContinuableSnapshot(run_id="run-alpha", step_index=0, messages=[ModelRequest(parts=[UserPromptPart(content="tell me about zephyrwood")])])

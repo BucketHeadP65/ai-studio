@@ -11,7 +11,6 @@ questions over a sequence.
 from __future__ import annotations
 
 import json
-import uuid
 
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -40,29 +39,27 @@ class TurnStarted(_Event):
     """A prompt entered the agent through one of the two entry points.
 
     `entry` names which one: the Studio over HTTP, or an editor over ACP. `session_id` names the
-    session it opened under when the writer knows it. It is `None` on lines written before a turn
-    carried its own session id. `prompt_excerpt` is the prompt's own opening words, truncated, and
+    session it opened under. `prompt_excerpt` is the prompt's own opening words, truncated, and
     the only trace of what the person said when a turn is cut off before its run registers. It is
-    `None` on lines written before the excerpt was recorded.
+    `None` for an empty prompt.
     """
 
     kind: Literal["turn_started"] = "turn_started"
     entry: Literal["spa", "acp"]
     chars: int
-    session_id: str | None = None
-    prompt_excerpt: str | None = None
+    session_id: str
+    prompt_excerpt: str | None
 
 
 class TurnSettled(_Event):
     """The turn produced its reply. `run_id` names the transcript it wrote.
 
-    `started_seq` names the `turn_started` log entry it closes when the writer knows it. `None`
-    closes whichever turn the positional walk currently considers open.
+    `started_seq` names the `turn_started` log entry it closes.
     """
 
     kind: Literal["turn_settled"] = "turn_settled"
     run_id: str | None
-    started_seq: int | None = None
+    started_seq: int
     pending: tuple[str, ...] = ()
     """Tool names the turn stopped for, left to the browser to perform or the person to approve, empty when the
     turn answered outright. The continuation is its own turn."""
@@ -71,17 +68,15 @@ class TurnSettled(_Event):
 class TurnFailed(_Event):
     """The turn raised. `error` is the error's first sentence, never a traceback.
 
-    `started_seq` names the `turn_started` log entry it closes when the writer knows it. `None`
-    closes whichever turn the positional walk currently considers open. `prompt_excerpt` is the
-    turn's own opening words, truncated, which the session projection takes its title from when
-    the session's first turn failed before any run saved a step. It is `None` when the writer had
-    nothing to give.
+    `started_seq` names the `turn_started` log entry it closes. `prompt_excerpt` is the turn's own
+    opening words, truncated, which the session projection takes its title from when the session's
+    first turn failed before any run saved a step. It is `None` for an empty prompt.
     """
 
     kind: Literal["turn_failed"] = "turn_failed"
     error: str
-    started_seq: int | None = None
-    prompt_excerpt: str | None = None
+    started_seq: int
+    prompt_excerpt: str | None
 
 
 class TurnAbandoned(_Event):
@@ -106,12 +101,12 @@ class TurnSteered(_Event):
 class ConversationForgotten(_Event):
     """The boundary: the person pressed Forget. Forgetting is a watermark, never an erasure.
 
-    `session_id` names the session being forgotten when the writer knows it. `None` closes
-    whichever session the positional walk currently considers live.
+    `session_id` names the session being forgotten. `None` is a Forget pressed while the conversation held no
+    session id, and closes whichever session the newest `session_started` opened.
     """
 
     kind: Literal["conversation_forgotten"] = "conversation_forgotten"
-    session_id: str | None = None
+    session_id: str | None
 
 
 class DraftSettled(_Event):
@@ -163,13 +158,12 @@ class SessionStarted(_Event):
     """A fresh session opened. Every following turn belongs to it until the next boundary.
 
     `session_kind` names what the session is for: `"chat"` for the authoring conversation, or
-    `"runner"` for one opened to drive a workflow unattended. It is `"chat"` on lines written
-    before the field existed.
+    `"runner"` for one opened to drive a workflow unattended.
     """
 
     kind: Literal["session_started"] = "session_started"
     session_id: str
-    session_kind: str = "chat"
+    session_kind: str
 
 
 class SessionRenamed(_Event):
@@ -195,9 +189,8 @@ class SessionDeleted(_Event):
     session_id: str
 
 
-FlagSource = Literal["live", "retro"]
-"""Where a flag came from. Only `live` is written. `retro` is kept for lines an earlier pass wrote,
-which a rebuild still replays."""
+FlagSource = Literal["live"]
+"""Where a flag came from: `live`, filed by the agent during a turn."""
 
 
 class FrictionFlagged(_Event):
@@ -320,9 +313,8 @@ def decode(line: str) -> Recorded | None:
 def open_turns(events: Sequence[Recorded]) -> tuple[Recorded, ...]:
     """Every `turn_started` with no terminal event, which is what the boot sweep closes as abandoned.
 
-    A settle or failure that names its own `started_seq` closes exactly that turn, wherever it
-    sits among other sessions' open turns. One written before turns carried it closes the newest
-    open turn instead. An abandonment always closes exactly the turn it names.
+    A settle, a failure or an abandonment closes exactly the turn its `started_seq` names, wherever
+    it sits among other sessions' open turns.
 
     Args:
         events: The timeline, in order.
@@ -335,12 +327,7 @@ def open_turns(events: Sequence[Recorded]) -> tuple[Recorded, ...]:
         match record.event:
             case TurnStarted():
                 open_records.append(record)
-            case TurnSettled(started_seq=started_seq) | TurnFailed(started_seq=started_seq):
-                if started_seq is not None:
-                    open_records = [record for record in open_records if record.seq != started_seq]
-                elif open_records:
-                    open_records.pop()
-            case TurnAbandoned(started_seq=started_seq):
+            case TurnSettled(started_seq=started_seq) | TurnFailed(started_seq=started_seq) | TurnAbandoned(started_seq=started_seq):
                 open_records = [record for record in open_records if record.seq != started_seq]
             case _:
                 pass
@@ -373,9 +360,6 @@ def logged_run_ids(events: Sequence[Recorded]) -> tuple[str, ...]:
 
 
 
-_LEGACY_SESSION_NS = uuid.UUID("6ba7b812-9dad-11d1-80b4-00c04fd430c8")
-
-
 class SessionSpan(BaseModel):
     """One stretch of the timeline belonging to one session id.
 
@@ -399,7 +383,6 @@ class _SpanBuilder:
     """One session's span still in progress: mutable while `session_spans` folds the timeline."""
 
     started_at: datetime | None = None
-    first_seq: int | None = None
     turns: int = 0
     run_ids: list[str] = field(default_factory=list)
     session_kind: str = "chat"
@@ -410,18 +393,19 @@ class _SpanFold:
 
     def __init__(self) -> None:
         self.spans: list[SessionSpan] = []
-        self.builders: dict[str | None, _SpanBuilder] = {}
+        self.builders: dict[str, _SpanBuilder] = {}
         self.seq_to_session: dict[int, str] = {}
         self.current_id: str | None = None
 
     def _close(self, key: str | None, ended_at: datetime | None) -> None:
-        builder = self.builders.pop(key, None)
-        if builder is None or builder.started_at is None or builder.first_seq is None:
+        if key is None:
             return
-        resolved_id = key if key is not None else str(uuid.uuid5(_LEGACY_SESSION_NS, str(builder.first_seq)))
+        builder = self.builders.pop(key, None)
+        if builder is None or builder.started_at is None:
+            return
         self.spans.append(
             SessionSpan(
-                session_id=resolved_id,
+                session_id=key,
                 started_at=builder.started_at,
                 ended_at=ended_at,
                 turns=builder.turns,
@@ -430,42 +414,38 @@ class _SpanFold:
             )
         )
 
-    def _opened(self, key: str | None, record: Recorded) -> _SpanBuilder:
+    def _opened(self, key: str, record: Recorded) -> _SpanBuilder:
         builder = self.builders.setdefault(key, _SpanBuilder())
         if builder.started_at is None:
-            builder.started_at, builder.first_seq = record.at, record.seq
+            builder.started_at = record.at
         return builder
 
     def _credit(self, key: str | None, run_id: str) -> None:
-        builder = self.builders.get(key)
+        builder = self.builders.get(key) if key is not None else None
         if builder is not None and builder.started_at is not None:
             builder.run_ids.append(run_id)
 
     def apply(self, record: Recorded) -> None:
-        """Fold one record: a boundary re-points the positional walk, a turn credits its span."""
+        """Fold one record: a start or a Forget closes a span, a turn opens or credits the span of its session."""
         match record.event:
             case SessionStarted(session_id=new_id, session_kind=new_kind):
                 self._close(self.current_id, record.at)
                 self.current_id = new_id
                 self._opened(new_id, record).session_kind = new_kind
-            case ConversationForgotten(session_id=stamped_id):
-                target = stamped_id if stamped_id is not None else self.current_id
-                self._close(target, record.at)
-                if stamped_id is None or stamped_id == self.current_id:
+            case ConversationForgotten(session_id=forgotten_id):
+                self._close(forgotten_id if forgotten_id is not None else self.current_id, record.at)
+                if forgotten_id is None or forgotten_id == self.current_id:
                     self.current_id = None
-            case TurnStarted(session_id=stamped_id):
-                key = stamped_id if stamped_id is not None else self.current_id
-                self._opened(key, record).turns += 1
-                if stamped_id is not None:
-                    self.seq_to_session[record.seq] = stamped_id
+            case TurnStarted(session_id=session_id):
+                self._opened(session_id, record).turns += 1
+                self.seq_to_session[record.seq] = session_id
             case TurnSettled(run_id=run_id, started_seq=started_seq) if run_id is not None:
-                key = self.seq_to_session.get(started_seq) if started_seq is not None else self.current_id
-                self._credit(key, run_id)
+                self._credit(self.seq_to_session.get(started_seq), run_id)
             case _:
                 pass
 
     def finish(self) -> tuple[SessionSpan, ...]:
-        """Close the positionally-current span, then every stamped span still open, live."""
+        """Close the current session's span, then every span still open, live."""
         self._close(self.current_id, None)
         for remaining in list(self.builders):
             self._close(remaining, None)
@@ -475,14 +455,11 @@ class _SpanFold:
 def session_spans(events: Sequence[Recorded]) -> tuple[SessionSpan, ...]:
     """The timeline cut at every boundary, each span carrying its session id.
 
-    A `turn_started` that names its own `session_id` is grouped under that id, so turns from
-    different sessions may interleave in the session log. One written before turns carried it
-    follows the positional walk instead: whichever session `session_started` most recently named.
-    A `turn_settled` that names its own `started_seq` credits its run to the session that turn
-    opened under, by the same rule. A `conversation_forgotten` that names its own `session_id`
-    closes only that session's span, and one that does not closes whichever span the positional
-    walk currently considers live. A span no event names a session for gets an id derived from its
-    first seq, the same on every rebuild.
+    A `turn_started` is grouped under the session it names, so turns from different sessions may
+    interleave in the session log. A `turn_settled` credits its run to the session of the turn it
+    closes. A `session_started` closes the span the previous `session_started` opened, and a
+    `conversation_forgotten` closes the span of the session it names, or with no session named the
+    span the newest `session_started` opened.
 
     Args:
         events: The timeline, in order.
@@ -508,9 +485,8 @@ class LiveSession(BaseModel):
 def live_session(events: Sequence[Recorded]) -> LiveSession | None:
     """The session the live slot points at, or None when the log ends on a Forget or is empty.
 
-    A `turn_settled` that names its own `started_seq` credits the run to the session that turn
-    opened under, even if another session's turns interleave around it. One written before turns
-    carried it credits whichever session is current when it lands.
+    A `turn_settled` credits its run to the session of the turn it closes, even if another
+    session's turns interleave around it.
 
     Args:
         events: The timeline, in order.
@@ -525,13 +501,13 @@ def live_session(events: Sequence[Recorded]) -> LiveSession | None:
         match record.event:
             case SessionStarted(session_id=new_id):
                 current_id = new_id
-            case ConversationForgotten(session_id=stamped_id):
-                if stamped_id is None or stamped_id == current_id:
+            case ConversationForgotten(session_id=forgotten_id):
+                if forgotten_id is None or forgotten_id == current_id:
                     current_id = None
-            case TurnStarted(session_id=stamped_id) if stamped_id is not None:
-                seq_to_session[record.seq] = stamped_id
+            case TurnStarted(session_id=session_id):
+                seq_to_session[record.seq] = session_id
             case TurnSettled(run_id=run_id, started_seq=started_seq) if run_id is not None:
-                owner = seq_to_session.get(started_seq) if started_seq is not None else current_id
+                owner = seq_to_session.get(started_seq)
                 if owner is not None:
                     newest_run[owner] = run_id
             case _:

@@ -101,7 +101,7 @@ def _checkout_session_log() -> SessionLog:
     from harness.settings import HarnessSettings  # noqa: PLC0415 (same)
 
     state = HarnessSettings().state
-    return OpenLog(state.session_log, forgotten_marker=state.forgotten_marker, topics=None)
+    return OpenLog(state.session_log, topics=None)
 
 
 @sessions_app.command(name="list")

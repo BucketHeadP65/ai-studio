@@ -216,8 +216,8 @@ async def _seed(recorder: SessionLog, store: StepStore, *, session_id: str, run_
     await store.save_snapshot(
         ContinuableSnapshot(run_id=run_id, step_index=0, messages=[ModelRequest(parts=[UserPromptPart(content=said)])])
     )
-    recorder.record(SessionStarted(session_id=session_id))
-    started = recorded(recorder, TurnStarted(entry="spa", chars=len(said), session_id=session_id))
+    recorder.record(SessionStarted(session_id=session_id, session_kind="chat"))
+    started = recorded(recorder, TurnStarted(entry="spa", chars=len(said), session_id=session_id, prompt_excerpt=None))
     recorder.record(TurnSettled(run_id=run_id, started_seq=started.seq))
 
 

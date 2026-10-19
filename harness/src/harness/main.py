@@ -387,8 +387,7 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:
             transcript = await container.get(SessionTranscript)
             records = await container.get(RunRecords)
             topics = await container.get(TopicSink)
-            # The sweep first: a marker left by an older process becomes the boundary event resume is
-            # about to honour, and any turn a crash left open is closed as abandoned, visibly.
+            # The sweep first: any turn a crash left open is closed as abandoned, visibly.
             session_log.boot_sweep()
             await asyncio.to_thread(prune_ended_spill_folders, SPILL_DIR)
             events = session_log.events()

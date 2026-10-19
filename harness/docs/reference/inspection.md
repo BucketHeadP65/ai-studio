@@ -162,9 +162,7 @@ SELECT id, key, attempts, max_attempts, last_error, result
 SELECT kind, tier, model, answer FROM inspection.questions ORDER BY question_id DESC LIMIT 10;
 ```
 
-A filed flag's `source` field can also read `retro`: a value a reader still accepts for lines the retired retro pass
-wrote before this slice, so an old session-log line still decodes. `live` is the only value written today, by
-`flag_friction` (`harness/src/harness/features/sessions/flags.py`).
+A filed flag's `source` field reads `live`, written by `flag_friction` (`harness/src/harness/features/sessions/flags.py`).
 
 ## Tables
 

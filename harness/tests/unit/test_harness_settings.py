@@ -90,7 +90,6 @@ class TestTheStateHome:
         assert paths.activation_log == tmp_path / "activations.jsonl"
         assert paths.external_agents == tmp_path / "external-agents.json"
         assert paths.draft == tmp_path / "draft.json"
-        assert paths.forgotten_marker == tmp_path / "forgotten-at"
         assert paths.archive == tmp_path / "runs" / "archive"
         assert paths.run_events("r1") == tmp_path / "runs" / "r1" / "events.jsonl"
 
@@ -121,7 +120,6 @@ class TestTheStateHome:
             paths.activation_log,
             paths.external_agents,
             paths.draft,
-            paths.forgotten_marker,
             paths.archive,
             paths.spend,
             paths.sessions,

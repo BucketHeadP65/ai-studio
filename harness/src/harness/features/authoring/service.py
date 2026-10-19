@@ -378,7 +378,7 @@ def ensure_session_id(runtime: Runtime) -> str:
     """
     if runtime.session_id is None:
         session_id = str(uuid4())
-        runtime.session_log.record(SessionStarted(session_id=session_id))
+        runtime.session_log.record(SessionStarted(session_id=session_id, session_kind="chat"))
         runtime.session_id = session_id
     return runtime.session_id
 
@@ -724,9 +724,8 @@ class ChatService:
                         yield event
         except (UsageLimitExceeded, UnexpectedModelBehavior, ModelHTTPError) as exc:
             error = str(exc)[:300]
-            session.session_log.record(
-                TurnFailed(error=error, started_seq=started.seq if started is not None else None, prompt_excerpt=asked.text[:300] or None)
-            )
+            if started is not None:
+                session.session_log.record(TurnFailed(error=error, started_seq=started.seq, prompt_excerpt=asked.text[:300] or None))
             ending.recorded = True
             await self._rescue(session, session_id, prompt, before_run_id, ended=TURN_FAILED.format(error=error))
             raise PlainTurnError(plain_error(str(exc))) from exc
@@ -741,18 +740,19 @@ class ChatService:
     async def _settle(
         self, session: Runtime, session_id: str, result: AgentRunResult[str | DeferredToolRequests], started: Recorded | None
     ) -> Mapping[str, JsonValue] | None:
-        """Fold the finished run into the session and record the settle, answering `None` for a run that stopped for the browser."""
-        started_seq = started.seq if started is not None else None
+        """Fold the finished run into the session, record the settle when its start was logged, and answer `None` for a browser stop."""
         output = result.output
         if isinstance(output, DeferredToolRequests):
             pending = settle_deferred(session, result, output)
             run_id = await newest_run_id(session, conversation_id=session_id)
-            session.session_log.record(TurnSettled(run_id=run_id, started_seq=started_seq, pending=pending))
+            if started is not None:
+                session.session_log.record(TurnSettled(run_id=run_id, started_seq=started.seq, pending=pending))
             refresh_projection(session, self._refresh)
             return None
         payload = settle_turn(session, result, draft_file=draft_path(session))
         run_id = await newest_run_id(session, conversation_id=session_id)
-        session.session_log.record(TurnSettled(run_id=run_id, started_seq=started_seq))
+        if started is not None:
+            session.session_log.record(TurnSettled(run_id=run_id, started_seq=started.seq))
         refresh_projection(session, self._refresh)
         return payload
 

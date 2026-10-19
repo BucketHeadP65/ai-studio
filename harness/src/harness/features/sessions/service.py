@@ -311,10 +311,8 @@ class _FlagRow:
     created_at: datetime
 
 
-def _close_turn(open_stack: list[_TurnUnderway], started_seq: int | None) -> _TurnUnderway | None:
-    """The open turn `started_seq` names, taken off the stack, the newest open one when it is `None`."""
-    if started_seq is None:
-        return open_stack.pop() if open_stack else None
+def _close_turn(open_stack: list[_TurnUnderway], started_seq: int) -> _TurnUnderway | None:
+    """The open turn `started_seq` names, taken off the stack."""
     for index, row in enumerate(open_stack):
         if row.seq == started_seq:
             del open_stack[index]
@@ -363,52 +361,27 @@ def _flag_row(record: Recorded, current: str | None) -> _FlagRow | None:
     )
 
 
-def _session_at_each_seq(events: Sequence[Recorded], spans: Sequence[SessionSpan]) -> dict[int, str]:
-    """Each log entry's seq mapped to the session that owns it, a stamped `session_id` first, else the positional walk."""
-    lookup: dict[int, str] = {}
-    current: SessionSpan | None = None
-    next_span = 0
-    for record in events:
-        stamped: str | None = None
-        # The walk opens the next span exactly where `session_spans` opens one, so an unstamped line gets the id a rebuild gives it.
-        match record.event:
-            case SessionStarted():
-                current = spans[next_span] if next_span < len(spans) else None
-                next_span += 1
-            case ConversationForgotten():
-                current = None
-            case TurnStarted(session_id=session_id):
-                stamped = session_id
-                if session_id is None and current is None:
-                    current = spans[next_span] if next_span < len(spans) else None
-                    next_span += 1
-            case _:
-                pass
-        owner = stamped if stamped is not None else (current.session_id if current is not None else None)
-        if owner is not None:
-            lookup[record.seq] = owner
-    return lookup
-
-
-def _fold_turns_and_flags(events: Sequence[Recorded], spans: Sequence[SessionSpan]) -> tuple[list[_TurnUnderway], list[_FlagRow]]:
-    """Turn rows and flag rows in one forward pass over `events`, resolved via `_session_at_each_seq`."""
-    seq_session = _session_at_each_seq(events, spans)
+def _fold_turns_and_flags(events: Sequence[Recorded]) -> tuple[list[_TurnUnderway], list[_FlagRow]]:
+    """Turn rows and flag rows in one forward pass over `events`, a flag with no subject filed under the current session."""
     turns: list[_TurnUnderway] = []
     flags: list[_FlagRow] = []
     open_stack: list[_TurnUnderway] = []
+    current: str | None = None
 
     for record in events:
         match record.event:
-            case TurnStarted(entry=entry, prompt_excerpt=prompt_excerpt):
-                row = _TurnUnderway(
-                    session_id=seq_session[record.seq], seq=record.seq, entry=entry, started_at=record.at, prompt_excerpt=prompt_excerpt
-                )
+            case SessionStarted(session_id=session_id):
+                current = session_id
+            case ConversationForgotten(session_id=session_id) if session_id is None or session_id == current:
+                current = None
+            case TurnStarted(session_id=session_id, entry=entry, prompt_excerpt=prompt_excerpt):
+                row = _TurnUnderway(session_id=session_id, seq=record.seq, entry=entry, started_at=record.at, prompt_excerpt=prompt_excerpt)
                 turns.append(row)
                 open_stack.append(row)
             case TurnSettled() | TurnFailed() | TurnAbandoned():
                 _stamp_outcome(open_stack, record)
             case FrictionFlagged():
-                if (flag := _flag_row(record, seq_session.get(record.seq))) is not None:
+                if (flag := _flag_row(record, current)) is not None:
                     flags.append(flag)
             case _:
                 pass
@@ -621,7 +594,7 @@ async def _project_rows(
 ) -> tuple[list[tuple[object, ...]], list[tuple[object, ...]], list[tuple[object, ...]], list[tuple[object, ...]]]:
     """Session, turn, message and flag rows ready to bind, only `only_session_id`'s when it is given."""
     spans = session_spans(events)
-    turn_rows, flag_rows = _fold_turns_and_flags(events, spans)
+    turn_rows, flag_rows = _fold_turns_and_flags(events)
     archived, deleted = _owner_acts(events)
     session_types = _session_types(events)
     forgotten_at = _forgotten_seq_by_session(events)

@@ -70,7 +70,6 @@ class SessionLog:
         self,
         path: Path,
         *,
-        forgotten_marker: Path | None = None,
         clock: Callable[[], datetime] = _now,
         topics: TopicSink | None,
     ) -> None:
@@ -78,13 +77,10 @@ class SessionLog:
 
         Args:
             path: The JSONL file. Its folder is created on the first append.
-            forgotten_marker: The `forgotten-at` marker file an older process may have left, which
-                `boot_sweep` turns into an event. `None` skips that step.
             clock: What stamps each event. Defaults to the UTC time, to the second.
             topics: Where each append is announced, or `None` to announce nothing.
         """
         self._path = path
-        self._forgotten_marker = forgotten_marker
         self._clock = clock
         self._topics = topics
 
@@ -114,24 +110,10 @@ class SessionLog:
         return recorded
 
     def boot_sweep(self) -> None:
-        """Bring the log up to date before the first request.
+        """Close every turn that started and never ended as abandoned, before the first request.
 
-        First, a `forgotten-at` marker an older process left becomes a forgotten boundary event stamped
-        with the marker's own time, and the marker is deleted. An unreadable marker is dropped with a warning.
-        Then every turn that started and never ended is closed as abandoned.
-        Call it before `resume`, so resume honours the migrated boundary. It records no `Booted` event,
-        which the caller records once it knows what it resumed.
-        A log opened with no marker path only closes the open turns.
+        Call it before `resume`. It records no `Booted` event, which the caller records once it knows what it resumed.
         """
-        marker = self._forgotten_marker
-        if marker is not None and marker.exists():
-            try:
-                stamp = datetime.fromisoformat(marker.read_text(encoding="utf-8").strip())
-            except ValueError:
-                _logger.warning("dropping an unreadable forgotten-at marker")
-            else:
-                self.record(ConversationForgotten(), at=stamp)
-            marker.unlink(missing_ok=True)
         for open_turn in open_turns(self.events()):
             self.record(TurnAbandoned(started_seq=open_turn.seq))
 

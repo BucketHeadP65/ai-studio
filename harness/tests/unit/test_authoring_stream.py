@@ -25,7 +25,8 @@ from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai_harness.step_persistence import ContinuableSnapshot, InMemoryStepStore, RunRecord, StepPersistence
 
-from harness.domain.events import TurnFailed
+from harness.adapters.session_log import SessionLog
+from harness.domain.events import TurnFailed, TurnStarted
 from harness.features.authoring import service as authoring_service
 from harness.features.authoring.api_models import ChatRequest
 from harness.features.authoring.wire import messages_of
@@ -38,12 +39,14 @@ from tests.support.streaming import streaming_function_model, submit
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
+    from datetime import datetime
     from pathlib import Path
 
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models.function import AgentInfo, DeltaToolCalls
     from pydantic_ai_harness.step_persistence import StepStore
 
+    from harness.domain.events import Recorded, SessionEvent
     from harness.domain.ports import SessionTranscript
     from harness.features.authoring.service import ChatService
     from harness.session import SessionRefresh
@@ -297,6 +300,29 @@ async def test_stream_journals_the_prompt_excerpt_on_a_failed_turn(tmp_path: Pat
 
     failed = next(record.event for record in a_session_log(tmp_path).events() if isinstance(record.event, TurnFailed))
     assert failed.prompt_excerpt == "loop forever"
+
+
+class _RefusesTurnStarts(SessionLog):
+    """A session log whose disk refuses every `turn_started` entry and takes every other one."""
+
+    def record(self, event: SessionEvent, *, at: datetime | None = None) -> Recorded | None:
+        if isinstance(event, TurnStarted):
+            return None
+        return super().record(event, at=at)
+
+
+@pytest.mark.parametrize(("agent", "ending"), [(_agent("Here is a draft."), "turn_settled"), (_insatiable_agent(), "turn_failed")])
+async def test_a_turn_whose_start_the_disk_refused_records_no_end(agent: Agent[Runtime, str], ending: str, tmp_path: Path) -> None:
+    """An end names the start it closes, so a turn with no start on the log writes no end either."""
+    session = a_runtime(
+        agent=agent, session_log=_RefusesTurnStarts(a_state(tmp_path).session_log, topics=None), store=InMemoryStepStore(), state=a_state(tmp_path)
+    )
+    pool = SessionPool(session, composition=PoolComposition(refresh=narrates_nowhere))
+    chat = a_chat(pool, refresh=narrates_nowhere)
+
+    await a_turn(chat, one_session(pool), submit("hello"))
+
+    assert ending not in _journal_kinds(tmp_path)
 
 
 async def test_stream_refreshes_the_projection_when_the_turn_fails(tmp_path: Path) -> None:

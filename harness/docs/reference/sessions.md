@@ -44,17 +44,13 @@ next caller one hydration and nothing else. The conversation rebuilds from the t
 ## The stamped session-log events
 
 Turn events carry their session id directly rather than relying on where they sit in the file, because sessions answer in
-parallel and interleave: `TurnStarted.session_id`, `TurnSettled.started_seq`, and `TurnFailed.started_seq` (the seq of the
-`turn_started` record each terminal event closes) are optional fields, `None` on a line written before a turn carried its
-own stamp. `ConversationForgotten.session_id` is stamped the same way. `session_spans` and `live_session` prefer a stamp
-when a line carries one and otherwise fall back to a positional walk, whichever session a boundary event (`session_started`
-/ `session_switched` / an unstamped `conversation_forgotten`) most recently named, only for the legacy prefix of a session
-log written before this shape existed. `open_turns` carries no session identity at all: a stamped settle or failure closes
-exactly the `turn_started` record it names, and an unstamped one closes whichever turn is newest off a plain LIFO stack,
-since turns were sequential in the app that wrote it. Either way an old session log still decodes and folds exactly as it
-always did. `session_spans` assigns a deterministic legacy id (`uuid5` over the span's first `seq`) to any span that
-predates the identity events entirely, so a rebuild gives it the same id every time. See
-[the session log reference](session-journal.md) for the full event grammar and the codec.
+parallel and interleave: `TurnStarted.session_id` names the session, and `TurnSettled.started_seq` and
+`TurnFailed.started_seq` name the `turn_started` record each terminal event closes. All three are required.
+`ConversationForgotten.session_id` names the session forgotten, or is `null` for a Forget pressed while the conversation
+held no session id, which closes whichever session the newest `session_started` opened. `session_spans` and `live_session`
+group every turn under its own session and credit every settled run to the session of the turn it closes. `open_turns`
+closes exactly the `turn_started` record each end names. See [the session log reference](session-journal.md) for the full
+event grammar and the codec.
 
 ## Per-project state homes
 

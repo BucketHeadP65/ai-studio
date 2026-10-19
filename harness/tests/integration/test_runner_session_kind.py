@@ -1,6 +1,6 @@
 """Runner sessions as a first-class kind: the projected column and the HTTP filter.
 
-The projection folds the event's `session_kind` (defaulting a legacy line to `chat`) into a real
+The projection folds the event's `session_kind` into a real
 column. The HTTP layer maps `kind` on the
 wire to `session_kind` on the event and the column: `POST /api/sessions` mints one,
 `GET /api/sessions` filters by it. Every test runs against the isolated `projection_pool`, never
@@ -62,19 +62,6 @@ async def test_rebuild_projects_session_kind_from_the_event(tmp_path: Path, proj
     row = await projection_pool.fetchrow("SELECT session_kind FROM sessions WHERE id = $1", SESSION)
     assert row is not None
     assert row["session_kind"] == "runner"
-
-
-async def test_rebuild_projects_a_legacy_session_started_line_as_chat(tmp_path: Path, projection_pool: ProjectionPool) -> None:
-    journal_path = tmp_path / "session-log.jsonl"
-    journal_path.write_text(
-        f'{{"seq": 1, "at": "2026-08-22T12:00:00+00:00", "kind": "session_started", "session_id": "{SESSION}"}}\n'
-    )
-
-    await rebuild(projection_pool, SessionLog(journal_path, topics=None).events(), InMemoryStepStore(), project_root=tmp_path)
-
-    row = await projection_pool.fetchrow("SELECT session_kind FROM sessions WHERE id = $1", SESSION)
-    assert row is not None
-    assert row["session_kind"] == "chat", "an old line with no session_kind at all projects as chat"
 
 
 def _default_runtime() -> Runtime:

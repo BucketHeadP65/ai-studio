@@ -215,18 +215,15 @@ async def broadcaster() -> AsyncIterator[Broadcaster]:
 def session_log(state: StateSettings, topics: Broadcaster) -> SessionEvents:
     """This deployment's session log, announcing every appended event. Creates the log's folder.
 
-    It is opened with the forgotten marker, so `boot_sweep()` turns a marker an older process left
-    into the boundary event resume honours.
-
     Args:
-        state: The state section, which names the log file and the marker.
+        state: The state section, which names the log file.
         topics: The change channel each append is announced on.
 
     Returns:
         The session log.
     """
     state.session_log.parent.mkdir(parents=True, exist_ok=True)
-    return SessionLog(state.session_log, forgotten_marker=state.forgotten_marker, topics=topics)
+    return SessionLog(state.session_log, topics=topics)
 
 
 def _record(database: RecordDatabase) -> PostgresStepStore:

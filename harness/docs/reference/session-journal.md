@@ -28,14 +28,13 @@ never content: message text stays in the transcript, evidence and activations li
 run is not here either: the run's own log answers that (`features/running/infrastructure/run_events.py`, one file per run under
 `.state/runs/<run_id>/events.jsonl`, with the events defined in `core.ai.workflows`), and the session log keeps only the
 launch. The session log is the timeline that interleaves what is left, and the authority for exactly one thing, the
-conversation lifecycle. `turn_started`
-and `conversation_forgotten` carry an optional `session_id`, and `turn_settled`/`turn_failed` an optional `started_seq`
-naming the `turn_started` record each closes. `None` on a line written before a turn stamped its own session.
-`turn_settled` also carries `pending`, the tool names a turn stopped for, empty when the turn answered outright.
-`session_spans` and `live_session` prefer a stamp and fall back to a positional walk of session boundaries for an
-unstamped line. `open_turns` carries no session identity at all and closes an unstamped turn off a plain LIFO stack
-instead. Either way an old session log still decodes and folds exactly as it always did. See [sessions.md](sessions.md)
-for the pool that stamps them and the API built over the result.
+conversation lifecycle. Every `turn_started` carries the `session_id` it opened under and its `prompt_excerpt` (`null`
+for an empty prompt). Every `turn_settled` and `turn_failed` carries the `started_seq` of the `turn_started` record it
+closes, so a turn whose start the disk refused writes no end either. Every `session_started` carries its `session_kind`.
+`conversation_forgotten` names the session forgotten, or `null` for a Forget pressed while the conversation held no
+session id, which closes the session the newest `session_started` opened. `turn_settled` also carries `pending`, the tool
+names a turn stopped for, empty when the turn answered outright. A line missing a field its event requires does not
+decode. See [sessions.md](sessions.md) for the pool that stamps them and the API built over the result.
 
 The codec and the projections are pure: `decode` answers `None` for a torn tail or a kind this reader does not know (one lost
 line never costs a boot). `open_turns`, `last_forgotten_at` and `session_spans` are the questions the runtime asks.
@@ -44,9 +43,7 @@ page's `.state/session-log.jsonl` as its own, separate home.
 
 ## The boot sweep (`harness.adapters.session_log.boot_sweep`)
 
-Runs in the lifespan before resume: a `forgotten-at` marker left by an older process migrates once into a boundary event
-carrying its own historical timestamp (then the marker is deleted, and the session log is the authority from there on), and
-every turn a crash left open is closed as explicitly `turn_abandoned`. Resume then honours `last_forgotten_at` as its
+Runs in the lifespan before resume: every turn a crash left open is closed as explicitly `turn_abandoned`. Resume then honours `last_forgotten_at` as its
 watermark, and the `Boot` event records what it resumed.
 
 ## Process boundary

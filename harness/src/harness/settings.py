@@ -326,11 +326,6 @@ class StateSettings(BaseModel):
         return self.home / "draft.json"
 
     @property
-    def forgotten_marker(self) -> Path:
-        """When the person last pressed Forget."""
-        return self.home / "forgotten-at"
-
-    @property
     def archive(self) -> Path:
         """Where ended runs rest, one file per run under its workflow's own folder."""
         return self.home / "runs" / "archive"

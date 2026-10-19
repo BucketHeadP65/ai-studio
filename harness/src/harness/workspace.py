@@ -52,7 +52,7 @@ def open_workspace(root: Path, *, topics: TopicSink | None = None) -> Workspace:
     return Workspace(
         root=root,
         state=state,
-        session_log=SessionLog(state.session_log, forgotten_marker=state.forgotten_marker, topics=topics),
+        session_log=SessionLog(state.session_log, topics=topics),
     )
 
 

@@ -149,7 +149,7 @@ class TestFrictionMount:
 
 
 class TestFlagsProjection:
-    async def test_a_retro_sourced_row_lists_rather_than_raises(self) -> None:
+    async def test_a_projected_row_lists_with_its_source(self) -> None:
         row = {
             "id": uuid.uuid4(),
             "session_id": uuid.uuid4(),
@@ -157,7 +157,7 @@ class TestFlagsProjection:
             "target": "some workflow",
             "note": "ground",
             "tool_call_id": None,
-            "source": "retro",
+            "source": "live",
             "created_at": datetime.now(UTC),
         }
         projection = SessionProjection(FakePool(rows=[row]))
@@ -165,7 +165,7 @@ class TestFlagsProjection:
         flags = await projection.flags(target_kind=None, target=None, session_id=None)
 
         assert len(flags) == 1
-        assert flags[0].source == "retro"
+        assert flags[0].source == "live"
 
 
 class TestFrictionDoor:
