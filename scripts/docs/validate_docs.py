@@ -21,8 +21,7 @@ Checks:
      initiative itself are not linted for words, they record the past or name the retired words on purpose.
 
 Governed set: docs/** and <app>/docs/**, plus CONTEXT-MAP.md and every CONTEXT.md, including
-the lifecycle dirs `docs/brainstorming/`, `docs/specs/`, `docs/plans/`, and `docs/memory/Units/`
-(all governed page types now; see docs/knowledge-base-schema.json). Excluded: `docs/implementation/`
+`docs/brainstorming/` and `docs/memory/Units/` (both governed page types, see docs/knowledge-base-schema.json). Excluded: `docs/implementation/`
 (workflow state, never documentation), `docs/_meta/` (the vocabulary pages, their own
 grammar, claimed by no page type), generated
 split-doc artifacts (`sections/` chunks and index.md files opening with a GENERATED banner), and
@@ -266,7 +265,7 @@ _MARKERS = re.compile(r"TL;DR")
 _FRONTMATTER_IDENTIFIER = re.compile(r"^(?:name|id|aliases|path|app|type|status|owner|date|tags|kinds|folders):[^\n]*$", re.M)
 _TS_STRING = re.compile(r'"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'|`((?:[^`\\]|\\.)*)`', re.S)
 _JSX_TEXT = re.compile(r">([^<>{}=;()]+)<")
-_VOCAB_SKIP_PARTS = {"adr", "brainstorming", "specs", "plans", "memory"}
+_VOCAB_SKIP_PARTS = {"adr", "brainstorming", "memory"}
 # Words the UI scan cannot tell from CSS class names or enum values (Tailwind `font-medium`, a thinking level).
 _UI_SKIP = {r"\bmedium\b"}
 _VOCAB_SKIP_PREFIXES = (("docs", "initiatives", "2026-09-02-vocabulary"),)
