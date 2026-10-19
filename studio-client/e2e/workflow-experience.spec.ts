@@ -307,6 +307,7 @@ async function mockApi(page: Page, journey: Journey): Promise<void> {
         spec: {},
         values: {},
         conversations: {},
+        owner_reviews: [],
         events: [],
         graph: GRAPH,
       });
