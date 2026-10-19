@@ -537,6 +537,11 @@ def _hit_ref(hit: SearchHit) -> str:
     return hit.id
 
 
+def _ranked_refs(result: SearchResult) -> list[str]:
+    """Each hit's bare id in rank order, each followed by its folded units that carry a snippet, best first."""
+    return [ref for hit in result.hits for ref in (_hit_ref(hit), *(unit.id for unit in hit.folded_units if unit.snippet and unit.snippet.strip()))]
+
+
 async def _search_call_ranking(
     call: ToolCallTrace, reader: DeliveredEvidenceReader, want: Collection[str], *, ks: tuple[int, ...], granularity: Granularity
 ) -> SearchCallRanking:
@@ -548,7 +553,7 @@ async def _search_call_ranking(
     except DeliveredEvidenceError:
         return SearchCallRanking(ordinal=call.ordinal, status="unknown")
     result = SearchResult.model_validate_json(evidence.payload_json)
-    got = normalize_refs([_hit_ref(hit) for hit in result.hits], granularity)
+    got = normalize_refs(_ranked_refs(result), granularity)
     return SearchCallRanking(ordinal=call.ordinal, status="measured", metrics=ranked_metrics(got, want, ks=ks))
 
 
@@ -561,6 +566,8 @@ async def search_ranking_metrics(
     granularity: Granularity = "page",
 ) -> SearchRankingMetrics:
     """Score each `search` call's own ordered hits, parsed from its delivered-evidence payload.
+
+    Each hit's folded units that carry a snippet rank right after it, best first, since the model received their text.
 
     Args:
         tool_calls: The trial's own tool calls, in any order (each call's own `ordinal` is preserved

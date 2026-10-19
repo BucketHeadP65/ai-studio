@@ -1,9 +1,10 @@
 """The unit ids the tool results of one agent run carried something of, read from the run's own messages.
 
-A search names each hit, a fetch the unit it read, a leveled fetch its own unit and every child it lists, and a graph
-answer each node. A SQL row names the units in its `id`, `page_id`, `section_id`, `claim_id` and `source_id` columns,
-never a relation end such as `src_id`. A unit's text is a hit's snippet, a fetched body, a leveled fetch's content, a
-child's summary or a SQL row's `text`, `quote`, `snippet` or `body`, and a claim counts only with its text. In code mode
+A search names each hit and each folded unit that carries a snippet, a fetch the unit it read, a leveled fetch its own
+unit and every child it lists, and a graph answer each node. A SQL row names the units in its `id`, `page_id`,
+`section_id`, `claim_id` and `source_id` columns, never a relation end such as `src_id`. A unit's text is a hit's
+snippet, a folded unit's snippet, a fetched body, a leveled fetch's content, a child's summary or a SQL row's `text`,
+`quote`, `snippet` or `body`, and a claim counts only with its text. In code mode
 a unit any program tool call of the case returned counts when a `run_code` output carries the first 60 characters of its
 text, or, once every returned text the output carries is cut out, its id, ref or page id as a word. Any other result
 names no unit, and a tool return of any shape is read without raising.
@@ -143,10 +144,13 @@ def _received(content: ToolReturnContent, collection: str) -> Iterator[_Received
 
 
 def _hits_received(result: SearchResult) -> Iterator[_Received]:
-    """Each hit of a search with its snippet, a claim hit only when its snippet came with it."""
+    """Each hit of a search with its snippet, a claim hit only when its snippet came with it, then its folded units that carry one."""
     for hit in result.hits:
         if hit.hit_level != _CLAIM or _has_text(hit.snippet):
             yield _Received(unit=hit.id, page=hit.page_id or page_of(hit.id), text=hit.snippet)
+        for unit in hit.folded_units:
+            if _has_text(unit.snippet):
+                yield _Received(unit=unit.id, page=page_of(unit.id), text=unit.snippet)
 
 
 def _ref_received(ref: str, text: str | None, collection: str) -> Iterator[_Received]:
@@ -183,7 +187,10 @@ def _row_received(value: ToolReturnContent) -> Iterator[_Received]:
 def _texts(content: ToolReturnContent) -> Iterator[str]:
     """Every text one tool's result returned, a SQL row's text columns included whether or not the row names a unit."""
     if isinstance(content, SearchResult):
-        yield from (hit.snippet for hit in content.hits if hit.snippet is not None)
+        for hit in content.hits:
+            if hit.snippet is not None:
+                yield hit.snippet
+            yield from (unit.snippet for unit in hit.folded_units if unit.snippet is not None)
     elif isinstance(content, FetchResult):
         if content.body is not None:
             yield content.body

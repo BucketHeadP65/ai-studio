@@ -125,7 +125,8 @@ and did not cite it. A case with a seen recall of 0 never received it, which is 
 The units seen are read from the run's own messages, never from Logfire
 (`engram.evals.harness.seen_units`, filled per case by `capture_run_messages`, so a failed case
 keeps what it saw before it failed). A unit counts only when a result carries something of it,
-never when it carries a bare id that points at it. A `search` names each hit's `id`, a `fetch` the
+never when it carries a bare id that points at it. A `search` names each hit's `id` and each of its folded units that
+carries a snippet, a `fetch` the
 unit it read, a leveled `fetch` its own unit and every child it lists, and `graph_expand` and
 `find_paths` each node, never an edge's provenance claim. A `run_sql` row names the units in its
 `id`, `page_id`, `section_id`, `claim_id` and `source_id` columns, the row's own unit or the unit
@@ -145,7 +146,7 @@ Under `--code-mode` seen recall reads the `run_code` output the model reads, nev
 own tool returns directly. The candidates are every unit that any tool call of any program in the
 case returned so far, as code mode records them on each call's return (`metadata["tool_returns"]`)
 and read by the same rules as a direct call, so a search in one call that a later call prints
-counts. A unit's text is a hit's snippet, a fetched unit's body, a leveled fetch's content, a
+counts. A unit's text is a hit's snippet, a folded unit's snippet, a fetched unit's body, a leveled fetch's content, a
 child's summary, or a SQL row's `text`, `quote`, `snippet` or `body` (`api.claims` serves a claim's
 text and quote as `text` and `quote`). A candidate counts when an output carries the first 60 characters of its text, or all of it
 when shorter. Whitespace is collapsed on both sides, and the escapes a printed Python value or a
@@ -817,7 +818,7 @@ the trial.
 
 Sources are extracted from the typed result in payload order, first mention only, and canonicalized:
 search hits, fetched units, disclosed units with their child stubs, graph nodes, and each node along
-each returned path. A search hit's folded units are never sources, since they carry no text. No result in this
+each returned path. A search hit's folded units are not among them, though each carries a snippet. No result in this
 retrieval surface carries a content hash or a version, so
 every `DeliveredSource` records only `source_ref` and leaves `source_content_sha256` and
 `source_version` as `None`. Neither is ever derived from a snippet or a fetched body. A grade that
@@ -899,9 +900,11 @@ land. `ranked_metrics` (`RankedMetrics`: `recall`, `precision`, `reciprocal_rank
   call). A call that is not `ok`, stored no evidence, or whose payload the reader refuses reads
   `unknown` for that call alone. A trial with no `search` call at all is `not_applicable` (`calls == ()`).
 
-A search hit's folded units carry an id, a level and a ref, never any of the unit's text. A pointer the model was not
-shown the content of is not a unit it saw, so the surfaced layer and each `search` call's ranking count a hit's own
-unit alone and never its folded units, and so does any count of the units a trial saw.
+A search hit's folded units carry an id, a level, a ref and a short snippet of the text each matched. A folded unit
+with a snippet is content the model received, so each `search` call's ranking counts it right after its hit, best
+first, and seen recall counts it as a unit the trial saw. A folded unit whose snippet is missing or empty carries no
+content and counts in neither. The surfaced layer reads a call's delivered sources, which list a hit's own unit and
+never its folded units.
 
 Granularity (`"page"` collapses a reference to everything before its first `#` anchor delimiter,
 `"unit"` scores it exact) is a named argument on every layer function, applied identically to `got`
