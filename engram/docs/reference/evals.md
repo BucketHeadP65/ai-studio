@@ -344,9 +344,7 @@ not record it.
   `<knowledge_base root>/evals/pending_pages.<collection>.json`, each knowledge base's own queue under its own
   root, an absolute `datasets_dir` instead makes its parent the one shared queue home),
   `evals.datasets_dir` (dataset YAML location, default
-  `evals/datasets`), `evals.rca_queries_path` (saved-SQL file, default `evals/rca/queries.sql`),
-  `evals.models` (`APP_EVALS__MODELS`, the curated model specs the Studio run form offers,
-  default `("gpt-4.1", "test-model")`).
+  `evals/datasets`), `evals.rca_queries_path` (saved-SQL file, default `evals/rca/queries.sql`).
   `evals.generation` (`APP_EVALS__GENERATION__*`, the structural `gen-dataset` knobs, ADR-0016):
   `target_distribution` (the per-archetype share of the dataset, keyed by archetype name. Default
   weights `pinpoint 0.6 / survey 0.2 / trace 0.1 / synthesis 0.1`, and an unknown archetype is refused by name), `total_cases`
