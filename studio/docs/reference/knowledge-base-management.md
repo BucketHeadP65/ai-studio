@@ -521,7 +521,7 @@ database with no `alembic_version` table yet reports `at no revision`. A knowled
 with no outcome slot, there is nothing to report an outcome for. An indexing run whose fingerprint is stale against a failed
 refresh run reports the outcome `failed`, with the run's own detail appended in parentheses. `code expects <revision>` is
 `engram.init.contracts.code_head_revision()`, the alembic head the installed code declares, independent of what the database is
-actually at. `<when>` is `memory.index_fingerprint.indexed_at`, re-stamped by every indexing run that writes rows, full or
+actually at. `<when>` is `kb.index_fingerprint.indexed_at`, re-stamped by every indexing run that writes rows, full or
 incremental, so it names the last time the collection actually took a write, not the last global-invalidator change.
 
 The `<changed tail>` names how many files on disk differ from the stored index manifest, the same raw diff an incremental
