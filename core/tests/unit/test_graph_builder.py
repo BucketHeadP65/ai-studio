@@ -499,8 +499,8 @@ def test_the_currency_source_never_reaches_a_read_side_join() -> None:
 
 @pytest.mark.parametrize("builder", _BUILDERS)
 def test_no_currency_source_renders_exactly_what_the_node_view_rendered(builder: BaseGraphTraversalBuilder) -> None:
-    # Every descriptor written before the field existed leaves it unset, so its generated SQL — the
-    # bodies a frozen migration replays — must not move by a byte.
+    # A descriptor that leaves the field unset generates the same SQL as one naming the node view, so the
+    # bodies a frozen migration replays do not move by a byte.
     graph = _current_partitioned_graph()
     explicit = dataclasses.replace(graph, currency_source=graph.node_view)
     for method in ("expand_body", "paths_body", "refresh_body"):

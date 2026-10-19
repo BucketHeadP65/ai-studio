@@ -854,7 +854,7 @@ def test_a_workflow_that_declares_no_result_parses_and_keeps_its_identity() -> N
 
     assert spec.result is None, "a workflow that never declared its work cannot say what its result is"
     assert gate.max_attempts == 3, "the ceiling a gate takes when the workflow names none"
-    assert spec_identity(spec) == _UNDECLARED_WORKFLOW_HASH, "the pinned literal -- a moved hash orphans this workflow's evidence"
+    assert spec_identity(spec) == _UNDECLARED_WORKFLOW_HASH, "the pinned literal, because a moved hash orphans this workflow's evidence"
 
     outcome = observed_outcome(spec.result, status="completed", facts=(), primary=None, decisions=(), reviews={})
     assert outcome.status == "unknown", "no declared work is honestly unknown, never inferred success"
