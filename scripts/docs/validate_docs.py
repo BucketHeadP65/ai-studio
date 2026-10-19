@@ -24,7 +24,7 @@ Governed set: docs/** and <app>/docs/**, plus CONTEXT-MAP.md and every CONTEXT.m
 the lifecycle dirs `docs/brainstorming/`, `docs/specs/`, `docs/plans/`, and `docs/memory/Units/`
 (all governed page types now; see docs/knowledge-base-schema.json). Excluded: `docs/implementation/`
 (workflow state, never documentation), `docs/_meta/` (the vocabulary pages, their own
-grammar, claimed by no page type), `docs/superpowers/` (legacy workflow state), generated
+grammar, claimed by no page type), generated
 split-doc artifacts (`sections/` chunks and index.md files opening with a GENERATED banner), and
 `node_modules`.
 
@@ -45,7 +45,7 @@ SPEC = json.loads((REPO / "docs" / "knowledge-base-schema.json").read_text(encod
 PAGE_TYPES = {pt["page_type"]: pt for pt in SPEC["page_types"]}
 TYPES = set(PAGE_TYPES)
 
-EXCLUDED_PARTS = {"implementation", "superpowers", "sections", "node_modules"}
+EXCLUDED_PARTS = {"implementation", "sections", "node_modules"}
 # The repo-docs registry pages live ONLY at the repo-root `docs/_meta/` — a path-PREFIX test,
 # not a bare part-name exclusion. A bare `"_meta"` in EXCLUDED_PARTS would silently exempt any
 # directory anywhere in the governed set with that name, leaving it out of governance with no
