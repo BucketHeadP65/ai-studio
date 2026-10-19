@@ -400,7 +400,6 @@ const KNOWLEDGE_BASES: Wire<typeof KnowledgeBaseListResultSchema> = {
 // plus the detail-only fields the page reads.
 const KNOWLEDGE_BASE_DETAIL: Wire<typeof KnowledgeBaseDetailSchema> = {
   ...KNOWLEDGE_BASES.knowledge_bases[0],
-  sources_connector: null,
   sources_connectors: [],
   watch_list: [],
   validation: [],

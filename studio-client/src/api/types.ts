@@ -183,7 +183,6 @@ export const ScheduleReportSchema = z.object({
 export type ScheduleReport = z.infer<typeof ScheduleReportSchema>;
 
 export const KnowledgeBaseDetailSchema = KnowledgeBaseListEntrySchema.extend({
-  sources_connector: z.string().nullable(),
   sources_connectors: z.array(z.string()),
   watch_list: z.array(WatchEntrySchema),
   validation: z.array(ValidationRowSchema),

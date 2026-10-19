@@ -182,16 +182,14 @@ class PageDecisionOut(DecidedPageOut):
 class KnowledgeBaseDetail(KnowledgeBaseListEntry):
     """The `GET /api/knowledge-bases/{name}` response: every listing field, and everything else AI Factory Studio shows about one knowledge base.
 
-    `sources_connector` is kept for old callers, and it must agree with the first of `sources_connectors`.
-    `sources_connector` is `None` and `sources_connectors` is empty when the schema declares no sources or cannot be read.
+    `sources_connectors` is empty when the schema declares no sources or cannot be read.
     `validation` holds the index's standing issues, and it is empty when the knowledge base was never indexed.
     `source_queue` is filled only when the source-queue connector is declared.
     `last_refresh_run` is `None` before the first refresh, and `schedule` is `None` when no schedule is set.
-    `identity` is `None` unless the knowledge base is registered and its schema can be read, from its folder or else from the index.
+    `identity` is `None` unless the knowledge base is registered and the schema in its folder can be read.
     The open decisions are their own route, `GET /api/knowledge-bases/{name}/decisions`.
     """
 
-    sources_connector: str | None = None
     sources_connectors: tuple[str, ...] = ()
     watch_list: tuple[WatchEntry, ...] = ()
     validation: tuple[ValidationRow, ...] = ()

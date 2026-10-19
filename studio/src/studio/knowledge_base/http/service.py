@@ -563,7 +563,6 @@ class KnowledgeBaseRegistry:
         list_entry = _list_entry(name, entry, info, broken.get(name), schema)
         return KnowledgeBaseDetail(
             **list_entry.model_dump(),
-            sources_connector=connectors[0] if connectors else None,
             sources_connectors=connectors,
             validation=issues,
             source_queue=queued,

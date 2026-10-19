@@ -45,7 +45,6 @@ const KNOWLEDGE_BASES = {
 // instead of its own heading.
 const KNOWLEDGE_BASE_DETAIL = {
   ...KNOWLEDGE_BASES.knowledge_bases[0],
-  sources_connector: null,
   sources_connectors: [],
   watch_list: [],
   validation: [],

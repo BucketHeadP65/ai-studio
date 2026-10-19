@@ -903,8 +903,8 @@ class TestKnowledgeBaseDetail:
         body = response.json()
         assert (body["registered"], body["indexed"], body["pages"]) == (True, True, 3)
         assert body["description"] == "vids"
-        assert body["sources_connector"] == "intake"
         assert body["sources_connectors"] == ["intake"]
+        assert "sources_connector" not in body
         assert [issue["rule"] for issue in body["validation"]] == ["dangling-link"]
         assert [row["key"] for row in body["source_queue"]] == ["yt-dQw4w9WgXcQ"]
         assert body["source_queue"][0]["status"] == "requested"
@@ -1002,7 +1002,7 @@ class TestKnowledgeBaseDetail:
         assert response.status_code == 200
         body = response.json()
         assert (body["registered"], body["indexed"], body["pages"]) == (False, True, 7)
-        assert (body["sources_connector"], body["source_queue"]) == (None, [])
+        assert (body["sources_connectors"], body["source_queue"]) == ([], [])
 
     async def test_an_unknown_name_is_a_404(self, tmp_path: Path):
         settings, settings_path = _knowledge_bases_app_settings(tmp_path)
