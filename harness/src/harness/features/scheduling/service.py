@@ -163,8 +163,8 @@ async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollabor
     except running.RunEngineUnavailableError as exc:
         _logger.warning("schedule {schedule} found no engine: {reason}", schedule=str(schedule.id), reason=str(exc))
         return ENGINE_UNREACHABLE_OUTCOME
-    except running.AutomodeUnavailableError as exc:
-        return f"refused: {exc}"
+    except running.AutomodeUnavailableError:
+        return f"refused: {ORCHESTRATE_ON_TEMPORAL}"
     return "launched"
 
 

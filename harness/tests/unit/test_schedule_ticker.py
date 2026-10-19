@@ -249,6 +249,7 @@ async def test_an_orchestrate_schedule_already_stored_on_temporal_is_stamped_ref
 
     assert outcome.startswith("refused: ")
     assert "Temporal" in outcome
+    assert outcome.endswith("Save the schedule in wait or auto mode.")
     after = await schedules.get(schedule.id)
     assert after is not None
     assert after.last_outcome == outcome
