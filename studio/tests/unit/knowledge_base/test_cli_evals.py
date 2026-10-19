@@ -1478,7 +1478,7 @@ def _resolver_container(tmp_path: Path) -> ContainerResolver:
 
     `_factory`'s `build()` deliberately returns `object` (the `ctx.obj` contract); helper-level tests
     call `_default_run_instructions` directly, so they hand it the same `Resolver` adapter the
-    commands build. Building it also materialises the knowledge base's `Memory/` + `_meta/` directories the
+    commands build. Building it also materialises the knowledge base's schema file and the `_meta/` folder the
     active-policy file lives in.
     """
     from studio.knowledge_base.container import create_container

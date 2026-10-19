@@ -155,8 +155,8 @@ def _make_knowledge_base(tmp_path: Path) -> KnowledgeBaseSettings:
     """A real `KnowledgeBaseSettings` over a minimal on-disk knowledge base carrying the research template's schema.
 
     `_build_mcp_server` reads the knowledge base's spec from disk (`load_knowledge_base_schema`), so the test
-    materialises the `_meta/` folder and the `knowledge-base-schema.json` the settings validator requires
-    (the research template's own, whose `retrieval.profile` is `full`).
+    materialises the `knowledge-base-schema.json` the settings validator requires (the research template's own,
+    whose `retrieval.profile` is `full`) and a `_meta/` folder.
     """
     (tmp_path / "_meta").mkdir(parents=True, exist_ok=True)
     (tmp_path / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")

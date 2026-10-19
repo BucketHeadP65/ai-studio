@@ -911,13 +911,8 @@ class TestKnowledgeBaseEntryPrivacy:
 
         assert entry.private is True
 
-    def test_a_row_carrying_neither_validates_as_shared(self, tmp_path: Path):
+    def test_a_row_with_no_private_key_validates_as_shared(self, tmp_path: Path):
         assert KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path))}).private is False
-
-    def test_an_undeclared_library_key_leaves_private_as_declared(self, tmp_path: Path):
-        entry = KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path)), "private": True, "library": True})
-
-        assert entry.private is True
 
 
 class TestApplyStalenessMax:

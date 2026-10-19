@@ -127,7 +127,7 @@ def _raising_factory():
 def _build_knowledge_base(root: Path, *, with_mirror: bool = True) -> KnowledgeBaseSettings:
     """Materialise a minimal valid knowledge base under `root` from the golden fixtures.
 
-    Lays down the `Memory/` + `_meta/` directories `KnowledgeBaseSettings` requires,
+    Lays down a `Units/Papers/` folder, the `knowledge-base-schema.json` `KnowledgeBaseSettings` requires,
     copies the three real-format mini-vocabulary into `_meta/vocabulary/`, and
     (by default) the golden mirror excerpt into `Sources/` so quote
     verification can resolve it by `zotero_key`.

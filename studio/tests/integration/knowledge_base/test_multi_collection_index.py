@@ -449,11 +449,10 @@ async def _index(engine: AsyncEngine, knowledge_base: Path, collection: str) -> 
 async def _page_ids_for_collection(engine: AsyncEngine, collection: str) -> set[str]:
     """Return the set of non-meta page ids belonging to `collection`.
 
-    `meta.about` keeps its bare literal id only for the legacy `"research"` collection
-    (`engram.indexing.service.orientation.orientation_page_id`); every other collection's copy is
-    suffixed (`meta.about@{collection}`) and never collides with another non-research
-    collection's copy. Exclude it anyway so the query focuses on actual knowledge base content
-    pages, not the synthetic orientation page.
+    Every collection's `meta.about` is suffixed (`meta.about@{collection}`,
+    `engram.indexing.service.orientation.orientation_page_id`), so no two collections' copies
+    collide. Exclude it anyway so the query focuses on actual knowledge base content pages, not
+    the synthetic orientation page.
     """
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT id FROM kb.pages WHERE collection = :c AND id NOT LIKE 'meta.%'"), {"c": collection})
@@ -609,8 +608,7 @@ class TestMultiCollectionIndex:
     async def test_alpha_rows_survive_beta_index(self, engine: AsyncEngine, tmp_path: Path) -> None:  # type: ignore[override]
         """Phase 1 + 2: index alpha, then beta; alpha's rows must STILL be present at EVERY table.
 
-        `meta.about` keeps its bare literal id only for the legacy `"research"` collection; alpha
-        and beta each get their own suffixed copy and never collide — it is excluded here anyway,
+        Alpha and beta each get their own suffixed `meta.about` and never collide. It is excluded here anyway,
         since it is a synthetic orientation page, not knowledge base content. `unit_summaries` is seeded
         directly (`SummaryStage` is wired separately from `IndexKnowledgeBaseHandler` and is not
         exercised here).

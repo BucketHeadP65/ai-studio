@@ -6,7 +6,7 @@ payload, then ingested. The whole path runs through the public `memory` commands
 
 1. an authoring payload (modelled on the golden LightRAG benchmark claim, carrying a quote
    that appears verbatim in the golden mirror excerpt) →
-2. `memory note build --payload … --out <knowledge_base>/Memory/Papers/built.md --verify-quotes` against a
+2. `studio note build --payload … --out <knowledge_base>/Wiki/Papers/built.md --verify-quotes` against a
    :class:`~engram.testing.knowledge_base_builder.KnowledgeBaseBuilder` knowledge base whose ``Sources/`` holds that mirror
    excerpt → the build verifies every quote against the mirror *before* writing, exits 0, and the
    file exists;
@@ -186,7 +186,7 @@ class _IndexContainer:
 def _build_knowledge_base(root: Path) -> tuple[Path, KnowledgeBaseSettings]:
     """Lay down the knowledge base (entity + the golden mirror + registries + meta stubs); return root + settings.
 
-    The `Memory/Papers/` directory is created so `memory note build --out` (which writes
+    The `Wiki/Papers/` directory is created so `studio note build --out` (which writes
     atomically into an existing directory) can drop the authored paper note where the
     filesystem knowledge base reader will later index it.
     """
