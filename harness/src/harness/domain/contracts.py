@@ -67,7 +67,6 @@ from harness.domain.readiness import (
     effective_presentation,
     refusal_text,
 )
-from harness.domain.replies import said
 from harness.domain.session_types import DEFAULT_SESSION_TYPE, UNKNOWN_SESSION, SessionType, session_type_of
 
 __all__ = [
@@ -138,7 +137,6 @@ __all__ = [
     "open_turns",
     "presentation_of",
     "refusal_text",
-    "said",
     "selected_knowledge_bases",
     "session_spans",
     "session_type_of",

@@ -210,18 +210,17 @@ async def test_transcript_returns_payload_and_text(tmp_path: Path, projection_po
         assert messages[1]["run_id"] == "run-1"
 
 
-_OLD_ENVELOPE = json.dumps(
+_JSON_REPLY = json.dumps(
     {"message": "the prose", "spec_yaml": "name: x\nversion: 1\n", "title": "t", "summary": "s", "applicability": "a"}
 )
-"""The reply shape every turn recorded before replies were plain prose."""
+"""A reply a model wrote as a JSON object."""
 
 
-async def test_transcript_serves_an_old_envelope_as_the_prose_it_carried(tmp_path: Path, projection_pool: ProjectionPool) -> None:
-    """A reply the SPA reads back must be words, whichever side of the prose change recorded it.
+async def test_transcript_serves_every_reply_exactly_as_it_was_written(tmp_path: Path, projection_pool: ProjectionPool) -> None:
+    """A reply the SPA reads back is the text the model wrote, JSON or prose.
 
     Both halves of a response row are read: `text` is what search and the turn inspector show, and
-    the payload's text part is what the chat bubble renders. Prose recorded after the change comes
-    back exactly as it was said, and so does the person's own prompt.
+    the payload's text part is what the chat bubble renders. The person's own prompt comes back as typed.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
     session_log.record(SessionStarted(session_id=SESSION))
@@ -235,7 +234,7 @@ async def test_transcript_serves_an_old_envelope_as_the_prose_it_carried(tmp_pat
             step_index=0,
             messages=[
                 ModelRequest(parts=[UserPromptPart(content="draft me one")]),
-                ModelResponse(parts=[TextPart(content=_OLD_ENVELOPE)], usage=usage),
+                ModelResponse(parts=[TextPart(content=_JSON_REPLY)], usage=usage),
                 ModelRequest(parts=[UserPromptPart(content="and again")]),
                 ModelResponse(parts=[TextPart(content="plain prose, untouched")], usage=usage),
             ],
@@ -251,9 +250,9 @@ async def test_transcript_serves_an_old_envelope_as_the_prose_it_carried(tmp_pat
         messages = transcript.json()["messages"]
         replies = [message for message in messages if message["kind"] == "response"]
         prompts = [message for message in messages if message["kind"] == "request"]
-        assert [message["text"] for message in replies] == ["the prose", "plain prose, untouched"]
+        assert [message["text"] for message in replies] == [_JSON_REPLY, "plain prose, untouched"]
         assert [part["content"] for message in replies for part in message["payload"]["parts"] if part["part_kind"] == "text"] == [
-            "the prose",
+            _JSON_REPLY,
             "plain prose, untouched",
         ]
         assert [message["text"] for message in prompts] == ["draft me one", "and again"]

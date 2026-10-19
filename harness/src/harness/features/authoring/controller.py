@@ -31,7 +31,6 @@ from harness.domain.contracts import (
     SessionStarted,
     SessionType,
     TurnSteered,
-    said,
     strip_page_context,
 )
 from harness.features.authoring.api_models import AdaptRequest, ChatRequest, RunAdaptRequest, SessionIn, SteerIn
@@ -101,7 +100,7 @@ def _turns(history: Sequence[ModelMessage]) -> list[dict[str, str]]:
         for part in message.parts:
             if isinstance(part, UserPromptPart) and (asked := _asked(part.content)):
                 turns.append({"who": "you", "text": asked})
-            elif isinstance(part, TextPart) and (spoken := said(part.content)):
+            elif isinstance(part, TextPart) and (spoken := part.content.strip()):
                 turns.append({"who": "agent", "text": spoken})
     return turns
 
