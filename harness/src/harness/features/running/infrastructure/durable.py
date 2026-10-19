@@ -369,6 +369,7 @@ async def _record_evidence(
             result=Outcome(status="unknown", summary=_NOT_CHECKED),
             gates_approved=gates_approved,
             gates_auto=gates_auto,
+            gates_orchestrated=(),
             gates_rejected=gates_rejected,
             params=dict(ran.params),
             produced=produced,

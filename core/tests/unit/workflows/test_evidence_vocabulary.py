@@ -15,34 +15,53 @@ from core.ai.workflows.contracts import Outcome, RunEvidence, WorkflowState, tru
 
 
 def test_a_stopped_run_validates() -> None:
-    run = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="stopped")
+    run = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="stopped", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=())
     assert run.outcome == "stopped"
 
 
 def test_a_stopped_run_counts_like_a_failure_and_confirms_nothing() -> None:
-    record = trust_level([RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="stopped")])
+    record = trust_level([RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="stopped", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=())])
     assert record.level == "unverified"
     assert record.failed_runs == 1
     assert record.runs_with_evidence == 0
 
 
-def test_gates_auto_defaults_empty_and_never_reads_as_an_approval() -> None:
-    run = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", gates_auto=("review",))
+def test_gates_auto_never_reads_as_an_approval() -> None:
+    run = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", gates_auto=("review",), result=Outcome(status="unknown", summary="nothing was checked"), gates_orchestrated=())
     assert run.gates_auto == ("review",)
     assert run.gates_approved == ()
 
 
-def test_a_legacy_record_without_gates_auto_still_parses() -> None:
-    legacy = RunEvidence.model_validate({"kind": "run", "workflow_id": "wf.report", "spec_hash": "abc", "outcome": "completed"})
-    assert legacy.gates_auto == ()
+@pytest.mark.parametrize("missing", ["result", "gates_auto", "gates_orchestrated"])
+def test_a_run_record_missing_a_field_every_writer_writes_is_refused(missing: str) -> None:
+    record = {
+        "kind": "run",
+        "workflow_id": "wf.report",
+        "spec_hash": "abc",
+        "outcome": "completed",
+        "result": {"status": "unknown", "summary": "nothing was checked"},
+        "gates_auto": [],
+        "gates_orchestrated": [],
+    }
+    del record[missing]
+
+    with pytest.raises(ValidationError):
+        RunEvidence.model_validate(record)
+
+
+def test_a_run_record_whose_result_is_null_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        RunEvidence.model_validate(
+            {"kind": "run", "workflow_id": "wf.report", "spec_hash": "abc", "outcome": "completed", "result": None, "gates_auto": [], "gates_orchestrated": []}
+        )
 
 
 def test_an_execution_outcome_is_exactly_the_three_words_an_observer_can_see() -> None:
     """What mechanically happened, never whether the work was any good."""
     for outcome in ("completed", "failed", "stopped"):
-        assert RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome=outcome).outcome == outcome  # type: ignore[arg-type]
+        assert RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome=outcome, result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()).outcome == outcome  # type: ignore[arg-type]
     with pytest.raises(ValidationError):
-        RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="succeeded")  # type: ignore[arg-type]
+        RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="succeeded", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=())  # type: ignore[arg-type]
 
 
 def test_a_maps_skip_list_is_a_reason_per_failure_and_not_a_disposition_per_item() -> None:
@@ -54,15 +73,9 @@ def test_a_maps_skip_list_is_a_reason_per_failure_and_not_a_disposition_per_item
     assert not state.work_facts, "the disposition of one item is its own fact, filed elsewhere"
 
 
-def test_a_record_written_before_checked_outcomes_carries_none_and_is_never_regenerated() -> None:
-    legacy = RunEvidence.model_validate({"kind": "run", "workflow_id": "wf.report", "spec_hash": "abc", "outcome": "completed"})
-
-    assert legacy.result is None
-
-
 def test_only_a_completed_run_with_a_checked_result_confirms_anything() -> None:
     confirmed = RunEvidence(
-        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome(status="succeeded", summary="every item landed")
+        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome(status="succeeded", summary="every item landed"), gates_auto=(), gates_orchestrated=()
     )
     record = trust_level([confirmed])
 
@@ -72,7 +85,7 @@ def test_only_a_completed_run_with_a_checked_result_confirms_anything() -> None:
 
 def test_an_explicit_no_op_is_a_checked_result_and_confirms_the_workflow_runs() -> None:
     nothing_to_do = RunEvidence(
-        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome(status="noop", summary="nothing was waiting")
+        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome(status="noop", summary="nothing was waiting"), gates_auto=(), gates_orchestrated=()
     )
 
     assert trust_level([nothing_to_do]).level == "machine-confirmed"
@@ -81,7 +94,7 @@ def test_an_explicit_no_op_is_a_checked_result_and_confirms_the_workflow_runs() 
 @pytest.mark.parametrize("status", ["unknown", "partial", "failed"])
 def test_a_completed_run_whose_result_is_not_confirmed_is_counted_apart(status: str) -> None:
     ran = RunEvidence(
-        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome.model_validate({"status": status, "summary": "not confirmed"})
+        workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome.model_validate({"status": status, "summary": "not confirmed"}), gates_auto=(), gates_orchestrated=()
     )
     record = trust_level([ran])
 
@@ -91,17 +104,9 @@ def test_a_completed_run_whose_result_is_not_confirmed_is_counted_apart(status: 
     assert record.failed_runs == 0, "a completed run is not a failure"
 
 
-def test_a_run_that_never_reported_a_checked_result_confirms_nothing_and_is_not_rewritten() -> None:
-    legacy = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed")
-    record = trust_level([legacy])
-
-    assert record.level == "unverified"
-    assert record.unconfirmed_runs == 1
-
-
 def test_an_approval_still_carries_the_workflow_whatever_the_runs_say() -> None:
     from core.ai.workflows.contracts import Approval
 
-    events = [RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed"), Approval(workflow_id="wf.report", spec_hash="abc", by="human:owner")]
+    events = [RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()), Approval(workflow_id="wf.report", spec_hash="abc", by="human:owner")]
 
     assert trust_level(events).level == "approved"

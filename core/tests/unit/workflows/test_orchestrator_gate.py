@@ -244,12 +244,6 @@ def test_rejecting_to_a_node_that_does_not_exist_is_refused(quarterly_report: Wo
 # --- the evidence ------------------------------------------------------------------------
 
 
-def test_a_legacy_evidence_record_without_gates_orchestrated_still_parses() -> None:
-    legacy = RunEvidence.model_validate({"kind": "run", "workflow_id": "wf.report", "spec_hash": "abc", "outcome": "completed"})
-
-    assert legacy.gates_orchestrated == ()
-
-
 def test_an_orchestrated_run_is_attested_and_still_not_a_human_approval() -> None:
     """Machine-confirmed is what an orchestrated run earns once its own work checks out, and nobody's approval."""
     run = RunEvidence(
@@ -257,7 +251,7 @@ def test_an_orchestrated_run_is_attested_and_still_not_a_human_approval() -> Non
         spec_hash="abc",
         outcome="completed",
         gates_orchestrated=("approve",),
-        result=Outcome(status="succeeded", summary="the report was published"),
+        result=Outcome(status="succeeded", summary="the report was published"), gates_auto=()
     )
 
     record = trust_level([run])
@@ -274,7 +268,7 @@ def test_an_orchestrated_run_that_checked_out_as_nothing_confirms_nothing() -> N
         spec_hash="abc",
         outcome="completed",
         gates_orchestrated=("approve",),
-        result=Outcome(status="unknown", summary="the primary work never settled"),
+        result=Outcome(status="unknown", summary="the primary work never settled"), gates_auto=()
     )
 
     record = trust_level([run])

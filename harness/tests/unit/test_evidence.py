@@ -55,14 +55,17 @@ if TYPE_CHECKING:
 
 
 CONFIRMED = Outcome(status="succeeded", summary="every piece of the primary work succeeded")
-"""The checked outcome of a run that did what it said. A completed run without one confirms nothing,
-so every fixture below about filtering carries it: the subject there is which events answer a
+"""The checked outcome of a run that did what it said. A completed run with an unknown one confirms nothing,
+so every completed fixture below about filtering carries this one: the subject there is which events answer a
 question, never whether a run earned its confirmation."""
+
+UNCHECKED = Outcome(status="unknown", summary="the run did not complete, so nothing was checked")
+"""The checked outcome a run that failed or stopped records."""
 
 
 def _run(outcome: str = "completed", **kwargs: object) -> RunEvidence:
-    checked = {"result": CONFIRMED} if outcome == "completed" else {}
-    return RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome=outcome, **checked | kwargs)  # type: ignore[arg-type]
+    fields: dict[str, object] = {"result": CONFIRMED if outcome == "completed" else UNCHECKED, "gates_auto": (), "gates_orchestrated": ()}
+    return RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome=outcome, **fields | kwargs)  # type: ignore[arg-type]
 
 
 def test_nothing_attested_is_unverified() -> None:
@@ -94,7 +97,7 @@ def test_an_approval_is_a_human_act_with_an_author() -> None:
 def test_a_structural_grade_is_folded_and_the_tier_ignores_it() -> None:
     """A grade is evidence of quality, not of completion -- the tier still only earns off `outcome`."""
     events = [
-        RunEvidence(workflow_id="wf.r.v1", spec_hash="sha256:abc", workflow_version=1, outcome="completed", result=CONFIRMED),
+        RunEvidence(workflow_id="wf.r.v1", spec_hash="sha256:abc", workflow_version=1, outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()),
         Grade(
             workflow_id="wf.r.v1",
             spec_hash="sha256:abc",
@@ -149,7 +152,7 @@ def test_approved_gates_are_read_off_run_state(quarterly_report: Workflow) -> No
 async def test_the_file_ledger_appends_and_filters(tmp_path: Path) -> None:
     ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
     await ledger.append(_run())
-    await ledger.append(RunEvidence(workflow_id="wf.other", spec_hash="abc", outcome="completed", result=CONFIRMED))
+    await ledger.append(RunEvidence(workflow_id="wf.other", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()))
     await ledger.append(Approval(workflow_id="wf.report", spec_hash="abc", by="human:alex"))
 
     events = await ledger.events_for("wf.report")
@@ -232,7 +235,7 @@ def test_trust_does_not_carry_across_a_version_the_ledger_never_saw() -> None:
     cannot answer for one. That is deliberately conservative: an unversioned evidence record is not
     evidence about v2, and unknown is not the same as earned -- the same ruling staleness makes.
     """
-    ran_v1 = RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=1, outcome="completed", result=CONFIRMED)
+    ran_v1 = RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=1, outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=())
 
     assert trust_level([ran_v1], version=1).level == "machine-confirmed"
     assert trust_level([ran_v1], version=2).level == "unverified", "v2 has never run"
@@ -242,8 +245,8 @@ def test_trust_does_not_carry_across_a_version_the_ledger_never_saw() -> None:
 def test_asking_for_no_version_still_folds_the_whole_ledger() -> None:
     """The unfiltered question stays askable: "has this artifact ever run successfully?"."""
     events = [
-        RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=1, outcome="completed", result=CONFIRMED),
-        RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=2, outcome="failed"),
+        RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=1, outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()),
+        RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=2, outcome="failed", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()),
     ]
     record = trust_level(events)
     assert record.runs_with_evidence == 1
@@ -252,7 +255,7 @@ def test_asking_for_no_version_still_folds_the_whole_ledger() -> None:
 
 def test_an_evidence_record_that_never_recorded_a_version_cannot_count_for_one(tmp_path: Path) -> None:
     """A record that names no version is no evidence for one: absence of evidence is not evidence."""
-    unversioned = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED)
+    unversioned = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=())
     assert trust_level([unversioned]).level == "machine-confirmed", "unfiltered, it is still a run that happened"
     assert trust_level([unversioned], version=1).level == "unverified", "but it cannot claim to be v1's run"
 
@@ -285,18 +288,19 @@ async def test_a_line_naming_no_content_address_is_skipped_like_a_damaged_one(tm
     assert [type(event).__name__ for event in await ledger.events_for("wf.report")] == ["Approval"]
 
 
-_COMPLETED_RUN_WITHOUT_RESULT_JSON = (
+_COMPLETED_RUN_WITH_AN_UNKNOWN_RESULT_JSON = (
     '{"kind":"run","workflow_id":"wf.quarterly-close","spec_hash":"abc","outcome":"completed",'
-    '"gates_approved":["approve_report"],"produced":{"collect_sales":"object"}}'
+    '"result":{"status":"unknown","summary":"nothing was checked"},"gates_approved":["approve_report"],'
+    '"gates_auto":[],"gates_orchestrated":[],"produced":{"collect_sales":"object"}}'
 )
-"""A completed run's evidence with no checked outcome, hand-typed, never dumped from today's model, so a
+"""A completed run's evidence whose checked outcome is unknown, hand-typed, never dumped from today's model, so a
 change to what gets defaulted fails loudly here rather than the fixture growing the field with the code."""
 
 
-def test_a_completed_run_with_no_checked_outcome_reads_unconfirmed() -> None:
-    """A run with no `result` cannot borrow the confirmation it never earned."""
-    unchecked = RunEvidence.model_validate_json(_COMPLETED_RUN_WITHOUT_RESULT_JSON)
-    assert unchecked.result is None
+def test_a_completed_run_with_an_unknown_checked_outcome_reads_unconfirmed() -> None:
+    """A run whose facts establish nothing cannot borrow the confirmation it never earned."""
+    unchecked = RunEvidence.model_validate_json(_COMPLETED_RUN_WITH_AN_UNKNOWN_RESULT_JSON)
+    assert unchecked.result.status == "unknown"
 
     record = trust_level([unchecked])
     assert record.level == "unverified"
@@ -311,8 +315,8 @@ def test_trust_is_asked_by_what_ran_rather_than_by_where_it_was_kept() -> None:
     id. Keyed on the hash they fold into one history; keyed on either address, half of it vanishes.
     """
     moved = [
-        RunEvidence(workflow_id="audit-a-claim@1", spec_hash="abc", outcome="completed", result=CONFIRMED),
-        RunEvidence(workflow_id="wf.audit-a-claim.v1", spec_hash="abc", outcome="completed", result=CONFIRMED),
+        RunEvidence(workflow_id="audit-a-claim@1", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()),
+        RunEvidence(workflow_id="wf.audit-a-claim.v1", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()),
     ]
     assert trust_level(moved, spec_hash="abc").runs_with_evidence == 2
     assert trust_level(moved, spec_hash="def").level == "unverified", "a different artifact's hash matches nothing"
@@ -327,14 +331,14 @@ def test_the_empty_hash_is_refused_as_an_identity() -> None:
 def test_a_version_bump_needs_no_version_filter(quarterly_report: Workflow) -> None:
     """Version is a field of the spec, so a v4 run cannot be found under v3's hash. No second filter."""
     v3, v4 = quarterly_report, quarterly_report.model_copy(update={"version": 4})
-    ran_v4 = RunEvidence(workflow_id="wf.report", spec_hash=spec_identity(v4), outcome="completed", result=CONFIRMED)
+    ran_v4 = RunEvidence(workflow_id="wf.report", spec_hash=spec_identity(v4), outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=())
     assert trust_level([ran_v4], spec_hash=spec_identity(v4)).level == "machine-confirmed"
     assert trust_level([ran_v4], spec_hash=spec_identity(v3)).level == "unverified"
 
 
 def test_the_two_filters_compose_rather_than_replacing_each_other() -> None:
     """The version filter and the hash filter each narrow the same fold."""
-    events = [RunEvidence(workflow_id="wf.report", workflow_version=2, spec_hash="abc", outcome="completed", result=CONFIRMED)]
+    events = [RunEvidence(workflow_id="wf.report", workflow_version=2, spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=())]
     assert trust_level(events, version=2, spec_hash="abc").runs_with_evidence == 1
     assert trust_level(events, version=1, spec_hash="abc").runs_with_evidence == 0
 
@@ -345,8 +349,8 @@ async def test_history_found_by_hash_survives_a_change_of_address(tmp_path: Path
     The two ids here are this repo's own re-keying: one page per NAME, then one page per version.
     """
     ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
-    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED))
-    await ledger.append(RunEvidence(workflow_id="wf.report.v1", spec_hash="abc", outcome="completed", result=CONFIRMED))
+    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()))
+    await ledger.append(RunEvidence(workflow_id="wf.report.v1", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()))
 
     history = await ledger.history_for(spec_hash="abc")
     assert len(history) == 2, "the run filed under the old address is this artifact's too"
@@ -356,7 +360,7 @@ async def test_history_found_by_hash_survives_a_change_of_address(tmp_path: Path
 async def test_another_artifacts_records_at_the_same_address_are_neither(tmp_path: Path) -> None:
     """A record that says what it ran and says something else is not unknown -- it is known to be other."""
     ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
-    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="other", outcome="completed", result=CONFIRMED))
+    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="other", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()))
 
     assert await ledger.history_for(spec_hash="abc") == (), "it knows what it exercised, and it was not this"
 
@@ -372,7 +376,7 @@ async def test_a_damaged_line_does_not_amnesia_a_hash_lookup_either(tmp_path: Pa
     """One bad write must not amnesia the ledger, on the new read path as much as the old one."""
     path = tmp_path / "evidence.jsonl"
     ledger = FileEvidenceLog(path)
-    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED))
+    await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED, gates_auto=(), gates_orchestrated=()))
     with path.open("a", encoding="utf-8") as handle:
         handle.write("{not json\n")
     await ledger.append(Approval(workflow_id="wf.report", spec_hash="abc", by="human:alex"))

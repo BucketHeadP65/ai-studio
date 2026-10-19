@@ -63,19 +63,16 @@ class RunEvidence(BaseModel):
     """How the execution ended. `stopped` is a person ending the run on purpose, and confirms
     nothing, exactly like `failed`. `completed` says the graph reached its end, never that the work
     was done. `result` answers that."""
-    result: Outcome | None = None
-    """What the run's own facts say it did, classified when it ended.
-
-    `None` means this record cannot say, as on a record written without a checked outcome. It is
-    never filled in afterwards."""
+    result: Outcome
+    """What the run's own facts say it did, classified when it ended. Status `unknown` when they establish nothing."""
     gates_approved: tuple[str, ...] = ()
     """Gates a person released the value of, read off run state and never self-reported."""
-    gates_auto: tuple[str, ...] = ()
+    gates_auto: tuple[str, ...]
     """Gates passed automatically, releasing their value without a person deciding.
 
     Never a `gates_approved` entry. `trust_level` ignores this field, because a gate passed
     automatically is not an approval."""
-    gates_orchestrated: tuple[str, ...] = ()
+    gates_orchestrated: tuple[str, ...]
     """Orchestrator gates the host's own agent approved, read off run state and never self-reported.
 
     `trust_level` never reads this field. An orchestrator clearing a gate the workflow said it
@@ -237,9 +234,9 @@ def trust_level(
     )
 
 
-def _is_confirmed(result: Outcome | None) -> bool:
+def _is_confirmed(result: Outcome) -> bool:
     """Whether a completed run's checked outcome says the declared work happened: `succeeded` or `noop`."""
-    return result is not None and result.status in ("succeeded", "noop")
+    return result.status in ("succeeded", "noop")
 
 
 def approved_gates(workflow: Workflow, values: Mapping[str, object]) -> tuple[str, ...]:

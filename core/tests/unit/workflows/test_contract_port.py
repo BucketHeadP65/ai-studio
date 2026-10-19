@@ -352,7 +352,7 @@ async def test_the_ledger_puts_earned_trust_on_the_search_and_fetch_surface(
             workflow_version=quarterly_report.version,
             outcome="completed",
             result=Outcome(status="succeeded", summary="the report was published"),
-            runner="test",
+            runner="test", gates_auto=(), gates_orchestrated=()
         )
     )
     host = FakeHost(rows={"wf-quarterly-report": yaml.safe_dump(quarterly_report.model_dump(mode="json"))})

@@ -393,4 +393,4 @@ def chains_after(evidence: RunEvidence) -> bool:
     Returns:
         True when the run's checked outcome is one of `CHAINED_OUTCOMES`.
     """
-    return evidence.result is not None and evidence.result.status in CHAINED_OUTCOMES
+    return evidence.result.status in CHAINED_OUTCOMES

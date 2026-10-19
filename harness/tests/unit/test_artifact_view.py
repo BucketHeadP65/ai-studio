@@ -201,7 +201,7 @@ async def test_a_stamp_that_no_longer_parses_is_unknown_rather_than_a_crash(libr
 async def _record_evidence(spec: Workflow, workflow_id: str, produced: dict[str, str], tmp_path: Path) -> None:
     """Write one completed run into the ledger the view reads."""
     await records_under(tmp_path).evidence.append(
-        RunEvidence(workflow_id=workflow_id, spec_hash=spec_identity(spec), outcome="completed", produced=produced, runner="test")
+        RunEvidence(workflow_id=workflow_id, spec_hash=spec_identity(spec), outcome="completed", produced=produced, runner="test", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=())
     )
 
 
@@ -245,7 +245,7 @@ async def test_a_run_that_failed_is_not_birth_evidence(library: FolderLibrary, q
     workflow_id = await save(quarterly_report, library, registry, title="Q", summary="s", applicability="a", saved_by="test")
     await records.evidence.append(
         RunEvidence(
-            workflow_id=workflow_id, spec_hash=spec_identity(quarterly_report), outcome="failed", produced={"fetch_sales": "SalesData"}, runner="test"
+            workflow_id=workflow_id, spec_hash=spec_identity(quarterly_report), outcome="failed", produced={"fetch_sales": "SalesData"}, runner="test", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()
         )
     )
     controller = _install(registry, library, tmp_path)
@@ -273,7 +273,7 @@ async def test_a_child_that_never_ran_says_which_nodes_its_parent_vouched_for(li
             spec_hash=spec_identity(quarterly_report),
             workflow_version=quarterly_report.version,
             outcome="completed",
-            produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"},
+            produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"}, result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()
         )
     )
     child, lineage = adapt(quarterly_report, ops=({"op": "remove_node", "id": "publish"}, {"op": "set_output", "to": {"node": "approve"}}))
@@ -306,7 +306,7 @@ async def test_runs_earned_under_another_address_still_count_for_the_artifact(li
             workflow_id="wf.somewhere.else.v3",
             spec_hash=spec_identity(quarterly_report),
             outcome="completed",
-            result=Outcome(status="succeeded", summary="the report was published"),
+            result=Outcome(status="succeeded", summary="the report was published"), gates_auto=(), gates_orchestrated=()
         )
     )
     controller = _install(registry, library, tmp_path)
@@ -341,7 +341,7 @@ async def test_a_child_cannot_inherit_its_parents_runs_through_the_hash(library:
             workflow_id=child_id,
             spec_hash=spec_identity(quarterly_report),
             outcome="completed",
-            result=Outcome(status="succeeded", summary="the report was published"),
+            result=Outcome(status="succeeded", summary="the report was published"), gates_auto=(), gates_orchestrated=()
         )
     )
     controller = _install(registry, library, tmp_path)
