@@ -102,8 +102,9 @@ class ResultsLine(BaseModel):
     """Whether the answer shared a word with the expected answer."""
     failed: bool
     """Whether the case raised instead of answering. A failed case counts as incorrect."""
-    sources: tuple[str, ...] | None
-    """The source ids the case's citations map to, or None when the run mapped none, so its scores are over page ids."""
+    sources: tuple[str | None, ...] | None
+    """The source id each of the case's citations maps to, None for one that holds no source, or None when the run mapped
+    none, so its scores are over page ids."""
     recall_at_4: float | None = Field(validation_alias="recall@4")
     """Recall at 4 against the case's gold ids, or None for a case with no gold ids. The file's key is `recall@4`."""
     recall_at_10: float | None = Field(validation_alias="recall@10")

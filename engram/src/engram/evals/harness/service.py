@@ -700,9 +700,9 @@ async def _index_identity(container: Resolver, collection: str) -> _IndexIdentit
 
 @dataclass(frozen=True)
 class _CaseSources:
-    """The ranked sources each answered case cited, and the sources each case's tool results named, keyed by case name."""
+    """The source each answered case's citations hold, one rank per citation, and the sources each case's tool results named, keyed by case name."""
 
-    cited: Mapping[str, Sequence[str]]
+    cited: Mapping[str, Sequence[str | None]]
     seen: Mapping[str, frozenset[str]]
 
 
@@ -723,7 +723,10 @@ async def _case_sources(
     page_sources = await hit_sources.source_ids(collection, sorted(pages)) if pages else {}
     return _CaseSources(
         cited={name: ranked_sources([as_hit(ref, pages) for ref in refs], page_sources)[0] for name, refs in cited.items()},
-        seen={name: frozenset(ranked_sources([as_hit(unit, pages) for unit in units], page_sources)[0]) for name, units in seen_units.items()},
+        seen={
+            name: frozenset(source for source in ranked_sources([as_hit(unit, pages) for unit in units], page_sources)[0] if source is not None)
+            for name, units in seen_units.items()
+        },
     )
 
 

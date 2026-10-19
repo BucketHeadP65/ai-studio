@@ -572,6 +572,16 @@ def test_the_reader_reads_the_sources_and_the_retrieval_scores(tmp_path: Path):
     assert (second.sources, second.recall_at_4, second.recall_at_10, second.mrr) == (None, None, None, None)
 
 
+def test_the_reader_reads_a_citation_that_holds_no_source(tmp_path: Path):
+    path = tmp_path / "a.jsonl"
+    scored = dataclasses.replace(_written_line("c1", strict=True), sources=(None, "s1", None), recall_at_4=1.0, recall_at_10=1.0, mrr=0.5)
+    write_results(path, _WRITTEN_HEADER, [scored])
+
+    (line,) = read_results(path).lines
+
+    assert (line.sources, line.mrr) == ((None, "s1", None), 0.5)
+
+
 _WRITTEN_HEADER = WrittenHeader(
     strategy="search-hybrid",
     sql=True,

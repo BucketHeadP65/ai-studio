@@ -2,7 +2,8 @@
 
 A case that failed is written as incorrect with its error and whether it failed transiently, so two runs of one
 dataset always pair case by case. Each line scores recall@4, recall@10 and MRR against the case's gold ids, over the
-source ids its citations map to when the run mapped them, and over its cited page ids otherwise. When the run mapped
+source ids its citations map to when the run mapped them, one rank per citation, and over its cited page ids otherwise.
+A citation with no source and a repeat of a source cited above it each hold their rank and match nothing. When the run mapped
 sources, each line also carries its seen recall: the share of its gold ids among the sources its tool results named. A
 file written by an older run reads back with code mode off, the thinking level unset, `search_date_range` as the
 opposite of `pinned_search`, the index build unknown, no seen recall, and whether each failure was transient read from
@@ -100,8 +101,11 @@ class ResultsLine:
     """The agent's answer, or None for a failed case."""
     cited: tuple[str, ...]
     """The ids the agent cited, in its order."""
-    sources: tuple[str, ...] | None
-    """The source ids the citations map to, each once at its first rank, or None when the run mapped none."""
+    sources: tuple[str | None, ...] | None
+    """The source id each citation maps to, one per citation, or None when the run mapped none.
+
+    A source counts once, at its first citation. A citation with no source and a repeat of a source cited above it are None.
+    """
     recall_at_4: Annotated[float | None, Field(validation_alias="recall@4")]
     """Recall at 4 against the gold ids, or None for a case with no gold ids. The file's key is `recall@4`."""
     recall_at_10: Annotated[float | None, Field(validation_alias="recall@10")]
@@ -156,7 +160,7 @@ _CASE_LINE = TypeAdapter(ResultsLine)
 def results_lines(  # noqa: PLR0913 (the report, its sources, its flags, the order and the kept lines are distinct inputs)
     report: EvaluationReport[QaInput, RetrievalAnswer, QaCaseMeta],
     *,
-    sources: Mapping[str, Sequence[str]] | None,
+    sources: Mapping[str, Sequence[str | None]] | None,
     seen: Mapping[str, Collection[str]] | None = None,
     other_collection: Collection[str],
     case_order: Sequence[str],
@@ -168,8 +172,8 @@ def results_lines(  # noqa: PLR0913 (the report, its sources, its flags, the ord
 
     Args:
         report: The run's report.
-        sources: The ranked source ids each answered case's citations map to, keyed by case name, or None when the
-            run mapped none. An answered case missing here maps to no source.
+        sources: The source id each answered case's citations map to, one rank per citation, keyed by case name, or None
+            when the run mapped none. An answered case missing here maps to no source.
         seen: The source ids each case's tool results named, answered and failed cases alike, keyed by case name. It is
             read only when `sources` is not None, and a case missing here saw no source.
         other_collection: The names of the cases whose SQL rows named another knowledge base.
@@ -292,7 +296,7 @@ def dataset_sha256(dataset: EvaluationDataset) -> str:
 def _answered_line(
     case: ReportCase[QaInput, RetrievalAnswer, QaCaseMeta],
     *,
-    sources: Mapping[str, Sequence[str]] | None,
+    sources: Mapping[str, Sequence[str | None]] | None,
     seen: Mapping[str, Collection[str]] | None,
     other_collection: Collection[str],
 ) -> ResultsLine:
@@ -371,7 +375,7 @@ def _seen_scores(case: str, seen: Mapping[str, Collection[str]] | None, gold: Se
     return seen_gold, len(seen_gold) / len(distinct)
 
 
-def _retrieval_scores(cited: Sequence[str], mapped: Sequence[str] | None, gold: Sequence[str]) -> tuple[float | None, float | None, float | None]:
+def _retrieval_scores(cited: Sequence[str], mapped: Sequence[str | None] | None, gold: Sequence[str]) -> tuple[float | None, float | None, float | None]:
     """Recall at 4, recall at 10 and MRR over the mapped sources, or the cited pages when nothing was mapped."""
     if not gold:
         return None, None, None

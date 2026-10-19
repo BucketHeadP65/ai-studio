@@ -1,8 +1,9 @@
 """The search setups, hits as ranked source documents, and one case's scores against its relevance judgments.
 
-Every metric is per document. A raw chunk's document is its id up to the last `:`, and a page's document is the
-source its page record names. A document keeps its first rank. A gold or judged id that names a page is read as that
-page's source document too.
+Every metric is per document and reads the first k hits. A raw chunk's document is its id up to the last `:`, and a
+page's document is the source its page record names. Each hit holds one rank. A document counts once, at the rank of
+its first hit, and a hit with no source document or a repeat of a document ranked above it holds its rank and matches
+nothing. A gold or judged id that names a page is read as that page's source document too.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
 
 SCORE_KS: tuple[int, ...] = (1, 5, 10)
-"""The recall cutoffs a score reports. Recall past 10 is left out, since 50 chunk hits can be fewer documents."""
+"""The recall cutoffs a score reports, each a number of hits."""
 
 NDCG_K = 10
 """The nDCG cutoff."""
@@ -89,8 +90,9 @@ class CaseScore(BaseModel):
     ndcg_at_10: float
     recall: dict[int, float]
     reciprocal_rank: float
-    ranked: tuple[str, ...] = ()
-    """The first `NDCG_K` source documents the search ranked, the ones nDCG@10 reads, not every document it returned."""
+    ranked: tuple[str | None, ...] = ()
+    """The first `NDCG_K` ranks, the ones nDCG@10 reads: each hit's source document, or None for a hit with no source document
+    or a repeat of a document ranked above it."""
     unmapped_hits: int = 0
     hits: int = 0
     """How many hits the case's search returned, 0 when it returned none at all."""
@@ -108,25 +110,30 @@ def page_ids_of(hits: Sequence[HitRef]) -> list[str]:
     return list(dict.fromkeys(hit.page_id or hit.id for hit in hits if hit.hit_level != "raw"))
 
 
-def ranked_sources(hits: Sequence[HitRef], page_sources: Mapping[str, str]) -> tuple[list[str], int]:
-    """The source documents `hits` came from, each once at its first rank, and how many hits named no source.
+def ranked_sources(hits: Sequence[HitRef], page_sources: Mapping[str, str]) -> tuple[list[str | None], int]:
+    """One rank per hit, holding the source document the hit came from, and how many hits named no source.
+
+    A document counts once, at the rank of its first hit. A hit with no source document and a repeat of a document ranked
+    above it each hold their rank as None, which matches nothing.
 
     Args:
         hits: The search hits, in rank order.
         page_sources: The source document of each page among the hits that names one.
 
     Returns:
-        The ranked documents and the count of hits that mapped to none.
+        The ranks, as many as `hits`, and the count of hits that mapped to no source document.
     """
-    ranked: dict[str, None] = {}
+    ranked: list[str | None] = []
+    seen: set[str] = set()
     unmapped = 0
     for hit in hits:
         source = hit.id.rsplit(":", 1)[0] if hit.hit_level == "raw" else page_sources.get(hit.page_id or hit.id)
         if source is None:
             unmapped += 1
-            continue
-        ranked.setdefault(source, None)
-    return list(ranked), unmapped
+        ranked.append(source if source is not None and source not in seen else None)
+        if source is not None:
+            seen.add(source)
+    return ranked, unmapped
 
 
 class SourceGold(BaseModel):
@@ -182,13 +189,13 @@ def _document_of(identifier: str, pages: Collection[str], page_sources: Mapping[
     return None if identifier in pages else identifier
 
 
-def score_case(*, ranked: Sequence[str], gold: Sequence[str], judgments: Mapping[str, int]) -> CaseScore:
+def score_case(*, ranked: Sequence[str | None], gold: Sequence[str], judgments: Mapping[str, int]) -> CaseScore:
     """One case's scores against its gold ids and relevance judgments.
 
     A case with no judgments, a generated one, scores every gold id as grade 1.
 
     Args:
-        ranked: The ranked source documents.
+        ranked: One rank per hit, as `ranked_sources` gives them.
         gold: The case's gold ids.
         judgments: The relevance judgment of each judged document, empty for a generated case.
 
@@ -277,7 +284,8 @@ def score_markdown(score: DatasetScore, *, dataset: str, collection: str) -> str
         f"Hits that named no source document: {score.unmapped_hits}.",
         f"Gold ids that name a page with no source document: {score.unmappable_gold}.",
         f"Cases left out because no gold id names a source document: {score.cases_without_gold}.",
-        "Recall past 10 is not reported, because 50 chunk hits can collapse to fewer than 50 documents.",
+        "Each hit holds one rank. A hit with no source document, or a repeat of a document ranked above it, matches nothing.",
+        "Recall past 10 is not reported.",
     ]
     if score.cases_without_hits:
         lines.append(f"Cases whose search returned no hits at all: {score.cases_without_hits} of {len(score.cases)}.")

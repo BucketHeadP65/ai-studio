@@ -38,18 +38,31 @@ def _section(unit_id: str) -> HitRef:
     return HitRef(id=unit_id, hit_level="section", page_id=unit_id.split("#", 1)[0])
 
 
-def test_two_chunks_of_one_document_count_once_at_the_better_rank():
-    assert ranked_sources([_raw("d1:3"), _raw("d1:7"), _raw("d2:0")], {}) == (["d1", "d2"], 0)
+def test_two_chunks_of_one_document_count_once_at_the_first_rank_and_the_repeat_holds_its_own_rank():
+    assert ranked_sources([_raw("d1:3"), _raw("d1:7"), _raw("d2:0")], {}) == (["d1", None, "d2"], 0)
 
 
 def test_a_page_hit_maps_through_its_page_s_source():
     hits = [_card("dg.paper-x"), _section("dg.paper-x#methods"), _raw("d9:1")]
 
-    assert ranked_sources(hits, {"dg.paper-x": "d4"}) == (["d4", "d9"], 0)
+    assert ranked_sources(hits, {"dg.paper-x": "d4"}) == (["d4", None, "d9"], 0)
 
 
-def test_a_hit_with_no_source_is_dropped_and_counted():
-    assert ranked_sources([_card("dg.orphan"), _raw("d1:0")], {}) == (["d1"], 1)
+def test_a_hit_with_no_source_holds_its_rank_and_is_counted():
+    assert ranked_sources([_card("dg.orphan"), _raw("d1:0")], {}) == ([None, "d1"], 1)
+
+
+def test_entity_hits_above_the_gold_source_take_the_first_ranks():
+    hits = [_card("dg.entity-a"), _card("dg.entity-b"), _raw("d1:0")]
+    ranked, unmapped = ranked_sources(hits, {})
+
+    scores = score_case(ranked=ranked, gold=("d1",), judgments={})
+
+    assert unmapped == 2
+    assert scores.recall == {1: 0.0, 5: 1.0, 10: 1.0}
+    assert scores.reciprocal_rank == pytest.approx(1 / 3)
+    assert scores.ndcg_at_10 == pytest.approx(1 / math.log2(4))
+    assert scores.ranked == (None, None, "d1")
 
 
 def test_a_case_with_judgments_scores_ndcg_from_the_grades():
@@ -130,8 +143,8 @@ async def test_a_dataset_is_scored_case_by_case_and_as_means(tmp_path: Path):
     score = await score_dataset(_dataset(tmp_path), collection="scifact", search=search, sources=sources)
 
     assert [case.name for case in score.cases] == ["q1", "q2"]
-    assert score.means["recall@1"] == 1.0
-    assert score.means["mrr"] == 1.0
+    assert score.means["recall@1"] == 0.5, "q2's first hit names no source, so its gold sits at rank two"
+    assert score.means["mrr"] == 0.75
     assert score.unmapped_hits == 1
     assert {query.k for query in search.queries} == {50}
     assert all(query.collection == "scifact" for query in search.queries)

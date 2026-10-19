@@ -117,7 +117,8 @@ source ids. A cited ref is read as the bare unit id it names first, so `page:<co
 `section:` and `unit:` refs map like their bare ids. The cited ids map to sources through
 `kb.pages.source_id` for a page, or an anchor on one, and to the id before the last `:` for anything
 else, so a raw chunk maps to the source it was cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
-those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
+those cited sources, one rank per citation by the source-level rank rule below, and `sources` holds one entry per
+citation, `null` for a citation that holds no source. Beside them it records the seen recall: `seen_recall`, the share of the case's
 gold sources that any tool result the model received during the case named, and `seen_gold`, those
 gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
 and did not cite it. A case with a seen recall of 0 never received it, which is a retrieval miss.
@@ -169,6 +170,15 @@ unit seen maps to its source the way the cited ids map, in the same one page loo
 lookup. Reading a tool result never raises, whatever its shape, so the measure never changes how a
 case ends or whether its failure is transient. A run without
 `--source-level`, or whose source lookup failed, writes null for both keys.
+
+**The source-level rank rule.** Every source-level metric (recall@k, precision@k, MRR and nDCG@k) reads the first k
+items of a ranked list as k ranks. `studio evals score` ranks a search's hits and `studio evals run --source-level` ranks
+a case's citations. Each hit or citation holds one rank. A source counts once, at the rank of its
+first hit. A hit whose page names no source, such as an entity card, holds its rank and matches nothing, and so does a
+later hit of a source already ranked. So entity cards ranked above the gold source push it down and lower recall@k and
+MRR, rather than being skipped. `studio evals score` still counts the hits that named no source document and prints the
+count. `engram.evals.scoring.domain.ranked_sources` builds the ranks for both commands, and
+`engram.evals.outcomes.domain.evaluators.ranked_metrics` and `ndcg_at_k` read a `None` rank as one that matches nothing.
 
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen
 recall, overall and then per query type, the cases with no query type last. `studio evals compare`

@@ -1142,15 +1142,16 @@ def _sql_knowledge_base(gateway: FakeSqlGateway, *, retry_refusals: bool = True)
 
 @dataclass
 class _FakeHitSources:
-    """A knowledge base whose pages are the keys of `sources`, recording every lookup it answers."""
+    """A knowledge base whose pages are the keys of `sources` and `pages_without_source`, recording every lookup it answers."""
 
     sources: Mapping[str, str]
+    pages_without_source: frozenset[str] = frozenset()
     page_lookups: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     source_lookups: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
 
     async def page_ids(self, collection: str, ids: Sequence[str]) -> frozenset[str]:
         self.page_lookups.append((collection, tuple(ids)))
-        return frozenset(identifier for identifier in ids if identifier in self.sources)
+        return frozenset(identifier for identifier in ids if identifier in self.sources or identifier in self.pages_without_source)
 
     async def source_ids(self, collection: str, page_ids: Sequence[str]) -> Mapping[str, str]:
         self.source_lookups.append((collection, tuple(page_ids)))
@@ -1545,6 +1546,24 @@ class TestSourceLevelRetrieval(_ResetsLogfire):
         assert (lines["case-b"]["recall@4"], lines["case-b"]["recall@10"], lines["case-b"]["mrr"]) == (1.0, 1.0, 1.0)
         assert [collection for collection, _ids in hit_sources.page_lookups] == ["research"]
         assert [collection for collection, _ids in hit_sources.source_lookups] == ["research"]
+
+    async def test_a_citation_with_no_source_and_a_repeated_source_each_hold_a_rank(self, tmp_path: Path):
+        hit_sources = _FakeHitSources(sources={"note.alpha": "src-alpha", "note.beta": "src-alpha", "note.gamma": "src-gamma"}, pages_without_source=frozenset({"note.entity"}))
+        citations = ["note.entity", "note.alpha", "note.beta", "note.gamma"]
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return _answer_part(info, "yes", citations)
+
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", hit_sources=hit_sources, results_path=results)
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(), config=config, dataset=_named_dataset(("case-a", "yes", ("src-gamma",))), model=FunctionModel(respond)
+        )
+
+        _header, lines = _read_results(results)
+        assert lines["case-a"]["sources"] == [None, "src-alpha", None, "src-gamma"]
+        assert (lines["case-a"]["recall@4"], lines["case-a"]["mrr"]) == (1.0, 0.25)
 
 
 # -- seen recall: which gold sources the tool results the model received named ----------

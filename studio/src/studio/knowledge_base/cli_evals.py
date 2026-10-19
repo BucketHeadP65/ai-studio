@@ -269,7 +269,8 @@ def evals_run_cmd(
     source_level: bool = typer.Option(
         default=False,
         help="Map each cited id to its source document and score recall@4, recall@10 and mrr against the dataset's gold "
-        "source ids, and score seen recall: the share of the gold sources that any tool result the model received named. "
+        "source ids, one rank per citation, so a citation with no source or a repeat of a source cited above it matches "
+        "nothing. Also score seen recall: the share of the gold sources that any tool result the model received named. "
         "The scores land in the results file, so it needs --results, and their means print after the table, overall and "
         "per query type.",
     ),
@@ -1228,7 +1229,8 @@ def evals_score_cmd(
     Runs one search per case at k = 50 with no agent, under the search setup `--setup` names (hybrid or keyword-only
     ranking, over every hit level or one), maps every hit to the source document it came from (a raw chunk by its id,
     a page through the source its page record names), and scores each case per document: nDCG@10 from the relevance
-    judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. It writes the per-case scores as YAML with
+    judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. Each hit holds one rank, so a hit with no
+    source document, or a repeat of a document ranked above it, holds its rank and matches nothing. It writes the per-case scores as YAML with
     a markdown summary, both named after the dataset and the setup, and prints the means. The hybrid setup's report
     leaves the setup out of its file names. A failure, such as an unknown setup, a missing dataset or an unreachable
     database, exits 1 with a message.
