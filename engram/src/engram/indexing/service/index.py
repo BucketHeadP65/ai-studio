@@ -501,7 +501,6 @@ class IndexKnowledgeBaseHandler:
                 vocabulary_hash=state.vocabulary_hash,
                 embed_model=self._embedder.model_id,
                 knowledge_base_root=self._knowledge_base_path(),
-                spec=self._spec,
             )
             await uow.page_type_contracts.upsert_many(page_type_contract_rows(self._spec, collection))
             await uow.page_type_contracts.prune_missing({pt.page_type for pt in self._spec.page_types}, collection=collection)

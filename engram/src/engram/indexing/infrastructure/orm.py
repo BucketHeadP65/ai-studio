@@ -383,7 +383,6 @@ class IndexFingerprintORM(KbBase):
     indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     knowledge_base_root: Mapped[str] = mapped_column(Text, nullable=False, server_default=text("''"))
     switches: Mapped[dict[str, bool]] = mapped_column(JSONB, nullable=False, default=dict)
-    spec: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB)
 
 
 class PageTypeContractORM(KbBase):

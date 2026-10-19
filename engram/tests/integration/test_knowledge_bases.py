@@ -29,7 +29,6 @@ from engram.indexing.infrastructure import orm
 from engram.indexing.infrastructure.repository import IndexFingerprints, Pages
 from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway
 from engram.retrieval.queries import KnowledgeBasesHandler
-from engram.testing.specs import research_spec
 
 if TYPE_CHECKING:
     from engram.retrieval.queries import Collections
@@ -74,7 +73,6 @@ async def _seed(engine_url: str) -> None:
                 vocabulary_hash="r1",
                 embed_model="m1",
                 knowledge_base_root="",
-                spec=research_spec(),
             )
             await IndexFingerprints(db, now_fn=lambda: _NOTEBOOK_COMPILED_AT).set(
                 collection="notebook",
@@ -83,7 +81,6 @@ async def _seed(engine_url: str) -> None:
                 vocabulary_hash="r1",
                 embed_model="m1",
                 knowledge_base_root="",
-                spec=research_spec(),
             )
             await db.commit()
     finally:

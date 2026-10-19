@@ -1,4 +1,4 @@
-"""`public.schedules` keeps a schedule's gate behaviour in `gate_mode` alone, every finished refresh stores its pass document, and `api.indexed_schema` goes.
+"""`public.schedules` keeps a schedule's gate behaviour in `gate_mode` alone, every finished refresh stores its pass document, and `api.indexed_schema` goes with the column it read.
 
 Revision ID: 0072
 Revises: 0071
@@ -12,9 +12,11 @@ A finished `kb.refresh` job stores its result as the JSON document a clean pass 
 `counts`. A result stored as plain text becomes that document, the text as its detail and every count zero. Downgrade
 leaves the documents as they are.
 
-`api.indexed_schema` served the schema an index ran with to readers, and nothing reads it. It is dropped, and the comment
-on `kb.index_fingerprint.spec` stops naming a reader. Downgrade creates the function again as 0071 holds it, with its
-comment and its grant, and restores the column's comment.
+`api.indexed_schema` served the schema an index ran with to readers, and nothing reads it. It is dropped, and so is
+`kb.index_fingerprint.spec`, the column only it read. Downgrade adds the column back as 0071 declares it, nullable jsonb
+with 0071's comment, and creates the function again as 0071 holds it, with its comment and its grant. The schemas the
+rows held cannot be rebuilt here, so every row's `spec` comes back null, the state 0071 gives a row a page write created,
+until the next index writes it.
 """
 
 from __future__ import annotations
@@ -42,12 +44,6 @@ _PREVIOUS_GATE_MODE_COMMENT = (
 _READER_ROLE = "kb_reader"
 
 _INDEXED_SCHEMA = "api.indexed_schema(text)"
-
-_SPEC_COLUMN_COMMENT = (
-    "COMMENT ON COLUMN kb.index_fingerprint.spec IS "
-    "'The validated knowledge base schema (as jsonb) the last index ran with. Null on a row a page write created, "
-    "until the collection is indexed. No reader is granted it.'"
-)
 
 # 0071's function, comment and column comment, byte-identical: what `downgrade` restores.
 _PREVIOUS_INDEXED_SCHEMA_FUNCTION = """
@@ -85,17 +81,18 @@ WHERE kind = 'kb.refresh' AND state = 'done' AND result IS NOT NULL AND result <
 
 
 def upgrade() -> None:
-    """Fold `auto_approve_gates` into `gate_mode`, store every text refresh result as its pass document, and drop `api.indexed_schema`."""
+    """Fold `auto_approve_gates` into `gate_mode`, store every text refresh result as its pass document, and drop `api.indexed_schema` and its column."""
     op.execute("UPDATE public.schedules SET gate_mode = 'auto' WHERE auto_approve_gates AND gate_mode <> 'auto'")
     op.execute("ALTER TABLE public.schedules DROP COLUMN auto_approve_gates")
     op.execute(_GATE_MODE_COMMENT)
     op.execute(_REFRESH_RESULTS_AS_DOCUMENTS)
     op.execute(f"DROP FUNCTION {_INDEXED_SCHEMA}")
-    op.execute(_SPEC_COLUMN_COMMENT)
+    op.execute("ALTER TABLE kb.index_fingerprint DROP COLUMN spec")
 
 
 def downgrade() -> None:
-    """Create `api.indexed_schema` again, then add `auto_approve_gates` back, derived from `gate_mode`, and restore 0030's comment."""
+    """Add the empty `spec` column and `api.indexed_schema` back, then `auto_approve_gates`, derived from `gate_mode`, and restore 0030's comment."""
+    op.execute("ALTER TABLE kb.index_fingerprint ADD COLUMN spec jsonb")
     op.execute(_PREVIOUS_INDEXED_SCHEMA_FUNCTION)
     op.execute(f"GRANT EXECUTE ON FUNCTION {_INDEXED_SCHEMA} TO {_READER_ROLE}")
     op.execute(_PREVIOUS_INDEXED_SCHEMA_COMMENT)

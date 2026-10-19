@@ -2168,20 +2168,29 @@ class TestGateModeAndRefreshResultsMigration:
         assert rows["queued"] is None
         assert rows["other"] == "left as written"
 
-
-    async def test_the_indexed_schema_function_is_dropped_and_the_downgrade_restores_it(self, pg: str):
+    async def test_the_indexed_schema_function_and_the_spec_column_are_dropped_and_the_downgrade_restores_both_empty(self, pg: str):
         target_url = await new_test_database(pg)
         run_upgrade(target_url, "0071")
         definition_before = await _function_definition(target_url, _INDEXED_SCHEMA)
         comment_before = await _function_comment(target_url, schema="api", name="indexed_schema")
         column_comment_before = await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT)
+        column_before = await _rows(target_url, _SPEC_COLUMN)
         assert definition_before is not None
         assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.execute(
+                "INSERT INTO kb.index_fingerprint (collection, indexer_version, spec_hash, vocabulary_hash, embed_model, spec)"
+                " VALUES ('notes', '7', 'spec-hash', 'vocabulary-hash', 'test-embedding', '{\"slug\": \"notes\"}'::jsonb)"
+            )
+        finally:
+            await connection.close()
 
         run_upgrade(target_url, "0072")
 
         assert not await _function_exists(target_url, _INDEXED_SCHEMA)
-        assert "indexed_schema" not in str(await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT))
+        assert "spec" not in await _column_names(target_url, "kb.index_fingerprint")
+        assert await _rows(target_url, "SELECT collection FROM kb.index_fingerprint") == [("notes",)], "the row stays, without the column"
 
         run_downgrade(target_url, "0071")
 
@@ -2189,6 +2198,10 @@ class TestGateModeAndRefreshResultsMigration:
         assert await _function_comment(target_url, schema="api", name="indexed_schema") == comment_before
         assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
         assert await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT) == column_comment_before
+        assert await _rows(target_url, _SPEC_COLUMN) == column_before
+        assert await _rows(target_url, "SELECT collection, spec FROM kb.index_fingerprint") == [("notes", None)], (
+            "the schema a row held cannot be rebuilt here, so the column comes back empty until the next index"
+        )
 
 
 _INDEXED_SCHEMA = "api.indexed_schema(text)"
@@ -2196,6 +2209,11 @@ _INDEXED_SCHEMA = "api.indexed_schema(text)"
 _INDEXED_SCHEMA_COLUMN_COMMENT = (
     "SELECT col_description('kb.index_fingerprint'::regclass, attnum) FROM pg_attribute"
     " WHERE attrelid = 'kb.index_fingerprint'::regclass AND attname = 'spec'"
+)
+
+_SPEC_COLUMN = (
+    "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+    " WHERE table_schema = 'kb' AND table_name = 'index_fingerprint' AND column_name = 'spec'"
 )
 
 

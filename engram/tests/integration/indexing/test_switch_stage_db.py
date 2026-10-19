@@ -187,7 +187,6 @@ class TestSwitchStageOnALiveCompile:
                     vocabulary_hash="seed",
                     embed_model="seed",
                     knowledge_base_root="",
-                    spec=research_spec(),
                 )
                 await IndexFingerprints(db).set_switches(collection="switchtest-fixed", switches=seeded)
                 await db.commit()

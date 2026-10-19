@@ -27,7 +27,6 @@ from engram.indexing.infrastructure.repository import (
     ValidationIssues,
     _embed_write_rows,
 )
-from engram.testing.specs import research_spec
 
 if TYPE_CHECKING:
     from sqlalchemy import CompoundSelect, Delete, Insert, Select, Update
@@ -232,18 +231,18 @@ class TestIndexFingerprints:
 
     def test_touch_re_stamps_the_time_and_claims_the_root(self):
         sql = _compiles(
-            IndexFingerprints.touch_statement("research", indexed_at=datetime.now(tz=UTC), knowledge_base_root="/knowledge_base", spec=research_spec())
+            IndexFingerprints.touch_statement("research", indexed_at=datetime.now(tz=UTC), knowledge_base_root="/knowledge_base")
         )
 
         assert "UPDATE kb.index_fingerprint" in sql
         assert "indexed_at" in sql
         assert "knowledge_base_root" in sql
-        assert "spec" in sql
+        assert "spec" not in sql
         assert "WHERE" in sql
 
     def test_touch_with_no_root_stamps_the_time_only(self):
         sql = _compiles(
-            IndexFingerprints.touch_statement("research", indexed_at=datetime.now(tz=UTC), knowledge_base_root="", spec=research_spec())
+            IndexFingerprints.touch_statement("research", indexed_at=datetime.now(tz=UTC), knowledge_base_root="")
         )
 
         assert "indexed_at" in sql

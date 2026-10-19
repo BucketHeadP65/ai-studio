@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from core.cqrs.contracts import Event
 
     from engram.indexing.contracts import ManifestEntry, PageKeyRowResult, PendingEmbedChunk, PendingEmbedRow, StoredFingerprint
-    from engram.kb.contracts import KnowledgeBaseSchema
 
 # The ordered log of the load operations whose relative order is part of the write contract.
 type _CallTrace = list[str]
@@ -393,7 +392,7 @@ class _RecordingFingerprintRepo:
     def __init__(self, *, calls: _CallTrace | None = None, name: str = "fingerprint") -> None:
         self.stored: StoredFingerprint | None = None
         self.fingerprint: Row | None = None
-        self.touch_calls: list[tuple[str, str, KnowledgeBaseSchema]] = []
+        self.touch_calls: list[tuple[str, str]] = []
         self.stored_switches: RetrievalSwitches = RetrievalSwitches()
         self.set_switches_calls: list[tuple[str, RetrievalSwitches]] = []
         self._trace = _Tracer(calls, name)
@@ -411,7 +410,6 @@ class _RecordingFingerprintRepo:
         vocabulary_hash: str,
         embed_model: str,
         knowledge_base_root: str,
-        spec: KnowledgeBaseSchema,
     ) -> None:
         self.fingerprint = {
             "collection": collection,
@@ -420,12 +418,11 @@ class _RecordingFingerprintRepo:
             "vocabulary_hash": vocabulary_hash,
             "embed_model": embed_model,
             "knowledge_base_root": knowledge_base_root,
-            "spec": spec,
         }
 
-    async def touch(self, collection: str, *, knowledge_base_root: str, spec: KnowledgeBaseSchema) -> None:
+    async def touch(self, collection: str, *, knowledge_base_root: str) -> None:
         self._trace("touch")
-        self.touch_calls.append((collection, knowledge_base_root, spec))
+        self.touch_calls.append((collection, knowledge_base_root))
 
     async def get_switches(self, collection: str) -> RetrievalSwitches:
         del collection

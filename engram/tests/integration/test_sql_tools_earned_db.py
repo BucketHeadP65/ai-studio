@@ -58,7 +58,6 @@ async def _seed_switches(migrated: str, *, collection: str, switches: RetrievalS
                 vocabulary_hash="seed",
                 embed_model="seed",
                 knowledge_base_root="",
-                spec=research_spec(),
             )
             await IndexFingerprints(db).set_switches(collection=collection, switches=switches)
             await db.commit()
