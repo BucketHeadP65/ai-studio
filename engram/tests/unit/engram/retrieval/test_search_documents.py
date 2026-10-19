@@ -9,26 +9,33 @@ document, a cap above 1 allows that many hits of one document, and no cap says n
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 import pytest
 
+from core.ai.disclosure.contracts import DisclosureEnvelope
 from mcp.server.fastmcp import FastMCP
+from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
 from pydantic_ai import FunctionToolset
 from sqlalchemy.exc import OperationalError
 
 from engram.retrieval.capability import RetrievalKnowledgeBase
 from engram.retrieval.contracts import read_hits_per_document
-from engram.retrieval.domain import FoldedUnit, SearchHit, SearchResult, SqlResult
+from engram.retrieval.dials import ReadDials
+from engram.retrieval.domain import FetchResult, FoldedUnit, SearchHit, SearchResult, SqlResult
 from engram.retrieval.queries import SearchHandler
 from engram.retrieval.tools import (
     SEARCH_RESULT_CHARS,
+    RetrievalHandlers,
     add_routed_read_tools,
     bound_search_result,
     build_retrieval_toolset,
     document_clause,
     register_mcp_tools,
+    register_routed_mcp_tools,
     search_description,
     search_hits,
     search_next_steps,
@@ -36,8 +43,8 @@ from engram.retrieval.tools import (
 )
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
-from tests.unit.engram.retrieval.test_retrieval_knowledge_base import RESEARCH, WORKDOCS, _surface
-from tests.unit.engram.retrieval.test_tools import FakeSearchHandler, _call, _ctx, _handlers
+from tests.unit.engram.retrieval.test_retrieval_knowledge_base import RESEARCH, WORKDOCS, FakeFlatFetch, _NeverWalks, _surface
+from tests.unit.engram.retrieval.test_tools import FakeSearchHandler, _call, _ctx, _envelope, _handlers, _text
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -45,6 +52,7 @@ if TYPE_CHECKING:
     from mcp.types import Tool as MCPTool
 
     from engram.retrieval.capability import ReadSurface
+    from engram.retrieval.dials import FetchDial
     from engram.retrieval.tools import RetrievalToolset
 
 _FOLDED_ROWS = (
@@ -291,3 +299,160 @@ class TestTheResponseBudgetTrimsFoldedUnitsFirst:
         _hits, answer = _bounded_answer(max_chars=6_000)
 
         assert all(hit.folded_units == () for hit in answer.hits)
+
+
+# -- every fetch opens a folded unit by its ref ------------------------------------
+
+_FETCHED_ROWS = (
+    {
+        "id": "note.alpha",
+        "hit_level": "card",
+        "page_id": "note.alpha",
+        "page_title": "Alpha",
+        "snippet": "the card",
+        "score": 0.9,
+        "folded_units": [
+            {"id": "note.alpha#s1", "hit_level": "section"},
+            {"id": "note.alpha#c1", "hit_level": "claim"},
+            {"id": "src.alpha:0", "hit_level": "raw"},
+        ],
+    },
+    {
+        "id": "src.beta:0",
+        "hit_level": "raw",
+        "page_id": None,
+        "page_title": "Beta source",
+        "snippet": "a chunk",
+        "score": 0.5,
+        "folded_units": [{"id": "note.beta", "hit_level": "card"}],
+    },
+)
+_UNITS: dict[str, dict[str, object]] = {
+    "note.alpha#s1": {"id": "note.alpha#s1", "level": "section", "title": "Findings", "body": "The section."},
+    "note.alpha#c1": {"id": "note.alpha#c1", "level": "claim", "title": "support", "body": "The claim."},
+    "src.alpha:0": {"id": "src.alpha:0", "level": "raw", "title": "Body", "body": "The chunk."},
+    "note.beta": {"id": "note.beta", "level": "page", "title": "Beta", "body": "The card."},
+}
+
+
+def _fetched_search() -> FakeSearchHandler:
+    """A search answering one card folding a section, a claim and a chunk, and one chunk folding a card."""
+    return FakeSearchHandler(result=SqlResult(rows=_FETCHED_ROWS, columns=_COLUMNS))
+
+
+def _folded(result: object) -> list[FoldedUnit]:
+    """Every folded unit a search answer carries, in rank order."""
+    assert isinstance(result, SearchResult)
+    return [unit for hit in result.hits for unit in hit.folded_units]
+
+
+def _opens(result: object, unit: FoldedUnit) -> bool:
+    """Whether a `fetch` answer is the read of `unit`: a leveled answer by its ref, a flat one by its id."""
+    if isinstance(result, DisclosureEnvelope):
+        return result.ref == unit.ref
+    return isinstance(result, FetchResult) and result.id == unit.id
+
+
+def _opens_payload(payload: Mapping[str, object], unit: FoldedUnit) -> bool:
+    """Whether a `fetch` answer read off the wire is the read of `unit`."""
+    return payload.get("ref") == unit.ref if "children" in payload else payload.get("id") == unit.id
+
+
+def _surface_over_units(name: str, domain: str) -> ReadSurface:
+    """A read surface whose search folds units under its hits and whose flat read knows each of them by id."""
+    return _surface(name, name, domain, search=_fetched_search(), flat=FakeFlatFetch(units=_UNITS))
+
+
+class TestEveryFetchOpensAFoldedUnitByItsRef:
+    @pytest.mark.parametrize("leveled", [False, True], ids=["flat", "leveled"])
+    async def test_the_single_base_toolset(self, leveled: bool):
+        handlers = RetrievalHandlers(search=_fetched_search(), fetch=FakeFlatFetch(units=_UNITS), graph_expand=_NeverWalks(), find_paths=_NeverWalks())
+        toolset = build_retrieval_toolset(handlers, collection="workdocs", envelope=_envelope("workdocs") if leveled else None)
+
+        units = _folded(await _call(toolset, "search", {"query": "alpha"}))
+
+        assert len(units) == 4
+        for unit in units:
+            assert _opens(await _call(toolset, "fetch", {"unit_id": unit.ref}), unit), unit
+
+    @pytest.mark.parametrize("leveled", [False, True], ids=["flat", "leveled"])
+    async def test_the_single_base_mcp_server(self, leveled: bool):
+        handlers = RetrievalHandlers(search=_fetched_search(), fetch=FakeFlatFetch(units=_UNITS), graph_expand=_NeverWalks(), find_paths=_NeverWalks())
+        server = FastMCP("documents")
+        register_mcp_tools(server, handlers, collection="workdocs", envelope=_envelope("workdocs") if leveled else None)
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            searched = await client.call_tool("search", {"query": "alpha"})
+            units = _folded(SearchResult.model_validate(json.loads(_text(searched))))
+            fetched = [(unit, await client.call_tool("fetch", {"unit_id": unit.ref})) for unit in units]
+
+        assert len(fetched) == 4
+        for unit, answer in fetched:
+            assert not answer.isError, _text(answer)
+            assert _opens_payload(json.loads(_text(answer)), unit), unit
+
+    async def test_the_routed_search_and_fetch(self):
+        toolset: RetrievalToolset = FunctionToolset()
+        add_routed_read_tools(
+            toolset, (_surface("workdocs", "workdocs", WORKDOCS), _surface_over_units("research", RESEARCH)), default_knowledge_base="workdocs"
+        )
+
+        units = _folded(await _call(toolset, "search", {"query": "alpha", "collection": "research"}))
+
+        assert len(units) == 4
+        for unit in units:
+            assert _opens(await _call(toolset, "fetch", {"unit_id": unit.ref}), unit), unit
+
+    async def test_the_routed_mcp_server(self):
+        server = FastMCP("documents")
+        register_routed_mcp_tools(
+            server, (_surface("workdocs", "workdocs", WORKDOCS), _surface_over_units("research", RESEARCH)), default_knowledge_base="workdocs"
+        )
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            searched = await client.call_tool("search", {"query": "alpha", "collection": "research"})
+            units = _folded(SearchResult.model_validate(json.loads(_text(searched))))
+            fetched = [(unit, await client.call_tool("fetch", {"unit_id": unit.ref})) for unit in units]
+
+        assert len(fetched) == 4
+        for unit, answer in fetched:
+            assert not answer.isError, _text(answer)
+            assert _opens_payload(json.loads(_text(answer)), unit), unit
+
+    @pytest.mark.parametrize("fetch_dial", ["leveled", "flat"])
+    async def test_the_capability(self, fetch_dial: FetchDial):
+        knowledge_base = RetrievalKnowledgeBase[None](
+            surfaces=(_surface_over_units("research", RESEARCH), _surface("workdocs", "workdocs", WORKDOCS)),
+            dials_source=lambda: ReadDials(fetch=fetch_dial),
+        )
+
+        units = _folded(await knowledge_base.direct_call_tool("search", {"query": "alpha", "knowledge_base": "research"}))
+
+        assert len(units) == 4
+        for unit in units:
+            assert _opens(await knowledge_base.direct_call_tool("fetch", {"knowledge_base": "research", "unit_id": unit.ref}), unit), unit
+
+
+
+class TestASurfaceWithoutFetchIsNotSentToFetch:
+    async def test_the_single_base_toolset(self):
+        toolset = build_retrieval_toolset(_handlers(), collection="workdocs", only=frozenset({"search"}), hits_per_document=1)
+
+        description = (await toolset.get_tools(_ctx()))["search"].tool_def.description or ""
+
+        assert "`folded_units`" in description
+        assert "`fetch` one directly" not in description
+
+    async def test_the_routed_mcp_server(self):
+        server = FastMCP("documents")
+        register_routed_mcp_tools(server, (_capped("workdocs", WORKDOCS, 1),), default_knowledge_base="workdocs", only=frozenset({"search"}))
+
+        description = _description(await server.list_tools())
+
+        assert "`folded_units`" in description
+        assert "`fetch` one directly" not in description
+
+    def test_the_clause_itself(self):
+        assert "`fetch`" not in document_clause(2, can_fetch=False)

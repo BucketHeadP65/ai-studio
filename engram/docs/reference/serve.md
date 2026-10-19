@@ -403,12 +403,16 @@ its claims and the source's raw chunks are one document. The next three matching
 come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level}` best
 first, and every other hit carries an empty array. `search_hits` gives each folded unit the ref a hit of
 its level carries (`section:<collection>/<id>`, `page:` for a card, `unit:` for a claim or a raw chunk),
-so the agent fetches one without searching again. `api.search_hits_per_document()` answers the cap the search
+so the agent fetches one without searching again: every `fetch`, flat or leveled, over one knowledge base or routed
+over several, opens that ref. `api.search_hits_per_document()` answers the cap the search
 applies, read from the same row over the same default and bound, 0 when every hit is kept. A host reads it once, when it
 opens a knowledge base (`read_hits_per_document`, which reads 0 when the database cannot answer), and every `search`
 description states it: a cap of 1 says each hit is a distinct document, a higher cap says how many hits one document may
 have, and 0 says nothing about documents. When knowledge bases behind one tool disagree on the cap, the description
-states none. `include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
+states none. A process reads the cap once, so after the owner changes it a running process states the old cap until it
+restarts. The document sentences go into the shipped description only. A tuned description from an active policy
+(`_meta/active-policy.yaml`) replaces that whole text, so it says about documents whatever its own text says.
+`include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
 own `meta.*` pages out before `k` is applied, so a search returns `k` rows when that many match. A raw
 `api.search` call keeps them unless it passes the same argument. `since` and `until` keep a page by its page date
 (`kb.pages.page_date`, migration 0066), which is `created` when the schema names no other field. A raw chunk carries

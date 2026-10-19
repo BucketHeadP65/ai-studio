@@ -172,17 +172,21 @@ _DOCUMENT = "a source together with every page made from it, or a page made from
 """What one document is, as a `search` description says it."""
 
 _FOLDED = "best first, each with the `ref` that fetches it, so `fetch` one directly rather than searching again."
-"""How a `search` description says a hit's folded units are listed and read."""
+"""How a `search` description says a hit's folded units are listed and read, where the surface serves `fetch`."""
+
+_FOLDED_UNREAD = "best first, each with its `ref`."
+"""How a `search` description says a hit's folded units are listed, where the surface serves no `fetch`."""
 
 _SCORE_SENTENCE_END = "a relevance `score`."
 """The words every shipped `search` description ends its result sentence with, where the document sentences go."""
 
 
-def document_clause(hits_per_document: int) -> str:
+def document_clause(hits_per_document: int, *, can_fetch: bool = True) -> str:
     """What a `search` description says about documents under the cap on hits per document the database applies.
 
     Args:
         hits_per_document: The most hits one document keeps, as the database's tuning row sets it. 0 keeps every hit.
+        can_fetch: Whether the surface serves `fetch`, which the sentences then send the agent to with a folded unit's ref.
 
     Returns:
         The sentences for a cap of 1 or more. An empty string for 0, since a search that keeps every hit says nothing
@@ -190,11 +194,12 @@ def document_clause(hits_per_document: int) -> str:
     """
     if hits_per_document <= 0:
         return ""
+    folded = _FOLDED if can_fetch else _FOLDED_UNREAD
     if hits_per_document == 1:
-        return f"Each hit is a distinct document: {_DOCUMENT}. A hit's `folded_units` lists more units of its document that matched, {_FOLDED}"
+        return f"Each hit is a distinct document: {_DOCUMENT}. A hit's `folded_units` lists more units of its document that matched, {folded}"
     return (
         f"At most {hits_per_document} hits come from one document: {_DOCUMENT}. The best hit of a document lists its next "
-        f"matching units as `folded_units`, {_FOLDED}"
+        f"matching units as `folded_units`, {folded}"
     )
 
 
@@ -211,9 +216,9 @@ def shared_hits_per_document(caps: Iterable[int]) -> int:
     return distinct.pop() if len(distinct) == 1 else 0
 
 
-def _with_document_clause(description: str, hits_per_document: int) -> str:
+def _with_document_clause(description: str, hits_per_document: int, *, can_fetch: bool = True) -> str:
     """`description` with the document sentences for `hits_per_document` after its result sentence, or appended."""
-    clause = document_clause(hits_per_document)
+    clause = document_clause(hits_per_document, can_fetch=can_fetch)
     if not clause:
         return description
     if _SCORE_SENTENCE_END in description:
@@ -569,7 +574,7 @@ def _final_descriptions(
         search_default = SEARCH_DESCRIPTION_HYBRID
     else:
         search_default = SEARCH_DESCRIPTION_KEYWORD
-    search_default = _with_document_clause(search_default, hits_per_document)
+    search_default = _with_document_clause(search_default, hits_per_document, can_fetch=can_fetch)
     if not can_sql:
         search_default = _without_sql_plane(search_default)
     if facets_clause is not None:
@@ -1778,7 +1783,9 @@ def register_routed_mcp_tools(
     refuse_duplicate_collections(surfaces)
     home = _home_surface(surfaces, default_knowledge_base)
     can_search = only is None or SEARCH in only
-    searching, reading = _routed_descriptions(surfaces, home, descriptions=descriptions, k_source=k_source, can_search=can_search)
+    searching, reading = _routed_descriptions(
+        surfaces, home, descriptions=descriptions, k_source=k_source, can_search=can_search, can_fetch=only is None or FETCH in only
+    )
     if can_search:
         server.add_tool(_routed_search(surfaces, home, k_source=k_source, refuse=ToolError), name=SEARCH, description=searching)
     if only is None or FETCH in only:
@@ -1835,6 +1842,7 @@ def _routed_descriptions(
     descriptions: Mapping[str, str] | None,
     k_source: Callable[[], int] | None,
     can_search: bool = True,
+    can_fetch: bool = True,
 ) -> tuple[str, str]:
     """The `search` and `fetch` descriptions a routed registration serves, in that order."""
     choices = ", ".join(surface.collection for surface in surfaces)
@@ -1843,6 +1851,7 @@ def _routed_descriptions(
         search_hybrid=home.hybrid,
         descriptions=descriptions,
         k_source=k_source,
+        selected=frozenset({SEARCH, FETCH}) if can_fetch else frozenset({SEARCH}),
         facets_clause=facets_clause,
         hits_per_document=shared_hits_per_document(surface.hits_per_document for surface in surfaces),
     )[SEARCH]
