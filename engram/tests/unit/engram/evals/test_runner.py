@@ -725,6 +725,35 @@ class TestTracedEvaluationRun:
         assert set(run.traces) == set(_CASE_NAMES)
         assert len(run.report.cases) == 2
 
+    async def test_a_withheld_unit_folded_under_a_kept_hit_leaves_the_hit_and_the_run_goes_on(self, tmp_path: Path):
+        kept = {
+            "id": "paper.kept",
+            "hit_level": "card",
+            "page_id": "paper.kept",
+            "page_title": "Kept",
+            "snippet": "kept text",
+            "score": 0.9,
+            "folded_units": [{"id": "paper.kept#s1", "hit_level": "section"}],
+        }
+        gateway = FakeSqlGateway(result=SqlResult(rows=(kept,), columns=tuple(kept)))
+        handlers = RetrievalHandlers(
+            search=SearchHandler(gateway, FakeEmbedding()),
+            fetch=FetchHandler(gateway, "research"),
+            graph_expand=GraphExpandHandler(gateway, "research"),
+            find_paths=GraphPathsHandler(gateway, "research"),
+        )
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", delivered_evidence_root=tmp_path, withheld_refs=frozenset({"section:research/paper.kept#s1"})
+        )
+
+        run = await run_traced_eval_on_dataset(
+            FakeContainer(handlers=handlers), config=config, dataset=_golden_dataset(), model=TestModel(call_tools=["search"])
+        )
+
+        searches = [call for trace in run.traces.values() for call in trace.tool_calls if call.tool_name == "search"]
+        assert len(searches) == len(_CASE_NAMES)
+        assert all(call.status == "ok" and call.returned_unit_refs == ("page:research/paper.kept",) for call in searches)
+
     async def test_two_cases_asking_the_same_question_stay_two_trials(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         # Identity is the case, not the text it asks. Keying on the question made the second case
         # collide with the first one's already-stored evidence and fail outright.

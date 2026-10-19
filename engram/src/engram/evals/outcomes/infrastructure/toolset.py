@@ -11,6 +11,8 @@ signal, while a removed row is never exposure.
 A storage failure, a leaked reference or a size bound raises instead, and the payload never reaches the model.
 A reference is never recorded for a payload that was not stored.
 Every `DeliveredSource` records only its canonical reference, with no content hash and no version.
+A search hit's folded units are pointers that carry no text: a withheld one is removed from its hit like a row, and
+none is ever recorded as a delivered source.
 """
 
 from __future__ import annotations
@@ -234,8 +236,18 @@ def _without_withheld(value: object, scrub: _Scrub) -> object:
     if isinstance(value, DisclosureEnvelope):
         return _envelope_without_withheld(value, scrub)
     if isinstance(value, list):
-        return [row for row in value if not (isinstance(row, SearchHit) and scrub.withheld.holds(_hit_ref(row)))]
+        return [
+            _without_withheld_folded(row, scrub.withheld) if isinstance(row, SearchHit) else row
+            for row in value
+            if not (isinstance(row, SearchHit) and scrub.withheld.holds(_hit_ref(row)))
+        ]
     return value
+
+
+def _without_withheld_folded(hit: SearchHit, withheld: WithheldRefs) -> SearchHit:
+    """`hit` without the folded units `withheld` holds, under whatever spelling, untouched when it folds none of them."""
+    kept = tuple(unit for unit in hit.folded_units if not withheld.holds(unit.ref or unit.id))
+    return hit if len(kept) == len(hit.folded_units) else hit.model_copy(update={"folded_units": kept})
 
 
 def _ran_hybrid(hits: tuple[SearchHit, ...], scrub: _Scrub) -> bool:
@@ -249,10 +261,10 @@ def _ran_hybrid(hits: tuple[SearchHit, ...], scrub: _Scrub) -> bool:
 
 
 def _search_without_withheld(value: SearchResult, scrub: _Scrub) -> SearchResult:
-    """The same answer without its withheld hits, its status, returned count and next-move block rebuilt."""
-    kept = tuple(hit for hit in value.hits if not scrub.withheld.holds(_hit_ref(hit)))
+    """The same answer without its withheld hits and folded units, its status, returned count and next-move block rebuilt."""
+    kept = tuple(_without_withheld_folded(hit, scrub.withheld) for hit in value.hits if not scrub.withheld.holds(_hit_ref(hit)))
     if len(kept) == len(value.hits):
-        return value
+        return value if kept == value.hits else value.model_copy(update={"hits": kept})
     status = search_result_status(kept)
     collection = scrub.searched_collection
     return value.model_copy(

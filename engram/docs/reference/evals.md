@@ -785,7 +785,7 @@ unit.
 
 | Result | What removal means |
 |---|---|
-| `SearchResult` | The withheld hits drop out, `status` is recomputed from the hits that remain, and `window.returned_items` is corrected |
+| `SearchResult` | The withheld hits drop out, `status` is recomputed from the hits that remain, and `window.returned_items` is corrected. A withheld unit folded under a kept hit drops out of that hit's `folded_units`, under any spelling, and the hit stays |
 | `GraphResult` | The withheld nodes drop out, and so does every edge that touched one or that a withheld claim asserts |
 | `GraphPathsResult` | A route that reaches a withheld node, or rests on a relation a withheld claim asserts, is dropped whole, because a route missing a node is not a shorter route |
 | `DisclosureEnvelope` | The child stubs naming withheld units drop out |
@@ -817,7 +817,8 @@ the trial.
 
 Sources are extracted from the typed result in payload order, first mention only, and canonicalized:
 search hits, fetched units, disclosed units with their child stubs, graph nodes, and each node along
-each returned path. No result in this retrieval surface carries a content hash or a version, so
+each returned path. A search hit's folded units are never sources, since they carry no text. No result in this
+retrieval surface carries a content hash or a version, so
 every `DeliveredSource` records only `source_ref` and leaves `source_content_sha256` and
 `source_version` as `None`. Neither is ever derived from a snippet or a fetched body. A grade that
 depends on source integrity therefore reads `unknown` instead of assuming the source was intact.
