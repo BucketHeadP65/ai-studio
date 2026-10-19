@@ -24,9 +24,11 @@ from harness.domain.contracts import (
     SessionStarted,
     TurnAbandoned,
     TurnStarted,
+    UnreadableLine,
     decode,
     encode,
     open_turns,
+    read_line,
 )
 
 if TYPE_CHECKING:
@@ -129,7 +131,8 @@ class SessionLog:
     def events(self) -> tuple[Recorded, ...]:
         """Every readable entry, in order.
 
-        A torn last line or an unknown event type costs that one line, never the whole read.
+        A line that cannot be read costs that one line, never the whole read, and logs a warning naming the file,
+        the line number and why.
 
         Returns:
             The entries in sequence order, empty when the file is missing or cannot be read.
@@ -138,7 +141,14 @@ class SessionLog:
             text = self._path.read_text(encoding="utf-8")
         except OSError:
             return ()
-        return tuple(record for line in text.splitlines() if (record := decode(line)) is not None)
+        entries: list[Recorded] = []
+        for number, line in enumerate(text.splitlines(), start=1):
+            record = read_line(line)
+            if isinstance(record, UnreadableLine):
+                _logger.warning("line {line} of {path} was skipped: {reason}", line=number, path=str(self._path), reason=record.reason)
+            else:
+                entries.append(record)
+        return tuple(entries)
 
     def _next_seq(self) -> int:
         """One past the newest readable sequence number, read from the log's tail so a restart keeps counting."""

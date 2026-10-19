@@ -285,11 +285,46 @@ def encode(record: Recorded) -> str:
     return json.dumps(payload)
 
 
-def decode(line: str) -> Recorded | None:
-    """The line's log entry, or `None` for a torn tail or a kind this reader does not know.
+@dataclass(frozen=True)
+class UnreadableLine:
+    """A session log line that is no log entry, and why."""
 
-    It never raises, so a damaged final line, or a line a newer process wrote, costs one event and
-    never the boot.
+    reason: str
+    """What is wrong with the line, in plain words: not JSON, no `seq` or `at`, an unknown kind or the fields it lacks."""
+
+
+def read_line(line: str) -> Recorded | UnreadableLine:
+    """The line's log entry, or what makes it unreadable.
+
+    It never raises, so a damaged line costs one event and never the boot.
+
+    Args:
+        line: One line of the session log.
+
+    Returns:
+        The log entry, or an `UnreadableLine` saying why the line cannot be read.
+    """
+    try:
+        payload = json.loads(line)
+    except ValueError:
+        return UnreadableLine("it is not JSON")
+    if not isinstance(payload, dict) or "seq" not in payload or "at" not in payload:
+        return UnreadableLine("it is not an object carrying `seq` and `at`")
+    seq, at = payload.pop("seq"), payload.pop("at")
+    try:
+        return _RECORDED.validate_python({"seq": seq, "at": at, "event": payload})
+    except ValidationError as error:
+        details = error.errors()
+        missing = [str(detail["loc"][-1]) for detail in details if detail["type"] == "missing"]
+        return UnreadableLine("it has no " + ", ".join(missing) if missing else details[0]["msg"])
+
+
+def decode(line: str) -> Recorded | None:
+    """The line's log entry, or `None` when the line cannot be read.
+
+    A line cannot be read when it is torn, names a kind this reader does not know, or lacks a field its event
+    requires. `read_line` says which. The session log logs one warning for each line it skips, naming the file
+    and the line number. It never raises, so a damaged line costs one event and never the boot.
 
     Args:
         line: One line of the session log.
@@ -297,17 +332,8 @@ def decode(line: str) -> Recorded | None:
     Returns:
         The log entry, or `None` when the line cannot be read.
     """
-    try:
-        payload = json.loads(line)
-    except ValueError:
-        return None
-    if not isinstance(payload, dict) or "seq" not in payload or "at" not in payload:
-        return None
-    seq, at = payload.pop("seq"), payload.pop("at")
-    try:
-        return _RECORDED.validate_python({"seq": seq, "at": at, "event": payload})
-    except ValidationError:
-        return None
+    record = read_line(line)
+    return record if isinstance(record, Recorded) else None
 
 
 def open_turns(events: Sequence[Recorded]) -> tuple[Recorded, ...]:
