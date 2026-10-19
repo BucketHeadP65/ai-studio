@@ -84,7 +84,6 @@ class TestTheStateHome:
     def test_every_path_hangs_off_the_one_home(self, tmp_path: Path) -> None:
         paths = StateSettings(home=tmp_path)
 
-        assert paths.steps == tmp_path / "steps"
         assert paths.session_log == tmp_path / "session-log.jsonl"
         assert paths.evidence_log == tmp_path / "evidence.jsonl"
         assert paths.activation_log == tmp_path / "activations.jsonl"
@@ -114,7 +113,6 @@ class TestTheStateHome:
         paths = StateSettings(home=home)
 
         for path in (
-            paths.steps,
             paths.session_log,
             paths.evidence_log,
             paths.activation_log,

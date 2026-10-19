@@ -8,19 +8,16 @@ the file holds.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from uuid import uuid4
 
-from pydantic_ai_harness.step_persistence import FileStepStore, InMemoryStepStore, RunRecord, StepEvent
 from typer.testing import CliRunner
 
 from harness.adapters.store import RecordDatabase, SessionsDatabase
 from harness.adapters.wiring import RecordPoolOpener
-from harness.cli import app, import_sessions_report, provision_record
+from harness.cli import app, provision_record
 from harness.container import create_container
 from harness.domain.events import Booted, ConversationForgotten, SessionRenamed, SessionStarted, TurnSettled, TurnStarted
-from harness.domain.ports import SessionTranscript
 from harness.settings import HarnessSettings
-from tests.support.container import answering_from_memory, rooted_at
+from tests.support.container import rooted_at
 from tests.support.fakes.pools import FakePool, FakeRecordPool, FakeSessionsDatabase
 from tests.support.state import a_session_log, a_state
 
@@ -114,36 +111,8 @@ async def test_rebuild_takes_the_records_home_from_the_container(tmp_path: Path)
     await container.close()
 
 
-async def test_import_copies_a_file_stores_run_into_the_containers_own_record(tmp_path: Path) -> None:
-    """`sessions import` on an explicit directory writes the one run it holds into the container's record.
+def test_sessions_has_no_import_verb(tmp_path: Path) -> None:
+    """Every session lives in the record. There is no transcript folder left to copy into it."""
+    result = runner.invoke(app, ["sessions", "import"], env={"APP_STATE__HOME": str(tmp_path)})
 
-    The report line the verb prints is what `import_sessions_report` returns; `SessionTranscript` is
-    overridden with a store of this test's own so what landed can be asserted on directly.
-    """
-    steps_dir = tmp_path / "steps"
-    source = FileStepStore(steps_dir)
-    conversation_id = str(uuid4())
-    await source.register_run(RunRecord(run_id="r-1", conversation_id=conversation_id))
-    await source.append_event(StepEvent(run_id="r-1", kind="run_started", step_index=0))
-    store = InMemoryStepStore()
-
-    container = create_container(rooted_at(HarnessSettings(), tmp_path))
-    with answering_from_memory(container), container.override({SessionTranscript: store}):
-        lines = await import_sessions_report([steps_dir], container=container)
-        assert lines == [
-            f"{steps_dir}: runs=1 events=1 snapshots=0 effects=0 skipped=0 resumed=0 unnamed=0 reconciled=0 malformed=0"
-        ]
-        assert await store.get_run(run_id="r-1") is not None
-
-    await container.close()
-
-
-async def test_import_reports_a_directory_with_nothing_there(tmp_path: Path) -> None:
-    """A directory that never held a file store is reported rather than treated as an error."""
-    missing = tmp_path / "nothing-here"
-    container = create_container(rooted_at(HarnessSettings(), tmp_path))
-    with answering_from_memory(container):
-        lines = await import_sessions_report([missing], container=container)
-
-    assert lines == [f"{missing}: nothing there"]
-    await container.close()
+    assert result.exit_code == 2

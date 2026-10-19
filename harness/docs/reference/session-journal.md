@@ -58,7 +58,6 @@ failure warns and never breaks the turn it was narrating.
 harness sessions list           # conversation spans: when, how it ended, turns held
 harness sessions tail --n 20    # the newest events, seq and stamp first
 harness sessions search TERM    # case-insensitive scan over the session log and this checkout's state home
-harness sessions import         # copy the pre-record transcripts into the record, once
 ```
 
 `search` is a scan, not an index. One owner's volume does not need one, and the knowledge base stays the semantic layer

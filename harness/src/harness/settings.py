@@ -296,11 +296,6 @@ class StateSettings(BaseModel):
     home: Path = CHECKOUT / ".state"
 
     @property
-    def steps(self) -> Path:
-        """Where a file-store transcript keeps its runs under this home: one directory per run, its snapshots inside."""
-        return self.home / "steps"
-
-    @property
     def session_log(self) -> Path:
         """The append-only timeline of what this process did."""
         return self.home / "session-log.jsonl"

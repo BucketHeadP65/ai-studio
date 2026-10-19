@@ -57,7 +57,7 @@ def a_log_under(state: StateSettings) -> SessionLog:
 
 def a_transcript(home: Path) -> FileStepStore:
     """One transcript under `home`."""
-    return FileStepStore(a_state(home).steps)
+    return FileStepStore(a_state(home).home / "steps")
 
 
 def recorded(log: SessionEvents, event: SessionEvent) -> Recorded:
