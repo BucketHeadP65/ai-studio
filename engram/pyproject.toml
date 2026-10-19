@@ -37,6 +37,7 @@ dependencies = [
     "logfire>=4.39.0",
     "markdown-it-py>=3.0.0",
     "mcp>=1.29.0",
+    "openai>=1.60.0",
     "pgvector>=0.3.6",
     "pydantic>=2.13.4",
     "pydantic-ai>=2.20.0",
