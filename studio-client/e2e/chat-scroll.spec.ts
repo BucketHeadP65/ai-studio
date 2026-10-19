@@ -120,6 +120,7 @@ const SESSION_S1 = {
   usage: usage(),
   kind: "chat",
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 

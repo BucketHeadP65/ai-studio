@@ -504,6 +504,7 @@ describe("Home sets a run up before it creates anything", () => {
             },
             kind: "runner",
             cost_usd: "0",
+            unpriced: 0,
             context: null,
           },
         });
@@ -527,6 +528,7 @@ describe("Home sets a run up before it creates anything", () => {
             },
             kind: "runner",
             cost_usd: "0",
+            unpriced: 0,
             context: null,
           },
         }),

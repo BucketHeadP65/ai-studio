@@ -49,7 +49,7 @@ export const SessionSummarySchema = z.object({
   cost_usd: z.string(),
   // Responses in this session that no source could price. Above zero, `cost_usd` is a floor rather
   // than the cost, and the vitals say so rather than showing a figure that reads as the whole of it.
-  unpriced: z.number().default(0),
+  unpriced: z.number(),
   context: ContextVitalsSchema.nullable(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
@@ -127,9 +127,9 @@ export const RunViewSchema = z.object({
   // card instead.
   run_title: z.string(),
   state: z.enum(["running", "paused", "waiting"]),
-  active: z.array(z.string()).default([]),
-  done: z.array(z.string()).default([]),
-  failed: z.array(z.string()).default([]),
+  active: z.array(z.string()),
+  done: z.array(z.string()),
+  failed: z.array(z.string()),
   waiting_at: z.string().nullable(),
   gate: PendingGateSchema.nullable(),
   // ISO 8601 UTC, "" when unknown.

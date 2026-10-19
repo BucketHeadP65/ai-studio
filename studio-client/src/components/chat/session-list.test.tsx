@@ -33,6 +33,7 @@ interface Session {
     cache_write_tokens: number;
   };
   cost_usd: string;
+  unpriced: number;
   context: null;
 }
 
@@ -52,6 +53,7 @@ const ALPHA: Session = {
   turn_count: 3,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -67,6 +69,7 @@ const BETA: Session = {
   turn_count: 5,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -82,6 +85,7 @@ const GAMMA: Session = {
   turn_count: 1,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -97,6 +101,7 @@ const DELTA: Session = {
   turn_count: 8,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 

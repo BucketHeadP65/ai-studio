@@ -117,6 +117,7 @@ function mountApi(overrides: {
         title: overrides.cardTitle ?? "",
         version: 1,
         description: "",
+        provisional: false,
         graph: emptyGraph,
         issues: [],
         fits: true,

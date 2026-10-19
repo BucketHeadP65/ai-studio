@@ -336,6 +336,7 @@ function session(id: string, title: string, kind = "chat") {
     usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },
     kind,
     cost_usd: "0",
+    unpriced: 0,
     context: null,
   };
 }

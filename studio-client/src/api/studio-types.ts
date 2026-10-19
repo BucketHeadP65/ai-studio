@@ -139,11 +139,11 @@ export const LibraryEntrySchema = z.object({
   provisional: z.boolean().default(true),
   score: z.number().nullish(),
   trust: TrustSchema,
-  needs: z.array(z.string()).default([]),
+  needs: z.array(z.string()),
   // `null` when the spec could not be read at all — a card that must say
   // "unreadable", not pretend the artifact is runnable.
   missing: z.array(z.string()).nullable(),
-  brings: z.array(z.string()).default([]),
+  brings: z.array(z.string()),
   version: z.number().nullable(),
   // When this artifact was archived, or `null` while it is live.
   archived_at: z.string().datetime({ offset: true }).nullable(),
@@ -159,7 +159,7 @@ export const LibraryEntrySchema = z.object({
   // What every priced run of this workflow has cost so far, and how many of its runs were
   // priced at all. Absent or `null` before any run of it has been priced.
   spend: z
-    .object({ cost_usd: z.string(), unpriced: z.number().default(0), runs: z.number() })
+    .object({ cost_usd: z.string(), unpriced: z.number(), runs: z.number() })
     .nullish(),
 });
 export type LibraryEntry = z.infer<typeof LibraryEntrySchema>;
@@ -312,18 +312,18 @@ export const WorkflowDetailSchema = z.object({
   id: z.string(),
   name: z.string(),
   version: z.number(),
-  description: z.string().default(""),
+  description: z.string(),
   // The card a chooser reads -- distinct from the spec's own `description` above, and the one
   // `PATCH .../card` rewrites. A blank `title` is the signal the header falls back to the id for.
   title: z.string(),
   summary: z.string(),
   applicability: z.string(),
-  provisional: z.boolean().default(true),
+  provisional: z.boolean(),
   graph: WorkflowGraphSchema,
-  issues: z.array(z.string()).default([]),
+  issues: z.array(z.string()),
   fits: z.boolean(),
-  missing: z.array(z.string()).default([]),
-  brings: z.array(z.string()).default([]),
+  missing: z.array(z.string()),
+  brings: z.array(z.string()),
   spec_yaml: z.string(),
   staleness: z.array(z.string()).nullable(),
   lineage: LineageSchema.nullable(),
@@ -343,7 +343,7 @@ export const WorkflowDetailSchema = z.object({
   // cost so far, and how many of its runs were priced at all. Absent or `null` before any run
   // of it has been priced.
   spend: z
-    .object({ cost_usd: z.string(), unpriced: z.number().default(0), runs: z.number() })
+    .object({ cost_usd: z.string(), unpriced: z.number(), runs: z.number() })
     .nullish(),
   // The author's own words, or `null` when the library kept none. Absent stays absent.
   presentation: WorkflowPresentationSchema.nullish(),
@@ -492,11 +492,11 @@ export const RunStateSchema = z.object({
   running: z.boolean(),
   workflow: z.string().nullable(),
   result: z.string().nullable(),
-  active: z.array(z.string()).default([]),
-  done: z.array(z.string()).default([]),
-  failed: z.array(z.string()).default([]),
+  active: z.array(z.string()),
+  done: z.array(z.string()),
+  failed: z.array(z.string()),
   waiting_at: z.string().nullable(),
-  events: z.array(StepEventSchema).default([]),
+  events: z.array(StepEventSchema),
   seq: z.number(),
   // The live run's own automatic-approval flag, the same one `/api/run/automode` flips.
   auto_approve: z.boolean(),
@@ -578,12 +578,9 @@ export const SpendViewSchema = z.object({
   cost_usd: z.string(),
   // Responses no source could name a figure for. Above zero, `cost_usd` is a floor rather than the
   // cost, and a screen says so rather than showing a number that reads as the whole of it.
-  unpriced: z.number().default(0),
+  unpriced: z.number(),
   usage: SpendUsageSchema,
-  steps: z.record(
-    z.string(),
-    z.object({ cost_usd: z.string(), unpriced: z.number().default(0), usage: SpendUsageSchema }),
-  ),
+  steps: z.record(z.string(), z.object({ cost_usd: z.string(), unpriced: z.number(), usage: SpendUsageSchema })),
 });
 export type SpendView = z.infer<typeof SpendViewSchema>;
 
@@ -683,22 +680,22 @@ export const RunEnvelopeSchema = z.object({
   // the workflow's own card.
   run_title: z.string(),
   outcome: z.enum(["completed", "failed", "stopped", "live"]),
-  failure: z.string().default(""),
+  failure: z.string(),
   started_at: z.string(),
-  ended_at: z.string().default(""),
+  ended_at: z.string(),
   runner: z.string(),
   session_id: z.string(),
   // Each declared parameter as the JSON value the run was actually given: an array stays an array
   // and a number a number, which is what lets a rerun reopen the same values in the same controls.
-  params: z.record(z.string(), JsonValueSchema).default({}),
-  gates_approved: z.array(z.string()).default([]),
-  gates_rejected: z.record(z.string(), z.number()).default({}),
-  gates_auto: z.array(z.string()).default([]),
+  params: z.record(z.string(), JsonValueSchema),
+  gates_approved: z.array(z.string()),
+  gates_rejected: z.record(z.string(), z.number()),
+  gates_auto: z.array(z.string()),
   // Gates this run's own orchestrator decided -- an authored orchestrator gate, or a person gate
   // converted under gate_mode orchestrate. Counted apart from `gates_approved` (a person's own
   // yes) and `gates_auto` (nobody asked), the same honesty those two already keep.
   gates_orchestrated: z.array(z.string()),
-  pinned: z.boolean().default(false),
+  pinned: z.boolean(),
   // This run's own priced cost, `null` when no ledger exists for it, as for a run still too fresh
   // to have priced a single response.
   spend: SpendViewSchema.nullable(),
@@ -710,13 +707,13 @@ export type RunEnvelope = z.infer<typeof RunEnvelopeSchema>;
 
 export const RunHistoryRecordSchema = RunEnvelopeSchema.extend({
   spec: z.unknown(),
-  values: z.record(z.string(), z.string()).default({}),
+  values: z.record(z.string(), z.string()),
   // Each worker step's own messages at the moment the run ended, keyed by step name --
   // pydantic-ai's `ModelMessage` grammar, dumped to JSON. Loose on purpose: rendering reads
   // only `kind` and each part's `part_kind`/`content`, tolerating whatever else a message
   // carries.
   conversations: z.record(z.string(), z.array(z.unknown())),
-  events: z.array(StepEventSchema).default([]),
+  events: z.array(StepEventSchema),
   graph: WorkflowGraphSchema.nullable(),
   // Every review a person recorded against this run, oldest first. Empty is a run nobody has
   // reviewed: owner acceptance unknown, never accepted and never rejected.

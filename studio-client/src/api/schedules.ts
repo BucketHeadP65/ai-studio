@@ -45,13 +45,13 @@ export const ScheduleSchema = z.object({
   // When a person last flipped this schedule off, `null` while it is on. Cleared the moment it
   // flips back on.
   paused_at: z.string().nullable(),
-  // What this schedule's own runs have cost today, and over the past seven days. Absent or
-  // null before any run of it has been priced.
-  spend_today_usd: z.string().nullish(),
-  spend_week_usd: z.string().nullish(),
+  // What this schedule's own runs have cost today, and over the past seven days, as decimal strings.
+  // "0" before any run of it has been priced.
+  spend_today_usd: z.string(),
+  spend_week_usd: z.string(),
   // Responses in each figure that no source could price. Above zero, the figure beside it is a floor.
-  spend_today_unpriced: z.number().nullish(),
-  spend_week_unpriced: z.number().nullish(),
+  spend_today_unpriced: z.number(),
+  spend_week_unpriced: z.number(),
 });
 export type Schedule = z.infer<typeof ScheduleSchema>;
 

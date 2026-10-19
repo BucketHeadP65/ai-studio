@@ -37,6 +37,10 @@ const SCHEDULE: Schedule = {
   next_run_at: "2026-08-23T10:30:00Z",
   live: null,
   paused_at: null,
+  spend_today_usd: "0",
+  spend_week_usd: "0",
+  spend_today_unpriced: 0,
+  spend_week_unpriced: 0,
 };
 
 describe("WorkflowSchedulesPage", () => {

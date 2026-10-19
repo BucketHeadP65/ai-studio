@@ -395,6 +395,7 @@ describe("LibraryCard", () => {
               },
               kind: "runner",
               cost_usd: "0",
+              unpriced: 0,
               context: null,
             },
           });
@@ -419,6 +420,7 @@ describe("LibraryCard", () => {
               },
               kind: "runner",
               cost_usd: "0",
+              unpriced: 0,
               context: null,
             },
           });

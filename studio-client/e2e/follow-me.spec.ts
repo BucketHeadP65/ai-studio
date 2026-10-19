@@ -78,6 +78,7 @@ const NEW_SESSION = {
   usage: usage(),
   kind: "chat",
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -167,7 +168,7 @@ async function mockApi(page: Page) {
     }
     if (url.pathname === "/api/sessions/m-1") {
       return json(route, {
-        session: { ...NEW_SESSION, id: "m-1", kind: "master", cost_usd: "0", context: null },
+        session: { ...NEW_SESSION, id: "m-1", kind: "master", cost_usd: "0", unpriced: 0, context: null },
         turns: [],
       });
     }

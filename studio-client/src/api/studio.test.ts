@@ -78,6 +78,7 @@ const WORKFLOW = {
   name: "lit-check",
   version: 5,
   description: "Check a decision against the literature.",
+  provisional: false,
   graph: GRAPH,
   issues: [],
   fits: true,

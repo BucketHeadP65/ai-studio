@@ -373,6 +373,7 @@ const SESSIONS: Wire<typeof SessionListSchema>["sessions"] = [
     usage: usage(),
     kind: "chat",
     cost_usd: "0.0421",
+    unpriced: 0,
     context: null,
   },
   {
@@ -387,6 +388,7 @@ const SESSIONS: Wire<typeof SessionListSchema>["sessions"] = [
     usage: usage(),
     kind: "runner",
     cost_usd: "0.0083",
+    unpriced: 0,
     context: null,
   },
 ];

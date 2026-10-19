@@ -41,6 +41,7 @@ function workflowFixture() {
     name: "wf-sales",
     version: 1,
     description: "fetch sales",
+    provisional: false,
     graph: {
       name: "wf-sales",
       version: 1,

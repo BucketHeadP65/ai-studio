@@ -32,6 +32,10 @@ interface RawSchedule {
   next_run_at: string | null;
   live: string | null;
   paused_at: string | null;
+  spend_today_usd: string;
+  spend_week_usd: string;
+  spend_today_unpriced: number;
+  spend_week_unpriced: number;
 }
 
 function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
@@ -54,6 +58,10 @@ function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
     next_run_at: "2026-08-23T10:30:00+00:00",
     live: null,
     paused_at: null,
+    spend_today_usd: "0",
+    spend_week_usd: "0",
+    spend_today_unpriced: 0,
+    spend_week_unpriced: 0,
     ...overrides,
   };
 }
