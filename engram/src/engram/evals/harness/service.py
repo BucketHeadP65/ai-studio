@@ -665,7 +665,8 @@ def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp
     try:
         written, lines = read_results(path)
     except (OSError, ValueError) as error:
-        msg = f"the results file {path} cannot be resumed: {error} Name another results file, or run without resuming to replace this one."
+        reason = str(error) if str(error).endswith(".") else f"{error}."
+        msg = f"the results file {path} cannot be resumed: {reason} Name another results file, or run without resuming to replace this one."
         raise ResultsFileNotResumableError(msg) from error
     differences = _held_differences(written, _results_header(config, dataset, stamp, source_lookup_error=None))
     if differences:

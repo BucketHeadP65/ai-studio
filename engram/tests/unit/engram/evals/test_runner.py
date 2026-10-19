@@ -2496,6 +2496,21 @@ class TestResume(_ResetsLogfire):
         with pytest.raises(ResultsFileNotResumableError, match="line 1 of"):
             await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_golden_dataset())
 
+    @pytest.mark.parametrize(("shape", "names"), [("empty", "is empty"), ("repeated", "repeats the case"), ("no header", "is not a results header")])
+    async def test_a_refused_resume_ends_its_reason_before_naming_the_way_out(self, tmp_path: Path, shape: str, names: str):
+        results = tmp_path / "results.jsonl"
+        dataset = _named_dataset(*_RESUMED_CASES)
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset)
+        header, first_case, *_rest = results.read_text(encoding="utf-8").splitlines()
+        rows = {"empty": [], "repeated": [header, first_case, first_case], "no header": [first_case]}[shape]
+        results.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+        with pytest.raises(ResultsFileNotResumableError, match=names) as refused:
+            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=_AskedModel().model())
+
+        assert str(refused.value).endswith(". Name another results file, or run without resuming to replace this one.")
+
     def test_resuming_needs_a_results_file(self):
         with pytest.raises(ValueError, match="a resumed run continues a results file"):
             EvaluationRunConfig(model_spec="test-model", instructions="Cite.", resume=True)
