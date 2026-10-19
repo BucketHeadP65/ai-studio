@@ -82,7 +82,7 @@ async def _seed(admin_url: str) -> None:
                 )
             # The 60 sections share one page, so lift the per-page cap past k and the cap per document off: the k clamp alone limits the rows.
             await conn.execute(
-                text("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"rows_per_group": 50, "max_hits_per_document": 0}'::jsonb WHERE id = 1""")
+                text("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"rows_per_group": 50, "max_hits_per_document": 0}'::jsonb WHERE collection IS NULL""")
             )
     finally:
         await engine.dispose()

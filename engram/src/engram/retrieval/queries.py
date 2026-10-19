@@ -121,8 +121,8 @@ SEARCH_SQL = (
     "include_meta => false)"
 )
 
-# The cap on hits per document `api.search` applies, as the database's tuning row sets it, 0 for every hit kept.
-HITS_PER_DOCUMENT_SQL = "SELECT api.search_hits_per_document() AS hits_per_document"
+# The cap on hits per document `api.search` applies to one knowledge base, as its search tuning sets it, 0 for every hit kept.
+HITS_PER_DOCUMENT_SQL = "SELECT api.search_hits_per_document(:collection) AS hits_per_document"
 
 # The `api.fetch` call behind the structured fetch tool. A `meta.*` id returns no unit. An id is
 # unique only within its collection, so `:collection` is always bound.
@@ -273,13 +273,16 @@ class SearchHandler:
         }
         return await self._gateway.rows(SEARCH_SQL, params, cap=query.k)
 
-    async def hits_per_document(self) -> int:
-        """Read the most hits one document keeps in this handler's search, as the database's tuning row sets it.
+    async def hits_per_document(self, collection: str) -> int:
+        """Read the most hits one document of a knowledge base keeps in this handler's search, as its search tuning sets it.
+
+        Args:
+            collection: The knowledge base whose cap is read, by its collection.
 
         Returns:
             The cap, 0 when the search keeps every hit or the database answers no number.
         """
-        result = await self._gateway.rows(HITS_PER_DOCUMENT_SQL, {}, cap=1)
+        result = await self._gateway.rows(HITS_PER_DOCUMENT_SQL, {"collection": collection}, cap=1)
         value = result.rows[0].get("hits_per_document") if result.rows else None
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 

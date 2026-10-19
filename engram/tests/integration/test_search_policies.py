@@ -53,7 +53,7 @@ async def admin(migrated: str) -> AsyncIterator[asyncpg.Connection]:
     """An owner connection over the long page, the titled page and the source, with no cap on hits per document."""
     connection = await asyncpg.connect(_asyncpg_dsn(migrated))
     try:
-        await connection.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || '{\"max_hits_per_document\": 0}'::jsonb WHERE id = 1")
+        await connection.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || '{\"max_hits_per_document\": 0}'::jsonb WHERE collection IS NULL")
         await _page(connection, _LONG, "Long notes", f"{_QUERY} {_QUERY} {_QUERY}")
         await connection.executemany(
             "INSERT INTO kb.sections (collection, id, page_id, ord, canon, path, heading, body, body_hash, tokens)"
@@ -114,7 +114,7 @@ async def test_one_sources_raw_chunks_keep_three_rows(reader: asyncpg.Connection
 
 
 async def test_the_tuning_row_changes_the_count(admin: asyncpg.Connection, reader: asyncpg.Connection):
-    await admin.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || '{\"rows_per_group\": 5}'::jsonb WHERE id = 1")
+    await admin.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || '{\"rows_per_group\": 5}'::jsonb WHERE collection IS NULL")
 
     rows = await reader.fetch(_SEARCH, "astrolabe", "raw", _COLLECTION)
 

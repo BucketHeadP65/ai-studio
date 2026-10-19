@@ -339,7 +339,7 @@ class ReadSurface:
 
     A call that searches this base refuses any other key. Empty (the default) refuses every key."""
     hits_per_document: int = 0
-    """The most hits one document keeps in this knowledge base's search, as its database's tuning row sets it.
+    """The most hits one document keeps in this knowledge base's search, as its search tuning sets it.
 
     The `search` description states it, and only when every knowledge base behind the tool applies the same cap. 0 (the
     default) keeps every hit and states nothing about documents."""
