@@ -21,7 +21,7 @@ What this pins:
 * `facets` still narrow a capped search.
 * the tuning row starts with a cap of 1 and refuses a cap that is neither a number nor null.
 * the reader reads the cap the search applies, through SQL and through the search handler.
-* the comment an agent reads names the cap and the folded units, and one step down puts 0068's search, row, check,
+* the comment an agent reads names the cap and the folded units, and one step down puts 0069's search, row, check,
   comment and functions back.
 """
 
@@ -224,7 +224,7 @@ async def test_an_entity_page_made_from_no_source_is_a_document_of_its_own(reade
 
 
 async def test_a_cap_of_zero_gives_back_the_ranking_before_the_cap(migrated: str, admin: asyncpg.Connection, reader: asyncpg.Connection):
-    run_downgrade(migrated, "0068")
+    run_downgrade(migrated, "0069")
     before = [(row["id"], row["hit_level"]) for row in await _search(reader)]
     run_upgrade_head(migrated)
     await _cap(admin, "0")
@@ -310,7 +310,7 @@ async def test_the_comment_names_the_cap_and_the_folded_units(migrated: str):
 
 
 async def test_one_step_down_puts_the_previous_search_row_and_comment_back(migrated: str, admin: asyncpg.Connection, reader: asyncpg.Connection):
-    run_downgrade(migrated, "0068")
+    run_downgrade(migrated, "0069")
     columns = [attribute.name for attribute in (await reader.prepare(_SEARCH)).get_attributes()]
     tuning = json.loads(str(await admin.fetchval("SELECT tuning FROM kb.retrieval_tuning WHERE id = 1")))
     below = await _comment(migrated)
@@ -330,7 +330,7 @@ _CHECK = (
 
 
 async def test_one_step_down_puts_back_the_check_that_knows_no_cap(migrated: str, admin: asyncpg.Connection):
-    run_downgrade(migrated, "0068")
+    run_downgrade(migrated, "0069")
     check = str(await admin.fetchval(_CHECK))
     await admin.execute("""UPDATE kb.retrieval_tuning SET tuning = tuning || '{"max_hits_per_document": "one"}'::jsonb WHERE id = 1""")
     with pytest.raises(asyncpg.CheckViolationError):

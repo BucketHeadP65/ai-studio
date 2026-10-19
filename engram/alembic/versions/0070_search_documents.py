@@ -1,7 +1,7 @@
 """`api.search` keeps the best hit of each document and lists the document's next matching units under it.
 
-Revision ID: 0069
-Revises: 0068
+Revision ID: 0070
+Revises: 0069
 Create Date: 2026-10-18 00:00:00.000000
 
 One document yields several units: a page made from a source, its sections, its claims and the source's raw chunks.
@@ -37,8 +37,8 @@ from core.ai.retrieval.contracts import (
     hits_per_document_body,
 )
 
-revision: str = "0069"
-down_revision: str | None = "0068"
+revision: str = "0070"
+down_revision: str | None = "0069"
 branch_labels: str | tuple[str, ...] | None = None
 depends_on: str | tuple[str, ...] | None = None
 

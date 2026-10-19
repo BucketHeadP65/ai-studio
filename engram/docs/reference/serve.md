@@ -397,7 +397,7 @@ rank policies run after the fusion: a card whose title equals the query, ignorin
 spaces, goes first when no other card holds that title, outside its page's count, every other hit keeps
 at most `rows_per_group` rows per page or source, and then each document keeps at most
 `max_hits_per_document` hits, its best first and the pinned card its best, so `k` counts documents
-(migration 0069). A unit's document is the source it was made from (`kb.pages.source_id`, or a raw
+(migration 0070). A unit's document is the source it was made from (`kb.pages.source_id`, or a raw
 chunk's own source) when it has one, otherwise its own page, so a page made from a source, its sections,
 its claims and the source's raw chunks are one document. The next three matching units of a document
 come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level}` best
