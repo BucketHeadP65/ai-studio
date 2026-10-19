@@ -953,3 +953,20 @@ def test_a_tuning_per_partition_needs_a_partitioned_schema_with_a_collection_fac
         replace(_corpus(), tuning=per_partition)
     with pytest.raises(ValueError, match="collection_facet"):
         replace(_partitioned_corpus(), tuning=per_partition)
+
+
+def test_the_cap_function_reads_a_partitions_own_row_only_when_the_session_may_see_the_partition() -> None:
+    schema = _tuned_per_partition_corpus()
+    assert schema.tuning is not None
+    visible = replace(schema, tuning=replace(schema.tuning, partition_visible="app.visible_tenant({partition})"))
+
+    body = hits_per_document_body(visible, function_name="api.search_hits_per_document")
+
+    assert "LEFT JOIN kb.search_tuning p ON p.tenant = $1 AND app.visible_tenant($1)" in body
+
+
+def test_a_visibility_rule_needs_a_partition_column_and_names_the_partition() -> None:
+    with pytest.raises(ValueError, match="partition_col"):
+        SearchTuning(relation="kb.search_tuning", max_hits_per_document=1, partition_visible="app.visible_tenant({partition})")
+    with pytest.raises(ValueError, match="must name the partition"):
+        SearchTuning(relation="kb.search_tuning", max_hits_per_document=1, partition_col="tenant", partition_visible="app.visible_tenant(tenant)")

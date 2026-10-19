@@ -162,7 +162,7 @@ def _overridden(row: str, key: str, clamped: str, fallback: str) -> str:
 
 
 def _folded_snippet(snippet: str, length: str) -> str:
-    """`snippet` cut to `length` at the last whole word that fits, ending in an ellipsis, or whole when it fits."""
+    """`snippet` whole when it fits, else cut to `length` at the last whole word inside it, or mid-word, with an ellipsis."""
     return (
         f"CASE WHEN char_length({snippet}) <= {length} THEN {snippet}"
         f" ELSE coalesce(substring(left({snippet}, {length}) FROM '^(.*\\S)\\s'), left({snippet}, {length} - 1)) || '\u2026' END"
@@ -175,14 +175,16 @@ def hits_per_document_body(schema: SearchSchema, *, function_name: str) -> str:
     The function reads the tuning relation as its owner, over the same defaults and bound the search carries, so it
     answers the number the search reads when it runs. It answers 0 when the search keeps every hit. A search tuned per
     partition gets a function taking the partition, named like the schema's collection facet and defaulting to the
-    reader session's own, which answers that partition's cap.
+    reader session's own, which answers that partition's cap. With `partition_visible` it reads the partition's own row
+    only when the session may see the partition, and the default row otherwise.
 
     Args:
         schema: The knowledge base schema whose search caps hits per document.
         function_name: The schema-qualified function name to create.
 
     Returns:
-        The complete `CREATE FUNCTION` DDL statement, a SQL function taking no argument and returning `int`.
+        The complete `CREATE FUNCTION` DDL statement, a SQL function returning `int`. It takes no argument, or the
+        partition when the search is tuned per partition.
 
     Raises:
         ValueError: When the schema's search caps no hits per document.
@@ -196,10 +198,11 @@ def hits_per_document_body(schema: SearchSchema, *, function_name: str) -> str:
     if not tuning.partition_col:
         return f"CREATE FUNCTION {function_name}() RETURNS int\n{preamble}SELECT {_max_hits_clamp('settings.tuning')}\n{settings}$$"
     cap = _overridden("p.tuning", "max_hits_per_document", _max_hits_clamp("p.tuning"), _max_hits_clamp("settings.tuning"))
+    visible = f" AND {tuning.partition_visible.replace('{partition}', '$1')}" if tuning.partition_visible else ""
     return (
         f"CREATE FUNCTION {function_name}({schema.collection_facet} text DEFAULT {_SESSION_COLLECTION_DEFAULT}) RETURNS int\n"
         f"{preamble}SELECT {cap}\n{settings}"
-        f"LEFT JOIN {tuning.relation} p ON p.{tuning.partition_col} = $1\n"
+        f"LEFT JOIN {tuning.relation} p ON p.{tuning.partition_col} = $1{visible}\n"
         "$$"
     )
 

@@ -240,13 +240,17 @@ class SearchTuning:
             pinned title its best. Its next `FOLDED_UNITS_PER_HIT` hits are listed under its best hit as folded units,
             in a `folded_units` jsonb column returned last. Bound to 0..50, and 0 or a null in the row keeps every hit.
             `None` generates neither the cap nor the column.
-        folded_snippet_chars: The longest snippet a folded unit carries, in characters. It is the unit's own snippet
-            cut at a whole word with an ellipsis, so it is never longer than `snippet_chars`. Bound to 20..2000.
-            `None` lists folded units without a snippet. It needs `max_hits_per_document`.
+        folded_snippet_chars: The longest snippet a folded unit carries, in characters. It is the unit's own snippet,
+            whole when it fits, else cut at the last whole word inside this length, or mid-word when no word ends
+            inside it, with an ellipsis. So it is never longer than `snippet_chars`. Bound to 20..2000. `None` lists
+            folded units without a snippet. It needs `max_hits_per_document`.
         partition_col: The column of `relation` naming the partition a row tunes. Set, the row whose column is null
             holds the numbers for every partition, and a partition's own row may set `max_hits_per_document` and
             `folded_snippet_chars` for that partition's hits. Empty, `relation` holds one row, `id = 1`. It needs
             `relation` and `max_hits_per_document`, and a schema with a partition and a collection facet.
+        partition_visible: A boolean SQL expression saying whether the reading session may see a partition, with
+            `{partition}` standing for it. The cap function reads a partition's own row only when it holds, and the
+            default row otherwise. Empty reads any partition's row. It needs `partition_col`.
     """
 
     relation: str = ""
@@ -259,18 +263,26 @@ class SearchTuning:
     max_hits_per_document: int | None = None
     folded_snippet_chars: int | None = None
     partition_col: str = ""
+    partition_visible: str = ""
 
     def __post_init__(self) -> None:
         """Validate the folded snippet length and the partition column against the cap and the relation.
 
         Raises:
             ValueError: When `folded_snippet_chars` is set without `max_hits_per_document`, or `partition_col` is set
-                without `relation` or `max_hits_per_document`, or is not an identifier.
+                without `relation` or `max_hits_per_document`, or is not an identifier, or `partition_visible` is set
+                without `partition_col` or without naming `{partition}`.
         """
         if self.folded_snippet_chars is not None and self.max_hits_per_document is None:
             msg = "SearchTuning.folded_snippet_chars needs max_hits_per_document, since only a capped search folds units"
             raise ValueError(msg)
+        if self.partition_visible and "{partition}" not in self.partition_visible:
+            msg = "SearchTuning.partition_visible must name the partition it judges as {partition}"
+            raise ValueError(msg)
         if not self.partition_col:
+            if self.partition_visible:
+                msg = "SearchTuning.partition_visible needs partition_col, since it judges a partition's own row"
+                raise ValueError(msg)
             return
         if not _IDENTIFIER.fullmatch(self.partition_col):
             msg = f"SearchTuning.partition_col {self.partition_col!r} must be an identifier"

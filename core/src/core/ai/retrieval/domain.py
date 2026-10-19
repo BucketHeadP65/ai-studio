@@ -217,8 +217,8 @@ class FoldedUnit(BaseModel):
     hit_level: str = Field(description="The unit's granularity tier, one of the values a hit's hit_level takes.")
     snippet: str | None = Field(
         default=None,
-        description="A short excerpt of the text the unit matched, cut at a whole word, enough to judge whether to fetch "
-        "it, never the whole unit. None when the search listed no snippet.",
+        description="The text the unit matched, cut short with an ellipsis when it is longer, enough to judge whether to "
+        "fetch it. None when the search listed none or the answer had no room for it.",
     )
     ref: str | None = Field(
         default=None,
