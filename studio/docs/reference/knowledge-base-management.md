@@ -563,7 +563,7 @@ evals score failed: embedding endpoint example.openai.azure.com: Connection erro
 evals run failed: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)
 ```
 
-The text comes from `engram.evals.harness.contracts.connection_failure_message`, the same rule an evaluation run uses for
+The text comes from `core.connection_failures.connection_failure_message`, the same rule an evaluation run uses for
 a failed case. Any other failure keeps its own text unchanged.
 
 **A collection belongs to the knowledge base root that indexed it.** Each indexing run stamps its knowledge base root onto

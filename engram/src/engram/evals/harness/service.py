@@ -30,6 +30,7 @@ from core.ai.evaluation.contracts import (
     model_fingerprint,
 )
 from core.ai.models import Thinking, chat_http_client
+from core.connection_failures import connection_failure_message
 from core.db import redact_db
 from core.settings import AzureOpenAiSettings, DatabaseSettings
 from pydantic_ai import capture_run_messages
@@ -39,7 +40,6 @@ from pydantic_ai.usage import UsageLimits
 from pydantic_evals.lifecycle import CaseLifecycle
 
 from engram.evals.harness.agent import build_agent, make_task
-from engram.evals.harness.connection_failures import ServiceConnectionError, connection_failure_message
 from engram.evals.harness.domain.evaluators import AnswerAccuracy
 from engram.evals.harness.domain.experiments import ExperimentRun, expand_variants
 from engram.evals.harness.infrastructure.instrumentation import configure_logfire, enable_local_span_recording, resolve_logfire_settings
@@ -770,6 +770,10 @@ class ResultsFileNotResumableError(ValueError):
     The file cannot be read, or it was written by a run whose settings differ in a field the paired comparison holds.
     The message names the line, or each differing field with both values.
     """
+
+
+class ServiceConnectionError(Exception):
+    """A case's connection to a service failed. Its message names the service before the error's own text."""
 
 
 class UnnamedCaseError(EvaluationError):

@@ -18,12 +18,12 @@ import typer
 
 from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
 from core.ai.retrieval.contracts import FeedbackEntry
+from core.connection_failures import connection_failure_message
 from core.cqrs.contracts import ImmediateWake, JobQueries, MemoryJobs, MessageBus, Worker
 from core.db import redact_db
 from core.observability import get_logger
 from core.wiring.contracts import ContainerResolver
 from engram.config import KnowledgeBaseSettings
-from engram.evals.harness.contracts import connection_failure_message
 from engram.identity import KnowledgeBaseIdentity, LastRun, disk_content_hashes, read_identity
 from engram.indexing.contracts import IndexKnowledgeBase, IndexReport, KnowledgeBaseReader
 from engram.init.contracts import code_head_revision

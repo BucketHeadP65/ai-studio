@@ -20,6 +20,7 @@ CONVERTED = (
 )
 """Every converted slice, by its dotted name. A slice joins when its conversion lands and never leaves."""
 DOCUMENTED: tuple[str, ...] = (
+    "core.connection_failures",
     "core.fingerprints",
     "core.statistics",
     "core.column_types",

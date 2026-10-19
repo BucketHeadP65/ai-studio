@@ -88,7 +88,7 @@ by SQLAlchemy) and by asyncio's text for a failed connection attempt, such as
 A tool-call limit, a refused answer, an error the agent's own SQL statement causes (a syntax error,
 an undefined column, a refused permission, a statement timeout) and every other error are not
 transient. The rule lives in `engram.evals.harness.transient_failures`, which reads database
-connection failures through `engram.evals.harness.infrastructure.database_failures`.
+connection failures through `core.connection_failures`.
 
 A failed case whose connection to a service failed records an error that names the service before
 the error's own text, so the results file and the printed failures table say which one failed:
@@ -99,7 +99,7 @@ An embedding endpoint is an OpenAI-compatible endpoint whose request path ends i
 other is a model endpoint, each named by its host. The database is the reader URL with its
 credentials removed (`core.db.redact_db`), since a case's tools connect through it. Whether the case
 failed transiently is read from the error it raised before it was named, so a named failure keeps its
-`transient` key. `engram.evals.harness.connection_failures.connection_failure_message` builds the
+`transient` key. `core.connection_failures.connection_failure_message` builds the
 text, and the `studio` CLI prints a command's own failure through it too.
 
 `--resume` continues that file after a run lost cases to transient failures. When the file exists
