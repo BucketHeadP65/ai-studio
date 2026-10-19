@@ -19,6 +19,7 @@ from core.ai.evaluation.contracts import OwnerReviewRequest, OwnerReviewService
 from core.ai.workflows.contracts import (
     FromNode,
     FromParameter,
+    Outcome,
     ParameterSpec,
     PersonGate,
     ResultArtifactSpec,
@@ -82,6 +83,7 @@ def _seed(state: Path, *, run_id: str = RUN, values: dict[str, object] | None = 
             run_id=run_id,
             workflow_id="wf.report",
             outcome="completed",
+            result=Outcome(status="unknown", summary="no result declared"),
             started_at=now,
             ended_at=now,
             runner="app:harness",
