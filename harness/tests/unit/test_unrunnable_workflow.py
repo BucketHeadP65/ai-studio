@@ -109,7 +109,7 @@ async def test_scheduling_refuses_with_the_running_slice_error(tmp_path: Path) -
     session = _session(tmp_path)
 
     with pytest.raises(ModelRetry) as refused:
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), WORKFLOW_ID, "every 30m")
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), WORKFLOW_ID, "every 30m", run_engine="in_process")
 
     assert isinstance(refused.value.__cause__, WorkflowNotRunnableError)
     assert str(refused.value) == f"cannot schedule {WORKFLOW_ID}. {_shared_refusal()}"

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from core.ai.workflows.contracts import LibraryError, unsatisfied_parameters, validate
 from core.observability import get_logger
@@ -63,6 +63,11 @@ CAUGHT_UP_OUTCOME = "caught up"
 
 ENGINE_UNREACHABLE_OUTCOME = "engine unreachable"
 """Stamped when the run engine this deployment is configured for answered nothing."""
+
+ORCHESTRATE_ON_TEMPORAL = (
+    "this deployment runs on Temporal, where an orchestrated gate has no counterpart yet. Save the schedule in wait or auto mode."
+)
+"""The refusal a schedule saved with gate mode `orchestrate` gets on a deployment that runs on Temporal."""
 
 _BLACKOUT_WALK_LIMIT = 1000
 """The most cadence occurrences `_next_outside_blackout` walks past before it gives up."""
@@ -122,13 +127,10 @@ async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollabor
     workflow_id = await current_version(session.library, schedule.workflow_id)
     try:
         spec = await _checked_workflow(session.library, session.registry, workflow_id)
+        _require_parameters(workflow_id, spec, schedule.arguments)
     except WorkflowUnavailableError as exc:
         return f"refused: {exc.reason}"
-    except running.WorkflowNotRunnableError as exc:
-        return f"refused: {exc}"
-    try:
-        _require_parameters(workflow_id, spec, schedule.arguments)
-    except WorkflowParametersMissingError as exc:
+    except (running.WorkflowNotRunnableError, WorkflowParametersMissingError) as exc:
         return f"refused: {exc}"
     try:
         params = await admitted_arguments(
@@ -161,7 +163,15 @@ async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollabor
     except running.RunEngineUnavailableError as exc:
         _logger.warning("schedule {schedule} found no engine: {reason}", schedule=str(schedule.id), reason=str(exc))
         return ENGINE_UNREACHABLE_OUTCOME
+    except running.AutomodeUnavailableError as exc:
+        return f"refused: {exc}"
     return "launched"
+
+
+def _refuse_orchestrate_on_temporal(gate_mode: GateMode | None, run_engine: Literal["in_process", "temporal"]) -> None:
+    """Refuse gate mode `orchestrate` on a deployment that runs on Temporal."""
+    if gate_mode == "orchestrate" and run_engine == "temporal":
+        raise ScheduleSettingInvalidError(ORCHESTRATE_ON_TEMPORAL)
 
 
 def _held_before(last_outcome: str) -> bool:
@@ -361,10 +371,12 @@ class Scheduler:
         catch_up: bool,
         names: KnowledgeBaseNames | None,
         now: datetime,
+        run_engine: Literal["in_process", "temporal"],
     ) -> Schedule:
         """Add a schedule after checking its workflow, its arguments and every setting.
 
-        The checks run in this order: the workflow, its required parameters, its arguments, the cadence, the gate policy, the blackout.
+        The checks run in this order: the workflow, its required parameters, its arguments, the cadence, the gate policy, the
+        blackout, the gate mode.
 
         Args:
             library: The workflow library the workflow is read from.
@@ -380,6 +392,7 @@ class Scheduler:
             catch_up: Whether a held fire runs once as soon as the hold clears.
             names: The registered knowledge bases, for a workflow whose parameters select one.
             now: The moment the first fire is counted from.
+            run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
 
         Returns:
             The stored schedule.
@@ -389,7 +402,8 @@ class Scheduler:
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
-            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, or an after-run cadence names the schedule's own workflow.
+            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
+                schedule's own workflow, or the gate mode is `orchestrate` on Temporal.
         """
         spec = await _checked_workflow(library, registry, workflow_id)
         _require_parameters(workflow_id, spec, arguments)
@@ -403,6 +417,7 @@ class Scheduler:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         if isinstance(parsed_cadence, AfterRunCadence) and parsed_cadence.workflow_name == spec.name:
             raise ScheduleSettingInvalidError(_after_itself(spec.name))
+        _refuse_orchestrate_on_temporal(gate_mode, run_engine)
         schedule = Schedule(
             workflow_id=workflow_id,
             arguments=admitted,
@@ -427,6 +442,7 @@ class Scheduler:
         changes: ScheduleUpdate,
         *,
         names: KnowledgeBaseNames | None,
+        run_engine: Literal["in_process", "temporal"],
         now: datetime | None = None,
     ) -> Schedule:
         """Apply the set fields of `changes` to one schedule, checking each one first.
@@ -443,6 +459,7 @@ class Scheduler:
             schedule_id: The schedule's id.
             changes: The fields to change, as the caller sent them.
             names: The registered knowledge bases, for a workflow whose parameters select one.
+            run_engine: The engine this deployment runs workflows on. Temporal refuses a change to gate mode `orchestrate`.
             now: The moment a restored next fire is counted from and a pause is stamped with. The current time when not given.
 
         Returns:
@@ -454,7 +471,8 @@ class Scheduler:
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
-            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, or an after-run cadence names the schedule's own workflow.
+            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
+                schedule's own workflow, or the change sets gate mode `orchestrate` on Temporal.
         """
         held = await self._schedules.get(schedule_id)
         if held is None:
@@ -468,6 +486,7 @@ class Scheduler:
                 parse_blackout(changes.blackout)
         except ValueError as exc:
             raise ScheduleSettingInvalidError(str(exc)) from exc
+        _refuse_orchestrate_on_temporal(changes.gate_mode, run_engine)
         await _refuse_firing_after_itself(library, registry, held, changes, cadence)
         rests = isinstance(cadence, OnRefreshCadence | AfterRunCadence)
         moment = now if now is not None else datetime.now(UTC)

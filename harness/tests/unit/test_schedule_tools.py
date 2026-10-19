@@ -82,7 +82,7 @@ async def test_schedule_workflow_creates_and_names_the_next_three_fires(registry
     store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
     schedule_rows = FakeSchedules()
     session = _world(store, registry=registry).default
-    report = await schedule_workflow(Scheduler(schedule_rows, schedule_rows, FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"})
+    report = await schedule_workflow(Scheduler(schedule_rows, schedule_rows, FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"}, run_engine="in_process")
 
     assert "Scheduled wf-sales as" in report
     assert "Next three fires" in report
@@ -110,6 +110,7 @@ async def test_schedule_workflow_carries_the_new_knobs_through(registry: StepReg
         capacity_limit=2,
         blackout="22:00-06:00",
         catch_up=True,
+        run_engine="in_process",
     )
 
     created = (await schedule_rows.list_all())[0]
@@ -122,19 +123,19 @@ async def test_schedule_workflow_carries_the_new_knobs_through(registry: StepReg
 async def test_schedule_workflow_refuses_a_workflow_that_does_not_check_out() -> None:
     session = _world(FakeWorkflowStore()).default
     with pytest.raises(ModelRetry, match="cannot schedule no-such-workflow"):
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "no-such-workflow", "every 30m")
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "no-such-workflow", "every 30m", run_engine="in_process")
 
 
 async def test_schedule_workflow_refuses_a_cadence_that_is_not_one(registry: StepRegistry) -> None:
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
     with pytest.raises(ModelRetry, match="cadence looks like"):
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "whenever", arguments={"quarter": "Q1"})
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "whenever", arguments={"quarter": "Q1"}, run_engine="in_process")
 
 
 async def test_schedule_workflow_refuses_a_blackout_that_is_not_one(registry: StepRegistry) -> None:
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
     with pytest.raises(ModelRetry, match="blackout looks like"):
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"}, blackout="whenever")
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"}, blackout="whenever", run_engine="in_process")
 
 
 async def test_update_schedule_changes_only_the_given_fields(registry: StepRegistry) -> None:
@@ -143,7 +144,7 @@ async def test_update_schedule_changes_only_the_given_fields(registry: StepRegis
     await store.insert(schedule)
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
     report = await update_schedule(
-        Scheduler(store, store, FakeBroadcaster()), _ctx(session), str(schedule.id), enabled=False, capacity_key="pool-a", capacity_limit=1
+        Scheduler(store, store, FakeBroadcaster()), _ctx(session), str(schedule.id), enabled=False, capacity_key="pool-a", capacity_limit=1, run_engine="in_process"
     )
 
     assert "Updated schedule" in report
@@ -158,13 +159,13 @@ async def test_update_schedule_changes_only_the_given_fields(registry: StepRegis
 async def test_update_schedule_refuses_an_unknown_id() -> None:
     session = _world(FakeWorkflowStore()).default
     with pytest.raises(ModelRetry, match=UNKNOWN_SCHEDULE):
-        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), str(uuid4()), enabled=False)
+        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), str(uuid4()), enabled=False, run_engine="in_process")
 
 
 async def test_update_schedule_refuses_a_malformed_id() -> None:
     session = _world(FakeWorkflowStore()).default
     with pytest.raises(ModelRetry, match=UNKNOWN_SCHEDULE):
-        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "not-a-uuid", enabled=False)
+        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "not-a-uuid", enabled=False, run_engine="in_process")
 
 
 async def test_update_schedule_refuses_a_cadence_that_is_not_one(registry: StepRegistry) -> None:
@@ -173,7 +174,7 @@ async def test_update_schedule_refuses_a_cadence_that_is_not_one(registry: StepR
     await store.insert(schedule)
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
     with pytest.raises(ModelRetry, match="cadence looks like"):
-        await update_schedule(Scheduler(store, store, FakeBroadcaster()), _ctx(session), str(schedule.id), cadence="whenever")
+        await update_schedule(Scheduler(store, store, FakeBroadcaster()), _ctx(session), str(schedule.id), cadence="whenever", run_engine="in_process")
 
 
 async def test_delete_schedule_removes_the_row() -> None:
@@ -249,7 +250,7 @@ async def test_the_agent_may_schedule_a_workflow_with_typed_arguments() -> None:
     pool = _world(FakeWorkflowStore(specs={"wf-typed": _typed_spec()}), registry=_typed_registry([]))
     typed: WorkflowArguments = {"knowledge_bases": ["research", "repo-docs"], "include_rejected": True}
 
-    answer = await schedule_workflow(Scheduler(store, store, FakeBroadcaster()), _ctx(pool.default), "wf-typed", "every 30m", arguments=typed)
+    answer = await schedule_workflow(Scheduler(store, store, FakeBroadcaster()), _ctx(pool.default), "wf-typed", "every 30m", arguments=typed, run_engine="in_process")
 
     assert "wf-typed" in answer
     kept = (await store.list_all())[0]
@@ -263,13 +264,14 @@ async def test_the_agent_is_told_which_argument_the_schema_refused() -> None:
     with pytest.raises(ModelRetry, match="knowledge_bases"):
         await schedule_workflow(
             Scheduler(store, store, FakeBroadcaster()), _ctx(pool.default), "wf-typed", "every 30m", arguments={"knowledge_bases": ["a", "b", "c", "d"], "include_rejected": True},
+            run_engine="in_process",
         )
 
 
 async def test_schedule_workflow_announces_the_new_schedule(registry: StepRegistry) -> None:
     topics = FakeBroadcaster()
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
-    await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), topics), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"})
+    await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), topics), _ctx(session), "wf-sales", "every 30m", arguments={"quarter": "Q1"}, run_engine="in_process")
 
     assert topics.published == ["schedules"]
 
@@ -280,7 +282,7 @@ async def test_update_schedule_announces_the_change(registry: StepRegistry) -> N
     await store.insert(schedule)
     topics = FakeBroadcaster()
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
-    await update_schedule(Scheduler(store, store, topics), _ctx(session), str(schedule.id), enabled=False)
+    await update_schedule(Scheduler(store, store, topics), _ctx(session), str(schedule.id), enabled=False, run_engine="in_process")
 
     assert topics.published == ["schedules"]
 
@@ -298,18 +300,18 @@ async def test_delete_schedule_announces_the_removal() -> None:
 async def test_update_schedule_refuses_an_unknown_id_before_checking_its_fields() -> None:
     session = _world(FakeWorkflowStore()).default
     with pytest.raises(ModelRetry, match=UNKNOWN_SCHEDULE):
-        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), str(uuid4()), cadence="whenever")
+        await update_schedule(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), str(uuid4()), cadence="whenever", run_engine="in_process")
 
 
 async def test_schedule_workflow_says_why_this_app_cannot_run_the_workflow() -> None:
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})).default
 
     with pytest.raises(ModelRetry, match=r"^cannot schedule wf-sales\. this app cannot run it\. "):
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m")
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", run_engine="in_process")
 
 
 async def test_schedule_workflow_names_the_required_parameters_left_unfilled(registry: StepRegistry) -> None:
     session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
 
     with pytest.raises(ModelRetry, match=r"^cannot schedule wf-sales\. fill in: quarter$"):
-        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m")
+        await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", run_engine="in_process")

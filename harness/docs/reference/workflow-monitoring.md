@@ -1228,7 +1228,10 @@ library cannot read answers 503, records nothing, and the studio delivers again.
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
 workflow the row names (the library's `current`), resolved on every read and every fire. The row keeps the id it was
-written with. `gate_mode` is the one stored gate switch (alembic `0072` folded the earlier flag into it).
+written with. `gate_mode` is the one stored gate switch (alembic `0072` folded the earlier flag into it). On a
+deployment that runs on Temporal, a `POST` or `PATCH` that sets `gate_mode` to `"orchestrate"` answers 400 with words
+saying the durable engine has no orchestrated gate. A fire of a schedule already stored that way launches nothing and
+stamps `refused: ...` as its outcome, keeping its cadence.
 
 `spend_today_usd` and `spend_week_usd` are `schedule_spend`'s own two figures (`features/running/spend.py`), computed
 fresh the same way as `live` rather than stored. Each counts only a fire whose spend record names this schedule's own

@@ -12,6 +12,7 @@ from harness.features.running.api_models import AutomodeRequest, Decision, Resum
 from harness.features.running.conversations import StepConversation, StepConversations, conversation_key
 from harness.features.running.domain.progress import GateVerdict, LiveProgress, PendingReview
 from harness.features.running.exceptions import (
+    AutomodeUnavailableError,
     RunEngineUnavailableError,
     RunGraphRefusedError,
     RunStateRefusedError,
@@ -43,6 +44,7 @@ __all__ = [
     "DEFAULT_SINCE_HOURS",
     "SCHEDULE_RUNNER_PREFIX",
     "AutomodeRequest",
+    "AutomodeUnavailableError",
     "Decision",
     "DurableTurns",
     "GateAsker",
