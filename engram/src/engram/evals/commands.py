@@ -445,10 +445,10 @@ class FreshnessCheckedReport(BaseModel):
     staleness_fraction: float
     out: str
     markdown: str
-    top_stale_pages: tuple[tuple[str, int], ...] = ()
+    top_stale_pages: tuple[tuple[str, int], ...]
     duration_seconds: float
-    n_premise_checked: int = 0
-    n_premise_broken: int = 0
+    n_premise_checked: int
+    n_premise_broken: int
 
 
 # -- freeze: command and report ------------------------------------
@@ -675,7 +675,7 @@ class TuningReport(BaseModel):
     winner_recall: float
     winner_val_recall: float | None = None
     duration_seconds: float = 0.0
-    dataset_staleness: float | None = None
+    dataset_staleness: float | None
     frozen_baseline_recall: float | None = None
     frozen_winner_recall: float | None = None
     frozen_beat: bool | None = None
@@ -1003,7 +1003,7 @@ class VerifyReport(BaseModel):
     drift_warning: str | None = None
     run_id: str | None = None
     duration_seconds: float = 0.0
-    dataset_staleness: float | None = None
+    dataset_staleness: float | None
 
 
 class ScoreDataset(Command):

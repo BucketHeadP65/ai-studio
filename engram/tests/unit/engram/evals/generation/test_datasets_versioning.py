@@ -217,7 +217,7 @@ def test_used_case_names_walks_the_whole_version_chain(tmp_path) -> None:
 
 
 def test_used_case_names_tolerates_a_missing_root_stamp(tmp_path) -> None:
-    v1 = dataset_version_path(tmp_path, "research", 1)  # a root that predates stamps: no sidecar.
+    v1 = dataset_version_path(tmp_path, "research", 1)  # a root with no stamp sidecar, where the walk ends.
     v2 = dataset_version_path(tmp_path, "research", 2)
     _write_stamp(v2, _stamp(parent_version=v1.name, retired=(RetirementRecord(case_name="gone:v2#0", seed_key="gone:v2", reason="stale"),)))
 
