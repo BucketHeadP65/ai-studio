@@ -1738,6 +1738,7 @@ class TestCompareCli:
         assert result.exit_code == 1
         assert "evals compare failed" in result.stdout
         assert "differ in model" in result.stdout
+        assert not out.exists()
 
     def test_runs_scored_under_different_source_scoring_versions_are_refused_saying_which_to_run_again(self, tmp_path: Path):
         older, newer = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
@@ -1751,7 +1752,6 @@ class TestCompareCli:
         message = " ".join(result.stdout.split())
         assert f"differ in source_scoring_version (1 and {SOURCE_SCORING_VERSION})" in message
         assert f"Run {older} again with --source-level to score it under version {SOURCE_SCORING_VERSION}" in message
-        assert not out.exists()
         assert not out.exists()
 
     @pytest.mark.parametrize("value", ["a.jsonl", "a.jsonl,b.jsonl,c.jsonl", "a.jsonl,", ",b.jsonl"])
