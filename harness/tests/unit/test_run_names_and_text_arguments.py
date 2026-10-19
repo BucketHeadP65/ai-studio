@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 # --- one archived run nobody named ---------------------------------------------------------------
 
 _ARCHIVED_RUN_JSON = (
-    '{"run_id":"run-unnamed","workflow_id":"wf.quarterly-close","outcome":"completed",'
+    '{"run_id":"run-unnamed","workflow_id":"wf.quarterly-close","run_title":"","outcome":"completed",'
     '"result":{"status":"unknown","summary":"no result declared"},'
     '"started_at":"2026-01-05T09:00:00+00:00","ended_at":"2026-01-05T09:04:00+00:00",'
     '"runner":"app:harness","session_id":"sess-shared","params":{"quarter":"Q1"},'
