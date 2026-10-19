@@ -320,7 +320,7 @@ def test_trust_is_asked_by_what_ran_rather_than_by_where_it_was_kept() -> None:
 
 def test_the_empty_hash_is_refused_as_an_identity() -> None:
     """`""` names no workflow, so asking about it is refused rather than answered with nothing."""
-    with pytest.raises(ValueError, match="not an identity"):
+    with pytest.raises(ValueError, match=r"^an empty spec hash is not an identity\. It names no workflow$"):
         trust_level([], spec_hash="")
 
 

@@ -37,7 +37,7 @@ def require_spec_identity(spec_hash: str) -> None:
         ValueError: When `spec_hash` is empty.
     """
     if not spec_hash:
-        msg = "an empty spec hash is not an identity. It marks a record that never said what it exercised"
+        msg = "an empty spec hash is not an identity. It names no workflow"
         raise ValueError(msg)
 
 
