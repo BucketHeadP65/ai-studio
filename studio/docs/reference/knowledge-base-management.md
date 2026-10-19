@@ -553,6 +553,19 @@ is the one exception. A long-lived server has nothing to exit into, so it prints
 the database is reachable.` as a third line and still builds and serves its tool surface, every tool call failing cleanly
 once it actually reads the database, rather than the whole server dying at startup on a database that has not come up yet.
 
+**A connection that fails later names its service.** A command that reports its failure as one line (`<command> failed:
+<error text>`, such as `evals score failed` or `search failed`) names the service when the failure came from a
+connection: the embedding endpoint or a model endpoint with its host, or the database with its redacted URL, before the
+error's own text.
+
+```
+evals score failed: embedding endpoint example.openai.azure.com: Connection error.
+evals run failed: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)
+```
+
+The text comes from `engram.evals.harness.contracts.connection_failure_message`, the same rule an evaluation run uses for
+a failed case. Any other failure keeps its own text unchanged.
+
 **A collection belongs to the knowledge base root that indexed it.** Each indexing run stamps its knowledge base root onto
 `memory.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
 before writing a single row and exits 2, because the indexing run's prune would delete everything the owning knowledge base put there.

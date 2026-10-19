@@ -1,6 +1,7 @@
 """The public surface of the retrieval evaluation harness."""
 
 from engram.evals.harness.agent import build_agent, make_task
+from engram.evals.harness.connection_failures import connection_failure_message
 from engram.evals.harness.domain.evaluators import AnswerAccuracy, RetrievalMetrics
 from engram.evals.harness.domain.experiments import ExperimentAxes, ExperimentAxis, ExperimentRun, ExperimentVariant, expand_variants
 from engram.evals.harness.infrastructure.instrumentation import (
@@ -40,6 +41,7 @@ __all__ = [
     "average_metrics",
     "build_agent",
     "configure_logfire",
+    "connection_failure_message",
     "enable_local_span_recording",
     "expand_variants",
     "experiment_span",

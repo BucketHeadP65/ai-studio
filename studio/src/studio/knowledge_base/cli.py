@@ -1118,7 +1118,7 @@ def summaries_list_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     rows = _run_command(
-        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed"
+        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed", database=settings.database
     )
     _print_pending_summaries(rows, collection=partition)
 
@@ -1158,7 +1158,7 @@ def summaries_approve_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     count = _run_command(
-        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed"
+        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed", database=settings.database
     )
     typer.echo(f"Approved {count} pending summary(ies) for collection {partition!r}.")
 
@@ -1233,7 +1233,7 @@ def search_cmd(
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     message = Search(query=query, k=k, level=level, facets=_parse_facets(facet), collection=partition, hybrid=not bm25_only)
     result = _run_command(
-        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed"
+        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed", database=settings.database
     )
     _print_search_hits(result)
 
@@ -1258,7 +1258,7 @@ def fetch_cmd(
     settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
-    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed")
+    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed", database=settings.database)
     _print_fetch_unit(result, unit_id)
 
 
@@ -1370,7 +1370,7 @@ def export_okf_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed"
+        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed", database=settings.database
     )
     _print_export_report(report)
 

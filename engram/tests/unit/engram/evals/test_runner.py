@@ -30,6 +30,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+import httpx2
 import pytest
 
 from core.ai.disclosure.contracts import ProgressiveDisclosure
@@ -43,7 +44,8 @@ from core.ai.evaluation.contracts import (
     content_fingerprint,
 )
 from core.ai.retrieval.contracts import SchemaDescription
-from core.settings import AzureOpenAiSettings, LogfireSettings
+from core.settings import AzureOpenAiSettings, DatabaseSettings, LogfireSettings
+from openai import APIConnectionError
 from pydantic_ai import FunctionToolset
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart, UserPromptPart
@@ -150,6 +152,10 @@ class _FakeInventoryReaders:
         yield self.reader
 
 
+_OWNER_URL = "postgresql+asyncpg://owner:secret@db.example:5434/knowledge_bases"
+_READER_URL = "postgresql+asyncpg://kb_reader:secret@db.example:5434/knowledge_bases"
+
+
 @dataclass
 class FakeContainer:
     """An async DI container resolving exactly the keys the run service asks for, from public state.
@@ -162,6 +168,7 @@ class FakeContainer:
 
     evals_settings: EvalsSettings = field(default_factory=EvalsSettings)
     openai: AzureOpenAiSettings = field(default_factory=_azure_openai)
+    database: DatabaseSettings = field(default_factory=lambda: DatabaseSettings(url=_OWNER_URL, reader_url=_READER_URL))
     logfire: LogfireSettings = field(default_factory=LogfireSettings)
     handlers: RetrievalHandlers = field(default_factory=_handlers)
     envelope_handler: EnvelopeHandler = field(default_factory=_envelope_handler)
@@ -178,6 +185,7 @@ class FakeContainer:
         services: dict[type, object] = {
             EvalsSettings: self.evals_settings,
             AzureOpenAiSettings: self.openai,
+            DatabaseSettings: self.database,
             LogfireSettings: self.logfire,
             RetrievalHandlers: self.handlers,
             EnvelopeHandler: self.envelope_handler,
@@ -2136,6 +2144,54 @@ def _drop_header_key(path: Path, key: str) -> None:
 def _case_rows(path: Path) -> list[dict[str, object]]:
     """The results file's case lines in file order."""
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()[1:]]
+
+
+def _endpoint_connection_error(path: str) -> ModelAPIError:
+    """What pydantic-ai raises when a connection to the OpenAI endpoint at `path` never opened."""
+    error = ModelAPIError("deployment-a", "Connection error.")
+    error.__cause__ = APIConnectionError(request=httpx2.Request("POST", f"https://example.openai.azure.com/openai/v1/{path}"))
+    return error
+
+
+class TestAFailedConnectionNamesTheService(_ResetsLogfire):
+    @pytest.mark.parametrize("guarded", [False, True])
+    @pytest.mark.parametrize(
+        ("failure", "error"),
+        [
+            (_endpoint_connection_error("responses"), "ServiceConnectionError: model endpoint example.openai.azure.com: Connection error."),
+            (_endpoint_connection_error("embeddings"), "ServiceConnectionError: embedding endpoint example.openai.azure.com: Connection error."),
+            (
+                ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)"),
+                "ServiceConnectionError: database db.example:5434/knowledge_bases: [Errno 61] Connect call failed ('10.0.0.5', 5434)",
+            ),
+        ],
+        ids=["model endpoint", "embedding endpoint", "database"],
+    )
+    async def test_a_case_whose_connection_failed_records_the_service_and_stays_transient(
+        self, tmp_path: Path, failure: BaseException, error: str, guarded: bool
+    ):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", results_path=results, delivered_evidence_root=tmp_path / "evidence" if guarded else None
+        )
+
+        run = await run_traced_eval_on_dataset(
+            FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES), model=_failing({"question case-b": failure})
+        )
+
+        assert [failed.error_message for failed in run.report.failures] == [error]
+        _header, lines = _read_results(results)
+        assert (lines["case-b"]["failed"], lines["case-b"]["transient"], lines["case-b"]["error"]) == (True, True, error)
+
+    async def test_a_failure_that_came_from_no_connection_keeps_its_own_text(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        refusal = UnexpectedModelBehavior("The model refused to answer.")
+
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES), model=_failing({"question case-b": refusal}))
+
+        _header, lines = _read_results(results)
+        assert lines["case-b"]["error"] == "UnexpectedModelBehavior: The model refused to answer."
 
 
 def _raw_case_lines(path: Path) -> dict[str, str]:

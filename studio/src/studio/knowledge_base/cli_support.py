@@ -23,6 +23,7 @@ from core.db import redact_db
 from core.observability import get_logger
 from core.wiring.contracts import ContainerResolver
 from engram.config import KnowledgeBaseSettings
+from engram.evals.harness.contracts import connection_failure_message
 from engram.identity import KnowledgeBaseIdentity, LastRun, disk_content_hashes, read_identity
 from engram.indexing.contracts import IndexKnowledgeBase, IndexReport, KnowledgeBaseReader
 from engram.init.contracts import code_head_revision
@@ -69,6 +70,11 @@ class ActiveKnowledgeBase:
 
     application: ApplicationSettings
     knowledge_base: KnowledgeBaseSettings
+
+    @property
+    def database(self) -> str:
+        """The database URL with its password redacted, as every printed line names it."""
+        return redact_db(self.application.infrastructure.database.url)
 
 
 def _build_container(
@@ -331,7 +337,7 @@ async def announce_db(
         The knowledge base's identity, or `None` when the database could not be reached.
     """
     root = active.knowledge_base.path
-    database = redact_db(active.application.infrastructure.database.url)
+    database = active.database
     reader = await container.get(KnowledgeBaseReader)
     on_disk = disk_content_hashes(reader)
     try:
@@ -377,14 +383,15 @@ async def announce_identity(container: Resolver, active: ActiveKnowledgeBase, *,
     return identity
 
 
-def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str) -> T:
-    """Run `coro` on a fresh event loop, passing `typer.Exit` through and turning any other error into an exit prefixed `on_error`."""
+def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
+    """Run `coro` on a fresh event loop, turning any error but `typer.Exit` into an exit prefixed `on_error` that names a failed service."""
     try:
         return asyncio.run(coro)
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 (top-level CLI guard: any failure becomes a clean _fail exit)
-        _fail(f"{on_error}: {exc}")
+        named = connection_failure_message(exc, database=database)
+        _fail(f"{on_error}: {named if named is not None else exc}")
 
 
 class KnowledgeBaseMissingError(ValueError):

@@ -91,6 +91,18 @@ an undefined column, a refused permission, a statement timeout) and every other 
 transient. The rule lives in `engram.evals.harness.transient_failures`, which reads database
 connection failures through `engram.evals.harness.infrastructure.database_failures`.
 
+A failed case whose connection to a service failed records an error that names the service before
+the error's own text, so the results file and the printed failures table say which one failed:
+`ServiceConnectionError: model endpoint example.openai.azure.com: Connection error.`,
+`ServiceConnectionError: embedding endpoint example.openai.azure.com: Request timed out.` or
+`ServiceConnectionError: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)`.
+An embedding endpoint is an OpenAI-compatible endpoint whose request path ends in `/embeddings`, and any
+other is a model endpoint, each named by its host. The database is the reader URL with its
+credentials removed (`core.db.redact_db`), since a case's tools connect through it. Whether the case
+failed transiently is read from the error it raised before it was named, so a named failure keeps its
+`transient` key. `engram.evals.harness.connection_failures.connection_failure_message` builds the
+text, and the `studio` CLI prints a command's own failure through it too.
+
 `--resume` continues that file after a run lost cases to transient failures. When the file exists
 and its header matches the run on every field the paired comparison holds (strategy, SQL switch,
 code mode, model, thinking level, instructions hash, tool-call budget, search pinning, search date

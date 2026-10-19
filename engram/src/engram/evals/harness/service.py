@@ -30,7 +30,8 @@ from core.ai.evaluation.contracts import (
     model_fingerprint,
 )
 from core.ai.models import Thinking, chat_http_client
-from core.settings import AzureOpenAiSettings
+from core.db import redact_db
+from core.settings import AzureOpenAiSettings, DatabaseSettings
 from pydantic_ai import capture_run_messages
 from pydantic_ai.exceptions import AgentRunError
 from pydantic_ai.settings import ModelSettings
@@ -38,6 +39,7 @@ from pydantic_ai.usage import UsageLimits
 from pydantic_evals.lifecycle import CaseLifecycle
 
 from engram.evals.harness.agent import build_agent, make_task
+from engram.evals.harness.connection_failures import ServiceConnectionError, connection_failure_message
 from engram.evals.harness.domain.evaluators import AnswerAccuracy
 from engram.evals.harness.domain.experiments import ExperimentRun, expand_variants
 from engram.evals.harness.infrastructure.instrumentation import configure_logfire, enable_local_span_recording, resolve_logfire_settings
@@ -257,7 +259,7 @@ async def run_eval(container: Resolver, *, config: EvaluationRunConfig, dataset_
     It is `run_eval_on_dataset` over the loaded dataset.
 
     Args:
-        container: The resolver the model, the retrieval handlers and the Logfire settings come from.
+        container: The resolver the model, the retrieval handlers, the database settings and the Logfire settings come from.
         config: The settings of the evaluation run.
         dataset_path: The dataset YAML to score against, already resolved by the caller.
 
@@ -288,7 +290,7 @@ async def run_eval_on_dataset(
     It is `run_traced_eval_on_dataset` without the per-trial traces.
 
     Args:
-        container: The resolver the model, the retrieval handlers and the Logfire settings come from.
+        container: The resolver the model, the retrieval handlers, the database settings and the Logfire settings come from.
         config: The settings of the evaluation run.
         dataset: The dataset to score against, held in memory and never loaded again.
         model: The model to evaluate in place of the one `config.model_spec` names, or `None` to build that one.
@@ -343,10 +345,12 @@ async def run_traced_eval_on_dataset(
     null. With `config.resume` set and the file already there, its header is checked before any case runs, the index
     build included, and the report covers only the cases run again. The file keeps the earlier header and its kept lines
     exactly, whatever the fingerprint now reads. A failed source lookup then leaves only the lines run now without
-    sources and scores, and the run returns the error rather than writing it.
+    sources and scores, and the run returns the error rather than writing it. A case whose connection to the embedding
+    endpoint, the model endpoint or the database failed records an error that names that service and keeps the error's
+    own text, and whether it failed transiently is read from the error it raised.
 
     Args:
-        container: The resolver the model, the retrieval handlers and the Logfire settings come from.
+        container: The resolver the model, the retrieval handlers, the database settings and the Logfire settings come from.
         config: The settings of the evaluation run.
         dataset: The dataset to score against, held in memory and never loaded again.
         model: The model to evaluate in place of the one `config.model_spec` names, or `None` to build that one.
@@ -400,6 +404,8 @@ async def run_traced_eval_on_dataset(
     scored = _cases_to_run(_with_answer_accuracy(dataset), kept)
     transient: set[str] = set()
     seen: dict[str, tuple[str, ...]] = {}
+    # A case's tools connect to the database through the reader URL.
+    database = redact_db((await container.get(DatabaseSettings)).reader_url)
 
     # Local span recording follows the token rather than the return of `configure_logfire`, because
     # that return is `True` whenever an earlier call in the process configured Logfire.
@@ -414,7 +420,9 @@ async def run_traced_eval_on_dataset(
             model, instructions=config.instructions, toolset=toolset, code_mode=config.code_mode, extra_capabilities=extra_capabilities
         )
         report = await scored.evaluate(
-            _noting_transient_failures(_noting_seen_units(make_task(agent, usage_limits=usage_limits), seen, collection), transient),
+            _naming_connection_failures(
+                _noting_transient_failures(_noting_seen_units(make_task(agent, usage_limits=usage_limits), seen, collection), transient), database
+            ),
             progress=False,
             max_concurrency=config.max_concurrency,
             repeat=config.repeat,
@@ -434,7 +442,7 @@ async def run_traced_eval_on_dataset(
             usage_limits=usage_limits,
         )
         report = await scored.evaluate(
-            _noting_transient_failures(_noting_seen_units(_traced_task(trial, traces), seen, collection), transient),
+            _naming_connection_failures(_noting_transient_failures(_noting_seen_units(_traced_task(trial, traces), seen, collection), transient), database),
             progress=False,
             max_concurrency=config.max_concurrency,
             repeat=config.repeat,
@@ -465,6 +473,23 @@ def _noting_transient_failures(
             if case is not None and is_transient_failure(error):
                 transient.add(case)
             raise
+
+    return run_case
+
+
+def _naming_connection_failures(
+    task: Callable[[QaInput], Awaitable[RetrievalAnswer]], database: str
+) -> Callable[[QaInput], Awaitable[RetrievalAnswer]]:
+    """The task, raising a failed connection to a service again as a `ServiceConnectionError` that names the service."""
+
+    async def run_case(inp: QaInput) -> RetrievalAnswer:
+        try:
+            return await task(inp)
+        except Exception as error:
+            message = connection_failure_message(error, database=database)
+            if message is None:
+                raise
+            raise ServiceConnectionError(message) from error
 
     return run_case
 

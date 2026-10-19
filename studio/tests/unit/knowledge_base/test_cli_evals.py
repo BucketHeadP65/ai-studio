@@ -31,11 +31,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx2
 import pytest
 import typer
 
 from core.ai.embedding import BatchEmbedder
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
+from core.db import redact_db
 from core.wiring.contracts import ContainerResolver
 from engram.evals.commands import (
     CheckGenerator,
@@ -71,6 +73,8 @@ from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.specs import research_spec
+from openai import APIConnectionError
+from pydantic_ai.exceptions import ModelAPIError
 from pydantic_evals.reporting import EvaluationReport
 from typer.testing import CliRunner
 from wireup import AsyncContainer
@@ -89,7 +93,14 @@ from studio.knowledge_base.cli_evals import (
     _skill_md_path,
     _variant_evaluator,
 )
-from studio.knowledge_base.settings import ApplicationSettings, EvalsSettings, KnowledgeBaseSettings, LogfireSettings, TuningSettings
+from studio.knowledge_base.settings import (
+    ApplicationSettings,
+    EvalsSettings,
+    KnowledgeBaseSettings,
+    LogfireSettings,
+    TuningSettings,
+    fetch_application_settings,
+)
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, EvaluationSqlTools, ReaderSqlGateway
 from tests.support.http_app import write_settings_json
 
@@ -147,6 +158,15 @@ class _FakeInventoryReaders:
 
     @asynccontextmanager
     async def __call__(self) -> AsyncGenerator[_FakeCoverageReader]:
+        yield _FakeCoverageReader()
+
+
+class _UnreachableInventoryReaders:
+    """Fails to open the owner session, the way a refused database connection fails."""
+
+    @asynccontextmanager
+    async def __call__(self) -> AsyncGenerator[_FakeCoverageReader]:
+        raise ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)")
         yield _FakeCoverageReader()
 
 
@@ -579,6 +599,23 @@ class TestEvalsRunResume:
         assert "evals run failed: the results file" in result.stdout
         assert "max_tool_calls (4 in the file, 6 now)" in " ".join(result.stdout.split())
         assert results.read_text(encoding="utf-8") == written
+
+    def test_a_refused_database_connection_names_the_database(self, tmp_path: Path):
+        dataset_path = _write_golden(tmp_path)
+        build = _factory(tmp_path)
+
+        def unreachable() -> object:
+            container = build()
+            assert isinstance(container, AsyncContainer)
+            container.override.set(target=InventoryReaderFactory, new=_UnreachableInventoryReaders())
+            return container
+
+        command = ["evals", "run", "--model", "test-model", "--dataset", str(dataset_path), "--results", str(tmp_path / "results.jsonl")]
+        result = runner.invoke(app, command, obj=unreachable)
+
+        assert result.exit_code == 1
+        database = redact_db(fetch_application_settings().infrastructure.database.url)
+        assert result.stdout.splitlines()[-1] == f"evals run failed: database {database}: [Errno 61] Connect call failed ('10.0.0.5', 5434)"
 
     def test_resume_refuses_a_results_file_from_another_index_build_naming_it(self, tmp_path: Path):
         dataset_path = _write_three_cases(tmp_path)
@@ -1721,6 +1758,25 @@ class TestCompareCli:
         assert not out.exists()
 
 
+class _FailingHandler:
+    """A command handler that raises the scripted error for every command."""
+
+    def __init__(self, error: Exception) -> None:
+        self.events: list[Event] = []
+        self.error = error
+
+    async def __call__(self, command: Command) -> object:
+        del command
+        raise self.error
+
+
+def _endpoint_connection_error(path: str) -> ModelAPIError:
+    """What pydantic-ai raises when a connection to the OpenAI endpoint at `path` never opened."""
+    error = ModelAPIError("deployment-a", "Connection error.")
+    error.__cause__ = APIConnectionError(request=httpx2.Request("POST", f"https://example.openai.azure.com/openai/v1/{path}"))
+    return error
+
+
 class TestScoreCli:
     def test_score_help_lists_the_flags(self):
         result = runner.invoke(app, ["evals", "score", "--help"])
@@ -1768,6 +1824,27 @@ class TestScoreCli:
         assert f"  gold ids that name a page with no source document: {unmappable_gold}\n" in result.stdout
         assert f"  cases left out because no gold id names a source document: {cases_without_gold}\n" in result.stdout
 
+    @pytest.mark.parametrize(
+        ("error", "service"),
+        [
+            (_endpoint_connection_error("embeddings"), "embedding endpoint example.openai.azure.com"),
+            (_endpoint_connection_error("responses"), "model endpoint example.openai.azure.com"),
+        ],
+        ids=["embedding endpoint", "model endpoint"],
+    )
+    def test_a_failed_endpoint_connection_names_the_endpoint_and_its_host(self, tmp_path: Path, error: Exception, service: str):
+        result = self._invoke(tmp_path, _FailingHandler(error))
+
+        assert result.exit_code == 1
+        assert result.stdout.splitlines()[-1] == f"evals score failed: {service}: Connection error."
+
+    def test_a_refused_database_connection_names_the_database(self, tmp_path: Path):
+        result = self._invoke(tmp_path, _FailingHandler(ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)")))
+
+        assert result.exit_code == 1
+        database = redact_db(fetch_application_settings().infrastructure.database.url)
+        assert result.stdout.splitlines()[-1] == f"evals score failed: database {database}: [Errno 61] Connect call failed ('10.0.0.5', 5434)"
+
     def test_it_prints_no_gold_lines_when_every_gold_id_named_a_source(self, tmp_path: Path):
         result = self._scored(tmp_path, unmappable_gold=0, cases_without_gold=0)
 
@@ -1796,7 +1873,7 @@ class TestScoreCli:
         )
 
     @staticmethod
-    def _invoke(tmp_path: Path, handler: RecordingCommandHandler, *extra: str) -> Result:
+    def _invoke(tmp_path: Path, handler: RecordingCommandHandler | _FailingHandler, *extra: str) -> Result:
         knowledge_base = tmp_path / "research"
         (knowledge_base / "Units").mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
