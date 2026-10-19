@@ -19,7 +19,7 @@ from core.db import Listener, Notifier
 from core.observability import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Mapping
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 
     from sqlalchemy import Result, TextClause
 
@@ -112,26 +112,33 @@ class Broadcaster:
     the same database reaches every reader here.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 (every argument after the DSN is keyword-only and defaulted)
         self,
         dsn: str,
         *,
         coalesce_seconds: float = 0.1,
+        backoff_cap_seconds: float = 30.0,
         notifier: TopicNotifier | None = None,
         listener: TopicListener | None = None,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
         """Hold both connections, not yet open.
 
         Args:
             dsn: The database both connections open on.
-            coalesce_seconds: How long the publisher task gathers before sending, and how long the fan-out task waits
-                before reopening a listening connection it lost.
+            coalesce_seconds: How long the publisher task gathers before sending, and how long the fan-out task first
+                waits before reopening a listening connection it lost.
+            backoff_cap_seconds: The longest wait between reopen attempts. The wait doubles after each failed attempt up
+                to it, and a reopen that succeeds starts it over.
             notifier: The sending connection. Defaults to a `Notifier` on `dsn`.
             listener: The listening connection. Defaults to a `Listener` on `dsn`.
+            sleep: How the wait between reopen attempts is taken.
         """
         self._notifier: TopicNotifier = notifier if notifier is not None else Notifier(dsn)
         self._listener: TopicListener = listener if listener is not None else Listener(dsn, TOPICS_CHANNEL)
         self._coalesce_seconds = coalesce_seconds
+        self._backoff_cap_seconds = backoff_cap_seconds
+        self._sleep = sleep
         self._pending: list[str] = []
         self._queued = asyncio.Event()
         self._subscribers: set[asyncio.Queue[ChangeNotification]] = set()
@@ -245,10 +252,18 @@ class Broadcaster:
             await self.flush()
 
     async def _listen_forever(self) -> None:
+        delay = self._coalesce_seconds
+        failures = 0
         while True:
             try:
                 await self._listener.open()
+                if failures:
+                    _logger.info("listener connection restored after {failures} failed attempts", failures=failures)
+                    delay, failures = self._coalesce_seconds, 0
                 self.deliver(await self._listener.get())
-            except OSError:
-                _logger.exception("listener connection lost, reconnecting")
-                await asyncio.sleep(self._coalesce_seconds)
+            except OSError as exc:
+                if not failures:
+                    _logger.warning("listener connection lost, reconnecting with backoff", error=exc)
+                failures += 1
+                await self._sleep(delay)
+                delay = min(delay * 2, self._backoff_cap_seconds)
