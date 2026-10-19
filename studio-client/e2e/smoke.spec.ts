@@ -117,6 +117,8 @@ async function mockApi(page: Page) {
   await page.route("**/api/projects", (route) => json(route, { projects: [] }));
   await page.route("**/api/run/state**", (route) =>
     json(route, {
+      auto_approve: false,
+      gate_mode: "wait",
       running: false,
       workflow: null,
       result: null,

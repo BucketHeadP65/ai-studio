@@ -17,6 +17,7 @@ import { SessionList } from "./session-list";
 const BASE = "http://studio.test";
 
 interface Session {
+  kind: "chat",
   id: string;
   project_id: string;
   title: string;
@@ -40,6 +41,7 @@ function usage() {
 }
 
 const ALPHA: Session = {
+  kind: "chat",
   id: "s-alpha",
   project_id: "proj-engram",
   title: "Alpha",
@@ -54,6 +56,7 @@ const ALPHA: Session = {
 };
 
 const BETA: Session = {
+  kind: "chat",
   id: "s-beta",
   project_id: "proj-engram",
   title: "Beta",
@@ -68,6 +71,7 @@ const BETA: Session = {
 };
 
 const GAMMA: Session = {
+  kind: "chat",
   id: "s-gamma",
   project_id: "proj-harness",
   title: "Gamma",
@@ -82,6 +86,7 @@ const GAMMA: Session = {
 };
 
 const DELTA: Session = {
+  kind: "chat",
   id: "s-delta",
   project_id: "proj-harness",
   title: "Delta",

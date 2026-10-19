@@ -70,7 +70,7 @@ const FOLLOW_UP_TEXT = "Why did you blame the tool?";
 const FOLLOW_UP_ANSWER = "Because the tool's own return fused the warning with the confirmation.";
 
 // A conversation with 11 tool calls (outline, 8 reads, 2 finds), a thinking part, a first
-// answer the taxonomy refuses (the older flat call shape), a second, accepted answer (the
+// answer the taxonomy refuses (a flat call shape), a second, accepted answer (the
 // `{symptom, blames}` shape), and one follow-up already asked and answered -- the same shape
 // the trace bar, its expanded rows and the meta line read from.
 const MESSAGES = [
@@ -231,7 +231,7 @@ describe("Trace", () => {
     expect(row).toHaveClass("bg-accent-soft");
   });
 
-  it("reads the taxonomy's older flat call shape as one blame, with only its own content", async () => {
+  it("reads blames only from a call's own blames list, never from fields at its top", async () => {
     mountQuestion([
       toldMessage("Symptom: warning_ignored."),
       {
@@ -255,9 +255,9 @@ describe("Trace", () => {
     render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} spans={SPANS} />);
     await expandTrace();
 
-    expect(await screen.findByText("Tool result shape")).toBeInTheDocument();
-    expect(screen.getByText(fullText("the model tier, nothing named to edit"))).toBeInTheDocument();
-    expect(screen.getByText("the return at 5.8.0 shows the tool answered with an empty steps list")).toBeInTheDocument();
+    expect(await screen.findByText("What it was told")).toBeInTheDocument();
+    expect(screen.queryByText("Tool result shape")).not.toBeInTheDocument();
+    expect(screen.queryByText(fullText("the model tier, nothing named to edit"))).not.toBeInTheDocument();
   });
 
   it("reads a scan's answer as one block per symptom it saw", async () => {

@@ -45,11 +45,13 @@ function freshJourney(): Journey {
 
 const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
   {
+    archived_at: null,
     id: WORKFLOW_ID,
     title: "Weekly sweep",
     summary: "Checks the queue every week and writes up what changed.",
     provisional: false,
     trust: {
+      approved_by: [],
       level: "unverified",
       runs_with_evidence: 0,
       failed_runs: 0,
@@ -71,6 +73,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
   version: 2,
   nodes: [
     {
+      input_schemas: {},
+      source: "",
       key: "topic",
       id: "topic",
       kind: "param",
@@ -80,6 +84,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
       required: true,
     },
     {
+      input_schemas: {},
+      source: "",
       key: "review",
       id: "review",
       kind: "gate",
@@ -113,6 +119,7 @@ const PROPOSED_NOTE = {
 };
 
 const WORKFLOW_DETAIL: Wire<typeof WorkflowDetailSchema> = {
+  archived_at: null,
   ok: true,
   id: WORKFLOW_ID,
   name: WORKFLOW_ID,
@@ -135,6 +142,7 @@ const WORKFLOW_DETAIL: Wire<typeof WorkflowDetailSchema> = {
   predictions: null,
   prediction_record: null,
   trust: {
+    approved_by: [],
     level: "unverified",
     runs_with_evidence: 0,
     failed_runs: 0,
@@ -193,6 +201,7 @@ function waitingRun(): Wire<typeof RunViewSchema> {
 
 function endedRun(): Wire<typeof RunEnvelopeSchema> {
   return {
+    spend: null,
     run_id: "run-1",
     workflow_id: WORKFLOW_ID,
     run_title: RUN_TITLE,

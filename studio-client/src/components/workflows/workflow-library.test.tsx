@@ -574,19 +574,4 @@ describe("WorkflowLibrary", () => {
     await waitFor(() => expect(restorePosted).toBe(true));
   });
 
-  it("still renders a card payload missing archived_at, treating it as live", async () => {
-    const { archived_at: _archivedAt, ...legacyCard } = cardFixture();
-    server.use(
-      http.get(`${BASE}/api/library`, ({ request }) => {
-        const archived = new URL(request.url).searchParams.get("archived") === "true";
-        return HttpResponse.json(archived ? [] : [legacyCard]);
-      }),
-      http.get(`${BASE}/api/runs`, () => HttpResponse.json({ runs: [] })),
-    );
-    render(<WorkflowLibrary />);
-
-    expect(await screen.findByRole("link", { name: "Fetch sales" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Run" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
-  });
 });

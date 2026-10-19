@@ -39,6 +39,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
   version: 1,
   nodes: [
     {
+      input_schemas: {},
+      source: "",
       key: "compose",
       id: "compose",
       kind: "run",
@@ -47,7 +49,7 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
       output_schema: null,
       is_output: true,
     },
-    { key: "approve", id: "approve", kind: "gate", signature: "", detail: "", output_schema: null },
+    { input_schemas: {}, source: "", key: "approve", id: "approve", kind: "gate", signature: "", detail: "", output_schema: null },
   ],
   edges: [{ from: "compose", to: "approve", kind: "wire" }],
 };
@@ -59,6 +61,7 @@ const LIMITS: Wire<typeof RunLimitsSchema> = {
 };
 
 const DETAIL: Wire<typeof WorkflowDetailSchema> = {
+  archived_at: null,
   ok: true,
   id: WORKFLOW_ID,
   name: WORKFLOW_ID,
@@ -81,6 +84,7 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
   predictions: null,
   prediction_record: null,
   trust: {
+    approved_by: [],
     level: "unverified",
     runs_with_evidence: 0,
     failed_runs: 0,
@@ -120,6 +124,7 @@ function artifact(digest: string): Wire<typeof ArtifactRefSchema> {
 
 function endedRun(digest: string): Wire<typeof RunEnvelopeSchema> {
   return {
+    spend: null,
     run_id: RUN_ID,
     workflow_id: WORKFLOW_ID,
     run_title: "Weekly sweep, the open queue",

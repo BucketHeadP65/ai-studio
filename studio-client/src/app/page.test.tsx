@@ -47,6 +47,8 @@ function runViewFixture(overrides: Partial<RunView> = {}): RunView {
 
 function runEnvelopeFixture(overrides: Partial<RunEnvelope> = {}): RunEnvelope {
   return {
+    spend: null,
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-1",
     workflow_id: "wf.weekly-sweep.v2",
     run_title: "",
@@ -137,6 +139,7 @@ interface MountOptions {
 
 function workflowDetail(id: string, graph: WorkflowGraph) {
   return {
+    archived_at: null,
     ok: true,
     id,
     name: id,
@@ -159,6 +162,7 @@ function workflowDetail(id: string, graph: WorkflowGraph) {
     predictions: null,
     prediction_record: null,
     trust: {
+      approved_by: [],
       level: "unverified",
       runs_with_evidence: 0,
       failed_runs: 0,
@@ -260,6 +264,7 @@ describe("Home orders what is happening", () => {
       runs: [
         runViewFixture({ session_id: "s-live", run_title: "This week's sweep", state: "running" }),
         runViewFixture({
+          started_at: "",
           session_id: "s-gate",
           run_title: "Last week's sweep",
           state: "waiting",
@@ -311,6 +316,8 @@ describe("Home orders what is happening", () => {
       runs: [
         runViewFixture({ session_id: "s-live", state: "running" }),
         runViewFixture({
+          run_title: "",
+          started_at: "",
           session_id: "s-gate",
           state: "waiting",
           waiting_at: "review",
@@ -360,6 +367,7 @@ describe("Home says what an empty shelf is for", () => {
         runViewFixture({ session_id: "s-live", run_title: "The weekly sweep", state: "running" }),
         runViewFixture({ session_id: "s-hold", run_title: "The held sweep", state: "paused" }),
         runViewFixture({
+          started_at: "",
           session_id: "s-gate",
           run_title: "The sweep before it",
           state: "waiting",
@@ -572,6 +580,7 @@ describe("Home answers a waiting gate where it is read", () => {
     mountApi({
       runs: [
         runViewFixture({
+          started_at: "",
           session_id: "s-gate",
           run_title: "Last week's sweep",
           state: "waiting",

@@ -56,12 +56,16 @@ function mountApi(
     http.get(`${BASE}/api/library`, () =>
       HttpResponse.json(
         libraryCards.map((card) => ({
+          archived_at: null,
+          shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+          runs: { last: null },
           id: card.id,
           title: card.title,
           summary: "",
           provisional: false,
           score: null,
           trust: {
+            approved_by: [],
             level: "unverified",
             runs_with_evidence: 0,
             failed_runs: 0,
@@ -193,6 +197,7 @@ describe("SchedulesPage", () => {
           predictions: null,
           prediction_record: null,
           trust: {
+            approved_by: [],
             level: "unverified",
             runs_with_evidence: 0,
             failed_runs: 0,

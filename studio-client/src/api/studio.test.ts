@@ -15,12 +15,15 @@ import { refusedReadiness, studioApi, studioErrorMessage } from "./studio";
 const BASE = "http://studio.test";
 
 const CARD = {
+  archived_at: null,
+  shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+  runs: { last: null },
   id: "wf.lit-check.v5",
   title: "Literature check → decision record",
   summary: "Search the knowledge base for prior art, rank the risks, write a dated ADR.",
   provisional: false,
   score: 3.0,
-  trust: { level: "machine-confirmed", runs_with_evidence: 2, failed_runs: 0 },
+  trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 2, failed_runs: 0 },
   needs: [],
   missing: [],
   brings: ["find_prior_art", "rank_risks"],
@@ -32,6 +35,9 @@ const GRAPH = {
   version: 5,
   nodes: [
     {
+      output_schema: null,
+      input_schemas: {},
+      source: "",
       key: "param:context",
       id: "context",
       kind: "param",
@@ -44,6 +50,9 @@ const GRAPH = {
       briefing: "",
     },
     {
+      output_schema: null,
+      input_schemas: {},
+      source: "",
       key: "draft",
       id: "draft",
       kind: "run",
@@ -60,6 +69,10 @@ const GRAPH = {
 };
 
 const WORKFLOW = {
+  title: "",
+  summary: "",
+  applicability: "",
+  archived_at: null,
   ok: true,
   id: "wf.lit-check.v5",
   name: "lit-check",
@@ -83,6 +96,7 @@ const WORKFLOW = {
   birth: null,
   carried: ["counter", "per_risk"],
   trust: {
+    approved_by: [],
     level: "machine-confirmed",
     runs_with_evidence: 2,
     failed_runs: 0,
@@ -112,6 +126,8 @@ const WORKFLOW = {
 };
 
 const RUN_ENVELOPE = {
+  spend: null,
+  result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
   run_id: "run-1",
   workflow_id: "wf.lit-check.v5",
   run_title: "",
@@ -131,6 +147,8 @@ const RUN_ENVELOPE = {
 
 const RUN_RECORD = {
   graph: null,
+  conversations: {},
+  owner_reviews: [],
   ...RUN_ENVELOPE,
   spec: { name: "lit-check" },
   values: { draft: "the record text" },
@@ -181,6 +199,9 @@ describe("studioApi", () => {
             nodes: [
               ...GRAPH.nodes,
               {
+                output_schema: null,
+                input_schemas: {},
+                source: "",
                 key: "review",
                 id: "review",
                 kind: "orchestrator-gate",
@@ -243,6 +264,8 @@ describe("studioApi", () => {
       http.get(`${BASE}/api/run/state`, ({ request }) => {
         expect(new URL(request.url).searchParams.get("since")).toBe("3");
         return HttpResponse.json({
+          auto_approve: false,
+          gate_mode: "wait",
           running: true,
           workflow: "wf.lit-check.v5",
           result: null,
@@ -337,33 +360,6 @@ describe("studioApi", () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]?.run_id).toBe("run-1");
     expect(runs[0]?.outcome).toBe("completed");
-  });
-
-  it("parses a run recorded before gates_orchestrated existed, defaulting it empty", async () => {
-    const legacyEnvelope = {
-      run_id: "run-legacy",
-      workflow_id: "wf.lit-check.v5",
-      outcome: "completed",
-      failure: "",
-      started_at: "2026-08-20T10:00:00Z",
-      ended_at: "2026-08-20T10:05:00Z",
-      runner: "chat",
-      session_id: "sess-old",
-      params: {},
-      gates_approved: ["review"],
-      gates_rejected: {},
-      gates_auto: [],
-      pinned: false,
-    };
-    server.use(
-      http.get(`${BASE}/api/workflows/${encodeURIComponent("wf.lit-check.v5")}/history`, () =>
-        HttpResponse.json({ runs: [legacyEnvelope] }),
-      ),
-    );
-
-    const runs = await studioApi.workflowHistory("wf.lit-check.v5");
-
-    expect(runs[0]?.gates_orchestrated).toEqual([]);
   });
 
   it("rejects a history envelope with an outcome outside the enum", async () => {
@@ -510,6 +506,7 @@ describe("a refused save's own reading", () => {
       http.patch(`${BASE}/api/workflow/wf.x.v1/card`, async ({ request }) => {
         patched = await request.json();
         return HttpResponse.json({
+          archived_at: null,
           ok: true,
           id: "wf.x.v1",
           title: "A better title",

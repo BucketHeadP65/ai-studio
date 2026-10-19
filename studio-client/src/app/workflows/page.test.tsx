@@ -43,6 +43,8 @@ function runViewFixture(overrides: Partial<RunView> = {}): RunView {
 
 function runEnvelopeFixture(overrides: Partial<RunEnvelope> = {}): RunEnvelope {
   return {
+    spend: null,
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-1",
     workflow_id: "wf.metric-sweep.v1",
     outcome: "completed",
@@ -106,6 +108,9 @@ function mountApi(overrides: {
     ),
     http.get(`${BASE}/api/workflow/:id`, ({ params }) =>
       HttpResponse.json({
+        summary: "",
+        applicability: "",
+        archived_at: null,
         ok: true,
         id: params.id,
         name: params.id,
@@ -125,6 +130,7 @@ function mountApi(overrides: {
         predictions: null,
         prediction_record: null,
         trust: {
+          approved_by: [],
           level: "unverified",
           runs_with_evidence: 0,
           failed_runs: 0,
@@ -143,6 +149,8 @@ describe("WorkflowsPage ordering", () => {
       runs: [
         runViewFixture({ session_id: "s-run", workflow_id: "wf.run", state: "running" }),
         runViewFixture({
+          run_title: "",
+          started_at: "",
           session_id: "s-wait",
           workflow_id: "wf.wait",
           state: "waiting",
@@ -187,6 +195,8 @@ describe("WorkflowsPage summary sentence", () => {
     mountApi({
       runs: [
         runViewFixture({
+          run_title: "",
+          started_at: "",
           session_id: "s-wait-1",
           state: "waiting",
           waiting_at: "review",
@@ -198,6 +208,8 @@ describe("WorkflowsPage summary sentence", () => {
           },
         }),
         runViewFixture({
+          run_title: "",
+          started_at: "",
           session_id: "s-wait-2",
           state: "waiting",
           waiting_at: "review",
@@ -221,6 +233,8 @@ describe("WorkflowsPage summary sentence", () => {
     mountApi({
       runs: [
         runViewFixture({
+          run_title: "",
+          started_at: "",
           session_id: "s-wait",
           state: "waiting",
           waiting_at: "review",
@@ -356,6 +370,10 @@ describe("WorkflowsPage acts", () => {
       http.get(`${BASE}/api/sessions`, () => HttpResponse.json({ sessions: [] })),
       http.get(`${BASE}/api/workflow/:id`, ({ params }) =>
         HttpResponse.json({
+          title: "",
+          summary: "",
+          applicability: "",
+          archived_at: null,
           ok: true,
           id: params.id,
           name: params.id,
@@ -374,6 +392,7 @@ describe("WorkflowsPage acts", () => {
           predictions: null,
           prediction_record: null,
           trust: {
+            approved_by: [],
             level: "unverified",
             runs_with_evidence: 0,
             failed_runs: 0,

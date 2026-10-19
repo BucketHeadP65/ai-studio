@@ -474,8 +474,7 @@ function responseToolCallIds(payload: MessagePayload): string[] {
 }
 
 // One response row's own `data-step` part, built from its stored usage and timestamp -- `null`
-// when the row predates the fork's usage tap and carries neither, so a legacy turn shows no
-// figure rather than a fabricated one. `returns` rides only for a call this turn's own request
+// when the row carries neither, so no figure is fabricated. `returns` rides only for a call this turn's own request
 // row already answered.
 function responseDataStepPart(
   payload: MessagePayload,

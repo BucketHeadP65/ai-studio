@@ -13,6 +13,7 @@ import { OutcomeStrip, RESULT_STATUS, ResultSummary } from "./outcome-strip";
 
 function envelope(overrides: Partial<RunEnvelope> = {}): RunEnvelope {
   return {
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-1",
     workflow_id: "wf.lit-check.v5",
     run_title: "",

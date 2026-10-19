@@ -83,6 +83,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
   version: 1,
   nodes: [
     {
+      input_schemas: {},
+      source: "",
       key: "topic",
       id: "topic",
       kind: "param",
@@ -92,6 +94,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
       required: true,
     },
     {
+      input_schemas: {},
+      source: "",
       key: "draft",
       id: "draft",
       kind: "run",
@@ -99,8 +103,10 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
       detail: "",
       output_schema: null,
     },
-    { key: "check", id: "check", kind: "judge", signature: "", detail: "", output_schema: null },
+    { input_schemas: {}, source: "", key: "check", id: "check", kind: "judge", signature: "", detail: "", output_schema: null },
     {
+      input_schemas: {},
+      source: "",
       key: "filed",
       id: "filed",
       kind: "run",
@@ -150,6 +156,7 @@ const PRESENTATION: Wire<typeof WorkflowPresentationSchema> = {
 };
 
 const DETAIL: Wire<typeof WorkflowDetailSchema> = {
+  archived_at: null,
   ok: true,
   id: WORKFLOW_ID,
   name: WORKFLOW_ID,
@@ -172,6 +179,7 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
   predictions: null,
   prediction_record: null,
   trust: {
+    approved_by: [],
     level: "unverified",
     runs_with_evidence: 0,
     failed_runs: 0,
@@ -244,6 +252,7 @@ const PROPOSED_NOTE = {
 // repair, and the counts stay counts. One rework, and still one piece of work.
 function filedRun(noteDigest: string): Wire<typeof RunEnvelopeSchema> {
   return {
+    spend: null,
     run_id: RUN_ID,
     workflow_id: WORKFLOW_ID,
     run_title: RUN_TITLE,
@@ -282,6 +291,7 @@ function filedRun(noteDigest: string): Wire<typeof RunEnvelopeSchema> {
 // is the reading most likely to be mistaken for a quiet success.
 function sweptRun(): Wire<typeof RunEnvelopeSchema> {
   return {
+    spend: null,
     run_id: SWEEP_RUN_ID,
     workflow_id: WORKFLOW_ID,
     run_title: "Sweep the reference pages",

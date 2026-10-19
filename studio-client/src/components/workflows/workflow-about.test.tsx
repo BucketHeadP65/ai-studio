@@ -81,6 +81,8 @@ function detailFixture(overrides: Partial<WorkflowDetail> = {}): WorkflowDetail 
       version: 1,
       nodes: [
         node({
+          input_schemas: {},
+          source: "",
           key: "param:collection",
           id: "collection",
           kind: "param",
@@ -437,6 +439,7 @@ describe("WorkflowAbout", () => {
       http.patch(`${BASE}/api/workflow/:id/card`, async ({ request, params }) => {
         patched = await request.json();
         return HttpResponse.json({
+          archived_at: null,
           ok: true,
           id: params.id,
           title: "Digest new sources",
@@ -678,6 +681,7 @@ describe("the card editor writes the author's words", () => {
       http.patch(`${BASE}/api/workflow/wf.research-digest.v1/card`, async ({ request }) => {
         patched = await request.json();
         return HttpResponse.json({
+          archived_at: null,
           ok: true,
           id: "wf.research-digest.v1",
           title: "Research digest",

@@ -246,6 +246,20 @@ describe("DraftWorkflowPage", () => {
 
   it("with ?run=, renders the run inspector for a run launched from a draft, not the empty draft page", async () => {
     const RUN_RECORD: RunHistoryRecord = {
+      spend: null,
+      result: {
+        status: "unknown",
+        summary: "",
+        attempted: 0,
+        succeeded: 0,
+        skipped: 0,
+        failed: 0,
+        retry_attempts: 0,
+        primary_input: null,
+        generation: null,
+        checks: [],
+        artifacts: [],
+      },
       run_id: "run-99",
       workflow_id: "draft",
       run_title: "",

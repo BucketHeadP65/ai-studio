@@ -79,6 +79,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
   version: 1,
   nodes: [
     {
+      input_schemas: {},
+      source: "",
       key: "queue",
       id: "queue",
       kind: "param",
@@ -88,6 +90,8 @@ const GRAPH: Wire<typeof WorkflowGraphSchema> = {
       required: true,
     },
     {
+      input_schemas: {},
+      source: "",
       key: "compose",
       id: "compose",
       kind: "run",
@@ -122,6 +126,7 @@ const LIMITS: Wire<typeof RunLimitsSchema> = {
 };
 
 const DETAIL: Wire<typeof WorkflowDetailSchema> = {
+  archived_at: null,
   ok: true,
   id: WORKFLOW_ID,
   name: WORKFLOW_ID,
@@ -144,6 +149,7 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
   predictions: null,
   prediction_record: null,
   trust: {
+    approved_by: [],
     level: "unverified",
     runs_with_evidence: 0,
     failed_runs: 0,
@@ -200,6 +206,7 @@ const CHILD_DRAFT = {
 
 function endedRun(): Wire<typeof RunEnvelopeSchema> {
   return {
+    spend: null,
     run_id: "run-1",
     workflow_id: WORKFLOW_ID,
     run_title: RUN_TITLE,
