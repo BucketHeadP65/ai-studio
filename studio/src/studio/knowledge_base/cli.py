@@ -139,7 +139,7 @@ from studio.knowledge_base.settings import (
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
-from studio.knowledge_base.wiring.indexing import ingestion_indexer_version
+from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
@@ -761,10 +761,10 @@ class _IndexFingerprint:
 _HASH_DISPLAY_LEN = 12
 
 
-def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, current_version: str) -> list[str]:
+def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, version_changed: bool) -> list[str]:
     """The index drift lines of `studio status`: mode, tracked files, fingerprint, and a hint when the next index runs full."""
     tracked = fingerprint is not None and files_tracked > 0
-    stale = files_tracked == 0 or (fingerprint is not None and fingerprint.indexer_version != current_version)
+    stale = files_tracked == 0 or version_changed
     lines = [f"Index mode (last run): {'incremental' if tracked else 'full'}", f"Files tracked (manifest): {files_tracked}"]
     if fingerprint is None:
         lines.append("Fingerprint: none yet")
@@ -782,7 +782,8 @@ def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int
 async def _print_status(container: Resolver, *, collection: str) -> None:
     """Print the table row counts, embedding metadata, last query time and index drift of `collection`, writing nothing."""
     engine = await container.get(AsyncEngine)
-    current_version = ingestion_indexer_version(await container.get(AzureOpenAiSettings), await container.get(IngestionSettings))
+    azure_openai = await container.get(AzureOpenAiSettings)
+    ingestion = await container.get(IngestionSettings)
     async with engine.connect() as conn:
         typer.echo("Row counts:")
         for table in _STATUS_TABLES:
@@ -805,7 +806,8 @@ async def _print_status(container: Resolver, *, collection: str) -> None:
             )
         ).first()
         fingerprint = _IndexFingerprint.from_row(fingerprint_row) if fingerprint_row is not None else None
-        for line in _index_drift_lines(fingerprint, files_tracked or 0, current_version=current_version):
+        version_changed = indexer_version_changed(fingerprint.indexer_version if fingerprint is not None else None, azure_openai, ingestion)
+        for line in _index_drift_lines(fingerprint, files_tracked or 0, version_changed=version_changed):
             typer.echo(line)
 
 

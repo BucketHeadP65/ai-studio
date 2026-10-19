@@ -39,6 +39,7 @@ from studio.knowledge_base.settings import (
     knowledge_base_slug,
 )
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
+from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -275,24 +276,28 @@ def _when(identity: KnowledgeBaseIdentity) -> str:
     return when.astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
 
-def _changed_tail(identity: KnowledgeBaseIdentity) -> str:
+def _changed_tail(identity: KnowledgeBaseIdentity, *, rebuilds_everything: bool) -> str:
+    """How far the knowledge base moved since its last index, and whether the next index rebuilds everything."""
     count = identity.changed_since
     noun = "file" if count == 1 else "files"
     if identity.last_indexed_at is None:
         return f"{count} {noun} awaiting index"
+    if rebuilds_everything:
+        files = f"{count} {noun} and " if count else ""
+        return f"{files}the indexer or its chunk settings changed since, the next index rebuilds everything"
     if count == 0:
         return "nothing changed since"
     return f"{count} {noun} changed since"
 
 
-def _db_line(identity: KnowledgeBaseIdentity) -> str:
+def _db_line(identity: KnowledgeBaseIdentity, *, rebuilds_everything: bool) -> str:
     revision = identity.db_revision if identity.db_revision is not None else "no revision"
     reason = f" ({identity.last_index_reason})" if identity.last_index_reason else ""
     # A collection never indexed has no outcome, and "last indexed never" already says so.
     outcome = "" if identity.last_index_outcome == "never" else f", {identity.last_index_outcome}{reason}"
     return (
         f"db {identity.database} at {revision} (code expects {identity.code_revision}), "
-        f"last indexed {_when(identity)}{outcome}, {_changed_tail(identity)}"
+        f"last indexed {_when(identity)}{outcome}, {_changed_tail(identity, rebuilds_everything=rebuilds_everything)}"
     )
 
 
@@ -344,7 +349,9 @@ async def announce_db(
     except _UNREACHABLE_ERRORS as exc:
         typer.echo(unreachable_line(database, exc), err=err)
         return None
-    typer.echo(_db_line(identity), err=err)
+    application = active.application
+    rebuilds_everything = indexer_version_changed(identity.indexer_version, application.infrastructure.azure_openai, application.ingestion)
+    typer.echo(_db_line(identity, rebuilds_everything=rebuilds_everything), err=err)
     return identity
 
 

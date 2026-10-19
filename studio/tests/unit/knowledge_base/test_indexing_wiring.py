@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings, KnowledgeBaseSettings
 from studio.knowledge_base.wiring.indexing import (
     _path_root,
+    indexer_version_changed,
     ingestion_chunk_planner,
     ingestion_chunk_sizes,
     ingestion_cut_plan_stage,
@@ -118,3 +119,13 @@ class TestChunkPlannerWiring:
         ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600)
 
         assert ingestion_indexer_version(AzureOpenAiSettings(endpoint=""), ingestion) == indexer_version(ChunkSizes(target_tokens=300, max_tokens=600))
+
+    def test_a_stored_indexer_version_other_than_the_settings_one_has_changed(self) -> None:
+        ingestion = IngestionSettings(chunk_target_tokens=300, chunk_max_tokens=600)
+        current = ingestion_indexer_version(AzureOpenAiSettings(endpoint=""), ingestion)
+
+        assert indexer_version_changed(current, AzureOpenAiSettings(endpoint=""), ingestion) is False
+        assert indexer_version_changed(indexer_version(ChunkSizes(target_tokens=400, max_tokens=800)), AzureOpenAiSettings(endpoint=""), ingestion) is True
+
+    def test_no_stored_indexer_version_is_no_change(self) -> None:
+        assert indexer_version_changed(None, AzureOpenAiSettings(endpoint=""), IngestionSettings()) is False

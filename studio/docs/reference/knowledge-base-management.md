@@ -531,6 +531,14 @@ index would start from, computed by walking the knowledge base with a `Knowledge
 one that is fully caught up. A knowledge base never indexed instead reads `193 files awaiting index` (`1 file awaiting index`
 for a single file), since there is no prior manifest to diff against and every file on disk is the whole gap.
 
+The tail also says when the next index rebuilds everything. The identity carries the indexer version the last index stored
+(`KnowledgeBaseIdentity.indexer_version`, read from `kb.index_fingerprint` with the index time), and the line compares it
+with the one the code and the settings produce now (the code's `INDEXER_VERSION`, the chunk sizes and the chunk planner), through
+`studio.knowledge_base.wiring.indexing.indexer_version_changed`, the same comparison `studio status` makes for its
+`Manifest stale` hint. When they differ, `nothing changed since` reads `the indexer or its chunk settings changed since, the
+next index rebuilds everything`, and `2 files changed since` reads `2 files and the indexer or its chunk settings changed
+since, the next index rebuilds everything`.
+
 **An unreachable database is one line, never a traceback.** A dead port, an unresolvable host, a wrong password, or a wrong
 database name each end the identity read the same way, a single line naming the redacted target and the reason.
 

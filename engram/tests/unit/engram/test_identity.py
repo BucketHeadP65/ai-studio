@@ -16,7 +16,11 @@ COMPILED = datetime(2026, 8, 26, 23, 50, tzinfo=UTC)
 
 
 def _gateway(
-    *, revision: str | None = "0034", indexed_at: datetime | None = COMPILED, manifest: dict[str, str] | None = None
+    *,
+    revision: str | None = "0034",
+    indexed_at: datetime | None = COMPILED,
+    indexer_version: str = "7+400-800",
+    manifest: dict[str, str] | None = None,
 ) -> FakeSqlGateway:
     present = revision is not None
     return FakeSqlGateway(
@@ -24,7 +28,8 @@ def _gateway(
             "to_regclass": SqlResult(rows=({"present": present},), columns=("present",)),
             "alembic_version": SqlResult(rows=({"version_num": revision},) if present else (), columns=("version_num",)),
             "index_fingerprint": SqlResult(
-                rows=({"indexed_at": indexed_at},) if indexed_at is not None else (), columns=("indexed_at",)
+                rows=({"indexed_at": indexed_at, "indexer_version": indexer_version},) if indexed_at is not None else (),
+                columns=("indexed_at", "indexer_version"),
             ),
             "index_manifest": SqlResult(
                 rows=tuple({"path": path, "content_hash": digest} for path, digest in (manifest or {}).items()),
@@ -54,6 +59,16 @@ class TestReadIdentity:
         assert identity.last_indexed_at is None
         assert identity.last_index_outcome == "never"
         assert identity.last_index_reason == ""
+
+    async def test_a_never_compiled_knowledge_base_has_no_indexer_version(self):
+        identity = await _identity(_gateway(indexed_at=None))
+
+        assert identity.indexer_version is None
+
+    async def test_the_indexer_version_the_last_index_stored_is_read_with_its_time(self):
+        identity = await _identity(_gateway(indexer_version="7+300-600"))
+
+        assert identity.indexer_version == "7+300-600"
 
     async def test_a_compiled_knowledge_base_with_no_run_record_reads_ok(self):
         identity = await _identity(_gateway())

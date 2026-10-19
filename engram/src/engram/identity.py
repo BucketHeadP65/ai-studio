@@ -30,7 +30,7 @@ _WHOLE_MANIFEST = 1_000_000
 
 _VERSION_TABLE_SQL = "SELECT to_regclass('alembic_version') IS NOT NULL AS present"
 _REVISION_SQL = "SELECT version_num FROM alembic_version"
-_INDEXED_AT_SQL = "SELECT indexed_at FROM kb.index_fingerprint WHERE collection = :collection"
+_FINGERPRINT_SQL = "SELECT indexed_at, indexer_version FROM kb.index_fingerprint WHERE collection = :collection"
 _MANIFEST_SQL = "SELECT path, content_hash FROM kb.index_manifest WHERE collection = :collection"
 
 
@@ -56,6 +56,8 @@ class KnowledgeBaseIdentity(BaseModel):
     db_revision: str | None
     code_revision: str | None
     last_indexed_at: datetime | None
+    indexer_version: str | None
+    """The indexer version the last index stored, or None when the collection was never indexed."""
     last_index_outcome: IndexOutcome
     last_index_reason: str = ""
     changed_since: int
@@ -87,13 +89,14 @@ async def read_identity(
             finished after the last successful index is the outcome the identity reports.
 
     Returns:
-        The identity, with `changed_since` counting the files that differ from the stored manifest.
+        The identity, with `changed_since` counting the files that differ from the stored manifest and `indexer_version`
+        the one the last index stored.
 
     Raises:
         RuntimeError: When the stored manifest holds more rows than one read returns, which would make `changed_since` wrong.
     """
     db_revision = await _db_revision(gateway)
-    indexed_at = await _last_indexed_at(gateway, collection)
+    indexed_at, indexer_version = await _fingerprint(gateway, collection)
     outcome, reason = _outcome(indexed_at, last_run)
     stored = await _manifest_hashes(gateway, collection)
     return KnowledgeBaseIdentity(
@@ -104,6 +107,7 @@ async def read_identity(
         db_revision=db_revision,
         code_revision=code_revision,
         last_indexed_at=indexed_at,
+        indexer_version=indexer_version,
         last_index_outcome=outcome,
         last_index_reason=reason,
         changed_since=changed_count(stored, on_disk),
@@ -129,7 +133,7 @@ async def read_stamp(gateway: SqlGateway, reader: KnowledgeBaseReader, *, slug: 
     Raises:
         RuntimeError: When the stored manifest holds more rows than one read returns, which would make the count wrong.
     """
-    indexed_at = await _last_indexed_at(gateway, collection)
+    indexed_at, _indexer_version = await _fingerprint(gateway, collection)
     stored = await _manifest_hashes(gateway, collection)
     return KnowledgeBaseStamp(slug=slug, indexed_at=indexed_at, changed_since=changed_count(stored, disk_content_hashes(reader)))
 
@@ -178,12 +182,14 @@ async def _db_revision(gateway: SqlGateway) -> str | None:
     return value if isinstance(value, str) else None
 
 
-async def _last_indexed_at(gateway: SqlGateway, collection: str) -> datetime | None:
-    result = await gateway.rows(_INDEXED_AT_SQL, {"collection": collection}, cap=1)
+async def _fingerprint(gateway: SqlGateway, collection: str) -> tuple[datetime | None, str | None]:
+    """The time of the collection's last index and the indexer version it stored, None for both when it has no fingerprint."""
+    result = await gateway.rows(_FINGERPRINT_SQL, {"collection": collection}, cap=1)
     if not result.rows:
-        return None
-    value = result.rows[0].get("indexed_at")
-    return value if isinstance(value, datetime) else None
+        return None, None
+    indexed_at = result.rows[0].get("indexed_at")
+    indexer_version = result.rows[0].get("indexer_version")
+    return (indexed_at if isinstance(indexed_at, datetime) else None, indexer_version if isinstance(indexer_version, str) else None)
 
 
 async def _manifest_hashes(gateway: SqlGateway, collection: str) -> dict[str, str]:
