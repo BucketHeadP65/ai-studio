@@ -404,7 +404,8 @@ come back under its best hit in the last column, `folded_units`, a jsonb array o
 first, and every other hit carries an empty array. `search_hits` gives each folded unit the ref a hit of
 its level carries (`section:<collection>/<id>`, `page:` for a card, `unit:` for a claim or a raw chunk),
 so the agent fetches one without searching again: every `fetch`, flat or leveled, over one knowledge base or routed
-over several, opens that ref. `api.search_hits_per_document()` answers the cap the search
+over several, opens that ref. A surface that serves `search` without `fetch` (an `only` set naming `search` alone)
+words its description without sending the agent to `fetch` at all. `api.search_hits_per_document()` answers the cap the search
 applies, read from the same row over the same default and bound, 0 when every hit is kept. A host reads it once, when it
 opens a knowledge base (`read_hits_per_document`, which reads 0 when the database cannot answer), and every `search`
 description states it: a cap of 1 says each hit is a distinct document, a higher cap says how many hits one document may

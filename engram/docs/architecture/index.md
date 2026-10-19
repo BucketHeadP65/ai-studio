@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 20,985 tokens.
+Sections: 10 · whole document ≈ 20,999 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -60,7 +60,7 @@ Sections: 10 · whole document ≈ 20,985 tokens.
 - **Load when:** knowledge, knowledge base, wikinote, note grammar, index, indexing, parse, resolve, validate, validation, embed, incremental, claims, pipeline
 
 ### 05 — Retrieval (bounded context)
-[sections/05-retrieval-bounded-context.md](sections/05-retrieval-bounded-context.md) · ~2,387 tokens
+[sections/05-retrieval-bounded-context.md](sections/05-retrieval-bounded-context.md) · ~2,401 tokens
 - **TL;DR:** The serve slice is the read-only query surface, one shared retrieval toolset (search/fetch/graph_expand/find_paths) over dialect (BM25) and graph seams, hitting only the `api` schema through the read-only `kb_reader` role (a private knowledge base through its own login role), one snapshot per tool call, exposed identically over the CLI, the Studio API, and the MCP server.
 - **Load when:** retrieval, serve, search, fetch, graph, mcp, http api, dialect seam, graph backend, kb_reader, read path, read tools, SQL tools, private knowledge base, statement guard, tuning, snapshot, graph reach
 

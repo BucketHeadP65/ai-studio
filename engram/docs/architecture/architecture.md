@@ -1270,8 +1270,9 @@ These hold on both dialects and both graph backends, for the read tools and for 
   its best, so `k` counts documents. A unit's document is the source it was made from when it has one, otherwise its own
   page. The document's next three matching units ride under its best hit as `folded_units`, each with its id and hit
   level, and the search tools give each one the ref that fetches it. A cap of 0 or null keeps every hit.
-  `api.search_hits_per_document()` answers the cap, and every `search` description states it. When an answer runs over
-  its size budget, folded units go first, from the lowest-ranked hit up. `meta.` pages leave before `k` applies.
+  `api.search_hits_per_document()` answers the cap, and a `search` description states the cap its process read, with
+  the exceptions the serve reference lists. When an answer runs over its size budget, folded units go first, from the
+  lowest-ranked hit up. `meta.` pages leave before `k` applies.
 - **Several knowledge bases merge by rank.** Each hit keeps its fused `score`, and a re-rank adds `rerank_score`. A
   search over several knowledge bases merges by re-rank probability when every hit has one, else rank by rank.
 - **Graph walks say how far they go.** An expansion walks at most 6 hops and a route at most 8. `api.graph_reach` walks
