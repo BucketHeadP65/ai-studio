@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from core.ai.disclosure.contracts import DisclosureEnvelope
 from core.ai.evaluation.contracts import DeliveredSource, ToolCallTrace
-from core.ai.retrieval.contracts import FetchResult, GraphEdge, GraphPath, GraphPathsResult, GraphResult, SearchHit, SearchResult
+from core.ai.retrieval.contracts import FETCH, FetchResult, GraphEdge, GraphPath, GraphPathsResult, GraphResult, SearchHit, SearchResult
 from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.toolsets import WrapperToolset
 
@@ -279,6 +279,7 @@ def _search_without_withheld(value: SearchResult, scrub: _Scrub) -> SearchResult
                 hybrid=_ran_hybrid(value.hits, scrub),
                 status=status,
                 map_collection=collection if scrub.browsable else None,
+                can_fetch=FETCH in scrub.served_tools,
             ),
         }
     )

@@ -506,3 +506,70 @@ class TestASearchOnlySurfaceNeverTellsTheModelToFetch:
 
         assert "then `fetch` a hit's full text by `id`." in description
         assert "Every hit stays a candidate until you fetch and read it." in description
+
+
+# -- a search answer's next steps name only the tools the surface serves ------------
+
+_ANSWERS = {
+    "lexical_hits": (
+        {"id": "note.alpha", "hit_level": "card", "page_id": "note.alpha", "page_title": "Alpha", "snippet": "a card", "score": 0.9, "lexical_rank": 1},
+    ),
+    "semantic_hits": (
+        {"id": "note.alpha", "hit_level": "card", "page_id": "note.alpha", "page_title": "Alpha", "snippet": "a card", "score": 0.9, "vector_rank": 1},
+    ),
+    "no_hits": (),
+}
+_ANSWER_COLUMNS = ("id", "hit_level", "page_id", "page_title", "snippet", "score", "lexical_rank", "vector_rank")
+
+
+def _answering(answer: str) -> FakeSearchHandler:
+    """A search whose rows are the scripted `answer`: keyword-supported hits, semantic-only hits or none."""
+    return FakeSearchHandler(result=SqlResult(rows=_ANSWERS[answer], columns=_ANSWER_COLUMNS))
+
+
+def _steps(result: object) -> str:
+    """A search answer's next-move block as the model reads it: its summary and every option."""
+    assert isinstance(result, SearchResult)
+    return " ".join((result.next_steps.summary, *result.next_steps.options))
+
+
+_ANSWER_KINDS = pytest.mark.parametrize("answer", list(_ANSWERS))
+
+
+class TestASearchAnswerOffersFetchOnlyWhereItIsServed:
+    @_ANSWER_KINDS
+    @pytest.mark.parametrize("served", [False, True], ids=["search_only", "with_fetch"])
+    async def test_the_single_base_toolset(self, answer: str, served: bool):
+        only = frozenset({"search", "fetch"}) if served else frozenset({"search"})
+        toolset = build_retrieval_toolset(_handlers(search=_answering(answer)), collection="workdocs", only=only, envelope=_envelope("workdocs"))
+
+        steps = _steps(await _call(toolset, "search", {"query": "alpha"}))
+
+        assert ("fetch" in steps) is served
+
+    @_ANSWER_KINDS
+    @pytest.mark.parametrize("served", [False, True], ids=["search_only", "with_fetch"])
+    async def test_the_single_base_mcp_server(self, answer: str, served: bool):
+        only = frozenset({"search", "fetch"}) if served else frozenset({"search"})
+        server = FastMCP("documents")
+        register_mcp_tools(server, _handlers(search=_answering(answer)), collection="workdocs", only=only, envelope=_envelope("workdocs"))
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            searched = await client.call_tool("search", {"query": "alpha"})
+
+        assert ("fetch" in _steps(SearchResult.model_validate(json.loads(_text(searched))))) is served
+
+    @_ANSWER_KINDS
+    @pytest.mark.parametrize("served", [False, True], ids=["search_only", "with_fetch"])
+    async def test_the_routed_mcp_server(self, answer: str, served: bool):
+        only = frozenset({"search", "fetch"}) if served else frozenset({"search"})
+        server = FastMCP("documents")
+        surfaces = (_surface("workdocs", "workdocs", WORKDOCS, search=_answering(answer)), _surface("research", "research", RESEARCH))
+        register_routed_mcp_tools(server, surfaces, default_knowledge_base="workdocs", only=only)
+
+        async with connect_in_memory(server) as client:
+            await client.initialize()
+            searched = await client.call_tool("search", {"query": "alpha"})
+
+        assert ("fetch" in _steps(SearchResult.model_validate(json.loads(_text(searched))))) is served

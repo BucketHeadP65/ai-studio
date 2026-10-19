@@ -653,7 +653,10 @@ _MINIMAL_STEPS = NextSteps(
 """The next move that replaces a composed block that pushed the answer past its budget."""
 
 _UNVERIFIED_CLAUSE = "Candidates are unverified evidence until you fetch and read them."
-"""What a candidate list is, said on every result that carries hits."""
+"""What a candidate list is, said on every result that carries hits where `fetch` is served."""
+
+_UNVERIFIED_UNREAD_CLAUSE = "Candidates are unverified evidence: each snippet is an excerpt, never the whole unit."
+"""What a candidate list is, said on every result that carries hits where no `fetch` is served."""
 
 
 def _clip(text: str | None, limit: int) -> str | None:
@@ -868,14 +871,15 @@ def search_next_steps(
     map_collection: str | None,
     dated: bool = False,
     filtered: bool = False,
+    can_fetch: bool = True,
 ) -> NextSteps:
     """The next-move block a `search` result carries: fetch a hit, or widen when there are none.
 
-    The top hit is named by its exact fetchable `ref`, so the option always goes through `fetch`.
-    With no hits, the options are a different query and, when `map_collection` names one, the
-    knowledge base's map. Every summary ends by naming which leg answered. When the semantic leg
-    alone selected the hits, the summary says so and offers saying the knowledge base has no support
-    for the question.
+    The top hit is named by its exact fetchable `ref`, so the option goes through `fetch` where the surface serves it.
+    Where it serves none, no option or summary names `fetch`, the hits are judged by their snippets and no map is
+    offered. With no hits, the options are a different query and, when `map_collection` names one, the knowledge
+    base's map. Every summary ends by naming which leg answered. When the semantic leg alone selected the hits, the
+    summary says so and offers saying the knowledge base has no support for the question.
 
     Args:
         hits: The projected hits, in rank order.
@@ -890,6 +894,7 @@ def search_next_steps(
             the range as a lever.
         filtered: Whether `facets` narrowed the search. With no hits, the widen option then names them
             as a lever.
+        can_fetch: Whether the surface serves `fetch`. `False` names no `fetch` anywhere in the block.
 
     Returns:
         The next-move block.
@@ -897,7 +902,7 @@ def search_next_steps(
     leg = "hybrid" if hybrid else "lexical"
     # The query is bounded like any other display text before it is quoted back.
     echoed = query if len(query) <= SEARCH_SNIPPET_CHARS else f"{query[: SEARCH_SNIPPET_CHARS - 1]}\u2026"
-    browse = None if map_collection is None else f"fetch(unit_id='collection:{map_collection}')"
+    browse = None if map_collection is None or not can_fetch else f"fetch(unit_id='collection:{map_collection}')"
     if not hits:
         widen = _widen_option(dated=dated, filtered=filtered)
         return NextSteps(
@@ -905,7 +910,13 @@ def search_next_steps(
             options=(widen,) if browse is None else (widen, f"{browse} to open the map and browse by structure instead."),
         )
     top = hits[0]
-    read_it = f"fetch(unit_id={top.ref!r}) to read its full text: a hit is an address plus a snippet, never the source."
+    read_it = (
+        f"fetch(unit_id={top.ref!r}) to read its full text: a hit is an address plus a snippet, never the source."
+        if can_fetch
+        else "Judge each hit by its snippet, an excerpt and never the source, and search again with narrower terms to bring "
+        "a different passage into view."
+    )
+    sources = "the sources you fetch" if can_fetch else "the snippets"
     if status == "semantic_candidates_only":
         retry = "Re-run with the exact terms you expect" if browse is None else f"Re-run with the exact terms you expect, or browse by structure: {browse}"
         return NextSteps(
@@ -916,11 +927,12 @@ def search_next_steps(
             options=(
                 read_it,
                 f"{retry}.",
-                "Say this knowledge base has no support for the question if the sources you fetch do not answer it.",
+                f"Say this knowledge base has no support for the question if {sources} do not answer it.",
             ),
         )
     return NextSteps(
-        summary=f"{len(hits)} hit(s) for {echoed!r}, ranked by relevance. {_UNVERIFIED_CLAUSE} Answered by {leg}.",
+        summary=f"{len(hits)} hit(s) for {echoed!r}, ranked by relevance. {_UNVERIFIED_CLAUSE if can_fetch else _UNVERIFIED_UNREAD_CLAUSE} "
+        f"Answered by {leg}.",
         options=(read_it,),
     )
 
@@ -1008,6 +1020,7 @@ async def _run_search(
     facet_owner: str = "this knowledge base",
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> SearchResult:
     """Run one search into a bounded result: `pinned` ignores a passed collection, otherwise one unlike `default_collection` is refused."""
     if pinned:
@@ -1044,6 +1057,7 @@ async def _run_search(
             map_collection=scoped if browsable else None,
             dated=message.is_dated,
             filtered=bool(message.facets),
+            can_fetch=can_fetch,
         ),
         knowledge_base=knowledge_base,
     )
@@ -1088,6 +1102,7 @@ def _build_search_fn(
     facet_keys: tuple[str, ...] = (),
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> Callable[..., Awaitable[SearchResult]]:
     """Build the `search` closure: `k_source` drops `k`, `search_hybrid` drops `bm25_only`, `pinned` ignores `collection`, `browsable` offers the map."""
 
@@ -1117,6 +1132,7 @@ def _build_search_fn(
             facet_keys=facet_keys,
             refuse=refuse,
             browsable=browsable,
+            can_fetch=can_fetch,
         )
 
     if search_hybrid is None:
@@ -1192,6 +1208,7 @@ def _add_search_tool(
     pinned: bool = False,
     facet_keys: tuple[str, ...] = (),
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> None:
     """Register engram's own `search` on the pydantic-ai `toolset`, a pinned one offering no collection (see `_build_search_fn`)."""
     search = _build_search_fn(
@@ -1204,6 +1221,7 @@ def _add_search_tool(
         pinned=pinned,
         facet_keys=facet_keys,
         browsable=browsable,
+        can_fetch=can_fetch,
     )
     toolset.add_function(
         search,
@@ -1238,6 +1256,7 @@ def _add_search_mcp_tool(
     stamp: StampSource | None = None,
     facet_keys: tuple[str, ...] = (),
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> None:
     """Register engram's own `search` on the FastMCP `server`, refusing through `ToolError` (see `_build_search_fn`)."""
     search = _build_search_fn(
@@ -1250,6 +1269,7 @@ def _add_search_mcp_tool(
         facet_keys=facet_keys,
         refuse=ToolError,
         browsable=browsable,
+        can_fetch=can_fetch,
     )
     server.add_tool(search, name=SEARCH, description=description)
 
@@ -1636,6 +1656,7 @@ def build_retrieval_toolset(
             pinned=pinned,
             facet_keys=facet_keys,
             browsable=fetch_opens_map(envelope, selected),
+            can_fetch=FETCH in selected,
         )
     if leveled and envelope is not None:
         toolset.add_function(
@@ -1742,6 +1763,7 @@ def register_mcp_tools(
             stamp=stamp,
             facet_keys=facet_keys,
             browsable=fetch_opens_map(envelope, selected),
+            can_fetch=FETCH in selected,
         )
     if not leveled and FETCH in selected:
         flat = flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), refuse=ToolError)
@@ -1806,7 +1828,11 @@ def register_routed_mcp_tools(
         surfaces, home, descriptions=descriptions, k_source=k_source, can_search=can_search, can_fetch=only is None or FETCH in only
     )
     if can_search:
-        server.add_tool(_routed_search(surfaces, home, k_source=k_source, refuse=ToolError), name=SEARCH, description=searching)
+        server.add_tool(
+            _routed_search(surfaces, home, k_source=k_source, refuse=ToolError, can_fetch=only is None or FETCH in only),
+            name=SEARCH,
+            description=searching,
+        )
     if only is None or FETCH in only:
         server.add_tool(
             _routed_fetch(surfaces, home, refuse=ToolError, tools=served if served is not None else (TOOL_NAMES if only is None else only)), name=FETCH, description=reading
@@ -1925,9 +1951,9 @@ def _owning(by_collection: Mapping[str, ReadSurface], home: ReadSurface, collect
 
 
 def _routed_search(
-    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, k_source: Callable[[], int] | None, refuse: Refuse
+    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, k_source: Callable[[], int] | None, refuse: Refuse, can_fetch: bool = True
 ) -> Callable[..., Awaitable[SearchResult]]:
-    """The routed `search`: `collection` names which registered knowledge base ranks and answers, filtered by its own facet keys."""
+    """The routed `search`: `collection` names which registered knowledge base answers, by its own facet keys, its next steps naming `fetch` only when served."""
     by_collection = {surface.collection: surface for surface in surfaces}
 
     async def run(
@@ -1949,6 +1975,7 @@ def _routed_search(
             facet_owner=_named_base(surface.collection),
             refuse=refuse,
             browsable=surface.envelope.mode != "search_only",
+            can_fetch=can_fetch,
         )
 
     if k_source is None:
