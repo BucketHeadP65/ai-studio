@@ -20,7 +20,7 @@ interface RawSchedule {
   cadence: string;
   enabled: boolean;
   gate_policy: string;
-  gate_mode?: string;
+  gate_mode: string;
   capacity_key: string | null;
   capacity_limit: number | null;
   blackout: string | null;

@@ -17,7 +17,7 @@ import { SessionList } from "./session-list";
 const BASE = "http://studio.test";
 
 interface Session {
-  kind: "chat",
+  kind: "chat";
   id: string;
   project_id: string;
   title: string;

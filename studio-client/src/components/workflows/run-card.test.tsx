@@ -720,5 +720,4 @@ describe("RunCard hierarchy", () => {
     expect(screen.queryByText("Recorded output")).not.toBeInTheDocument();
     expect(screen.getByText("No work needed")).toBeInTheDocument();
   });
-
 });
