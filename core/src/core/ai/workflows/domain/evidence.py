@@ -57,8 +57,8 @@ class RunEvidence(BaseModel):
     spec_hash: str = ""
     """The content address of the workflow this run exercised, `spec_identity(workflow)`.
 
-    `""` means the record does not know what it ran, and a record written without a hash still
-    parses. A lookup keeps such records apart from confirmed ones and never folds them into a level.
+    `""` means the record does not know what it ran, as a durable run's record does not. A lookup
+    keeps such records apart from confirmed ones and never folds them into a level.
 
     A content address says what ran, not whose it was. Two teams writing byte-identical workflows
     share an identity, so in a shared evidence log one team's runs count for the other's."""
@@ -96,7 +96,7 @@ class RunEvidence(BaseModel):
     means no gate was refused, or the runner did not record refusals, and the two read the same."""
     params: WorkflowArguments = Field(default_factory=dict)
     """What this run was given, as the JSON each parameter declares. A replay runs on these
-    inputs. A record whose arguments were all text still parses, and still reads as that text."""
+    inputs."""
     produced: dict[str, str] = Field(default_factory=dict)
     """The shape of what each node produced, by node id, never the value itself."""
     runner: str = ""
@@ -115,8 +115,7 @@ class Approval(BaseModel):
     spec_hash: str = ""
     """The content address of the workflow that was approved, `spec_identity(workflow)`.
 
-    `""` means this approval cannot say which workflow it was about, as on a record written
-    without a hash."""
+    `""` means this approval cannot say which workflow it was about."""
     workflow_version: int | None = None
     """Which version was approved. Approving v1 is not approving what v1 became."""
     by: str
@@ -288,7 +287,7 @@ def orchestrated_gates(workflow: Workflow, values: Mapping[str, object]) -> tupl
 class EvidenceHistory(BaseModel):
     """What an evidence log holds about one workflow, split by what can be confirmed as its own.
 
-    A record that carries no content address is kept apart in `legacy`, never merged into
+    A record that carries no content address is kept apart in `unaddressed`, never merged into
     `matched` and never dropped.
     """
 
@@ -297,7 +296,7 @@ class EvidenceHistory(BaseModel):
     matched: tuple[RunEvidence | Approval | Grade, ...] = ()
     """Events carrying this workflow's content address, wherever they were filed. A level may be
     folded from this bucket only, and a workflow keeps these runs when it moves."""
-    legacy: tuple[RunEvidence | Approval | Grade, ...] = ()
+    unaddressed: tuple[RunEvidence | Approval | Grade, ...] = ()
     """Events at the address asked about carrying no content address. They may be this workflow's,
     an adapted child's, or a namesake's, and nothing here can tell. They are reported, never counted."""
 
@@ -311,6 +310,6 @@ class EvidenceHistory(BaseModel):
         """
         if self.matched:
             return "content"
-        return "address-only" if self.legacy else "none"
+        return "address-only" if self.unaddressed else "none"
 
 

@@ -143,7 +143,7 @@ shipped library is one. It answers two questions:
 | `events_for(workflow_id)` | an address | every event filed there, correct only for a workflow that never moved and whose library never re-keyed |
 | `history_for(spec_hash=..., workflow_id=None)` | content, plus an optional address | a `EvidenceHistory` with two buckets |
 
-`EvidenceHistory.matched` holds events carrying this spec's hash **wherever they were filed**, that is what keeps runs with evidence findable across a move. `EvidenceHistory.legacy` holds events at
+`EvidenceHistory.matched` holds events carrying this spec's hash **wherever they were filed**, that is what keeps runs with evidence findable across a move. `EvidenceHistory.unaddressed` holds events at
 the given address that carry no hash at all. The two are never merged: merging would let a record
 of unknown provenance count as this workflow's run, and dropping would orphan the history a real
 evidence log already holds. An event naming a *different* hash is in neither bucket, it said what it
@@ -232,7 +232,7 @@ This is the table a library implementer should read first.
 | `Lineage`, parent, ops, `touched` | library-side, beside the child | `fetch_lineage` |
 | `Lineage.evidence` (prose) | library-side, beside the child | `fetch_lineage`. Read, never scored |
 | `Lineage.predictions` (claims) | library-side, beside the child | `fetch_lineage` |
-| RunEvidence, approvals | evidence log-side, append-only | `EvidenceLog.history_for(spec_hash=...)`, or `events_for(id)` for legacy records |
+| RunEvidence, approvals | evidence log-side, append-only | `EvidenceLog.history_for(spec_hash=...)`, or `events_for(id)` for records with no hash |
 | **Content address** | nowhere | derived: `spec_identity(spec)` |
 | **Trust level** | nowhere | derived: `trust_level(history.matched).level` |
 | **Whether that level is about this workflow** | nowhere | derived: `EvidenceHistory.basis` |
@@ -1073,8 +1073,8 @@ test that pins it for the existing libraries.
  only answer `unverified` for both has reproduced the silent failure. `EvidenceHistory.basis`
  must say which.
  *Pinned by:* `tests/unit/test_evidence.py::test_nothing_recorded_is_distinguishable_from_a_history_nobody_can_confirm`,
- `::test_legacy_records_are_offered_apart_from_confirmed_ones_never_merged`,
- `tests/unit/test_artifact_view.py::test_history_that_predates_hashes_reads_as_unconfirmed_rather_than_never_run`.
+ `::test_unaddressed_records_are_offered_apart_from_confirmed_ones_never_merged`,
+ `tests/unit/test_artifact_view.py::test_history_with_no_hash_reads_as_unconfirmed_rather_than_never_run`.
 
 30. **A content address survives the round trip through the library.** Hash a spec, put it, fetch
  it, hash it again, including through a backend that reorders object keys.
@@ -1143,13 +1143,10 @@ defect, a library is not required to be the evidence log, but it does mean the p
 evidence log implementation and therefore no second implementation disagreeing with it, which is the
 test the library seam itself is held to in the Purpose section.
 
-**Records written before content addressing can never be confirmed.** `spec_hash` defaults to
-`""` so they still parse, and `history_for` returns them in their own `legacy` bucket at the
-address they were filed under, but nothing can decide whether such a record is this workflow's,
-an adapted child's, or a namesake's. They are reported and never counted. The honest end state is
-a migration that re-derives the hash for records whose workflow is still fetchable at the
-recorded id, and nothing does that. The bucket is the interim answer. There are seven such
-records in this repository's own `.state/evidence.jsonl`.
+**A record with no content address can never be confirmed.** A durable run's evidence names no
+`spec_hash`, so the field reads `""`, and `history_for` returns such records in their own `unaddressed`
+bucket at the address they were filed under, but nothing can decide whether such a record is this
+workflow's, an adapted child's, or a namesake's. They are reported and never counted.
 
 **Identical specs from different authors share an identity.** `spec_identity` hashes the spec and
 nothing else, so two teams who independently write the same graph get one content address. In a
@@ -1169,7 +1166,7 @@ trips the same test for the same reason. Neither is prevented. Both are made vis
 answers trust by content address on both the workflow page and `/api/library`, but
 `_changes_since_first_run` and `_inherited_nodes` call `events_for(workflow_id)`. A workflow that
 moved therefore keeps its trust and loses its birth verdict. Switching them is mechanical. What
-holds it back is that the legacy records those paths currently answer from would go silent, and
+holds it back is that the records with no hash those paths currently answer from would go silent, and
 that is a visible regression to weigh against the fix rather than an oversight.
 
 **Provenance is one key by convention.** `put` takes `provenance: Mapping[str, str]`, and

@@ -392,7 +392,7 @@ async def _trust(evidence: EvidenceLog, workflow: Workflow | None, workflow_id: 
         record, basis, unconfirmed = trust_level(()), "none", 0
     else:
         history = await evidence.history_for(spec_hash=spec_identity(workflow), workflow_id=workflow_id)
-        record, basis, unconfirmed = trust_level(history.matched), history.basis, len(history.legacy)
+        record, basis, unconfirmed = trust_level(history.matched), history.basis, len(history.unaddressed)
     return {
         "level": record.level,
         "runs_with_evidence": record.runs_with_evidence,

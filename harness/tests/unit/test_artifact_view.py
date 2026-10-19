@@ -315,7 +315,7 @@ async def test_runs_earned_under_another_address_still_count_for_the_artifact(li
     assert trust["basis"] == "content"
 
 
-async def test_history_that_predates_hashes_reads_as_unconfirmed_rather_than_never_run(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+async def test_history_with_no_hash_reads_as_unconfirmed_rather_than_never_run(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """The silent half: an empty lookup and an unattributable one both rendered as a confident zero.
 
     The record below is real history at this address that nothing can tie to this spec. It must not

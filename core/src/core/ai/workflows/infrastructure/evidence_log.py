@@ -68,20 +68,20 @@ class FileEvidenceLog:
 
         Returns:
             The events carrying `spec_hash` as `matched`, and the unhashed events filed under
-            `workflow_id` as `legacy`, each oldest first.
+            `workflow_id` as `unaddressed`, each oldest first.
 
         Raises:
             ValueError: If `spec_hash` is empty.
         """
         require_spec_identity(spec_hash)
         matched: list[RunEvidence | Approval | Grade] = []
-        legacy: list[RunEvidence | Approval | Grade] = []
+        unaddressed: list[RunEvidence | Approval | Grade] = []
         for event in self._surviving():
             if event.spec_hash == spec_hash:
                 matched.append(event)
             elif not event.spec_hash and event.workflow_id == workflow_id:
-                legacy.append(event)
-        return EvidenceHistory(matched=tuple(matched), legacy=tuple(legacy))
+                unaddressed.append(event)
+        return EvidenceHistory(matched=tuple(matched), unaddressed=tuple(unaddressed))
 
     def _surviving(self) -> Iterator[RunEvidence | Approval | Grade]:
         """Every line that still parses, in the order it was written. A missing file holds nothing."""

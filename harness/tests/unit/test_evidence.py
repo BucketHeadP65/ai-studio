@@ -250,10 +250,10 @@ def test_asking_for_no_version_still_folds_the_whole_ledger() -> None:
 
 
 def test_an_evidence_record_that_never_recorded_a_version_cannot_count_for_one(tmp_path: Path) -> None:
-    """Older records predate the field, and absence of evidence is not evidence."""
-    legacy = RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED)
-    assert trust_level([legacy]).level == "machine-confirmed", "unfiltered, it is still a run that happened"
-    assert trust_level([legacy], version=1).level == "unverified", "but it cannot claim to be v1's run"
+    """A record that names no version is no evidence for one: absence of evidence is not evidence."""
+    unversioned = RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED)
+    assert trust_level([unversioned]).level == "machine-confirmed", "unfiltered, it is still a run that happened"
+    assert trust_level([unversioned], version=1).level == "unverified", "but it cannot claim to be v1's run"
 
 
 def test_an_approval_is_for_the_version_it_named() -> None:
@@ -263,10 +263,10 @@ def test_an_approval_is_for_the_version_it_named() -> None:
     assert trust_level([approval], version=2).level == "unverified"
 
 
-def test_a_record_written_before_content_addressing_still_parses(tmp_path: Path) -> None:
-    """Legacy records predate content addressing and must still parse; a required field would make history unreadable."""
-    legacy = RunEvidence.model_validate_json('{"kind":"run","workflow_id":"wf.report","outcome":"completed"}')
-    assert legacy.spec_hash == "", "empty means the record does not know what it ran -- not that it matches nothing"
+def test_a_record_with_no_content_address_parses_with_an_empty_one(tmp_path: Path) -> None:
+    """A durable run's record names no content address, and it must still parse."""
+    unaddressed = RunEvidence.model_validate_json('{"kind":"run","workflow_id":"wf.report","outcome":"completed"}')
+    assert unaddressed.spec_hash == "", "empty means the record does not know what it ran -- not that it matches nothing"
     assert Approval.model_validate_json('{"kind":"approval","workflow_id":"wf.report","by":"alex"}').spec_hash == ""
 
 
@@ -306,16 +306,16 @@ def test_trust_is_asked_by_what_ran_rather_than_by_where_it_was_kept() -> None:
 
 def test_a_record_that_never_said_what_it_ran_cannot_count_for_a_hash() -> None:
     """The same ruling the version filter makes: unknown is not earned, and it must not read as it."""
-    legacy = RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED)
-    assert trust_level([legacy]).level == "machine-confirmed", "unfiltered, it is still a run that happened"
-    assert trust_level([legacy], spec_hash="abc").level == "unverified", "but it cannot claim to be this artifact's run"
+    unaddressed = RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED)
+    assert trust_level([unaddressed]).level == "machine-confirmed", "unfiltered, it is still a run that happened"
+    assert trust_level([unaddressed], spec_hash="abc").level == "unverified", "but it cannot claim to be this artifact's run"
 
 
 def test_the_empty_hash_is_refused_as_an_identity() -> None:
     """Asking for `""` would hand back every record that knows nothing and call the fold confident.
 
     Reachable by accident: a caller passing `some_attestation.spec_hash` straight through hits it
-    the first time it meets a legacy record.
+    the first time it meets a record with no content address.
     """
     with pytest.raises(ValueError, match="not an identity"):
         trust_level([], spec_hash="")
@@ -330,7 +330,7 @@ def test_a_version_bump_needs_no_version_filter(quarterly_report: Workflow) -> N
 
 
 def test_the_two_filters_compose_rather_than_replacing_each_other() -> None:
-    """The version filter stays: it is the only question a legacy record can still answer."""
+    """The version filter stays: it is the only question a record with no content address can still answer."""
     events = [RunEvidence(workflow_id="wf.report", workflow_version=2, spec_hash="abc", outcome="completed", result=CONFIRMED)]
     assert trust_level(events, version=2, spec_hash="abc").runs_with_evidence == 1
     assert trust_level(events, version=1, spec_hash="abc").runs_with_evidence == 0
@@ -373,10 +373,10 @@ async def test_a_grade_round_trips_beside_an_old_style_evidence_line(tmp_path: P
 
     history = await ledger.history_for(spec_hash="abc", workflow_id="wf.report")
     assert [type(event).__name__ for event in history.matched] == ["Grade"]
-    assert [type(event).__name__ for event in history.legacy] == ["RunEvidence"]
+    assert [type(event).__name__ for event in history.unaddressed] == ["RunEvidence"]
 
 
-async def test_legacy_records_are_offered_apart_from_confirmed_ones_never_merged(tmp_path: Path) -> None:
+async def test_unaddressed_records_are_offered_apart_from_confirmed_ones_never_merged(tmp_path: Path) -> None:
     """Merging would launder: an unversioned record of unknown provenance would count as this artifact's run.
 
     Dropping them would orphan the history the user actually has. So both come back, in separate
@@ -388,7 +388,7 @@ async def test_legacy_records_are_offered_apart_from_confirmed_ones_never_merged
 
     history = await ledger.history_for(spec_hash="abc", workflow_id="wf.report")
     assert len(history.matched) == 1
-    assert len(history.legacy) == 1
+    assert len(history.unaddressed) == 1
     assert trust_level(history.matched).runs_with_evidence == 1, "the fold sees only what is confirmed"
 
 
@@ -405,11 +405,11 @@ async def test_nothing_recorded_is_distinguishable_from_a_history_nobody_can_con
     unconfirmable = await ledger.history_for(spec_hash="abc", workflow_id="wf.report")
     assert unconfirmable.basis == "address-only"
     assert unconfirmable.matched == ()
-    assert len(unconfirmable.legacy) == 1
+    assert len(unconfirmable.unaddressed) == 1
 
     nothing = await ledger.history_for(spec_hash="abc", workflow_id="wf.elsewhere")
     assert nothing.basis == "none"
-    assert nothing.legacy == ()
+    assert nothing.unaddressed == ()
 
 
 async def test_another_artifacts_records_at_the_same_address_are_neither(tmp_path: Path) -> None:
@@ -419,23 +419,23 @@ async def test_another_artifacts_records_at_the_same_address_are_neither(tmp_pat
 
     history = await ledger.history_for(spec_hash="abc", workflow_id="wf.report")
     assert history.matched == ()
-    assert history.legacy == (), "it knows what it exercised, and it was not this"
+    assert history.unaddressed == (), "it knows what it exercised, and it was not this"
     assert history.basis == "none"
 
 
 async def test_a_hash_only_lookup_asks_about_no_address_at_all(tmp_path: Path) -> None:
-    """The caller that has a spec and no store: no address means no legacy bucket to widen into."""
+    """The caller that has a spec and no store: no address means no unaddressed bucket to widen into."""
     ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
     await ledger.append(RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED))
     await ledger.append(RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", result=CONFIRMED))
 
     history = await ledger.history_for(spec_hash="abc")
     assert len(history.matched) == 1
-    assert history.legacy == ()
+    assert history.unaddressed == ()
 
 
 async def test_the_ledger_refuses_the_empty_hash_as_an_identity(tmp_path: Path) -> None:
-    """Otherwise every legacy record in the file answers to it, and the fold reads confident."""
+    """Otherwise every unaddressed record in the file answers to it, and the fold reads confident."""
     ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
     await ledger.append(RunEvidence(workflow_id="wf.report", outcome="completed", result=CONFIRMED))
     with pytest.raises(ValueError, match="not an identity"):
