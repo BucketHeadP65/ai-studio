@@ -182,7 +182,7 @@ wrote before this slice, so an old session-log line still decodes. `live` is the
 | `seen_at` | timestamptz | Defaults to `now()`. |
 | `attempted_at` | timestamptz, nullable | Stamped once the inspector's lane has tried every tier. |
 | `refusal` | text, nullable | The reason for a dismissal or an unresolved attribution. |
-| `resolution` | text, not null | `open`, `undecided`, `invalid`, or `dismissed`. Legacy attempted rows migrate to `undecided`. |
+| `resolution` | text, not null | `open`, `undecided`, `invalid`, or `dismissed`. Defaults to `open`. |
 
 **`inspection.findings`**
 
