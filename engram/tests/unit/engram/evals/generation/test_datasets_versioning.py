@@ -111,7 +111,7 @@ def test_stamp_round_trips_through_model_validate(tmp_path) -> None:
 
 
 def test_load_stamp_returns_none_for_an_unversioned_dataset(tmp_path) -> None:
-    # An unversioned dataset has no sidecar stamp; loading its stamp is a clean None, not an error.
+    # An unversioned dataset has no sidecar stamp, so loading its stamp is a clean None, not an error.
     path = tmp_path / "unversioned.yaml"
     save_dataset(build_dataset([_authored()]), path)
 
