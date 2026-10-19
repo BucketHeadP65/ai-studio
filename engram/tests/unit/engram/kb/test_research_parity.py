@@ -4,8 +4,8 @@
   reproduce the golden universal fields + edge set committed to
   `fixtures/parity_golden/<page_type>.json`. Any divergence from the golden is a genuine regression.
 
-- **Smoke test** (the live knowledge base `KNOWLEDGE_BASE_LIVE_PATH` names, skipped when it is unset): parse ALL `Units/**/*.md` via the public
-  :func:`parse` API, tolerating a `NoteGrammarError` per note the same way `index/handlers.py`
+- **Smoke test** (the live knowledge base `KNOWLEDGE_BASE_LIVE_PATH` names, skipped when it is unset): parse every page
+  in the folders and files its own `knowledge-base-schema.json` declares via the public :func:`parse` API under that schema, tolerating a `NoteGrammarError` per note the same way `index/handlers.py`
   does at index time (a page-level validation issue, not an abort); assert ``swept ≥ 485`` and that
   resolver edge extraction succeeds on each successfully parsed note (no exception; edges is a list).
 """
@@ -19,7 +19,7 @@ import pathlib
 import pytest
 
 from engram.indexing.domain.resolver import _frontmatter_relations
-from engram.kb.contracts import BaseFrontmatter, NoteGrammarError, VocabularyIndex, parse
+from engram.kb.contracts import BaseFrontmatter, KnowledgeBaseSchema, NoteGrammarError, VocabularyIndex, parse
 from engram.kb.domain.note import _parse_frontmatter_generic
 from engram.testing.specs import research_spec
 
@@ -115,12 +115,19 @@ def test_generic_path_matches_golden(page_type: str, note_path: pathlib.Path, go
 # Live-knowledge_base smoke guard (skipped unless KNOWLEDGE_BASE_LIVE_PATH names a knowledge base)
 # ---------------------------------------------------------------------------
 
-_LIVE_KNOWLEDGE_BASE_PRESENT = _LIVE_KNOWLEDGE_BASE is not None and (_LIVE_KNOWLEDGE_BASE / "Units").is_dir()
+_LIVE_KNOWLEDGE_BASE_PRESENT = _LIVE_KNOWLEDGE_BASE is not None and (_LIVE_KNOWLEDGE_BASE / "knowledge-base-schema.json").is_file()
 
 
-@pytest.mark.skipif(not _LIVE_KNOWLEDGE_BASE_PRESENT, reason=f"{_LIVE_KNOWLEDGE_BASE_ENV} names no knowledge base with a Units/ folder")
+def _declared_pages(root: pathlib.Path, schema: KnowledgeBaseSchema) -> list[pathlib.Path]:
+    """Every markdown page in the folders and files `schema` declares under `root`, each once, sorted."""
+    pages = {path for folder in schema.note_folders for path in (root / folder).rglob("*.md")}
+    pages.update(root / name for name in schema.note_files if (root / name).is_file())
+    return sorted(pages)
+
+
+@pytest.mark.skipif(not _LIVE_KNOWLEDGE_BASE_PRESENT, reason=f"{_LIVE_KNOWLEDGE_BASE_ENV} names no knowledge base with a knowledge-base-schema.json")
 def test_live_knowledge_base_smoke_sweep() -> None:
-    """Sweep EVERY note under the live knowledge base's Units/ folder through the single generic path.
+    """Sweep EVERY page in the folders and files the live knowledge base's own schema declares through the single generic path.
 
     Asserts:
     - `swept >= 485` (count-guard; the knowledge base carries at least 485 notes)
@@ -131,15 +138,13 @@ def test_live_knowledge_base_smoke_sweep() -> None:
     - resolver edge extraction succeeds on each successfully parsed note (no exception, edges is a list)
     """
     assert _LIVE_KNOWLEDGE_BASE is not None
-    research = research_spec()
-    units_root = _LIVE_KNOWLEDGE_BASE / "Units"
-    note_paths = sorted(units_root.rglob("*.md"))
+    schema = KnowledgeBaseSchema.from_path(_LIVE_KNOWLEDGE_BASE / "knowledge-base-schema.json")
     swept = 0
 
-    for path in note_paths:
+    for path in _declared_pages(_LIVE_KNOWLEDGE_BASE, schema):
         text = path.read_text(encoding="utf-8")
         try:
-            note = parse(text, source_path=str(path.relative_to(path.parent.parent)), spec=research)
+            note = parse(text, source_path=path.relative_to(_LIVE_KNOWLEDGE_BASE).as_posix(), spec=schema)
         except NoteGrammarError:
             swept += 1
             continue
