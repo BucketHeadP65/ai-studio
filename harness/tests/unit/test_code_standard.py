@@ -18,7 +18,6 @@ CONVERTED = (
     "harness.features.followme",
     "harness.features.terminal",
     "harness.domain",
-    "harness.migrations",
     "harness.features.authoring",
     "harness.adapters",
 )

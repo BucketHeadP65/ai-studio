@@ -42,7 +42,6 @@ only shrink. The tiers, inward first:
 - `composition.py`, the one module that knows every slice: `harness_session`, `build_environment`.
 - `container.py`, the composition map: the sections, the adapters' leaves and every slice's
   registrations, in one `create_container(settings)`.
-- `migrations/`: one-time rewrites of this deployment's own state, reaching no further than `adapters/`.
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database

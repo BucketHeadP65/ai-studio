@@ -59,16 +59,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from wireup.integration import fastapi as wireup_fastapi
 
 from harness import session as session_state
-from harness.adapters.contracts import (
-    DEFAULT_TIERS,
-    ModelList,
-    ModelTiers,
-    SessionsDatabase,
-    TierSetting,
-    prune_ended_spill_folders,
-    set_tier,
-    stored_tiers,
-)
+from harness.adapters.contracts import DEFAULT_TIERS, ModelList, ModelTiers, TierSetting, prune_ended_spill_folders, set_tier, stored_tiers
 from harness.composition import ensure_run_engine, restore_waiting_run, restore_waiting_runs, run_log_folders, serve_durable_runs
 from harness.container import create_container
 from harness.domain.contracts import Booted, SessionEvents, SessionTranscript, last_forgotten_at, live_session, logged_run_ids
@@ -85,13 +76,6 @@ from harness.features.selfauthoring.controller import SelfAuthoringController
 from harness.features.sessions.contracts import SessionProjection, project_config, project_registry
 from harness.features.sessions.controller import SessionsController
 from harness.features.terminal.controller import TerminalController
-from harness.migrations.contracts import (
-    migrate_knowledge_base_words,
-    migrate_projection,
-    migrate_session_words,
-    migrate_trust_words,
-    migrate_workflow_words,
-)
 from harness.session import Runtime, SessionPool
 from harness.settings import (
     AI_FACTORY_STUDIO_ORIGINS,
@@ -107,7 +91,7 @@ from harness.settings import (
 from harness.tracing import POLLED
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Sequence
+    from collections.abc import AsyncGenerator
 
     from starlette.types import Lifespan
     from wireup import AsyncContainer
@@ -308,53 +292,6 @@ def _apply_setup(setup: SetupConfig, tiers: ModelTiers, custom: Path) -> None:
             _logger.warning("project setup names an unusable model {model!r}: {reason}", model=setup.model, reason=str(exc))
 
 
-async def _migrate_state(state: StateSettings, custom: Path) -> None:
-    """Rewrite state still in the old words before anything reads it, logging a failure rather than raising."""
-    try:
-        migration = await migrate_workflow_words(state)
-    except Exception:
-        _logger.exception("the wave 1 migration did not finish. Run `python -m harness.migrations.rewrite_workflow_words` by hand")
-    else:
-        _report("wave 1", migration.lines(), touched=migration.touched, refused=migration.refused)
-    try:
-        sessions = migrate_session_words(state, custom)
-    except Exception:
-        _logger.exception("the wave 2 migration did not finish. Run `python -m harness.migrations.rewrite_session_words` by hand")
-    else:
-        _report("wave 2", sessions.lines(), touched=sessions.touched, refused=sessions.refused)
-    try:
-        knowledge_base = await migrate_knowledge_base_words(state)
-    except Exception:
-        _logger.exception("the wave 3 migration did not finish. Run `python -m harness.migrations.rewrite_knowledge_base_words` by hand")
-    else:
-        _report("wave 3", knowledge_base.lines(), touched=knowledge_base.touched, refused=knowledge_base.refused)
-    try:
-        trust = await migrate_trust_words(state)
-    except Exception:
-        _logger.exception("the wave 4 migration did not finish. Run `python -m harness.migrations.rewrite_trust_words` by hand")
-    else:
-        _report("wave 4", trust.lines(), touched=trust.touched, refused=trust.refused)
-
-
-async def _migrate_projection(sessions: asyncpg.Pool) -> None:
-    """Rewrite the two projected columns that still carry an old word. Never fatal: logged and skipped."""
-    try:
-        await migrate_projection(sessions)
-    except Exception:
-        _logger.exception(
-            "the wave 2 projection migration did not finish. Run `python -m harness.migrations.rewrite_session_words` by hand"
-        )
-
-
-def _report(wave: str, lines: Sequence[str], *, touched: bool, refused: Sequence[str]) -> None:
-    """Log what one migration did, and how much of it it could not do."""
-    if touched or refused:
-        for line in lines:
-            _logger.info("migration: {line}", line=line)
-    if refused:
-        _logger.warning("the {wave} migration left {n} line(s) unrewritten", wave=wave, n=len(refused))
-
-
 CONTROLLERS: list[type] = [
     AuthoringController,
     BrowsingController,
@@ -420,7 +357,7 @@ async def any_failure_is_still_json(request: Request, exc: Exception) -> JSONRes
     return JSONResponse({"ok": False, "message": f"{type(exc).__name__}: {exc}", "issues": [], "valid": False}, status_code=500)
 
 
-def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:  # noqa: PLR0915 (the boot sequence, one step after another in its order)
+def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:
     """The lifespan of an application resolving from `container`.
 
     Everything that outlives a request, such as the two pools, the change channel and the schedule
@@ -440,7 +377,6 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:  # noqa: PLR0
         (await container.get(Tracing)).start()
         state = await container.get(StateSettings)
         custom = custom_root(await container.get(SelfAuthoringSettings))
-        await _migrate_state(state, custom)
         async with AsyncExitStack() as stack:
             # Registered first so it unwinds last: every record the shutdown writes is flushed with the rest.
             stack.callback(stop_tracing)
@@ -472,9 +408,7 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:  # noqa: PLR0
             session_log.record(Booted(resumed_run_id=resumed))
             session.session_id = live.session_id if live and resumed else None
             # The projection, before the session pool that narrates into it: a settled turn writes
-            # through here, and a session from an earlier process finds its home here too. The
-            # migration is the one thing still handed the raw pool, because a repair is not a projection read.
-            await _migrate_projection((await container.get(SessionsDatabase)).pool)
+            # through here, and a session from an earlier process finds its home here too.
             projected = await container.get(SessionProjection)
             await projected.ensure_schema()
             project_registry.boot(CHECKOUT)

@@ -5,8 +5,7 @@ The tiers, inward first: `domain/` (ports and contract vocabulary, imports nothi
 `rendering`, `sandbox`, `tracing`, `workspace` -- the shared surface every slice may hold), `adapters/`
 (third-party construction: databases, the settings file, embeddings, models, the step environment),
 `features/<slice>` (a slice may reach inward and sideways into its own slice, never into another
-slice or outward), `migrations/` (one-time rewrites of this deployment's own state, reaching no
-further than the adapters), `composition` (the one module that knows every slice, the container,
+slice or outward), `composition` (the one module that knows every slice, the container,
 and every `wiring` module -- a wiring module says where a thing comes from, which is composition
 wherever it sits), and the entries (`main`, `acp`, `cli`). `vendor/` is third-party source and exempt.
 
@@ -99,7 +98,7 @@ SANCTIONED: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-PACKAGES = ("domain", "adapters", "features", "migrations", "vendor")
+PACKAGES = ("domain", "adapters", "features", "vendor")
 """Tiers that are a package: the module itself, or anything under it, belongs to that tier."""
 
 
@@ -149,9 +148,8 @@ REACHES = {
     "kernel": {"domain", "settings", "kernel"},
     "adapters": {"domain", "settings", "adapters", "vendor"},
     "features": {"domain", "settings", "kernel", "adapters", "vendor", "features"},
-    "migrations": {"domain", "settings", "adapters", "vendor", "migrations"},
-    "composition": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition", "migrations"},
-    "entries": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition", "migrations"},
+    "composition": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition"},
+    "entries": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition"},
     "vendor": {"vendor"},
 }
 """Which tiers each tier may reach, inward only. The rule the whole gate rests on."""
