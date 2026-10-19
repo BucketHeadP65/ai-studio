@@ -290,7 +290,11 @@ class UnreadableLine:
     """A session log line that is no log entry, and why."""
 
     reason: str
-    """What is wrong with the line, in plain words: not JSON, no `seq` or `at`, an unknown kind or the fields it lacks."""
+    """What is wrong with the line, in plain words.
+
+    It says the line is not JSON, carries no `seq` or `at`, names an unknown kind, lacks fields its event requires, or holds
+    a field whose value is wrong. It names the fields it lacks, or the field whose value is wrong.
+    """
 
 
 def read_line(line: str) -> Recorded | UnreadableLine:
@@ -316,7 +320,12 @@ def read_line(line: str) -> Recorded | UnreadableLine:
     except ValidationError as error:
         details = error.errors()
         missing = [str(detail["loc"][-1]) for detail in details if detail["type"] == "missing"]
-        return UnreadableLine("it has no " + ", ".join(missing) if missing else details[0]["msg"])
+        if missing:
+            return UnreadableLine("it has no " + ", ".join(missing))
+        first = details[0]
+        location = first["loc"][2:] if first["loc"][:1] == ("event",) else first["loc"]
+        field = ".".join(str(part) for part in location)
+        return UnreadableLine(f"{field}: {first['msg']}" if field else first["msg"])
 
 
 def decode(line: str) -> Recorded | None:

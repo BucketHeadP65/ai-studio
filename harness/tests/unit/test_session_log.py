@@ -89,6 +89,26 @@ def test_a_line_missing_a_field_its_event_requires_is_skipped_with_a_warning_nam
     assert "prompt_excerpt" in warning
 
 
+def test_a_line_whose_field_holds_a_wrong_value_is_skipped_with_a_warning_naming_the_field(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    path = tmp_path / "session-log.jsonl"
+    path.write_text(
+        '{"seq": 1, "at": "2026-08-22T12:00:00+00:00", "kind": "friction_flagged", "target_kind": "tool", "target": "search",'
+        ' "note": "slow", "tool_call_id": null, "source": "replayed", "subject_session_id": null}\n',
+        encoding="utf-8",
+    )
+    session_log = _journal(path)
+    caplog.clear()
+
+    with caplog.at_level(logging.WARNING):
+        events = session_log.events()
+
+    assert events == ()
+    (warning,) = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
+    assert f"line 1 of {path} was skipped: source: " in warning
+
+
 def test_a_readable_log_logs_no_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     session_log = _journal(tmp_path / "session-log.jsonl")
     recorded(session_log, ConversationForgotten(session_id=None))
