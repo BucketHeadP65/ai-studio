@@ -33,18 +33,16 @@ by entry point ([root ADR-0018](../../../docs/adr/0018-corpus-bundles-and-provid
 | Surface | Entry | Defined in |
 |---|---|---|
 | CLI | `studio sync [--dry-run] [--limit N]` | `studio/src/studio/knowledge_base/cli.py` (`sync_cmd`) |
-| HTTP | `POST /api/jobs/sync` | `studio/src/studio/knowledge_base/http/api.py` (`start_sync`) |
+| HTTP | `POST /api/knowledge-bases/{name}/refresh` queues a `kb.refresh` job and answers 202 with its id, or 409 with the id of the one already live. `GET /api/jobs/{job_id}` reads it | `studio/src/studio/knowledge_base/http/controllers/refresh.py` (`start_refresh`) |
 | Bus | `SyncMirrors` command to `SyncMirrorsHandler`, or `MultiConnectorSync` when a knowledge base declares more than one connector | `engram/src/engram/sources/service/sync.py` |
 
-Both surfaces obtain their bus through `resolve_sync_bus`
-(`studio/src/studio/knowledge_base/wiring/sync.py`), a deliberate single funnel. The `SyncMirrors`
-route is registered **lazily**, as a side effect of providing
-`SyncMirrorsHandler` (`studio/src/studio/knowledge_base/container.py`, `sync_handler_provider`), so the
-handler must be resolved *before* the bus or the bus would not yet route the
-command. `resolve_sync_bus` encapsulates that ordering invariant in one place so
-no future call site can silently re-violate it. The CLI dispatches inline and
-prints a report. The HTTP route wraps the run in a `JobRegistry` job
-(`JobKind.SYNC`).
+Both surfaces dispatch `SyncMirrors` on the knowledge base's `MessageBus`. `build_command_routes`
+(`studio/src/studio/knowledge_base/container.py`) binds it to the handler `sync_handler_provider`
+(`studio/src/studio/knowledge_base/wiring/sync.py`) provides, a `MultiConnectorSync` over one
+`SyncMirrorsHandler` per declared connector. The CLI scans the watch list, dispatches inline and
+prints a report. The HTTP route queues a `kb.refresh` job, and `studio worker` runs it as
+`RefreshKnowledgeBaseJob`: when the schema turns sources on, it scans the watch list if there is one
+and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](indexing.md) describes.
 
 ## Public contract
 

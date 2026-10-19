@@ -18,6 +18,7 @@ import typer
 
 from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
 from core.ai.retrieval.contracts import FeedbackEntry
+from core.connection_failures import connection_failure_message
 from core.cqrs.contracts import ImmediateWake, JobQueries, MemoryJobs, MessageBus, Worker
 from core.db import redact_db
 from core.observability import get_logger
@@ -39,6 +40,7 @@ from studio.knowledge_base.settings import (
     knowledge_base_slug,
 )
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
+from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -68,6 +70,11 @@ class ActiveKnowledgeBase:
 
     application: ApplicationSettings
     knowledge_base: KnowledgeBaseSettings
+
+    @property
+    def database(self) -> str:
+        """The database URL with its password redacted, as every printed line names it."""
+        return redact_db(self.application.infrastructure.database.url)
 
 
 def _build_container(
@@ -275,24 +282,28 @@ def _when(identity: KnowledgeBaseIdentity) -> str:
     return when.astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
 
-def _changed_tail(identity: KnowledgeBaseIdentity) -> str:
+def _changed_tail(identity: KnowledgeBaseIdentity, *, rebuilds_everything: bool) -> str:
+    """How far the knowledge base moved since its last index, and whether the next index rebuilds everything."""
     count = identity.changed_since
     noun = "file" if count == 1 else "files"
     if identity.last_indexed_at is None:
         return f"{count} {noun} awaiting index"
+    if rebuilds_everything:
+        files = f"{count} {noun} and " if count else ""
+        return f"{files}the indexer or its chunk settings changed since, the next index rebuilds everything"
     if count == 0:
         return "nothing changed since"
     return f"{count} {noun} changed since"
 
 
-def _db_line(identity: KnowledgeBaseIdentity) -> str:
+def _db_line(identity: KnowledgeBaseIdentity, *, rebuilds_everything: bool) -> str:
     revision = identity.db_revision if identity.db_revision is not None else "no revision"
     reason = f" ({identity.last_index_reason})" if identity.last_index_reason else ""
     # A collection never indexed has no outcome, and "last indexed never" already says so.
     outcome = "" if identity.last_index_outcome == "never" else f", {identity.last_index_outcome}{reason}"
     return (
         f"db {identity.database} at {revision} (code expects {identity.code_revision}), "
-        f"last indexed {_when(identity)}{outcome}, {_changed_tail(identity)}"
+        f"last indexed {_when(identity)}{outcome}, {_changed_tail(identity, rebuilds_everything=rebuilds_everything)}"
     )
 
 
@@ -326,7 +337,7 @@ async def announce_db(
         The knowledge base's identity, or `None` when the database could not be reached.
     """
     root = active.knowledge_base.path
-    database = redact_db(active.application.infrastructure.database.url)
+    database = active.database
     reader = await container.get(KnowledgeBaseReader)
     on_disk = disk_content_hashes(reader)
     try:
@@ -344,7 +355,9 @@ async def announce_db(
     except _UNREACHABLE_ERRORS as exc:
         typer.echo(unreachable_line(database, exc), err=err)
         return None
-    typer.echo(_db_line(identity), err=err)
+    application = active.application
+    rebuilds_everything = indexer_version_changed(identity.indexer_version, application.infrastructure.azure_openai, application.ingestion)
+    typer.echo(_db_line(identity, rebuilds_everything=rebuilds_everything), err=err)
     return identity
 
 
@@ -370,10 +383,36 @@ async def announce_identity(container: Resolver, active: ActiveKnowledgeBase, *,
     return identity
 
 
-def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str) -> T:
-    """Run `coro` on a fresh event loop, passing `typer.Exit` through and turning any other error into an exit prefixed `on_error`."""
+def run_naming_connection_failures[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
+    """Run `coro` on a fresh event loop, turning a failed connection into one line and an exit with code 1.
+
+    The line is `on_error`, then the service the connection reached and the error's own text. Any other error is raised
+    as it is.
+
+    Args:
+        coro: The command's work.
+        on_error: What the line opens with, such as `index failed`.
+        database: The redacted URL of the database the command opens, or None when it opens none.
+
+    Returns:
+        What `coro` returns.
+
+    Raises:
+        typer.Exit: With code 1, after the line is printed, when a connection to a service failed.
+    """
     try:
         return asyncio.run(coro)
+    except Exception as exc:
+        named = connection_failure_message(exc, database=database)
+        if named is None:
+            raise
+        _fail(f"{on_error}: {named}")
+
+
+def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
+    """Run `coro` like `run_naming_connection_failures`, turning any other error but `typer.Exit` into an exit prefixed `on_error`."""
+    try:
+        return run_naming_connection_failures(coro, on_error=on_error, database=database)
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 (top-level CLI guard: any failure becomes a clean _fail exit)

@@ -27,8 +27,8 @@ knowledge base is read only through its own login role, a member of `kb_reader`
 that `kb.reader_scopes` names
 ([ADR-0046](../../adr/0046-private-knowledge-base-read-through-its-own-login-role.md)).
 Base `kb.*` tables are never granted. The
-Studio's `JobRegistry` (job triggers) and runtime prefs sit app-side under
-`studio/src/studio/knowledge_base/http/`, over this surface rather than in it. The retrieval
+studio HTTP API sits app-side under `studio/src/studio/knowledge_base/http/`, over this surface rather than in it,
+and serves no search or fetch route. The retrieval
 contract lives in [serve.md](../../reference/serve.md).
 
 ### serve (retrieval)
@@ -78,9 +78,7 @@ C4Component
 
     Component_Boundary(app, "studio.knowledge_base, the entry points over it") {
         Component(cli, "CLI search/fetch + mcp", "studio/src/studio/knowledge_base/cli.py", "Resolves handlers, builds the MCP server")
-        Component(http, "FastAPI app :8100", "studio/src/studio/knowledge_base/http/api.py, create_app", "/api/search,fetch,graph,graph/expand,graph/paths,schema,status,prefs,jobs")
-        Component(jobs, "JobRegistry", "studio/src/studio/knowledge_base/http/jobs.py", "One async HTTP job at a time (index/sync/eval)")
-        Component(prefs, "PrefsStore", "studio/src/studio/knowledge_base/http/prefs.py", "Studio runtime defaults (.dashboard-prefs.json)")
+        Component(http, "FastAPI app :8100", "studio/src/studio/knowledge_base/http/api.py, create_app", "/api/knowledge-bases/*, /api/graph, /api/events, /api/jobs/{job_id}, /api/templates")
     }
 
     Rel(agent, cli, "search / fetch / mcp")
@@ -89,7 +87,7 @@ C4Component
     Rel(evals, tools, "build_retrieval_toolset")
     Rel(cli, tools, "register_mcp_tools (+ active-policy override)")
     Rel(mcp, tools, "register_mcp_tools")
-    Rel(http, queries, "_resolve(Handler), NOT via the bus")
+    Rel(http, queries, "GraphHandler for /api/graph, NOT via the bus")
     Rel(cli, queries, "resolves handlers")
     Rel(tools, queries, "RetrievalHandlers ports to handler.__call__")
     Rel(queries, reader_gw, "rows(api.*) / api_objects")
@@ -98,11 +96,9 @@ C4Component
     Rel(admin_gw, pg, "SELECT kb.* (admin URL)")
     Rel(dialects, pg, "api.search BM25 SQL (migration-time DDL)")
     Rel(backends, pg, "api.graph_* traversal SQL (migration-time DDL)")
-    Rel(http, jobs, "trigger index/sync/eval")
-    Rel(http, prefs, "/api/prefs")
 ```
 
-Source: `src/engram/retrieval/tools.py`, `src/engram/retrieval/queries.py`, `src/engram/retrieval/infrastructure/gateway.py`, `studio/src/studio/knowledge_base/wiring/serve.py`, `studio/src/studio/knowledge_base/http/api.py`, `src/engram/retrieval/infrastructure/mcp_server.py`, `studio/src/studio/knowledge_base/http/jobs.py`, `studio/src/studio/knowledge_base/http/prefs.py`, `src/engram/retrieval/search_dialect/registry.py`, `src/engram/retrieval/graph_backend/registry.py`, `studio/src/studio/knowledge_base/cli.py`
+Source: `src/engram/retrieval/tools.py`, `src/engram/retrieval/queries.py`, `src/engram/retrieval/infrastructure/gateway.py`, `studio/src/studio/knowledge_base/wiring/serve.py`, `studio/src/studio/knowledge_base/http/api.py`, `src/engram/retrieval/infrastructure/mcp_server.py`, `src/engram/retrieval/search_dialect/registry.py`, `src/engram/retrieval/graph_backend/registry.py`, `studio/src/studio/knowledge_base/cli.py`
 
 The domain model is the read-side contract (`domain.py`): frozen query `Message`s
 (reads, **not** `Command`s, the CQS asymmetry), result models, and the `SqlGateway`

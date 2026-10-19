@@ -12,6 +12,7 @@ import pytest
 
 from engram.evals.generation.contracts import AuthoredCase, EvaluationDataset, build_dataset, load_dataset, save_dataset
 from engram.evals.harness.infrastructure.results import ResultsHeader, dataset_sha256, read_results, results_lines, write_results
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION
 from engram.evals.shared.domain import ExpectedQa, QaCaseMeta, QaInput, RetrievalAnswer
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ _HEADER = ResultsHeader(
     index_build="7+500-1000 test-embedding",
     started="2026-10-13T09:00:00+00:00",
     source_lookup_error=None,
+    source_scoring_version=SOURCE_SCORING_VERSION,
 )
 
 _LINE_KEYS = {
@@ -122,6 +124,7 @@ async def test_the_file_opens_with_the_header_and_holds_one_line_per_case(tmp_pa
             "index_build": "7+500-1000 test-embedding",
             "started": "2026-10-13T09:00:00+00:00",
             "source_lookup_error": None,
+            "source_scoring_version": SOURCE_SCORING_VERSION,
         }
     }
     assert [line["case"] for line in written[1:]] == ["case-a", "case-b", "case-c"]
@@ -334,6 +337,7 @@ def test_an_older_file_reads_code_mode_off_thinking_unset_and_each_failure_from_
 
     assert (header.code_mode, header.thinking, header.model) == (False, None, "test-model")
     assert header.index_build is None
+    assert header.source_scoring_version == 1
     assert {line.case: line.transient for line in lines} == {"case-a": False, "case-b": True, "case-c": False}
     assert all((line.seen_gold, line.seen_recall) == (None, None) for line in lines)
     assert lines[1].error == "ModelAPIError: Connection error."

@@ -269,7 +269,8 @@ def evals_run_cmd(
     source_level: bool = typer.Option(
         default=False,
         help="Map each cited id to its source document and score recall@4, recall@10 and mrr against the dataset's gold "
-        "source ids, and score seen recall: the share of the gold sources that any tool result the model received named. "
+        "source ids, one rank per citation, so a citation with no source or a repeat of a source cited above it matches "
+        "nothing. Also score seen recall: the share of the gold sources that any tool result the model received named. "
         "The scores land in the results file, so it needs --results, and their means print after the table, overall and "
         "per query type.",
     ),
@@ -280,8 +281,8 @@ def evals_run_cmd(
         default=False,
         help="Continue the --results file: keep every case that did not fail transiently (a model connection error, a timeout, "
         "an HTTP 429 or 5xx, or a refused or closed database connection), run only the missing cases and those, and rewrite "
-        "the file under the earlier header. A file written with other settings or on another index build is refused before "
-        "any case runs. With no file there yet, every case runs.",
+        "the file under the earlier header. A file written with other settings, on another index build or under another "
+        "source scoring version is refused before any case runs. With no file there yet, every case runs.",
     ),
     knowledge_base: str | None = typer.Option(default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."),
 ) -> None:
@@ -306,8 +307,9 @@ def evals_run_cmd(
     file under the earlier header. It then prints how many cases it kept and ran and a summary over every case in the
     file, and the source-level lines cover every case too. It warns when the knowledge base was indexed again since the
     file was started, and says when the cases run now miss their source scores because the source lookup failed. A file
-    written with other settings, or on another index build, is refused before any case runs. A failed run, such as a
-    missing dataset, an unreachable model or database, or an unknown strategy, exits 1 with a message.
+    written with other settings, on another index build or under another source scoring version, is refused before any
+    case runs. A failed run, such as a missing dataset, an unreachable model or database, or an unknown strategy, exits
+    1 with a message.
     """
     if source_level and results is None:
         _fail("--source-level writes its scores to the results file, so pass --results PATH with it.")
@@ -337,7 +339,7 @@ def evals_run_cmd(
             results=results,
             resume=resume,
         ),
-        on_error="evals run failed",
+        on_error="evals run failed", database=settings.database,
     )
     run.report.print(include_input=False, include_output=False, include_durations=False)
     if results is not None and (resume or source_level):
@@ -577,7 +579,7 @@ def evals_gen_dataset_cmd(
             dry_run=dry_run,
             salt=salt,
         ),
-        on_error="evals gen-dataset failed",
+        on_error="evals gen-dataset failed", database=settings.database,
     )
     _echo_gen_dataset_report(report)
 
@@ -701,7 +703,7 @@ def evals_tune_cmd(
             knowledge_base=knowledge_base,
             apply_runtime=apply_runtime,
         ),
-        on_error="evals tune failed",
+        on_error="evals tune failed", database=settings.database,
     )
     val = "n/a" if report.winner_val_recall is None else f"{report.winner_val_recall:.3f}"
     typer.echo(
@@ -756,7 +758,7 @@ def evals_rollback_policy_cmd(
     collection = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)).retrieval.collection
     report = _run_command(
         _rollback_with_identity(container, settings, RollbackPolicy(knowledge_base=knowledge_base), collection=collection),
-        on_error="evals rollback-policy failed",
+        on_error="evals rollback-policy failed", database=settings.database,
     )
     typer.echo(f"restored {report.restored_from} -> _meta/active-policy.yaml")
     if report.history_snapshot is not None:
@@ -797,7 +799,7 @@ def evals_import_judgments_cmd(
     --per-type, only that many cases of each query type are kept, and the cases with no query type count as
     one type. A line that does not parse exits 1 naming the line, and nothing is written.
     """
-    report = _run_command(_import_judgments(Path(file), Path(out), per_type=per_type, salt=salt), on_error="evals import-judgments failed")
+    report = _run_command(_import_judgments(Path(file), Path(out), per_type=per_type, salt=salt), on_error="evals import-judgments failed", database=None)
     typer.echo(f"Imported {report.cases} case(s), {report.skipped} skipped for having no relevant document and no answer -> {report.out}")
     for query_type, count in report.cases_per_type.items():
         typer.echo(f"  {query_type}: {count} case(s)")
@@ -880,13 +882,15 @@ def evals_compare_cmd(
     differ in the SQL switch or in code mode, not in both, and two runs under different strategies must share both and
     the candidate must be the baseline plus the graph leg. A results file written before code mode and the thinking
     level were recorded reads them as off and unset, one written before the search date range was recorded reads it
-    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. A
-    refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
+    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. Two
+    runs that both carry source-level scores under different source scoring versions are refused, naming the run to run
+    again, and a results file written before that version was recorded reads it as 1. A refusal exits 1 naming the case
+    or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
     before any file is read.
     """
     pairs = [_compared_pair(value) for value in pair]
     report_path = _report_path(out)
-    comparisons, markdown, twin = _run_command(_compare(pairs, report_path), on_error="evals compare failed")
+    comparisons, markdown, twin = _run_command(_compare(pairs, report_path), on_error="evals compare failed", database=None)
     for comparison in comparisons:
         scores = comparison.overall
         typer.echo(
@@ -925,7 +929,7 @@ def evals_apply_policy_cmd(
     skill or bad YAML, exits 1 with a message.
     """
     announce_knowledge_base(Path(knowledge_base).resolve())
-    report = _run_command(_apply_policy(policy_path=Path(policy), knowledge_base_path=Path(knowledge_base)), on_error="evals apply-policy failed")
+    report = _run_command(_apply_policy(policy_path=Path(policy), knowledge_base_path=Path(knowledge_base)), on_error="evals apply-policy failed", database=None)
     typer.echo(
         f"Applied policy (working tree only, no commit) -> instructions: {report.instructions_target}, "
         f"skill: {report.skill_target}, active-policy: {report.active_policy_target}"
@@ -1020,7 +1024,7 @@ def evals_recommend_cmd(
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
         _run_recommend(container, settings, dataset=dataset, model=model, collection=partition, policy=policy, out=out, simulate=simulate),
-        on_error="evals recommend failed",
+        on_error="evals recommend failed", database=settings.database,
     )
     simulated = f", {report.n_simulated} simulated" if simulate else ""
     typer.echo(
@@ -1063,7 +1067,7 @@ def evals_apply_spec_cmd(
     announce_knowledge_base(Path(knowledge_base).resolve())
     report = _run_command(
         _apply_spec(recommendation_path=Path(recommendation), proposal_ids=tuple(proposal_id), knowledge_base_path=Path(knowledge_base)),
-        on_error="evals apply-spec failed",
+        on_error="evals apply-spec failed", database=None,
     )
     state = "changed" if report.changed else "unchanged"
     applied = ", ".join(report.applied_ids) or "none"
@@ -1108,7 +1112,7 @@ def evals_verify_recommendation_cmd(
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
     command = VerifyRecommendation(recommendation=recommendation, model=model, dataset=dataset)
     report = _run_command(
-        _verify_recommendation(container, settings, command, collection=schema.retrieval.collection), on_error="evals verify-recommendation failed"
+        _verify_recommendation(container, settings, command, collection=schema.retrieval.collection), on_error="evals verify-recommendation failed", database=settings.database
     )
     verdicts = f"{report.predictions_held} held / {report.predictions_failed} failed / {report.predictions_unmeasurable} unmeasurable"
     deltas = f"targeted {report.targeted_mean_delta:+.3f}, untargeted {report.untargeted_mean_delta:+.3f}"
@@ -1180,7 +1184,7 @@ def evals_coverage_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _run_coverage(container, settings, collection=partition, dataset=dataset, out=out), on_error="evals coverage failed"
+        _run_coverage(container, settings, collection=partition, dataset=dataset, out=out), on_error="evals coverage failed", database=settings.database
     )
     mode = f"version {report.dataset_version}" if report.dataset_version else "inventory-only"
     typer.echo(f"Coverage [{report.collection}] {mode}: debt {report.debt:.3f}")
@@ -1228,7 +1232,8 @@ def evals_score_cmd(
     Runs one search per case at k = 50 with no agent, under the search setup `--setup` names (hybrid or keyword-only
     ranking, over every hit level or one), maps every hit to the source document it came from (a raw chunk by its id,
     a page through the source its page record names), and scores each case per document: nDCG@10 from the relevance
-    judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. It writes the per-case scores as YAML with
+    judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. Each hit holds one rank, so a hit with no
+    source document, or a repeat of a document ranked above it, holds its rank and matches nothing. It writes the per-case scores as YAML with
     a markdown summary, both named after the dataset and the setup, and prints the means. The hybrid setup's report
     leaves the setup out of its file names. A failure, such as an unknown setup, a missing dataset or an unreachable
     database, exits 1 with a message.
@@ -1241,7 +1246,7 @@ def evals_score_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _run_score(container, settings, collection=partition, dataset=dataset, setup=setup, out=out), on_error="evals score failed"
+        _run_score(container, settings, collection=partition, dataset=dataset, setup=setup, out=out), on_error="evals score failed", database=settings.database
     )
     typer.echo(f"Score [{report.collection}] {report.dataset} under {report.setup}: {report.cases} case(s)")
     for name, value in report.means.items():
@@ -1303,7 +1308,7 @@ def evals_check_generator_cmd(
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
         _run_check_generator(container, settings, collection=partition, human=human, generated=generated, out=out),
-        on_error="evals check-generator failed",
+        on_error="evals check-generator failed", database=settings.database,
     )
     verdict = "passed" if report.check.passed else "failed"
     typer.echo(f"Generator check [{report.collection}] {report.generated} against {report.human}: {verdict}")
@@ -1376,7 +1381,7 @@ def evals_freshness_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _run_freshness(container, settings, collection=partition, dataset=dataset, out=out), on_error="evals freshness failed"
+        _run_freshness(container, settings, collection=partition, dataset=dataset, out=out), on_error="evals freshness failed", database=settings.database
     )
     typer.echo(f"Freshness [{report.collection}] version {report.dataset_version}: {report.staleness_fraction:.1%} stale")
     typer.echo(f"  verdicts: {', '.join(f'{verdict}={count}' for verdict, count in report.counts.items())}")
@@ -1435,7 +1440,7 @@ def evals_freeze_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _run_freeze(container, settings, collection=partition, dataset=dataset, fraction=fraction), on_error="evals freeze failed"
+        _run_freeze(container, settings, collection=partition, dataset=dataset, fraction=fraction), on_error="evals freeze failed", database=settings.database
     )
     typer.echo(
         f"Froze [{partition}] version {report.dataset_version} -> frozen v{report.frozen_version}: "
@@ -1618,7 +1623,7 @@ def evals_experiment_cmd(
             datasets=tuple(dataset),
             retrieval_strategies=strategies,
         ),
-        on_error="evals experiment failed",
+        on_error="evals experiment failed", database=settings.database,
     )
     _print_experiment(runs)
 
@@ -1702,5 +1707,5 @@ def evals_rca_cmd(
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
     _run_command(
         _run_rca(container, settings, collection=schema.retrieval.collection, query_names=tuple(query), focus=focus, prompt_only=prompt),
-        on_error="evals rca failed",
+        on_error="evals rca failed", database=settings.database,
     )

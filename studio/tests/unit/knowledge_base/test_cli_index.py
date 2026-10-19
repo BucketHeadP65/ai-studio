@@ -32,6 +32,7 @@ import pytest
 import typer
 
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
+from core.db import redact_db
 from engram.indexing.contracts import (
     DEFAULT_CHUNK_SIZES,
     PARAGRAPH_NUMBERING_VERSION,
@@ -56,11 +57,12 @@ from typer.testing import CliRunner
 from studio.knowledge_base import cli as cli_module
 from studio.knowledge_base.cli import app
 from studio.knowledge_base.cli_support import resolve_knowledge_base_alias
-from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings
+from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings, fetch_application_settings
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
+from tests.support.connection_errors import ENDPOINT_HOST, REFUSED_DATABASE, endpoint_connection_error
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from core.cqrs.contracts import Command, Event
     from engram.kb.contracts import KnowledgeBaseSchema
@@ -555,6 +557,52 @@ class TestSchemaPreflightUnreachableDatabase:
         assert len(lines) == 2
         assert "Traceback" not in result.stdout
         assert factory.handler.handled == []  # the preflight failed before any dispatch ran
+
+
+class _FailingIndexHandler:
+    """An index handler that raises the scripted error for every command."""
+
+    def __init__(self, error: Exception) -> None:
+        self.events: list[Event] = []
+        self.error = error
+
+    async def __call__(self, command: Command) -> object:
+        del command
+        raise self.error
+
+
+def _failing_factory(error: Exception) -> Callable[[], FakeContainer]:
+    """A `ctx.obj` factory whose index dispatch raises `error`."""
+    bus = MessageBus({IndexKnowledgeBase: _FailingIndexHandler(error)}, {})
+    return lambda: FakeContainer(bus)
+
+
+class TestAFailedConnectionNamesTheService:
+    """A connection that fails while the index runs ends in one line naming the service, the line the session-start hook shows."""
+
+    @pytest.mark.parametrize(
+        ("path", "service"), [("embeddings", "embedding endpoint"), ("responses", "model endpoint")], ids=["embedding", "model"]
+    )
+    def test_a_failed_endpoint_connection_names_the_endpoint_and_its_host(self, path: str, service: str):
+        result = runner.invoke(app, ["index"], obj=_failing_factory(endpoint_connection_error(path)))
+
+        assert result.exit_code == 1
+        assert isinstance(result.exception, SystemExit)
+        assert result.stdout.splitlines()[-1] == f"index failed: {service} {ENDPOINT_HOST}: Connection error."
+
+    def test_a_refused_database_connection_names_the_database(self):
+        result = runner.invoke(app, ["index"], obj=_failing_factory(REFUSED_DATABASE))
+
+        assert result.exit_code == 1
+        assert isinstance(result.exception, SystemExit)
+        database = redact_db(fetch_application_settings().infrastructure.database.url)
+        assert result.stdout.splitlines()[-1] == f"index failed: database {database}: {REFUSED_DATABASE}"
+
+    def test_a_failure_that_came_from_no_connection_still_raises(self):
+        result = runner.invoke(app, ["index"], obj=_failing_factory(RuntimeError("the cut plan store is corrupt")))
+
+        assert isinstance(result.exception, RuntimeError)
+        assert "index failed" not in result.stdout
 
 
 @dataclass(frozen=True, slots=True)

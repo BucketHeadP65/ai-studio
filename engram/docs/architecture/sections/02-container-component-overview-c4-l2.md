@@ -34,7 +34,7 @@ C4Container
 
     System_Boundary(engram, "studio.knowledge_base (application) over the engram library") {
         Container(cli, "Typer CLI", "studio/src/studio/knowledge_base/cli.py (+ cli_evals/cli_note/cli_init)", "index, status, search, fetch, sync, export okf, serve-http, mcp, evals/note/init groups")
-        Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Read routes + job/prefs/evals, studio-client backend")
+        Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Knowledge base registry, graph, refresh jobs and events, studio-client backend")
         Container(mcp, "FastMCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
 
         Container(container, "Composition root", "studio/src/studio/knowledge_base/container.py, wireup", "Wires every slice, owns cross-slice routing")

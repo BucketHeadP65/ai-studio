@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import re
 
+from core.connection_failures import is_database_connection_failure, is_database_connection_failure_text
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
-
-from engram.evals.harness.infrastructure.database_failures import is_database_connection_failure, is_database_connection_failure_text
 
 TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, *range(500, 600)})
 """The HTTP statuses from the model that make a failure transient: 429, too many requests, and every server error."""

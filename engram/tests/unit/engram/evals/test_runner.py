@@ -1,7 +1,6 @@
 r"""Unit specs for the shared evaluation-run service (`engram.evals.harness.service`).
 
-The single source of truth the `engram evals` CLI and the `POST /api/evals/run` job both
-delegate to (Phase-3 finding E — the run flow had been copied into both). These specs pin the
+The single source of truth the `studio evals` CLI delegates to. These specs pin the
 three public functions directly, network-free:
 
 * :func:`build_eval_model` returns the right model per spec — ``test-model`` is a network-free
@@ -30,6 +29,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+import httpx2
 import pytest
 
 from core.ai.disclosure.contracts import ProgressiveDisclosure
@@ -43,7 +43,8 @@ from core.ai.evaluation.contracts import (
     content_fingerprint,
 )
 from core.ai.retrieval.contracts import SchemaDescription
-from core.settings import AzureOpenAiSettings, LogfireSettings
+from core.settings import AzureOpenAiSettings, DatabaseSettings, LogfireSettings
+from openai import APIConnectionError
 from pydantic_ai import FunctionToolset
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart, UserPromptPart
@@ -77,6 +78,7 @@ from engram.evals.harness.service import (
     trial_id_for,
 )
 from engram.evals.outcomes.contracts import GuardedTracingToolset
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION
 from engram.evals.shared.domain import ExpectedQa, QaCaseMeta, QaInput
 from engram.kb.contracts import KnowledgeBaseSchema
 from engram.retrieval.capability import SqlKnowledgeBase
@@ -150,6 +152,10 @@ class _FakeInventoryReaders:
         yield self.reader
 
 
+_OWNER_URL = "postgresql+asyncpg://owner:secret@db.example:5434/knowledge_bases"
+_READER_URL = "postgresql+asyncpg://kb_reader:secret@db.example:5434/knowledge_bases"
+
+
 @dataclass
 class FakeContainer:
     """An async DI container resolving exactly the keys the run service asks for, from public state.
@@ -162,6 +168,7 @@ class FakeContainer:
 
     evals_settings: EvalsSettings = field(default_factory=EvalsSettings)
     openai: AzureOpenAiSettings = field(default_factory=_azure_openai)
+    database: DatabaseSettings = field(default_factory=lambda: DatabaseSettings(url=_OWNER_URL, reader_url=_READER_URL))
     logfire: LogfireSettings = field(default_factory=LogfireSettings)
     handlers: RetrievalHandlers = field(default_factory=_handlers)
     envelope_handler: EnvelopeHandler = field(default_factory=_envelope_handler)
@@ -178,6 +185,7 @@ class FakeContainer:
         services: dict[type, object] = {
             EvalsSettings: self.evals_settings,
             AzureOpenAiSettings: self.openai,
+            DatabaseSettings: self.database,
             LogfireSettings: self.logfire,
             RetrievalHandlers: self.handlers,
             EnvelopeHandler: self.envelope_handler,
@@ -1142,15 +1150,16 @@ def _sql_knowledge_base(gateway: FakeSqlGateway, *, retry_refusals: bool = True)
 
 @dataclass
 class _FakeHitSources:
-    """A knowledge base whose pages are the keys of `sources`, recording every lookup it answers."""
+    """A knowledge base whose pages are the keys of `sources` and `pages_without_source`, recording every lookup it answers."""
 
     sources: Mapping[str, str]
+    pages_without_source: frozenset[str] = frozenset()
     page_lookups: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
     source_lookups: list[tuple[str, tuple[str, ...]]] = field(default_factory=list)
 
     async def page_ids(self, collection: str, ids: Sequence[str]) -> frozenset[str]:
         self.page_lookups.append((collection, tuple(ids)))
-        return frozenset(identifier for identifier in ids if identifier in self.sources)
+        return frozenset(identifier for identifier in ids if identifier in self.sources or identifier in self.pages_without_source)
 
     async def source_ids(self, collection: str, page_ids: Sequence[str]) -> Mapping[str, str]:
         self.source_lookups.append((collection, tuple(page_ids)))
@@ -1545,6 +1554,24 @@ class TestSourceLevelRetrieval(_ResetsLogfire):
         assert (lines["case-b"]["recall@4"], lines["case-b"]["recall@10"], lines["case-b"]["mrr"]) == (1.0, 1.0, 1.0)
         assert [collection for collection, _ids in hit_sources.page_lookups] == ["research"]
         assert [collection for collection, _ids in hit_sources.source_lookups] == ["research"]
+
+    async def test_a_citation_with_no_source_and_a_repeated_source_each_hold_a_rank(self, tmp_path: Path):
+        hit_sources = _FakeHitSources(sources={"note.alpha": "src-alpha", "note.beta": "src-alpha", "note.gamma": "src-gamma"}, pages_without_source=frozenset({"note.entity"}))
+        citations = ["note.entity", "note.alpha", "note.beta", "note.gamma"]
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            return _answer_part(info, "yes", citations)
+
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", hit_sources=hit_sources, results_path=results)
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(), config=config, dataset=_named_dataset(("case-a", "yes", ("src-gamma",))), model=FunctionModel(respond)
+        )
+
+        _header, lines = _read_results(results)
+        assert lines["case-a"]["sources"] == [None, "src-alpha", None, "src-gamma"]
+        assert (lines["case-a"]["recall@4"], lines["case-a"]["mrr"]) == (1.0, 0.25)
 
 
 # -- seen recall: which gold sources the tool results the model received named ----------
@@ -2014,6 +2041,7 @@ class TestResultsFile(_ResetsLogfire):
             "knowledge_base_fingerprint": "spec-hash:research",
             "index_build": "7+500-1000 test-embedding",
             "source_lookup_error": None,
+            "source_scoring_version": SOURCE_SCORING_VERSION,
         }
         assert datetime.fromisoformat(str(started)).tzinfo is not None
         assert set(lines) == set(_CASE_NAMES)
@@ -2117,6 +2145,54 @@ def _drop_header_key(path: Path, key: str) -> None:
 def _case_rows(path: Path) -> list[dict[str, object]]:
     """The results file's case lines in file order."""
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()[1:]]
+
+
+def _endpoint_connection_error(path: str) -> ModelAPIError:
+    """What pydantic-ai raises when a connection to the OpenAI endpoint at `path` never opened."""
+    error = ModelAPIError("deployment-a", "Connection error.")
+    error.__cause__ = APIConnectionError(request=httpx2.Request("POST", f"https://example.openai.azure.com/openai/v1/{path}"))
+    return error
+
+
+class TestAFailedConnectionNamesTheService(_ResetsLogfire):
+    @pytest.mark.parametrize("guarded", [False, True])
+    @pytest.mark.parametrize(
+        ("failure", "error"),
+        [
+            (_endpoint_connection_error("responses"), "ServiceConnectionError: model endpoint example.openai.azure.com: Connection error."),
+            (_endpoint_connection_error("embeddings"), "ServiceConnectionError: embedding endpoint example.openai.azure.com: Connection error."),
+            (
+                ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5434)"),
+                "ServiceConnectionError: database db.example:5434/knowledge_bases: [Errno 61] Connect call failed ('10.0.0.5', 5434)",
+            ),
+        ],
+        ids=["model endpoint", "embedding endpoint", "database"],
+    )
+    async def test_a_case_whose_connection_failed_records_the_service_and_stays_transient(
+        self, tmp_path: Path, failure: BaseException, error: str, guarded: bool
+    ):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(
+            model_spec="test-model", instructions="Cite.", results_path=results, delivered_evidence_root=tmp_path / "evidence" if guarded else None
+        )
+
+        run = await run_traced_eval_on_dataset(
+            FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES), model=_failing({"question case-b": failure})
+        )
+
+        assert [failed.error_message for failed in run.report.failures] == [error]
+        _header, lines = _read_results(results)
+        assert (lines["case-b"]["failed"], lines["case-b"]["transient"], lines["case-b"]["error"]) == (True, True, error)
+
+    async def test_a_failure_that_came_from_no_connection_keeps_its_own_text(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        refusal = UnexpectedModelBehavior("The model refused to answer.")
+
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES), model=_failing({"question case-b": refusal}))
+
+        _header, lines = _read_results(results)
+        assert lines["case-b"]["error"] == "UnexpectedModelBehavior: The model refused to answer."
 
 
 def _raw_case_lines(path: Path) -> dict[str, str]:
@@ -2282,6 +2358,34 @@ class TestResume(_ResetsLogfire):
 
         assert "index_build (unknown in the file, 7+500-1000 test-embedding now)" in str(refused.value)
         assert asked.asked == []
+
+    async def test_the_header_records_the_source_scoring_version(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES))
+
+        header, _lines = _read_results(results)
+        assert header["source_scoring_version"] == SOURCE_SCORING_VERSION
+
+    async def test_a_results_file_scored_under_another_source_scoring_version_is_refused_saying_to_run_again(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        dataset = _named_dataset(*_RESUMED_CASES)
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
+        _drop_header_key(results, "source_scoring_version")
+        written = results.read_text(encoding="utf-8")
+        asked = _AskedModel()
+
+        with pytest.raises(ResultsFileNotResumableError) as refused:
+            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
+
+        message = str(refused.value)
+        assert f"source_scoring_version (1 in the file, {SOURCE_SCORING_VERSION} now)" in message
+        assert "run without resuming to replace this one" in message
+        assert asked.asked == []
+        assert results.read_text(encoding="utf-8") == written
 
     async def test_an_older_pinned_results_file_is_refused_naming_search_date_range(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"

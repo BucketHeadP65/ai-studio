@@ -39,8 +39,8 @@ class ResultsHeader(BaseModel):
     """How one evaluation run was set up, as the first line of its results file records it.
 
     A header written before code mode and the thinking level were recorded reads them as off and unset. One written before
-    `search_date_range` was recorded reads it as the opposite of `pinned_search`, and one written before the index build
-    was recorded reads it as None.
+    `search_date_range` was recorded reads it as the opposite of `pinned_search`, one written before the index build
+    was recorded reads it as None, and one written before the source scoring version was recorded reads it as 1.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -77,6 +77,8 @@ class ResultsHeader(BaseModel):
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
     """What the lookup of the cited pages' sources raised, or None when it succeeded or the run mapped no sources."""
+    source_scoring_version: int = 1
+    """The version of the source-level scoring rule the lines were scored under. 1 in a header that did not record it."""
 
     @model_validator(mode="before")
     @classmethod
@@ -102,8 +104,9 @@ class ResultsLine(BaseModel):
     """Whether the answer shared a word with the expected answer."""
     failed: bool
     """Whether the case raised instead of answering. A failed case counts as incorrect."""
-    sources: tuple[str, ...] | None
-    """The source ids the case's citations map to, or None when the run mapped none, so its scores are over page ids."""
+    sources: tuple[str | None, ...] | None
+    """The source id each of the case's citations maps to, None for one that holds no source, or None when the run mapped
+    none, so its scores are over page ids."""
     recall_at_4: float | None = Field(validation_alias="recall@4")
     """Recall at 4 against the case's gold ids, or None for a case with no gold ids. The file's key is `recall@4`."""
     recall_at_10: float | None = Field(validation_alias="recall@10")
@@ -360,7 +363,8 @@ def paired_comparisons(pairs: Sequence[tuple[ResultsFile, ResultsFile]]) -> tupl
     """Compare each pair of runs case by case, with Holm's method across all the pairs.
 
     Two runs are compared only when they agree on the dataset, the model, the thinking level, the instructions, the
-    tool-call budget, the search pinning, whether the search took a date range and the knowledge base. Two runs may differ
+    tool-call budget, the search pinning, whether the search took a date range and the knowledge base. Two runs that both
+    carry source-level scores must share the source scoring version. Two runs may differ
     in the knowledge base fingerprint and in the index build. Two runs under one strategy may differ in either the SQL
     switch or code mode, never in both. Two runs under different strategies must
     share the SQL switch and code mode, and the graph verdict must call the candidate the baseline plus the graph leg.
@@ -373,7 +377,8 @@ def paired_comparisons(pairs: Sequence[tuple[ResultsFile, ResultsFile]]) -> tupl
         One comparison per pair, in the order given.
 
     Raises:
-        RunsNotComparableError: When a pair's variants differ in a held field, which is named, when they differ in both
+        RunsNotComparableError: When a pair's variants differ in a held field, which is named, when both carry source-level
+            scores under different source scoring versions, naming the run to repeat, when they differ in both
             the SQL switch and code mode, when its strategies make a pair the graph verdict calls unfair, with the
             verdict's reason, when a case is in one run only, which is named, or when a pair holds no cases.
     """
@@ -479,6 +484,7 @@ def _check_variants(baseline: ResultsFile, candidate: ResultsFile) -> None:
                 "so their cases cannot be compared"
             )
             raise RunsNotComparableError(msg)
+    _check_source_scoring(baseline, candidate)
     if first.strategy == second.strategy:
         if first.sql != second.sql and first.code_mode != second.code_mode:
             msg = (
@@ -498,6 +504,24 @@ def _check_variants(baseline: ResultsFile, candidate: ResultsFile) -> None:
                 "so the difference cannot be put down to either"
             )
             raise RunsNotComparableError(msg)
+
+
+def _check_source_scoring(baseline: ResultsFile, candidate: ResultsFile) -> None:
+    """Refuse a pair whose sides both carry source-level scores scored under different versions of the rule."""
+    versions = (baseline.header.source_scoring_version, candidate.header.source_scoring_version)
+    if versions[0] == versions[1] or not (_scored_at_source_level(baseline) and _scored_at_source_level(candidate)):
+        return
+    older = baseline if versions[0] < versions[1] else candidate
+    msg = (
+        f"{baseline.path} and {candidate.path} differ in source_scoring_version ({versions[0]} and {versions[1]}), so their "
+        f"source-level scores cannot be compared. Run {older.path} again with --source-level to score it under version {max(versions)}"
+    )
+    raise RunsNotComparableError(msg)
+
+
+def _scored_at_source_level(results: ResultsFile) -> bool:
+    """Whether a run's source lookup succeeded and at least one of its lines carries source-level scores."""
+    return results.header.source_lookup_error is None and source_level_retrieval(results.lines) is not None
 
 
 def _named(cases: Sequence[str]) -> str:

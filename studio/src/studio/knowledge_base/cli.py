@@ -107,6 +107,7 @@ from studio.knowledge_base.cli_support import (
     resolve_knowledge_base_alias,
     resolve_knowledge_base_root,
     resolve_partition,
+    run_naming_connection_failures,
     settings_knowledge_base_path,
     unreachable_line,
     vault_option,
@@ -139,7 +140,7 @@ from studio.knowledge_base.settings import (
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
-from studio.knowledge_base.wiring.indexing import ingestion_indexer_version
+from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
@@ -761,10 +762,10 @@ class _IndexFingerprint:
 _HASH_DISPLAY_LEN = 12
 
 
-def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, current_version: str) -> list[str]:
+def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int, *, version_changed: bool) -> list[str]:
     """The index drift lines of `studio status`: mode, tracked files, fingerprint, and a hint when the next index runs full."""
     tracked = fingerprint is not None and files_tracked > 0
-    stale = files_tracked == 0 or (fingerprint is not None and fingerprint.indexer_version != current_version)
+    stale = files_tracked == 0 or version_changed
     lines = [f"Index mode (last run): {'incremental' if tracked else 'full'}", f"Files tracked (manifest): {files_tracked}"]
     if fingerprint is None:
         lines.append("Fingerprint: none yet")
@@ -782,7 +783,8 @@ def _index_drift_lines(fingerprint: _IndexFingerprint | None, files_tracked: int
 async def _print_status(container: Resolver, *, collection: str) -> None:
     """Print the table row counts, embedding metadata, last query time and index drift of `collection`, writing nothing."""
     engine = await container.get(AsyncEngine)
-    current_version = ingestion_indexer_version(await container.get(AzureOpenAiSettings), await container.get(IngestionSettings))
+    azure_openai = await container.get(AzureOpenAiSettings)
+    ingestion = await container.get(IngestionSettings)
     async with engine.connect() as conn:
         typer.echo("Row counts:")
         for table in _STATUS_TABLES:
@@ -805,7 +807,8 @@ async def _print_status(container: Resolver, *, collection: str) -> None:
             )
         ).first()
         fingerprint = _IndexFingerprint.from_row(fingerprint_row) if fingerprint_row is not None else None
-        for line in _index_drift_lines(fingerprint, files_tracked or 0, current_version=current_version):
+        version_changed = indexer_version_changed(fingerprint.indexer_version if fingerprint is not None else None, azure_openai, ingestion)
+        for line in _index_drift_lines(fingerprint, files_tracked or 0, version_changed=version_changed):
             typer.echo(line)
 
 
@@ -976,7 +979,9 @@ def index_cmd(
         collection=partition, embed=embed, full=full, dry_run=dry_run, summaries=summaries, collection_named=collection is not None
     )
     try:
-        identity, report = asyncio.run(_index_after_identity(container, settings, command, collection=partition))
+        identity, report = run_naming_connection_failures(
+            _index_after_identity(container, settings, command, collection=partition), on_error="index failed", database=settings.database
+        )
     except CollectionIsForeignError as exc:
         typer.echo(
             f"collection {exc.collection} was indexed from {exc.stored_root}, this knowledge base is at {exc.knowledge_base_root}. "
@@ -1062,8 +1067,10 @@ def ingest_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    result = asyncio.run(
-        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema)
+    result = run_naming_connection_failures(
+        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema),
+        on_error="ingest failed",
+        database=settings.database,
     )
     typer.echo(
         f"ingested {result.page_id} into {result.collection}: "
@@ -1116,7 +1123,7 @@ def summaries_list_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     rows = _run_command(
-        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed"
+        _list_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries list failed", database=settings.database
     )
     _print_pending_summaries(rows, collection=partition)
 
@@ -1156,7 +1163,7 @@ def summaries_approve_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     count = _run_command(
-        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed"
+        _approve_pending_summaries_after_identity(container, settings, collection=partition), on_error="summaries approve failed", database=settings.database
     )
     typer.echo(f"Approved {count} pending summary(ies) for collection {partition!r}.")
 
@@ -1231,7 +1238,7 @@ def search_cmd(
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     message = Search(query=query, k=k, level=level, facets=_parse_facets(facet), collection=partition, hybrid=not bm25_only)
     result = _run_command(
-        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed"
+        _search_with_identity(container, settings, message, collection=partition, hybrid=not bm25_only), on_error="search failed", database=settings.database
     )
     _print_search_hits(result)
 
@@ -1256,7 +1263,7 @@ def fetch_cmd(
     settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
-    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed")
+    result = _run_command(_fetch_with_identity(container, settings, Fetch(id=unit_id), partition), on_error="fetch failed", database=settings.database)
     _print_fetch_unit(result, unit_id)
 
 
@@ -1334,8 +1341,10 @@ def sync_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    scan, report = asyncio.run(
-        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection)
+    scan, report = run_naming_connection_failures(
+        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection),
+        on_error="sync failed",
+        database=settings.database,
     )
     if scan is not None:
         _print_scan_report(scan)
@@ -1368,7 +1377,7 @@ def export_okf_cmd(
     container = _build_container(ctx, settings)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
     report = _run_command(
-        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed"
+        _export_with_identity(container, settings, ExportOkf(collection=partition, out_dir=out)), on_error="export failed", database=settings.database
     )
     _print_export_report(report)
 

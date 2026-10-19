@@ -329,6 +329,22 @@ def ingestion_indexer_version(azure_openai: AzureOpenAiSettings, ingestion: Inge
     return indexer_version(sizes, planner=planner, planner_ceiling_tokens=ingestion.chunk_planner_ceiling_tokens)
 
 
+def indexer_version_changed(stored: str | None, azure_openai: AzureOpenAiSettings, ingestion: IngestionSettings) -> bool:
+    """Whether a stored indexer version differs from the one an index under these settings stores, so the next index rebuilds everything.
+
+    No stored version, a collection never indexed, is no change.
+
+    Args:
+        stored: The indexer version the last index stored, or None when the collection was never indexed.
+        azure_openai: The Azure OpenAI resource the chunk planner runs on.
+        ingestion: The ingestion settings that name the chunk sizes and the chunk planner.
+
+    Returns:
+        True when the two versions differ.
+    """
+    return stored is not None and stored != ingestion_indexer_version(azure_openai, ingestion)
+
+
 def _path_root(knowledge_base: KnowledgeBaseSettings, schema: KnowledgeBaseSchema) -> Path:
     """The folder the schema's `path_fields` values resolve against: the knowledge base root, or by default its parent."""
     return knowledge_base.path if schema.path_root == "knowledge_base" else knowledge_base.path.parent

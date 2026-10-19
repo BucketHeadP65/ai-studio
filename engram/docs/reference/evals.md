@@ -41,15 +41,14 @@ verbatim quote-checking. Authoring the knowledge base belongs to [indexing](inde
 | CLI | `studio evals recommend --dataset YAML [--model M] [--collection C] [--policy YAML] [--out YAML] [--simulate]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_recommend_cmd`) |
 | CLI | `studio evals apply-spec --recommendation YAML --id P1 [--id P2 …] [--knowledge-base .]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_apply_spec_cmd`) |
 | CLI | `studio evals verify-recommendation --recommendation YAML [--model M] [--dataset YAML]` | `studio/src/studio/knowledge_base/cli_evals.py` (`evals_verify_recommendation_cmd`) |
-| HTTP | `POST /api/evals/run` gives **202** `{run_id}`, `GET /api/evals/runs`, `GET /api/evals/runs/{run_id}`, `GET /api/evals/options`, `GET /api/evals/freshness`, `GET /api/evals/freshness/{dataset}` | `studio/src/studio/knowledge_base/http/evals.py` |
 | Bus | `CitingPagesChanged` event triggers `QaGenerationSubscriber` (enqueues changed digest pages for `gen-dataset`) | `src/engram/evals/generation/service/subscriber.py` |
 | MCP (opt-in) | `propose_eval_seeds`, `submit_eval_cases`, the gold-from-seed authoring flow over MCP. Enable with `studio mcp --authoring` (off by default) | `src/engram/retrieval/infrastructure/mcp_server.py` |
 | MCP (opt-in) | `diagnose`, `evaluate_policy`, `submit_tuning`, the tuning-loop controller-brain over MCP (Claude Code *is* the proposer by hand). Enabled alongside the seed tools by `studio mcp --authoring` | `src/engram/evals/tuning/infrastructure/mcp_tuning.py` (`register_tuning_tools`) |
 | MCP (opt-in) | `diagnose_structure`, `what_if_edges`, `submit_recommendation`, the recommendation brain loop over MCP (Claude Code drafts the recommendation. The server re-validates every op via `apply_op` before saving, an integrity trust boundary, ADR-0026). Enabled by `studio mcp --authoring` | `src/engram/evals/recommendation/infrastructure/mcp_recommendation.py` (`register_recommendation_tools`) |
 
-The `run` CLI command and `POST /api/evals/run` both delegate the run flow to one shared
-service, `run_eval` (`src/engram/evals/harness/service.py`). The HTTP route wraps it in a
-`JobRegistry` job (`JobKind.EVAL`, `studio/src/studio/knowledge_base/http/jobs.py`).
+The `run` CLI command delegates the run flow to the shared service in
+`src/engram/evals/harness/service.py` (`run_eval`, `run_traced_eval_on_dataset`). No HTTP route
+starts or reads an evaluation run.
 
 `studio evals run --max-tool-calls N` (`EvaluationRunConfig.max_tool_calls`) is the tool-call budget,
 pydantic-ai's `UsageLimits(tool_calls_limit=N)`. Before the model's next tool calls run, pydantic-ai
@@ -89,12 +88,24 @@ by SQLAlchemy) and by asyncio's text for a failed connection attempt, such as
 A tool-call limit, a refused answer, an error the agent's own SQL statement causes (a syntax error,
 an undefined column, a refused permission, a statement timeout) and every other error are not
 transient. The rule lives in `engram.evals.harness.transient_failures`, which reads database
-connection failures through `engram.evals.harness.infrastructure.database_failures`.
+connection failures through `core.connection_failures`.
+
+A failed case whose connection to a service failed records an error that names the service before
+the error's own text, so the results file and the printed failures table say which one failed:
+`ServiceConnectionError: model endpoint example.openai.azure.com: Connection error.`,
+`ServiceConnectionError: embedding endpoint example.openai.azure.com: Request timed out.` or
+`ServiceConnectionError: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)`.
+An embedding endpoint is an OpenAI-compatible endpoint whose request path ends in `/embeddings`, and any
+other is a model endpoint, each named by its host. The database is the reader URL with its
+credentials removed (`core.db.redact_db`), since a case's tools connect through it. Whether the case
+failed transiently is read from the error it raised before it was named, so a named failure keeps its
+`transient` key. `core.connection_failures.connection_failure_message` builds the
+text, and the `studio` CLI prints a command's own failure through it too.
 
 `--resume` continues that file after a run lost cases to transient failures. When the file exists
 and its header matches the run on every field the paired comparison holds (strategy, SQL switch,
 code mode, model, thinking level, instructions hash, tool-call budget, search pinning, search date
-range, dataset hash and knowledge base) and on the index build, the run keeps every case line that was not a transient failure, runs only the
+range, dataset hash and knowledge base), on the index build and on the source scoring version, the run keeps every case line that was not a transient failure, runs only the
 missing cases and the transient failures, and rewrites the file under the earlier header in
 dataset order, every kept line exactly as it was. A header that differs is refused before any case
 runs, and the message names each differing field with both values, such as
@@ -117,7 +128,8 @@ source ids. A cited ref is read as the bare unit id it names first, so `page:<co
 `section:` and `unit:` refs map like their bare ids. The cited ids map to sources through
 `kb.pages.source_id` for a page, or an anchor on one, and to the id before the last `:` for anything
 else, so a raw chunk maps to the source it was cut from and a source id to itself. The line's `sources`, `recall@4`, `recall@10` and `mrr` score
-those cited sources. Beside them it records the seen recall: `seen_recall`, the share of the case's
+those cited sources, one rank per citation by the source-level rank rule below, and `sources` holds one entry per
+citation, `null` for a citation that holds no source. Beside them it records the seen recall: `seen_recall`, the share of the case's
 gold sources that any tool result the model received during the case named, and `seen_gold`, those
 gold sources in gold order. A case with a seen recall of 1 and a cited recall of 0 read its evidence
 and did not cite it. A case with a seen recall of 0 never received it, which is a retrieval miss.
@@ -170,6 +182,25 @@ lookup. Reading a tool result never raises, whatever its shape, so the measure n
 case ends or whether its failure is transient. A run without
 `--source-level`, or whose source lookup failed, writes null for both keys.
 
+**The source-level rank rule.** Every source-level metric (recall@k, precision@k, MRR and nDCG@k) reads the first k
+items of a ranked list as k ranks. `studio evals score` ranks a search's hits and `studio evals run --source-level` ranks
+a case's citations. Each hit or citation holds one rank. A source counts once, at the rank of its
+first hit. A hit whose page names no source, such as an entity card, holds its rank and matches nothing, and so does a
+later hit of a source already ranked. So entity cards ranked above the gold source push it down and lower recall@k and
+MRR, rather than being skipped. `studio evals score` still counts the hits that named no source document and prints the
+count. `engram.evals.scoring.domain.ranked_sources` builds the ranks for both commands, and
+`engram.evals.outcomes.domain.evaluators.ranked_metrics` and `ndcg_at_k` read a `None` rank as one that matches nothing.
+
+The rule carries a version, `engram.evals.scoring.contracts.SOURCE_SCORING_VERSION` (2 for the rule
+above), and a results file's header records the version its lines were scored under as
+`source_scoring_version`. A header written before the key was recorded reads it as 1. `--resume`
+refuses a file scored under another version, naming `source_scoring_version (1 in the file, 2 now)`
+and saying to run without resuming, which replaces the file. `studio evals compare` refuses two runs
+that both carry source-level scores under different versions and names the run to run again with
+`--source-level`. Two runs where at most one side carries source-level scores compare across
+versions, since no source-level score is set beside another. Nothing converts an older file. The
+version is raised whenever a change alters a source-level score.
+
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen
 recall, overall and then per query type, the cases with no query type last. `studio evals compare`
 reports both runs' mean seen recall and the mean paired difference over the cases both runs
@@ -184,19 +215,12 @@ not record it.
 - **Inputs:** the frozen value objects in `src/engram/evals/shared/domain.py`: `QaInput`
   (the agent's input: `question` + optional `task` hint), `ExpectedQa` (ground truth:
   `answer`, `expected_source_ids` page ids, optional `expected_claim_anchors`), and
-  `QaCaseMeta` (`anchor_page_id`, a file saying `paper_id` still loads, + closed-set `page_type`/`difficulty`). The HTTP body is
-  `EvalRunRequest` (`dataset`, `model`, `instructions_id?`, `variant?`, the retrieval-surface axes
-  `retrieval_strategy?` + `code_mode`, plus `reasoning_effort?`)
-  in `studio/src/studio/knowledge_base/http/evals.py`.
+  `QaCaseMeta` (`anchor_page_id`, a file saying `paper_id` still loads, + closed-set `page_type`/`difficulty`).
 - **Outputs:** the agent's structured output `RetrievalAnswer` (ordered
   `cited_source_ids`, `domain.py`), the scorer `RetrievalMetrics` Evaluator
   (`src/engram/evals/harness/domain/evaluators.py`), and the persistable frozen DTOs
   `EvaluationRunSummary` / `EvaluationRunDetail` / `EvaluationCaseResultRow`
-  (`src/engram/evals/shared/read_models.py`). HTTP `POST` returns `EvalRunAccepted` (`run_id`).
-  `GET /api/evals/options` returns `EvalOptions` (`datasets` discovered on disk under
-  `evals.datasets_dir`, the curated `models` list, `reasoning_efforts`, and `retrieval_strategies`,
-  the registry-owned surfaces), the choices AI Factory Studio's run form's dropdowns are built from, so
-  valid values stay server-owned.
+  (`src/engram/evals/shared/read_models.py`).
 - **Invariants:**
   - **Page-level recall is primary, claim-anchor secondary (D3).** Both the agent's and
     the expected citations are normalized to page ids before scoring (a `paper.x#^c3` anchor
@@ -314,18 +338,13 @@ not record it.
     [Freshness and staleness-aware maintenance](#freshness-and-staleness-aware-maintenance-vibe-rag-phase-6).
 - **Errors:** the run service (`service.py`) raises plain exceptions (`TypeError` on a
   broken container contract, `ValueError` on an unconstrained dataset path). Each caller
-  owns its UX. The CLI `evals` commands exit 1 with a clean message (no traceback), the
-  HTTP job captures the failure on the `Job`. A missing run is HTTP 404 (`UnknownIdError`).
-  The `POST` body's `dataset` is constrained to `evals.datasets_dir` (a `..`/absolute path
-  is rejected before `load_dataset`).
+  owns its UX. The CLI `evals` commands exit 1 with a clean message (no traceback).
 - **Config:** `APP_EVALS__AUTOGEN` (`evals.autogen` ∈ `queue`|`inline`|`off`, default
   `queue`, the index-to-QA-gen mode. `queue` enqueues an indexing run's changed digest pages at
   `<knowledge_base root>/evals/pending_pages.<collection>.json`, each knowledge base's own queue under its own
   root, an absolute `datasets_dir` instead makes its parent the one shared queue home),
   `evals.datasets_dir` (dataset YAML location, default
-  `evals/datasets`), `evals.rca_queries_path` (saved-SQL file, default `evals/rca/queries.sql`),
-  `evals.models` (`APP_EVALS__MODELS`, the curated model specs the Studio run form offers,
-  default `("gpt-4.1", "test-model")`).
+  `evals/datasets`), `evals.rca_queries_path` (saved-SQL file, default `evals/rca/queries.sql`).
   `evals.generation` (`APP_EVALS__GENERATION__*`, the structural `gen-dataset` knobs, ADR-0016):
   `target_distribution` (the per-archetype share of the dataset, keyed by archetype name. Default
   weights `pinpoint 0.6 / survey 0.2 / trace 0.1 / synthesis 0.1`, and an unknown archetype is refused by name), `total_cases`
@@ -607,20 +626,6 @@ report files still load), the markdown gains a `## Structural integrity (report-
 echoes `structural premises (report-only): checked N, broken M`. A broken premise never changes the
 freshness verdict and never retires a case, the verdict ladder stays era-authoritative. The premise says
 the question's structural *ground* moved, which is a human's re-generation signal, not a machine's.
-
-### The freshness read surface, HTTP and the Studio (Phase 7, D13)
-
-Two **GET-only report-file readers** serve the check's output to the Studio. The check itself stays
-CLI-only (there is no HTTP trigger). `GET /api/evals/freshness` returns one `FreshnessDatasetSummary` per
-dataset chain found in the output directory (the same `<datasets_dir>/../freshness` the CLI writes):
-`dataset`, `latest_version`, `staleness_fraction`, string-keyed verdict `counts`, `n_premise_broken`, and
-`generated_at` (the report file's mtime. The report itself is deliberately wall-clock-free).
-`GET /api/evals/freshness/{dataset}` returns the chain's latest full `FreshnessReport` payload plus a
-`history` trend (one `{version, generated_at, staleness_fraction}` point per swept version, oldest first).
-An unknown chain is a 404, and the path parameter is matched against scanned chain names, never joined
-into a filesystem path. The studio-client evals page renders these as the **FreshnessPanel** (per-chain
-staleness pill, verdict counts, premise tally, and the per-version trend behind a disclosure), zod-validated
-at the boundary like every other route.
 
 ### Staleness on `tune` and `verify-recommendation`
 
@@ -1138,13 +1143,16 @@ flowchart LR
     BA --> EV["dataset.evaluate(make_task(agent))"]
     EV -->|per case: ctx.output + ctx.span_tree| RM["RetrievalMetrics.evaluate<br/>recall@k / precision@k / mrr / n_tool_calls"]
     RM --> RP["EvaluationReport"]
-    RP --> SUM["EvaluationRunSummary + EvaluationCaseResultRow<br/>to owner AsyncSession (infrastructure/postgres.py)"]
+    RP --> RF["results file, with --results<br/>(infrastructure/results.py)"]
     BA -.instrumented spans.-> LF[(Logfire, deep store<br/>only with a write token)]
 ```
 
 The model dispatch, toolset resolution, best-effort Logfire-or-local-span fallback,
 agent build, dataset evaluate, and per-metric averaging all live once in `run_eval` /
-`average_metrics` (`service.py`). The CLI and HTTP job both call it.
+`average_metrics` (`service.py`). The CLI calls it. An evaluation run writes no Postgres row. Only the
+tune, recommend and verify-recommendation handlers save an `EvaluationRunSummary` with its
+`EvaluationCaseResultRow`s to `kb.evaluation_runs` and `kb.evaluation_case_results`, through the owner
+session (`infrastructure/postgres.py`).
 
 ## Examples
 
@@ -1218,11 +1226,6 @@ studio evals apply-spec --recommendation evals/recommendations/research.yaml --i
 studio evals verify-recommendation --recommendation evals/recommendations/research.yaml --model test-model
 ```
 
-```bash
-# Trigger an eval over HTTP — returns 202 {run_id}; poll GET /api/evals/runs/{run_id}
-curl -X POST localhost:8100/api/evals/run -d '{"dataset": "seed.yaml", "model": "test-model"}'
-```
-
 ## Patterns used
 
 - **Single-source retrieval toolset**, one `RetrievalToolset` shared by the eval agent
@@ -1231,8 +1234,6 @@ curl -X POST localhost:8100/api/evals/run -d '{"dataset": "seed.yaml", "model": 
 - **Strategy/registry (model backends)**, `build_eval_model` (`service.py`) dispatches a
   model spec to `TestModel` / an Azure chat deployment. See
   `../../../docs/explanation/design-patterns.md#strategy-registry`.
-- **JobRegistry async job**, `POST /api/evals/run` runs as the one-at-a-time
-  `JobKind.EVAL` background job (`studio/src/studio/knowledge_base/http/jobs.py`), mirroring indexing/sync.
 - **Structural gold-from-seed generation:** `gen-dataset` seeds gold ids from the indexed
   graph's structure (`infrastructure/seeds.py`, one seeder per `Archetype`), the model writes only
   question/answer/quotes, and the `accept` gate keeps a case only when every quote verifies
@@ -1263,8 +1264,7 @@ curl -X POST localhost:8100/api/evals/run -d '{"dataset": "seed.yaml", "model": 
   and enqueues changed digest pages (`subscriber.py`). See
   `../../../docs/explanation/design-patterns.md#cqrs-message-bus`.
 - **DI seams / fakes over mocks (owner-session)**, the toolset/handlers come from wireup
-  (`studio/src/studio/knowledge_base/wiring/evals.py`). The repository takes the injected owner `AsyncSession`, and
-  the HTTP router takes injectable `job_registry_key` / `repository_provider` seams. See
+  (`studio/src/studio/knowledge_base/wiring/evals.py`). The repository takes the injected owner `AsyncSession`. See
   `../../../docs/explanation/design-patterns.md#di-seams-and-fakes-over-mocks`.
 - Glossary terms (`kb_reader`, `api` schema, page id, claim anchor): see `../../CONTEXT.md`.
 
@@ -1274,9 +1274,7 @@ curl -X POST localhost:8100/api/evals/run -d '{"dataset": "seed.yaml", "model": 
   (`service.py`), the agent synthesizes its `RetrievalAnswer` directly, network-free, with
   no tool-loop flakiness. A tokenless run records spans locally so cases still score.
 - **Seams:** `RetrievalHandlers` ports (`engram/retrieval/tools.py`) accept fakes.
-  `create_evals_router(job_registry_key=…, repository_provider=…)` and the
-  `SupportsJobStart` / `SupportsLogfireQuery` / `QaGenerationQueue` protocols are the
-  substitution points. `RetrievalMetrics`' pure helpers are unit-testable against
+  The `SupportsLogfireQuery` and `QaGenerationQueue` protocols are the substitution points. `RetrievalMetrics`' pure helpers are unit-testable against
   hand-computed values.
 - **Fakes/factories:** `FakeSqlGateway` (`tests/support/fakes/gateway.py`). Slice-local
   recording fakes/stubs in the eval test modules. Polyfactory factories under
@@ -1285,7 +1283,7 @@ curl -X POST localhost:8100/api/evals/run -d '{"dataset": "seed.yaml", "model": 
   (`test_comparison.py`, `test_evaluators.py`, `test_answer_grader.py`, `test_toolset.py`,
   `test_governance.py`). Unit suite `tests/unit/evals/` (`test_evaluators.py`, `test_agent.py`,
   `test_runner.py`, `test_datasets.py`, `test_generation.py`, `test_subscriber.py`,
-  `test_rca.py`, `test_experiments.py`, `test_http.py`, `test_instrumentation.py`,
+  `test_rca.py`, `test_experiments.py`, `test_instrumentation.py`,
   `test_orm.py`, `test_deps.py`, `test_domain.py`, plus the Phase-6 verdict/recipe cores
   `test_freshness.py` and `test_mirror.py`). Integration `tests/integration/evals/`
   (`test_repository.py`, `test_run.py`, `test_gen_dataset.py`, testcontainers (local Postgres)),

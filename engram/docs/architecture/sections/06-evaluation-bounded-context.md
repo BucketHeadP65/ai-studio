@@ -51,9 +51,9 @@ plus the one guardrailed ADR-0032 machine rung), and scores runs with `Retrieval
 (recall@k / precision@k / MRR) over a Logfire-instrumented harness. The slice is
 organised into five sub-packages
 (`generation/`, `tuning/`, `rca/`, `harness/`, `recommendation/`, plus `shared/` value
-objects and the slice-level `commands.py` / `handlers.py` bus surface. Its wiring and
-HTTP routes are app-side, in `studio/src/studio/knowledge_base/wiring/evals.py` and
-`studio/src/studio/knowledge_base/http/evals.py`) and gets **two** C4 L3 component sub-diagrams.
+objects and the slice-level `commands.py` / `handlers.py` bus surface. Its wiring is
+app-side, in `studio/src/studio/knowledge_base/wiring/evals.py`, and the `studio evals` CLI is its only
+entry point, with no HTTP route) and gets **two** C4 L3 component sub-diagrams.
 
 **Generation, the dataset lifecycle, and the tuning loop.** Generation seeds
 cases whose gold ids are known by construction (`SeedQueries` reads `kb.*` over

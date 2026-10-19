@@ -1,6 +1,7 @@
 """Layered retrieval-evidence metrics: citation, surfaced-source and raw-ranking, each from its own input.
 
-`ranked_metrics` is the one arithmetic core (recall@k, precision@k and reciprocal rank) every layer calls.
+`ranked_metrics` is the one arithmetic core (recall@k, precision@k and reciprocal rank) every layer calls. It reads the
+first k items as k ranks, and a None item holds its rank and matches nothing.
 The citation layer scores the agent's own cited ids against the expected ids and is always `measured`.
 The surfaced layer scores the references the trial's ok tool calls returned, in first-seen order, resolved
 off their collection qualification to the bare ids the other layers compare.
@@ -105,21 +106,21 @@ def bare_unit_id(ref: str, collection: str) -> str:
         return ref
 
 
-def _recall_at_k(got: Sequence[str], want: Collection[str], k: int) -> float:
+def _recall_at_k(got: Sequence[str | None], want: Collection[str], k: int) -> float:
     """`|set(got[:k]) ∩ want| / max(1, |want|)`, guarded against an empty `want`."""
     want_set = set(want)
     hits = len(set(got[:k]) & want_set)
     return hits / max(1, len(want_set))
 
 
-def _precision_at_k(got: Sequence[str], want: Collection[str], k: int) -> float:
+def _precision_at_k(got: Sequence[str | None], want: Collection[str], k: int) -> float:
     """`|set(got[:k]) ∩ want| / max(1, min(k, |got|))`, guarded against an empty `got`."""
     want_set = set(want)
     hits = len(set(got[:k]) & want_set)
     return hits / max(1, min(k, len(got)))
 
 
-def _mrr(got: Sequence[str], want: Collection[str]) -> float:
+def _mrr(got: Sequence[str | None], want: Collection[str]) -> float:
     """`1 / rank` of the first item of `got` that is in `want`, or `0.0` when none is."""
     want_set = set(want)
     for index, item in enumerate(got):
@@ -128,7 +129,7 @@ def _mrr(got: Sequence[str], want: Collection[str]) -> float:
     return 0.0
 
 
-def ndcg_at_k(ranked: Sequence[str], grades: Mapping[str, int], k: int) -> float:
+def ndcg_at_k(ranked: Sequence[str | None], grades: Mapping[str, int], k: int) -> float:
     """nDCG@k of `ranked` against graded relevance judgments, from 0 to 1.
 
     A document's gain is its grade, as trec_eval's `ndcg_cut` counts it, and rank `i` (from 1) is
@@ -136,7 +137,7 @@ def ndcg_at_k(ranked: Sequence[str], grades: Mapping[str, int], k: int) -> float
     over that of the ideal order of `grades`, and `0.0` when no document has a grade above 0.
 
     Args:
-        ranked: The documents in the order retrieval returned them, each at most once.
+        ranked: The documents in the order retrieval returned them, each at most once. A None rank has grade 0.
         grades: Each judged document's relevance judgment. A document missing here has grade 0.
         k: The cutoff.
 
@@ -147,7 +148,7 @@ def ndcg_at_k(ranked: Sequence[str], grades: Mapping[str, int], k: int) -> float
     ideal_gain = sum(grade / math.log2(rank + 2) for rank, grade in enumerate(ideal))
     if ideal_gain == 0:
         return 0.0
-    gain = sum(max(grades.get(document, 0), 0) / math.log2(rank + 2) for rank, document in enumerate(ranked[:k]))
+    gain = sum(max(grades.get(document, 0), 0) / math.log2(rank + 2) for rank, document in enumerate(ranked[:k]) if document is not None)
     return gain / ideal_gain
 
 
@@ -159,11 +160,11 @@ class RankedMetrics(EvaluationModel):
     reciprocal_rank: float
 
 
-def ranked_metrics(got: Sequence[str], want: Collection[str], *, ks: tuple[int, ...]) -> RankedMetrics:
+def ranked_metrics(got: Sequence[str | None], want: Collection[str], *, ks: tuple[int, ...]) -> RankedMetrics:
     """The one arithmetic core every layer calls: recall@k, precision@k and MRR over `got` against `want`.
 
     Args:
-        got: The ordered references under scoring.
+        got: The ordered references under scoring, one per rank. A None item holds its rank and matches nothing.
         want: The expected references.
         ks: The recall and precision cutoffs to report.
 

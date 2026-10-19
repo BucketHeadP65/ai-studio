@@ -167,7 +167,7 @@ validation (`KnowledgeBaseValidationHandler`, empty when never indexed), its sou
 `resolved`, `failed`, `skipped` or `seen`, populated only when `intake` is among the declared connectors), its watch list
 (`watch_list`, from `_meta/watch-list.yaml`), its most recent refresh (`last_refresh_run`, `None` before the first
 `POST .../refresh`), its declared
-`schedule` (`None` when unset), and its `identity` (which database, at what revision, last indexed when, `None` for a name
+`schedule` (`None` when unset), and its `identity` (which database, at what revision, last indexed when, and the indexer version that index stored, `None` for a name
 neither registered nor indexed, see section 7). `KnowledgeBaseDetail` is declared as a `KnowledgeBaseListEntry` subclass carrying exactly these eight
 additions, so the two shapes can never drift apart field-by-field. The knowledge base's open decisions are their own route,
 `GET .../decisions` (below), never a `KnowledgeBaseDetail` field.
@@ -531,6 +531,14 @@ index would start from, computed by walking the knowledge base with a `Knowledge
 one that is fully caught up. A knowledge base never indexed instead reads `193 files awaiting index` (`1 file awaiting index`
 for a single file), since there is no prior manifest to diff against and every file on disk is the whole gap.
 
+The tail also says when the next index rebuilds everything. The identity carries the indexer version the last index stored
+(`KnowledgeBaseIdentity.indexer_version`, read from `kb.index_fingerprint` with the index time), and the line compares it
+with the one the code and the settings produce now (the code's `INDEXER_VERSION`, the chunk sizes and the chunk planner), through
+`studio.knowledge_base.wiring.indexing.indexer_version_changed`, the same comparison `studio status` makes for its
+`Manifest stale` hint. When they differ, `nothing changed since` reads `the indexer or its chunk settings changed since, the
+next index rebuilds everything`, and `2 files changed since` reads `2 files and the indexer or its chunk settings changed
+since, the next index rebuilds everything`.
+
 **An unreachable database is one line, never a traceback.** A dead port, an unresolvable host, a wrong password, or a wrong
 database name each end the identity read the same way, a single line naming the redacted target and the reason.
 
@@ -544,6 +552,27 @@ after printing this line, with no traceback and no `search failed` (or `index fa
 is the one exception. A long-lived server has nothing to exit into, so it prints `serving anyway, every call fails until
 the database is reachable.` as a third line and still builds and serves its tool surface, every tool call failing cleanly
 once it actually reads the database, rather than the whole server dying at startup on a database that has not come up yet.
+
+**A connection that fails later names its service.** A command that reports its failure as one line (`<command> failed:
+<error text>`, such as `evals score failed` or `search failed`) names the service when the failure came from a
+connection: the embedding endpoint or a model endpoint with its host, or the database with its redacted URL, before the
+error's own text.
+
+```
+evals score failed: embedding endpoint example.openai.azure.com: Connection error.
+evals run failed: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)
+```
+
+`studio index`, `studio ingest` and `studio sync` print the same line for a failed connection (`index failed: ...`,
+`ingest failed: ...`, `sync failed: ...`) and exit 1 with no traceback, so the last line of `studio index`, the one the
+plugin's session-start hook shows, names the service. Any other error those three commands meet still raises as before.
+
+```
+index failed: embedding endpoint example.openai.azure.com: Connection error.
+```
+
+The text comes from `core.connection_failures.connection_failure_message`, the same rule an evaluation run uses for
+a failed case. Any other failure keeps its own text unchanged.
 
 **A collection belongs to the knowledge base root that indexed it.** Each indexing run stamps its knowledge base root onto
 `memory.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
