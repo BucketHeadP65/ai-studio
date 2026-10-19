@@ -229,21 +229,6 @@ async def test_a_card_keeps_the_trust_a_workflow_earned_before_it_moved(controll
     cards = {card["id"]: card for card in await _cards(controller)}
 
     assert cards["wf.a"]["trust"]["level"] == "approved"
-    assert cards["wf.a"]["trust"]["basis"] == "content"
-
-
-async def test_a_card_reports_a_record_without_a_content_address_and_never_counts_it(
-    controller: BrowsingController, quarterly_report: Workflow, tmp_path: Path
-) -> None:
-    """A record at wf.a that names no content address may be another workflow's, so it is reported and not counted."""
-    records = records_under(tmp_path)
-    await records.evidence.append(Approval(workflow_id="wf.a", workflow_version=quarterly_report.version, by="owner"))
-
-    cards = {card["id"]: card for card in await _cards(controller)}
-
-    assert cards["wf.a"]["trust"]["level"] == "unverified"
-    assert cards["wf.a"]["trust"]["basis"] == "address-only"
-    assert cards["wf.a"]["trust"]["unconfirmed"] == 1
 
 
 async def test_a_card_reports_the_trust_the_workflow_page_reports(controller: BrowsingController, quarterly_report: Workflow, tmp_path: Path) -> None:
@@ -251,7 +236,7 @@ async def test_a_card_reports_the_trust_the_workflow_page_reports(controller: Br
     await records.evidence.append(
         Approval(workflow_id="wf.before-the-move", spec_hash=spec_identity(quarterly_report), workflow_version=quarterly_report.version, by="owner")
     )
-    await records.evidence.append(Approval(workflow_id="wf.a", workflow_version=quarterly_report.version, by="owner"))
+    await records.evidence.append(Approval(workflow_id="wf.a", spec_hash="another", workflow_version=quarterly_report.version, by="owner"))
 
     cards = {card["id"]: card for card in await _cards(controller)}
 
@@ -271,7 +256,7 @@ async def test_a_card_whose_workflow_cannot_be_read_reports_an_empty_history(tmp
             raise LibraryError(msg)
 
     runtime = Runtime(registry=StepRegistry(), library=_BrokenStore(), agent=_NoAgent(), session_log=NoSessionLog(), state=a_state(tmp_path))  # type: ignore[arg-type]
-    await records_under(tmp_path).evidence.append(Approval(workflow_id="wf.broken", by="owner"))
+    await records_under(tmp_path).evidence.append(Approval(workflow_id="wf.broken", spec_hash="abc", by="owner"))
 
     cards = await _cards(_controller(runtime, tmp_path))
 
@@ -280,8 +265,6 @@ async def test_a_card_whose_workflow_cannot_be_read_reports_an_empty_history(tmp
         "runs_with_evidence": 0,
         "failed_runs": 0,
         "approved_by": [],
-        "basis": "none",
-        "unconfirmed": 0,
         "structural_grades": 0,
         "structural_mean": None,
         "structural_last": None,

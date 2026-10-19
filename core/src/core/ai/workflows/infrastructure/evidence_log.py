@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import TypeAdapter, ValidationError
 
-from core.ai.workflows.domain.evidence import Approval, EvidenceHistory, Grade, RunEvidence, require_spec_identity
+from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, require_spec_identity
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -56,32 +56,20 @@ class FileEvidenceLog:
         """
         return tuple(event for event in self._surviving() if event.workflow_id == workflow_id)
 
-    async def history_for(self, *, spec_hash: str, workflow_id: str | None = None) -> EvidenceHistory:
-        """One workflow's history by content hash, plus the events with no hash filed under `workflow_id`, kept apart.
-
-        The matched events are found wherever the workflow was filed. An event carrying a different
-        hash is in neither part.
+    async def history_for(self, *, spec_hash: str) -> tuple[RunEvidence | Approval | Grade, ...]:
+        """One workflow's events by content hash, wherever the workflow was filed.
 
         Args:
             spec_hash: The workflow's content hash. It must not be empty.
-            workflow_id: The library id to search for events written without a hash. None finds none.
 
         Returns:
-            The events carrying `spec_hash` as `matched`, and the unhashed events filed under
-            `workflow_id` as `unaddressed`, each oldest first.
+            The events carrying `spec_hash`, oldest first.
 
         Raises:
             ValueError: If `spec_hash` is empty.
         """
         require_spec_identity(spec_hash)
-        matched: list[RunEvidence | Approval | Grade] = []
-        unaddressed: list[RunEvidence | Approval | Grade] = []
-        for event in self._surviving():
-            if event.spec_hash == spec_hash:
-                matched.append(event)
-            elif not event.spec_hash and event.workflow_id == workflow_id:
-                unaddressed.append(event)
-        return EvidenceHistory(matched=tuple(matched), unaddressed=tuple(unaddressed))
+        return tuple(event for event in self._surviving() if event.spec_hash == spec_hash)
 
     def _surviving(self) -> Iterator[RunEvidence | Approval | Grade]:
         """Every line that still parses, in the order it was written. A missing file holds nothing."""

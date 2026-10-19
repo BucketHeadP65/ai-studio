@@ -141,21 +141,12 @@ shipped library is one. It answers two questions:
 | Verb | Keyed on | Answers |
 |---|---|---|
 | `events_for(workflow_id)` | an address | every event filed there, correct only for a workflow that never moved and whose library never re-keyed |
-| `history_for(spec_hash=..., workflow_id=None)` | content, plus an optional address | a `EvidenceHistory` with two buckets |
+| `history_for(spec_hash=...)` | content | every event carrying this spec's hash, wherever it was filed |
 
-`EvidenceHistory.matched` holds events carrying this spec's hash **wherever they were filed**, that is what keeps runs with evidence findable across a move. `EvidenceHistory.unaddressed` holds events at
-the given address that carry no hash at all. The two are never merged: merging would let a record
-of unknown provenance count as this workflow's run, and dropping would orphan the history a real
-evidence log already holds. An event naming a *different* hash is in neither bucket, it said what it
-exercised, and it was not this.
-
-`EvidenceHistory.basis` is the tri-state, and it is the point of the split:
-
-| `basis` | Means | A level folded from `matched` |
-|---|---|---|
-| `content` | something carries this spec's hash | is about this workflow |
-| `address-only` | nothing does, but the address holds unattributable history | reads `unverified`, meaning *unconfirmed*, not never-run |
-| `none` | nothing recorded either way | reads `unverified`, meaning nothing has ever run it |
+`history_for` is what keeps runs with evidence findable across a move. An event naming a *different*
+hash is not in the answer: it said what it exercised, and it was not this. Every event carries a hash,
+because `RunEvidence`, `Approval` and `Grade` each refuse an empty `spec_hash`, and a line in the log
+without one is skipped like a damaged line.
 
 **Two properties of content addressing a reader must not be sold short.**
 
@@ -232,10 +223,9 @@ This is the table a library implementer should read first.
 | `Lineage`, parent, ops, `touched` | library-side, beside the child | `fetch_lineage` |
 | `Lineage.evidence` (prose) | library-side, beside the child | `fetch_lineage`. Read, never scored |
 | `Lineage.predictions` (claims) | library-side, beside the child | `fetch_lineage` |
-| RunEvidence, approvals | evidence log-side, append-only | `EvidenceLog.history_for(spec_hash=...)`, or `events_for(id)` for records with no hash |
+| RunEvidence, approvals | evidence log-side, append-only | `EvidenceLog.history_for(spec_hash=...)`, or `events_for(id)` by address |
 | **Content address** | nowhere | derived: `spec_identity(spec)` |
-| **Trust level** | nowhere | derived: `trust_level(history.matched).level` |
-| **Whether that level is about this workflow** | nowhere | derived: `EvidenceHistory.basis` |
+| **Trust level** | nowhere | derived: `trust_level(history).level` |
 | **Prediction verdicts** | nowhere | derived: `grade(lineage, events, version=...)` |
 | **Adapter hit rate** | nowhere | derived: `prediction_record(outcomes).hit_rate` |
 | **Staleness** | nowhere | derived: `drift(recorded, fingerprint(spec, registry, world))` |
@@ -535,15 +525,9 @@ The tri-state appears in six places and behaves the same way in all of them.
 | Staleness | `[]` | a list of drift findings | `None` |
 | Fit | `fits_here: True` | `False` | `None` (no registry) |
 | Birth | `[]` | a list of findings | `None` (nothing ever ran it) |
-| Trust | a level folded from `matched` |, | `unverified`, qualified by `basis` |
-| Trust evidence | `basis: content` |, | `basis: address-only`, and `basis: none` for nothing recorded |
+| Trust | a level folded from `history_for` |, | `unverified` |
 | A prediction | `holds: True` | `holds: False` | `holds: None` (nothing has tested it) |
 | An adapter's rate | a float | a float | `hit_rate: None` (nothing measured) |
-
-The trust rows are two questions because a level alone cannot carry them both. `unverified` is
-the honest fold over no confirmed evidence, and it is the same string whether nothing ever ran
-the workflow or its whole history sits at an address nothing can attribute to it. `basis`
-separates them, so a workflow whose evidence merely moved is no longer reported as never run.
 
 The last two are the newest and the most explicit about it. `PredictionRecord` counts
 `unmeasurable` apart from `misses`, because an untested claim is not a wrong one, and
@@ -1069,12 +1053,11 @@ test that pins it for the existing libraries.
 28. **An untranslatable host answer is a refusal naming the failure.**
  *Pinned by:* `tests/unit/test_contract_port.py::test_an_untranslatable_answer_is_a_retry_not_a_half_parsed_card`.
 
-29. **An address's unattributable history is distinguishable from no history.** A lookup that can
- only answer `unverified` for both has reproduced the silent failure. `EvidenceHistory.basis`
- must say which.
- *Pinned by:* `tests/unit/test_evidence.py::test_nothing_recorded_is_distinguishable_from_a_history_nobody_can_confirm`,
- `::test_unaddressed_records_are_offered_apart_from_confirmed_ones_never_merged`,
- `tests/unit/test_artifact_view.py::test_history_with_no_hash_reads_as_unconfirmed_rather_than_never_run`.
+29. **Every evidence record names the workflow it was about.** `RunEvidence`, `Approval` and `Grade` refuse an
+ empty `spec_hash`, a log line without one is skipped, and a durable run records the hash of the spec it ran.
+ *Pinned by:* `tests/unit/test_evidence.py::test_every_record_must_name_the_content_address_of_what_it_was_about`,
+ `::test_a_line_naming_no_content_address_is_skipped_like_a_damaged_one`,
+ `tests/unit/test_run_engine_choice.py::test_a_durable_runs_evidence_carries_the_content_address_of_the_workflow_it_ran`.
 
 30. **A content address survives the round trip through the library.** Hash a spec, put it, fetch
  it, hash it again, including through a backend that reorders object keys.
@@ -1143,11 +1126,6 @@ defect, a library is not required to be the evidence log, but it does mean the p
 evidence log implementation and therefore no second implementation disagreeing with it, which is the
 test the library seam itself is held to in the Purpose section.
 
-**A record with no content address can never be confirmed.** A durable run's evidence names no
-`spec_hash`, so the field reads `""`, and `history_for` returns such records in their own `unaddressed`
-bucket at the address they were filed under, but nothing can decide whether such a record is this
-workflow's, an adapted child's, or a namesake's. They are reported and never counted.
-
 **Identical specs from different authors share an identity.** `spec_identity` hashes the spec and
 nothing else, so two teams who independently write the same graph get one content address. In a
 per-owner evidence log this is invisible. In a shared one, one team's runs raise the other team's
@@ -1165,9 +1143,8 @@ trips the same test for the same reason. Neither is prevented. Both are made vis
 **Two reads in the workflow view are still keyed on an address.** `features/browsing/controller.py`
 answers trust by content address on both the workflow page and `/api/library`, but
 `_changes_since_first_run` and `_inherited_nodes` call `events_for(workflow_id)`. A workflow that
-moved therefore keeps its trust and loses its birth verdict. Switching them is mechanical. What
-holds it back is that the records with no hash those paths currently answer from would go silent, and
-that is a visible regression to weigh against the fix rather than an oversight.
+moved therefore keeps its trust and loses its birth verdict. Switching them to `history_for` is
+mechanical and not yet done.
 
 **Provenance is one key by convention.** `put` takes `provenance: Mapping[str, str]`, and
 both libraries read only `saved_by` out of it. `FolderLibrary` splats the whole mapping into the

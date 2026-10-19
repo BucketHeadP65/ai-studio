@@ -511,8 +511,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         if self.evidence_log is None:
             return None
         if workflow is not None:
-            history = await self.evidence_log.history_for(spec_hash=spec_identity(workflow), workflow_id=workflow_id)
-            record = trust_level(history.matched)
+            record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
         else:
             record = trust_level(await self.evidence_log.events_for(workflow_id))
         failed = f", {record.failed_runs} failed" if record.failed_runs else ""

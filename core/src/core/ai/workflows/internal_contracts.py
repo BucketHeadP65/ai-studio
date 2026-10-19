@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from pydantic import JsonValue
 
-    from core.ai.workflows.domain.evidence import Approval, EvidenceHistory, Grade, RunEvidence
+    from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence
     from core.ai.workflows.domain.fingerprint import WorkflowFingerprint
     from core.ai.workflows.domain.intent import WorkflowIntent
     from core.ai.workflows.domain.lineage import Lineage
@@ -319,18 +319,16 @@ class EvidenceLog(Protocol):
         """
         ...
 
-    async def history_for(self, *, spec_hash: str, workflow_id: str | None = None) -> EvidenceHistory:
+    async def history_for(self, *, spec_hash: str) -> tuple[RunEvidence | Approval | Grade, ...]:
         """Everything held about one workflow, found by what it is rather than where it was kept.
 
         An implementation applies `require_spec_identity` to `spec_hash` before answering.
 
         Args:
             spec_hash: The workflow's content address.
-            workflow_id: A library id whose records that carry no content address are added to the
-                answer. They can be found no other way. Omit it to ask by content address alone.
 
         Returns:
-            The workflow's evidence history.
+            The events carrying `spec_hash`, oldest first.
 
         Raises:
             ValueError: If `spec_hash` is empty.

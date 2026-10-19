@@ -772,8 +772,7 @@ class RunningController:
         evidence = self._run.records.evidence
         spec_hash = spec_identity(spec)
         await evidence.append(Approval(workflow_id=workflow_id, spec_hash=spec_hash, workflow_version=spec.version, by=by))
-        history = await evidence.history_for(spec_hash=spec_hash, workflow_id=workflow_id)
-        record = trust_level(history.matched)
+        record = trust_level(await evidence.history_for(spec_hash=spec_hash))
         return JSONResponse(
             {
                 "ok": True,

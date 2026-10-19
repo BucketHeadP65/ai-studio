@@ -47,6 +47,7 @@ async def _born(spec: Workflow, registry: StepRegistry) -> RunEvidence:
     assert isinstance(result, ReportUrl)
     return RunEvidence(
         workflow_id="wf.report",
+        spec_hash="abc",
         outcome="completed",
         params={"quarter": "Q2"},
         produced=shapes_of(state.values),
@@ -129,7 +130,7 @@ async def test_a_replay_whose_shape_moved_is_reported(quarterly_report: Workflow
 
 
 async def test_a_replay_of_a_run_with_no_recorded_inputs_says_so(quarterly_report: Workflow, call_log: CallLog) -> None:
-    bare = RunEvidence(workflow_id="wf.report", outcome="completed")
+    bare = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed")
     findings = await replay_birth(quarterly_report, _registry(call_log), bare, approval=ApproveAll())
     assert any("has no inputs" in finding for finding in findings)
 
@@ -175,7 +176,7 @@ async def test_a_step_that_returns_a_typed_list_is_not_reported_as_drifted(call_
 
     state = WorkflowState(params={"quarter": "Q1"})
     await build_graph(spec, registry, approval=ApproveAll()).run(state=state)
-    born = RunEvidence(workflow_id="wf.typed-list", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
+    born = RunEvidence(workflow_id="wf.typed-list", spec_hash="abc", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
 
     assert born.produced["risks"] == "list[ReportDraft]", "the run really did record the element type"
     assert check_birth(spec, registry, born) == (), "and nothing has changed, so nothing has drifted"
@@ -241,7 +242,7 @@ def _chained_list_spec_and_registry(call_log: CallLog) -> tuple[Workflow, StepRe
 async def _born_chained_list(spec: Workflow, registry: StepRegistry) -> RunEvidence:
     state = WorkflowState(params={"quarter": "Q1"})
     await build_graph(spec, registry, approval=ApproveAll()).run(state=state)
-    return RunEvidence(workflow_id="wf.chained-list", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
+    return RunEvidence(workflow_id="wf.chained-list", spec_hash="abc", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
 
 
 async def test_a_judge_gates_pass_through_is_not_compared_against_its_judging_steps_verdict(call_log: CallLog) -> None:
@@ -280,7 +281,7 @@ async def test_a_judge_gates_pass_through_is_not_compared_against_its_judging_st
 
     state = WorkflowState(params={"quarter": "Q1"})
     await build_graph(spec, registry, approval=ApproveAll()).run(state=state)
-    born = RunEvidence(workflow_id="wf.judged", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
+    born = RunEvidence(workflow_id="wf.judged", spec_hash="abc", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
 
     assert born.produced["weighed"] == "ReportDraft", "the gate recorded the draft it passed through, not its verdict"
     assert check_birth(spec, registry, born) == ()
@@ -373,7 +374,7 @@ async def test_a_changed_turns_own_shape_is_named_against_its_dotted_key() -> No
 
     state = WorkflowState(params={"quarter": "Q1"})
     await build_graph(spec, registry, approval=ApproveAll()).run(state=state)
-    born = RunEvidence(workflow_id="wf.two-independent-turns", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
+    born = RunEvidence(workflow_id="wf.two-independent-turns", spec_hash="abc", outcome="completed", params={"quarter": "Q1"}, produced=shapes_of(state.values))
 
     assert born.produced["drafted.flag_risk"] == "list[str]"
 

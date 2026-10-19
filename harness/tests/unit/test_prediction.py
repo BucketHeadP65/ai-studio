@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 
 def _completed(version: int, **kwargs: object) -> RunEvidence:
     """One completed run of a version, as the observer writes it."""
-    return RunEvidence(workflow_id="wf.report", workflow_version=version, outcome="completed", **kwargs)  # type: ignore[arg-type]
+    return RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=version, outcome="completed", **kwargs)  # type: ignore[arg-type]
 
 
 def _child(quarterly_report: Workflow, *predictions: Prediction, evidence: str = "") -> Lineage:
@@ -187,7 +187,7 @@ def test_a_version_that_only_ever_failed_falsifies_a_completes_claim(quarterly_r
     not complete are exactly the evidence against it.
     """
     lineage = _child(quarterly_report, Prediction(claim="completes"))
-    failed = RunEvidence(workflow_id="wf.report", workflow_version=4, outcome="failed")
+    failed = RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=4, outcome="failed")
     (outcome,) = grade(lineage, (failed, failed), version=4)
     assert outcome.holds is False
     assert "2" in outcome.observed, "the count of runs that did not complete is what a person acts on"
@@ -196,7 +196,7 @@ def test_a_version_that_only_ever_failed_falsifies_a_completes_claim(quarterly_r
 def test_a_failed_run_measures_nothing_about_what_a_version_produces(quarterly_report: Workflow) -> None:
     """A run that fell over never reached the node, so its silence is not evidence against the claim."""
     lineage = _child(quarterly_report, Prediction(claim="produces", subject="publish"))
-    failed = RunEvidence(workflow_id="wf.report", workflow_version=4, outcome="failed", produced={"fetch_sales": "SalesData"})
+    failed = RunEvidence(workflow_id="wf.report", spec_hash="abc", workflow_version=4, outcome="failed", produced={"fetch_sales": "SalesData"})
     (outcome,) = grade(lineage, (failed,), version=4)
     assert outcome.holds is None
 
@@ -211,7 +211,7 @@ def test_a_run_of_a_different_version_grades_nothing(quarterly_report: Workflow)
 def test_a_run_that_never_said_which_version_it_exercised_is_not_evidence(quarterly_report: Workflow) -> None:
     """Same ruling the tier makes: an evidence record that cannot say what it ran counts for no version."""
     lineage = _child(quarterly_report, Prediction(claim="produces", subject="publish"))
-    anonymous = RunEvidence(workflow_id="wf.report", outcome="completed", produced={"publish": "ReportUrl"})
+    anonymous = RunEvidence(workflow_id="wf.report", spec_hash="abc", outcome="completed", produced={"publish": "ReportUrl"})
     (outcome,) = grade(lineage, (anonymous,), version=4)
     assert outcome.holds is None
 
@@ -219,7 +219,7 @@ def test_a_run_that_never_said_which_version_it_exercised_is_not_evidence(quarte
 def test_an_approval_grades_nothing(quarterly_report: Workflow) -> None:
     """A person approving an artifact is not a run of it, and cannot confirm a claim about one."""
     lineage = _child(quarterly_report, Prediction(claim="completes"))
-    (outcome,) = grade(lineage, (Approval(workflow_id="wf.report", workflow_version=4, by="someone"),), version=4)
+    (outcome,) = grade(lineage, (Approval(workflow_id="wf.report", spec_hash="abc", workflow_version=4, by="someone"),), version=4)
     assert outcome.holds is None
 
 
@@ -527,6 +527,7 @@ async def test_a_person_opening_a_child_reads_why_it_exists_and_how_its_claims_a
     await records.evidence.append(
         RunEvidence(
             workflow_id=child_id,
+            spec_hash="abc",
             workflow_version=quarterly_report.version + 1,
             outcome="completed",
             produced={"draft_report": "ReportDraft"},
@@ -567,7 +568,7 @@ async def test_a_run_of_the_parent_s_version_grades_none_of_the_child_s_claims(
     library = FolderLibrary(tmp_path / "workflows")
     child_id = await _saved_child(library, quarterly_report, registry, Prediction(claim="completes"), evidence="")
     await records.evidence.append(
-        RunEvidence(workflow_id=child_id, workflow_version=quarterly_report.version, outcome="completed", runner="test")
+        RunEvidence(workflow_id=child_id, spec_hash="abc", workflow_version=quarterly_report.version, outcome="completed", runner="test")
     )
     _, controller = _install(registry, library, tmp_path)
 

@@ -114,6 +114,7 @@ async def test_a_coherent_adaptation_runs(quarterly_report: Workflow, registry: 
 def test_trust_carries_for_every_node_the_diff_did_not_touch(quarterly_report: Workflow) -> None:
     born = RunEvidence(
         workflow_id="wf.report",
+        spec_hash="abc",
         outcome="completed",
         produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"},
     )

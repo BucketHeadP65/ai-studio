@@ -35,6 +35,7 @@ T0 = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 def _ended(workflow_id: str, status: OutcomeStatus | None, base: str = "notes") -> RunEvidence:
     return RunEvidence(
         workflow_id=workflow_id,
+        spec_hash="abc",
         outcome="completed",
         result=None if status is None else Outcome(status=status, summary="what the run did"),
         params={"base": base},
@@ -87,7 +88,7 @@ async def test_an_approval_is_written_and_tells_nobody(tmp_path: Path) -> None:
     observer = RecordingObserver()
     log = ObservedEvidenceLog(tmp_path / "evidence.jsonl", observer)
 
-    await log.append(Approval(workflow_id=GATHER, by="owner"))
+    await log.append(Approval(workflow_id=GATHER, spec_hash="abc", by="owner"))
 
     assert observer.seen == []
 
