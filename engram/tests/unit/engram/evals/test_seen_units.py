@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from core.ai.disclosure.contracts import ChildSummary, DisclosureEnvelope
 from core.ai.retrieval.contracts import (
     FetchResult,
+    FoldedUnit,
     GraphEdge,
     GraphNode,
     GraphPath,
@@ -61,6 +62,65 @@ def test_a_search_names_each_hit():
     )
 
     assert seen_units(_returned(("search", result)), collection="notes") == ("note.alpha#s1", "src-beta:3")
+
+
+def test_a_search_names_each_folded_unit_that_carries_a_snippet():
+    hit = SearchHit(
+        id="note.alpha",
+        hit_level="card",
+        score=1.0,
+        folded_units=(
+            FoldedUnit(id="note.alpha#s1", hit_level="section", snippet="The vote count moved to the end of the month."),
+            FoldedUnit(id="note.alpha#c1", hit_level="claim", snippet="The count was set for the end of the month."),
+            FoldedUnit(id="src-alpha:2", hit_level="raw"),
+            FoldedUnit(id="src-alpha:3", hit_level="raw", snippet="   "),
+        ),
+    )
+
+    seen = seen_units(_returned(("search", SearchResult(hits=(hit,), next_steps=_NEXT))), collection="notes")
+
+    assert seen == ("note.alpha", "note.alpha#s1", "note.alpha#c1")
+
+
+def test_a_snippet_that_is_only_an_ellipsis_carries_no_text():
+    hit = SearchHit(
+        id="note.alpha#c1",
+        hit_level="claim",
+        page_id="note.alpha",
+        snippet="\u2026",
+        score=1.0,
+        folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet=" \u2026 "),),
+    )
+
+    seen = seen_units(_returned(("search", SearchResult(hits=(hit,), next_steps=_NEXT))), collection="notes")
+
+    assert seen == ()
+
+
+def test_in_code_mode_an_ellipsis_alone_never_matches_a_printed_snippet():
+    cut = "The second day of the vote count in the northern\u2026"
+    hit = SearchHit(
+        id="note.alpha",
+        hit_level="card",
+        snippet=cut,
+        score=1.0,
+        folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet="\u2026"),),
+    )
+    search = SearchResult(hits=(hit,), next_steps=_NEXT)
+
+    seen = seen_units(_run_code({"output": f"{cut}\n"}, ("search", search)), collection="notes")
+
+    assert seen == ("note.alpha",)
+
+
+def test_in_code_mode_a_printed_folded_snippet_counts_for_its_unit():
+    snippet = "The vote count moved to the end of the month, after the second recount."
+    hit = SearchHit(id="note.alpha", hit_level="card", score=1.0, folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet=snippet),))
+    search = SearchResult(hits=(hit,), next_steps=_NEXT)
+
+    seen = seen_units(_run_code({"output": f"{snippet}\n"}, ("search", search)), collection="notes")
+
+    assert seen == ("note.alpha#s1",)
 
 
 def test_a_fetch_names_the_unit_it_read():

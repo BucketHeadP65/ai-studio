@@ -35,7 +35,12 @@ import sqlalchemy.exc
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from core.ai.retrieval.contracts import AgeGraphTraversalBuilder, CteGraphTraversalBuilder, ParadeDBHybridSearchBuilder
+from core.ai.retrieval.contracts import (
+    AgeGraphTraversalBuilder,
+    CteGraphTraversalBuilder,
+    ParadeDBHybridSearchBuilder,
+    hits_per_document_body,
+)
 from core.ai.retrieval.search_builder import SEARCH_SNIPPET_CHARS
 
 from engram.retrieval.graph_schema import kb_graph_schema
@@ -578,14 +583,40 @@ class TestSearchSignatureDriftGuard:
     def test_0070_restores_exactly_the_shape_0066_published(self) -> None:
         assert _load_migration_module("0070")._search_schema(documented=False) == _load_migration_module("0066")._search_schema(page_dated=True)
 
-    def test_0070_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
-        assert _load_migration_module("0070")._search_schema(documented=True) == KB_SEARCH_SCHEMA
-
     def test_0070_restores_the_comment_0066_set(self) -> None:
         assert _load_migration_module("0070")._PREVIOUS_COMMENT_TEXT == _load_migration_module("0066")._COMMENT_TEXT
 
     def test_0070_restores_the_table_comment_0061_set(self) -> None:
         assert _load_migration_module("0070")._PREVIOUS_TUNING_COMMENT == _load_migration_module("0061")._TUNING_COMMENT
+
+    def test_0071_frozen_schemas_match_their_hardcoded_signature_constant(self) -> None:
+        module = _load_migration_module("0071")
+
+        for folded_snippets in (True, False):
+            rendered = _bare_type_signature("api.search", module._search_schema(folded_snippets=folded_snippets))
+            assert _canonical_types(rendered) == _canonical_types(module._SEARCH_SIGNATURE)
+
+    def test_0071_restores_exactly_the_shape_0070_published(self) -> None:
+        assert _load_migration_module("0071")._search_schema(folded_snippets=False) == _load_migration_module("0070")._search_schema(documented=True)
+
+    def test_0071_publishes_the_shape_the_serving_layer_generates_from(self) -> None:
+        assert _load_migration_module("0071")._search_schema(folded_snippets=True) == KB_SEARCH_SCHEMA
+
+    def test_0071_restores_the_comments_and_the_check_0070_set(self) -> None:
+        module, previous = _load_migration_module("0071"), _load_migration_module("0070")
+
+        assert module._PREVIOUS_COMMENT_TEXT == previous._COMMENT_TEXT
+        assert module._PREVIOUS_CAP_COMMENT == previous._CAP_COMMENT
+        assert module._PREVIOUS_TUNING_COMMENT == previous._TUNING_COMMENT
+        assert module._numbers_check(folded=False) == previous._numbers_check(capped=True)
+
+    def test_0071_names_the_cap_function_it_creates_by_its_argument(self) -> None:
+        module = _load_migration_module("0071")
+
+        body = hits_per_document_body(module._search_schema(folded_snippets=True), function_name=module._CAP_FUNCTION)
+
+        assert body.startswith(f"CREATE FUNCTION {module._CAP_FUNCTION}(collection text ")
+        assert f"{module._CAP_FUNCTION}(text)" == module._CAP_SIGNATURE
 
 
 class TestGraphSignatureDriftGuard:

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Literal
 import pytest
 
 from core.ai.evaluation.contracts import DeliveredEvidenceRef, ExecutionTrace, FileDeliveredEvidenceStore, ToolCallTrace
-from core.ai.retrieval.contracts import NextSteps, SearchHit, SearchResult
+from core.ai.retrieval.contracts import FoldedUnit, NextSteps, SearchHit, SearchResult
 
 from engram.evals.outcomes.domain.evaluators import (
     LayeredEvidenceMetrics,
@@ -255,6 +255,27 @@ class TestSearchRankingMetrics:
         assert unit_metrics is not None
         assert page_metrics.recall[1] == pytest.approx(1.0, abs=_EPSILON)
         assert unit_metrics.recall[1] == pytest.approx(0.0, abs=_EPSILON)
+
+    async def test_a_folded_unit_with_a_snippet_ranks_right_after_its_hit(self, tmp_path: Path):
+        store = FileDeliveredEvidenceStore(tmp_path)
+        hit = _hit("page.other").model_copy(
+            update={
+                "folded_units": (
+                    FoldedUnit(id="page.unread#s1", hit_level="section"),
+                    FoldedUnit(id="page.cut#s1", hit_level="section", snippet="\u2026"),
+                    FoldedUnit(id="page.gold#s1", hit_level="section", snippet="The sentence that decides the claim."),
+                )
+            }
+        )
+        call = await _store_search_call(store, "trial", 0, SearchResult(hits=(hit, _hit("page.next")), next_steps=NextSteps(summary="ok")))
+
+        result = await search_ranking_metrics((call,), store, ["page.gold"], ks=(1, 2))
+
+        metrics = result.calls[0].metrics
+        assert metrics is not None
+        assert metrics.recall[1] == pytest.approx(0.0, abs=_EPSILON)
+        assert metrics.recall[2] == pytest.approx(1.0, abs=_EPSILON)
+        assert metrics.reciprocal_rank == pytest.approx(0.5, abs=_EPSILON)
 
     async def test_multiple_search_calls_keep_separate_rankings(self, tmp_path: Path):
         store = FileDeliveredEvidenceStore(tmp_path)

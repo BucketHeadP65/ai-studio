@@ -15,6 +15,10 @@ real BM25 (pg_search) + pgvector RRF fusion:
 * `only_current` (the default) excludes a superseded page that otherwise matches;
 * `k` is honoured (the > 50 hard cap is proven in `test_guardrails.py`).
 
+Each document keeps one hit by default and lists its other matching units under it as folded units, so a check that
+a paper or a page was found reads the hits and their folded units together. The bounded-snippet check sets the
+knowledge base's cap to 0, so the long section ranks as a hit of its own.
+
 The whole module skips when Docker is unavailable (the `pg` fixture, via `migrated`, raises
 `pytest.skip`). Tests are *synchronous*: `runner.invoke` drives the Typer `index` command
 (which calls `asyncio.run`), so the body has no running loop; the gateway reads each wrap their
@@ -34,11 +38,12 @@ from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
 from engram.indexing.contracts import FilesystemKnowledgeBaseReader, IndexKnowledgeBase, IndexKnowledgeBaseHandler, KnowledgeBaseReader
 from engram.indexing.infrastructure import orm
 from engram.kb.contracts import load_knowledge_base_schema
+from engram.retrieval.domain import SearchHit
 from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway
 from engram.testing.fakes.embedding import FakeEmbedding, _vector
 from engram.testing.infrastructure.knowledge_base_db import BED_BM25_EXTENSION
 from engram.testing.knowledge_base_builder import KnowledgeBaseBuilder
-from sqlalchemy import NullPool
+from sqlalchemy import NullPool, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from typer.testing import CliRunner
 
@@ -325,6 +330,39 @@ def _page_ids(result: SqlResult) -> set[str]:
     return {str(row["page_id"]) for row in result.rows}
 
 
+def _units_found(result: SqlResult) -> set[str]:
+    """Every unit a search returned: each hit's own id and the ids of the units folded under it."""
+    hits = [SearchHit.model_validate(dict(row)) for row in result.rows]
+    return {hit.id for hit in hits} | {unit.id for hit in hits for unit in hit.folded_units}
+
+
+def _pages_found(result: SqlResult) -> set[str]:
+    """Every page a search returned: each hit's page, and the page of each card, section or claim folded under it."""
+    hits = [SearchHit.model_validate(dict(row)) for row in result.rows]
+    folded = {unit.id.split("#", 1)[0] for hit in hits for unit in hit.folded_units if unit.hit_level != "raw"}
+    return _page_ids(result) | folded
+
+
+def _keep_every_hit(admin_url: str) -> None:
+    """Set the cap on hits per document of every indexed knowledge base to 0, so each of its searches keeps every hit."""
+
+    async def _go() -> None:
+        engine = create_async_engine(admin_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as connection:
+                await connection.execute(
+                    text(
+                        "INSERT INTO kb.retrieval_tuning (collection, tuning)"
+                        """ SELECT DISTINCT collection, '{"max_hits_per_document": 0}'::jsonb FROM kb.pages"""
+                        " ON CONFLICT (collection) DO UPDATE SET tuning = kb.retrieval_tuning.tuning || EXCLUDED.tuning"
+                    )
+                )
+        finally:
+            await engine.dispose()
+
+    _run(_go())
+
+
 # Bind every api.search arg by name (positional-with-defaults). The query vector is a halfvec
 # text literal cast `CAST(:qvec AS text)::halfvec` — the text cast pins asyncpg's param type so
 # the registered pgvector codec does not binary-encode the string (the same shape production's
@@ -370,8 +408,8 @@ class TestBm25Search:
     def test_disjoint_query_returns_the_other_paper(self, reader: str):
         result = _search(reader, _SEARCH_SQL, _params("hot passage caching retrieval latency", k=5))
 
-        assert "paper.vector-cache" in _page_ids(result)
-        assert "paper.speech-unrelated" not in _page_ids(result)
+        assert "paper.vector-cache" in _pages_found(result)
+        assert "paper.speech-unrelated" not in _pages_found(result)
 
 
 class TestHybridSearch:
@@ -407,12 +445,12 @@ class TestOnlyCurrent:
     def test_default_excludes_the_superseded_page(self, reader: str):
         result = _search(reader, _SEARCH_SQL, _params("graph indexing token cost early draft", k=10, only_current=True))
 
-        assert "paper.graph-cost-v0" not in _ids(result)
+        assert "paper.graph-cost-v0" not in _units_found(result)
 
     def test_only_current_false_includes_the_superseded_page(self, reader: str):
         result = _search(reader, _SEARCH_SQL, _params("graph indexing token cost early draft", k=10, only_current=False))
 
-        assert "paper.graph-cost-v0" in _ids(result)
+        assert "paper.graph-cost-v0" in _units_found(result)
 
 
 class TestKHonoured:
@@ -453,6 +491,7 @@ class TestComponentRanks:
             "vector_rank",
             "vector_distance",
             "snippet_truncated",
+            "folded_units",
         )
 
     def test_a_keyword_only_search_ranks_on_the_lexical_leg_alone(self, reader: str):
@@ -529,7 +568,10 @@ class TestComponentRanks:
 class TestBoundedSnippets:
     """A snippet is an excerpt for choosing a fetch, never the unit's full text."""
 
-    def test_an_oversized_section_comes_back_as_a_bounded_excerpt(self, reader: str):
+    def test_an_oversized_section_comes_back_as_a_bounded_excerpt(self, indexed: str, reader: str):
+        # The long section and the short one are units of one document, so only a cap of 0 ranks both as hits.
+        _keep_every_hit(indexed)
+
         result = _search(reader, _SEARCH_SQL, _params("fluxidrome dispersion", k=10, level="section"))
 
         assert result.rows

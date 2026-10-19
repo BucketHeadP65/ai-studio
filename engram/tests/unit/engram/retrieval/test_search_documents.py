@@ -1,10 +1,12 @@
 """Every `search` shows a hit's folded units with the refs that fetch them, and states the cap on hits per document.
 
 `api.search` keeps the best hits of each document and lists the document's next matching units under its best hit as
-`folded_units`, each an id and a hit level. The projection gives each folded unit the ref a hit of its own level would
-carry, qualified by the collection it came from, on the single-base search, the routed search and the capability's
-search alike. Every search description states the cap the database applies: a cap of 1 makes each hit a distinct
-document, a cap above 1 allows that many hits of one document, and no cap says nothing about documents.
+`folded_units`, each an id, a hit level and a snippet. The projection gives each folded unit the ref a hit of its own
+level would carry, qualified by the collection it came from, on the single-base search, the routed search and the
+capability's search alike, and bounds its snippet as a hit's. Every search description states the cap the database
+applies to the knowledge base, and that folded units carry a snippet: a cap of 1 makes each hit a distinct document, a
+cap above 1 allows that many hits of one document, and no cap says nothing about documents. The response budget cuts a
+folded unit's snippet before it drops the unit.
 """
 
 from __future__ import annotations
@@ -25,10 +27,11 @@ from sqlalchemy.exc import OperationalError
 from engram.retrieval.capability import RetrievalKnowledgeBase
 from engram.retrieval.contracts import read_hits_per_document
 from engram.retrieval.dials import ReadDials
-from engram.retrieval.domain import FetchResult, FoldedUnit, SearchHit, SearchResult, SqlResult
+from engram.retrieval.domain import FetchResult, FoldedUnit, NextSteps, SearchHit, SearchResult, SqlResult
 from engram.retrieval.queries import SearchHandler
 from engram.retrieval.tools import (
     SEARCH_RESULT_CHARS,
+    SEARCH_SNIPPET_CHARS,
     RetrievalHandlers,
     add_routed_read_tools,
     bound_search_result,
@@ -49,6 +52,7 @@ from tests.unit.engram.retrieval.test_tools import FakeSearchHandler, _call, _ct
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from core.ai.retrieval.contracts import SearchResultStatus
     from mcp.types import Tool as MCPTool
 
     from engram.retrieval.capability import ReadSurface
@@ -102,6 +106,20 @@ class TestTheProjection:
 
         assert hit.folded_units == ()
 
+    def test_each_folded_unit_keeps_the_snippet_its_row_carries(self):
+        row = {**_FOLDED_ROWS[0], "folded_units": [{"id": "note.alpha#s1", "hit_level": "section", "snippet": "The section matched\u2026"}]}
+
+        (hit,) = search_hits((row,), collection="workdocs", knowledge_base="workdocs", hybrid=False)
+
+        assert [unit.snippet for unit in hit.folded_units] == ["The section matched\u2026"]
+
+    def test_a_folded_snippet_longer_than_a_hit_snippet_is_cut_to_it(self):
+        row = {**_FOLDED_ROWS[0], "folded_units": [{"id": "note.alpha#s1", "hit_level": "section", "snippet": "y" * 600}]}
+
+        (hit,) = search_hits((row,), collection="workdocs", knowledge_base="workdocs", hybrid=False)
+
+        assert hit.folded_units[0].snippet == "y" * (SEARCH_SNIPPET_CHARS - 1) + "\u2026"
+
 
 class TestEverySearchShowsTheFoldedUnits:
     async def test_the_single_base_search(self):
@@ -136,6 +154,7 @@ class TestEverySearchShowsTheFoldedUnits:
 
 _DISTINCT = "Each hit is a distinct document"
 _AT_MOST_TWO = "At most 2 hits come from one document"
+_SNIPPETED = "each with a short `snippet` of the text it matched"
 
 
 def _says(description: str, cap: int) -> None:
@@ -147,6 +166,7 @@ def _says(description: str, cap: int) -> None:
     assert (_DISTINCT in description) is (cap == 1)
     assert (_AT_MOST_TWO in description) is (cap == 2)
     assert "`folded_units`" in description
+    assert _SNIPPETED in description
 
 
 def _description(tools: list[MCPTool]) -> str:
@@ -224,23 +244,36 @@ def _capped(name: str, domain: str, cap: int) -> ReadSurface:
 
 
 class TestReadingTheCap:
-    async def test_the_search_handler_reads_the_number_the_database_answers(self):
+    async def test_the_search_handler_reads_the_number_the_database_answers_for_its_knowledge_base(self):
         gateway = FakeSqlGateway(routed={"api.search_hits_per_document": SqlResult(rows=({"hits_per_document": 2},), columns=("hits_per_document",))})
 
-        assert await SearchHandler(gateway, FakeEmbedding()).hits_per_document() == 2
+        cap = await SearchHandler(gateway, FakeEmbedding()).hits_per_document("workdocs")
+
+        assert cap == 2
+        assert gateway.rows_calls[-1].params == {"collection": "workdocs"}
+
+    async def test_a_host_reads_the_cap_of_the_knowledge_base_it_names(self):
+        gateway = FakeSqlGateway(routed={"api.search_hits_per_document": SqlResult(rows=({"hits_per_document": 3},), columns=("hits_per_document",))})
+
+        cap = await read_hits_per_document(SearchHandler(gateway, FakeEmbedding()), knowledge_base="the work documents", collection="workdocs")
+
+        assert cap == 3
+        assert gateway.rows_calls[-1].params == {"collection": "workdocs"}
 
     async def test_no_answer_reads_as_no_cap(self):
-        assert await SearchHandler(FakeSqlGateway(), FakeEmbedding()).hits_per_document() == 0
+        assert await SearchHandler(FakeSqlGateway(), FakeEmbedding()).hits_per_document("workdocs") == 0
 
     @pytest.mark.parametrize("error", [OperationalError("SELECT 1", {}, Exception("gone")), ConnectionRefusedError("refused")], ids=["database", "network"])
     async def test_a_failed_read_states_no_cap(self, error: Exception):
-        assert await read_hits_per_document(SearchHandler(_FailingGateway(error=error), FakeEmbedding()), knowledge_base="workdocs") == 0
+        search = SearchHandler(_FailingGateway(error=error), FakeEmbedding())
+
+        assert await read_hits_per_document(search, knowledge_base="workdocs", collection="workdocs") == 0
 
     async def test_a_failed_read_warns_naming_the_knowledge_base_and_the_error(self, caplog: pytest.LogCaptureFixture):
         search = SearchHandler(_FailingGateway(error=ConnectionRefusedError("refused by the host")), FakeEmbedding())
 
         with caplog.at_level("WARNING"):
-            await read_hits_per_document(search, knowledge_base="workdocs")
+            await read_hits_per_document(search, knowledge_base="workdocs", collection="workdocs")
 
         assert "workdocs" in caplog.text
         assert "ConnectionRefusedError" in caplog.text
@@ -309,6 +342,61 @@ class TestTheResponseBudgetTrimsFoldedUnitsFirst:
         _hits, answer = _bounded_answer(max_chars=6_000)
 
         assert all(hit.folded_units == () for hit in answer.hits)
+
+
+_FOLDED_SNIPPET = "The folded section says the vote count moved to the end of the month, after the second recount. " * 2
+
+
+def _one_folding_hit() -> tuple[tuple[SearchHit, ...], SearchResultStatus, NextSteps]:
+    """One card hit folding one section whose snippet is long, with the status and next steps its answer carries."""
+    row = {
+        **_FOLDED_ROWS[0],
+        "snippet": "z" * 300,
+        "folded_units": [{"id": "note.alpha#s1", "hit_level": "section", "snippet": _FOLDED_SNIPPET}],
+    }
+    hits = search_hits((row,), collection="knowledge", knowledge_base="knowledge", hybrid=True)
+    status = search_result_status(hits)
+    return hits, status, search_next_steps(hits, query="example", knowledge_base="knowledge", hybrid=True, status=status, map_collection="knowledge")
+
+
+def _size(hits: tuple[SearchHit, ...], status: SearchResultStatus, steps: NextSteps) -> int:
+    """How many characters the whole answer over `hits` serializes to."""
+    return len(bound_search_result(hits, status=status, next_steps=steps, knowledge_base=None, max_chars=1_000_000).model_dump_json())
+
+
+class TestTheResponseBudgetCutsAFoldedSnippetBeforeDroppingItsUnit:
+    def test_a_folded_unit_that_fits_with_a_shorter_snippet_keeps_a_cut_one(self):
+        hits, status, steps = _one_folding_hit()
+        unit = hits[0].folded_units[0]
+        bare = _size((hits[0].model_copy(update={"folded_units": (unit.model_copy(update={"snippet": ""}),)}),), status, steps)
+
+        answer = bound_search_result(hits, status=status, next_steps=steps, knowledge_base=None, max_chars=bare + 60)
+
+        [kept] = answer.hits[0].folded_units
+        assert kept.id == unit.id
+        assert kept.snippet is not None
+        assert 0 < len(kept.snippet) < len(_FOLDED_SNIPPET)
+        assert kept.snippet.endswith("\u2026")
+        assert answer.hits[0].snippet == "z" * 300
+
+    def test_a_folded_snippet_is_never_cut_to_its_ellipsis_alone(self):
+        hits, status, steps = _one_folding_hit()
+        unit = hits[0].folded_units[0]
+        ellipsis_only = _size((hits[0].model_copy(update={"folded_units": (unit.model_copy(update={"snippet": "\u2026"}),)}),), status, steps)
+
+        answer = bound_search_result(hits, status=status, next_steps=steps, knowledge_base=None, max_chars=ellipsis_only)
+
+        assert all(folded.snippet != "\u2026" for folded in answer.hits[0].folded_units)
+        assert answer.hits[0].snippet == "z" * 300
+
+    def test_a_folded_unit_that_fits_with_no_snippet_at_all_is_dropped_before_any_hit_snippet_is_cut(self):
+        hits, status, steps = _one_folding_hit()
+        alone = _size((hits[0].model_copy(update={"folded_units": ()}),), status, steps)
+
+        answer = bound_search_result(hits, status=status, next_steps=steps, knowledge_base=None, max_chars=alone + 5)
+
+        assert answer.hits[0].folded_units == ()
+        assert answer.hits[0].snippet == "z" * 300
 
 
 # -- every fetch opens a folded unit by its ref ------------------------------------
@@ -464,7 +552,10 @@ class TestASurfaceWithoutFetchIsNotSentToFetch:
         assert "`fetch` one directly" not in description
 
     def test_the_clause_itself(self):
-        assert "`fetch`" not in document_clause(2, can_fetch=False)
+        clause = document_clause(2, can_fetch=False)
+
+        assert "`fetch`" not in clause
+        assert _SNIPPETED in clause
 
 
 _LEGS = pytest.mark.parametrize("search_hybrid", [None, True, False], ids=["either_leg", "hybrid", "keyword"])

@@ -1,7 +1,8 @@
 """`api.search` stops every leg at a budget and reads its numbers from `kb.retrieval_tuning`, clamped to its bounds.
 
 One shared collection holds thirty cards with the same embedding and a 300-character card text. The query text matches
-no card, so every hit comes from the semantic leg. Searches run as `kb_reader`, and the owner changes the tuning row.
+no card, so every hit comes from the semantic leg. Searches run as `kb_reader`, and the owner changes the default
+tuning row.
 
 What this pins:
 
@@ -9,7 +10,7 @@ What this pins:
 * a smaller budget stops the semantic leg, so fewer rows reach the fusion;
 * a weight of zero on a leg scores its hits zero;
 * a snippet length below the bound is held at the bound;
-* the reader can neither read nor change the row, and the row refuses a value that is not a number.
+* the reader can neither read the table nor add a row to it, and a row refuses a value that is not a number.
 """
 
 from __future__ import annotations
@@ -57,12 +58,12 @@ async def reader(admin: asyncpg.Connection, reader_url: str) -> AsyncIterator[as
 
 
 async def _tune(admin: asyncpg.Connection, tuning: str) -> None:
-    """Merge `tuning` into the row."""
-    await admin.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || $1::jsonb WHERE id = 1", tuning)
+    """Merge `tuning` into the default row."""
+    await admin.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || $1::jsonb WHERE collection IS NULL", tuning)
 
 
 async def test_the_row_starts_with_the_defaults(admin: asyncpg.Connection, reader: asyncpg.Connection):
-    tuning = await admin.fetchval("SELECT tuning::text FROM kb.retrieval_tuning WHERE id = 1")
+    tuning = await admin.fetchval("SELECT tuning::text FROM kb.retrieval_tuning WHERE collection IS NULL")
     rows = await reader.fetch(_SEARCH, _VECTOR, _COLLECTION)
 
     assert '"budget": 50' in str(tuning)
@@ -106,6 +107,13 @@ async def test_a_snippet_length_below_the_bound_is_held_at_the_bound(admin: asyn
 async def test_the_reader_can_neither_read_nor_change_the_row(reader: asyncpg.Connection):
     with pytest.raises(asyncpg.InsufficientPrivilegeError):
         await reader.fetch("SELECT * FROM kb.retrieval_tuning")
+    # The reader's sessions are read-only by default, which would refuse the write before any privilege is checked.
+    await reader.execute("BEGIN READ WRITE")
+    try:
+        with pytest.raises(asyncpg.InsufficientPrivilegeError):
+            await reader.execute("INSERT INTO kb.retrieval_tuning (collection, tuning) VALUES ($1, '{}'::jsonb)", _COLLECTION)
+    finally:
+        await reader.execute("ROLLBACK")
 
 
 async def test_the_row_refuses_a_value_that_is_not_a_number(admin: asyncpg.Connection):

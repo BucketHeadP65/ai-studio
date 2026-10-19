@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import json
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from engram.retrieval.domain import SqlResult
-from engram.testing.fakes.gateway import FakeSqlGateway
+from engram.testing.fakes.gateway import FakeSqlGateway, RecordedQuery
 from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
 
 from studio.knowledge_base.cli import _build_mcp_server
@@ -21,6 +22,7 @@ from studio.knowledge_base.settings import KnowledgeBaseSettings
 from tests.unit.knowledge_base.test_cli_serve import _McpServerContainer
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from mcp.types import CallToolResult
@@ -85,3 +87,37 @@ async def test_the_served_search_states_the_cap_on_hits_per_document_the_databas
 
     [tool] = [published for published in listing.tools if published.name == "search"]
     assert "At most 2 hits come from one document" in (tool.description or "")
+
+
+@dataclass
+class _CapsByCollection(FakeSqlGateway):
+    """A gateway answering each knowledge base's cap on hits per document by the collection the read names."""
+
+    caps: dict[str, int] = field(default_factory=dict)
+
+    async def rows(self, sql: str, params: Mapping[str, object] | None = None, *, cap: int = 50) -> SqlResult:
+        if "api.search_hits_per_document" not in sql:
+            return await super().rows(sql, params, cap=cap)
+        self.rows_calls.append(RecordedQuery(sql=sql, params=dict(params or {}), cap=cap))
+        answer = self.caps.get(str((params or {}).get("collection")), 0)
+        return SqlResult(rows=({"hits_per_document": answer},), columns=("hits_per_document",))
+
+
+async def test_each_knowledge_base_reads_its_own_cap_and_bases_that_disagree_state_none(tmp_path: Path) -> None:
+    served = _knowledge_base(tmp_path / "alpha", slug="alpha", facet_keys=("shade",))
+    registered = _knowledge_base(tmp_path / "beta", slug="beta", facet_keys=("weight",))
+    settings_path = tmp_path / "application_settings.json"
+    settings_path.write_text(json.dumps({"knowledge_bases": {"beta": {"path": str(registered)}}}), encoding="utf-8")
+    gateway = _CapsByCollection(result=SqlResult(rows=(), columns=()), caps={"alpha": 2, "beta": 1})
+    container = _McpServerContainer(knowledge_base=KnowledgeBaseSettings(path=served), gateway=gateway)
+
+    server = await _build_mcp_server(container, settings_path=settings_path)
+    async with connect_in_memory(server) as client:
+        await client.initialize()
+        listing = await client.list_tools()
+
+    [tool] = [published for published in listing.tools if published.name == "search"]
+    read = [call.params["collection"] for call in gateway.rows_calls if "api.search_hits_per_document" in call.sql]
+    assert read == ["alpha", "beta"]
+    assert "hits come from one document" not in (tool.description or "")
+    assert "distinct document" not in (tool.description or "")

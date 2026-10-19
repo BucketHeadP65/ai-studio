@@ -11,8 +11,8 @@ signal, while a removed row is never exposure.
 A storage failure, a leaked reference or a size bound raises instead, and the payload never reaches the model.
 A reference is never recorded for a payload that was not stored.
 Every `DeliveredSource` records only its canonical reference, with no content hash and no version.
-A search hit's folded units are pointers that carry no text: a withheld one is removed from its hit like a row, and
-none is ever recorded as a delivered source.
+A withheld unit folded under a kept search hit is removed from that hit like a row, its snippet with it, and no folded
+unit is ever recorded as a delivered source.
 """
 
 from __future__ import annotations

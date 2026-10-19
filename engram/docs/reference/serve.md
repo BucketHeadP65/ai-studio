@@ -51,7 +51,7 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   seed/endpoint ids, the hop bound (`hops`, at most 6, or `max_hops`, at most 8), an optional
   `rel_types` filter, `include_superseded`, and `k`.
 - **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, `rerank_score` when a model
-  re-ranked it, and `folded_units`, the other matching units of its document as `FoldedUnit`s), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
+  re-ranked it, and `folded_units`, the other matching units of its document as `FoldedUnit`s, each with a short snippet), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
   `GraphPathsResult` (ranked multi-hop routes from `find_paths`), `GraphReach` (how far a walk's
   seeds reach, carried on graph results as `reach`), `SchemaDescription` (+ `ObjectInfo` /
   `ColumnInfo`), `StatusReport` (`src/engram/retrieval/domain.py`).
@@ -277,16 +277,17 @@ together), never on the items alone. One fitter does the measuring for all of th
 
 | Budget | Value | What it bounds | Where it is measured |
 |---|---|---|---|
-| `SEARCH_SNIPPET_CHARS` | 480 | One hit's `snippet`, and any `page_title` a bounded result shortens | The generated `api.search` body cuts the excerpt at the tuning row's `snippet_chars` (480 by default, held to 80..2,000), so a raw SQL caller is bounded too. `search_hits` cuts it again at 480 per hit (`src/engram/retrieval/tools.py`) |
+| `SEARCH_SNIPPET_CHARS` | 480 | One hit's `snippet`, one folded unit's `snippet`, and any `page_title` a bounded result shortens | The generated `api.search` body cuts the excerpt at the default tuning row's `snippet_chars` (480 by default, held to 80..2,000), so a raw SQL caller is bounded too. `search_hits` cuts it again at 480 per hit and per folded unit (`src/engram/retrieval/tools.py`) |
 | `SEARCH_RESULT_CHARS` | 12,000 | The complete `SearchResult` a `search` call answers with | `src/engram/retrieval/tools.py` |
 | `GRAPH_RESULT_CHARS` | 16,000 | The complete `GraphResult` and the complete `GraphPathsResult` | `src/engram/retrieval/queries.py` |
 | `SCHEMA_RESULT_CHARS` | 12,000 | The rendered `describe_schema` document, catalog or detail | `src/engram/retrieval/queries.py` |
 | `SQL_CELL_CHARS` | 2,000 | Every string a `run_sql` cell carries, including the strings nested inside a JSON cell | `src/engram/retrieval/sql_tools.py` |
 | `SQL_RESULT_CHARS` | 16,000 | The complete `{"rows": ..., "note": ...}` envelope, its `note` counted in | `src/engram/retrieval/sql_tools.py` |
 
-**Folded units go first.** When a `search` answer does not fit whole, its hits' folded units are dropped one at a
-time, from the lowest-ranked hit's last one up, before any title or snippet is cut or any hit is left out. A folded
-unit is a pointer, never content, so losing one loses no text the model would have read.
+**Folded units go first.** When a `search` answer does not fit whole, its hits' folded units give way one at a time,
+from the lowest-ranked hit's last one up: each keeps the longest snippet that lets the answer fit, never its ellipsis
+alone, keeps no snippet when only that fits, and is dropped when not even that fits. Only after every folded unit has
+given way is any hit's title or snippet cut or any hit left out.
 
 **Identity never shortens.** Only display text is cut: a hit's `page_title` and `snippet`, a graph
 node's `title`, the strings inside a `run_sql` cell. An `id`, a `ref`, a `provenance_ref` and a score
@@ -374,10 +375,14 @@ the name. Each distinct text is embedded once, all of them within 10 s
 A statement that passes `query_vec` or `query_model` itself is refused, since only the rewrite writes
 them.
 
-**Search legs are bounded and tuned from one row** (engram ADR-0048). Every keyword leg ranks by its
+**Search legs are bounded and tuned from a default row and one row per knowledge base** (engram ADR-0048, amended by
+migration 0071). Every keyword leg ranks by its
 BM25 index and every semantic leg by exact distance, and each stops at the leg budget before the fusion.
-`api.search` reads its numbers from `kb.retrieval_tuning`, a one-row table (`id = 1`) the reader cannot
-read or write, as its owner, and holds each to a bound generated into the function:
+`api.search` reads its numbers from `kb.retrieval_tuning`, a table the reader cannot read or write, as its owner,
+and holds each to a bound generated into the function. The table holds a default row, whose `collection` is null, and
+at most one row per knowledge base, keyed by its collection (migration 0071). A knowledge base's row may set only
+`max_hits_per_document` and `folded_snippet_chars`, and what it sets wins over the default row for that knowledge
+base's hits, in a search over one knowledge base or over every one. Every other number comes from the default row:
 
 | Key | Default | Bound | What it sets |
 |---|---|---|---|
@@ -386,11 +391,16 @@ read or write, as its owner, and holds each to a bound generated into the functi
 | `k_ceiling` | 50 | 1..50 | The most rows one search returns |
 | `snippet_chars` | 480 | 80..2000 | The longest snippet |
 | `rows_per_group` | 3 | 1..50 | The most hits one page (its card, sections and claims) or one source (its raw chunks) keeps |
-| `max_hits_per_document` | 1 | 0..50, 0 or null keeping every hit | The most hits one document keeps, the next three folded under its best hit |
+| `max_hits_per_document` | 1 | 0..50, 0 or null keeping every hit | The most hits one document keeps, the next three folded under its best hit. A knowledge base's row may set it |
+| `folded_snippet_chars` | 160 | 20..2000, never longer than `snippet_chars` | The longest snippet a folded unit carries. A knowledge base's row may set it |
 | `weights` | `{}` | 0..10 each | A weight per tier and leg, keyed `<tier>:<lexical\|semantic>` (`card:semantic`), 1 when not named |
 
-The owner changes a number with an `UPDATE kb.retrieval_tuning SET tuning = tuning || '{...}'`, and a
-check constraint refuses a value that is not a number (`max_hits_per_document` also takes null). Three
+The owner changes a number for the whole database in the default row, with
+`UPDATE kb.retrieval_tuning SET tuning = tuning || '{...}' WHERE collection IS NULL`, and sets one knowledge base's
+cap or folded snippet length in its own row, naming its collection:
+`INSERT INTO kb.retrieval_tuning (collection, tuning) VALUES ('<collection>', '{"max_hits_per_document": 2}') ON CONFLICT (collection) DO UPDATE SET tuning = kb.retrieval_tuning.tuning || EXCLUDED.tuning`.
+Deleting a knowledge base's row puts it back on the default row. Check constraints refuse a value that is not a number
+(`max_hits_per_document` also takes null), a second default row, and a knowledge base's row naming any other key. Three
 rank policies run after the fusion: a card whose title equals the query, ignoring case and surrounding
 spaces, goes first when no other card holds that title, outside its page's count, every other hit keeps
 at most `rows_per_group` rows per page or source, and then each document keeps at most
@@ -398,17 +408,24 @@ at most `rows_per_group` rows per page or source, and then each document keeps a
 (migration 0070). A unit's document is the source it was made from (`kb.pages.source_id`, or a raw
 chunk's own source) when it has one, otherwise its own page, so a page made from a source, its sections,
 its claims and the source's raw chunks are one document. The next three matching units of a document
-come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level}` best
-first, and every other hit carries an empty array. `search_hits` gives each folded unit the ref a hit of
+come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level, snippet}` best
+first, and every other hit carries an empty array. A folded unit's snippet is its own snippet cut at the last whole
+word inside `folded_snippet_chars`, with an ellipsis, or cut mid-word when no word ends inside that length, so it is
+never longer than a hit's snippet (migration 0071). `search_hits` bounds it again at 480 characters, as it does a
+hit's snippet, and gives each folded unit the ref a hit of
 its level carries (`section:<collection>/<id>`, `page:` for a card, `unit:` for a claim or a raw chunk),
 so the agent fetches one without searching again: every `fetch`, flat or leveled, over one knowledge base or routed
 over several, opens that ref. A surface that serves `search` without `fetch` (an `only` set naming `search` alone)
 words its description without sending the agent to `fetch` at all, and the next steps of its search answers name no
-`fetch` either: they offer judging the hits by their snippets and searching again, and no map. `api.search_hits_per_document()` answers the cap the search
-applies, read from the same row over the same default and bound, 0 when every hit is kept. A host reads it once, when it
-opens a knowledge base (`read_hits_per_document`, which reads 0 when the database cannot answer), and every `search`
-description states it: a cap of 1 says each hit is a distinct document, a higher cap says how many hits one document may
-have, and 0 says nothing about documents. When knowledge bases behind one tool disagree on the cap, the description
+`fetch` either: they offer judging the hits by their snippets and searching again, and no map.
+`api.search_hits_per_document(collection)` answers the cap the search applies to one knowledge base, read from its own
+row, else the default row, over the same default and bound, 0 when every hit is kept. With no collection it answers for
+the reader session's own knowledge base. For a knowledge base the session cannot see (`api.visible_collection`) it reads
+the default row only, so a reader learns nothing of a private knowledge base's own row. A host reads it once for each knowledge base, when it opens one
+(`read_hits_per_document`, which reads 0 when the database cannot answer, as below migration 0071, whose function takes
+no collection), and every `search` description states it: a cap of 1 says each hit is a distinct document, a higher cap
+says how many hits one document may have, and 0 says nothing about documents. Where it states a cap, it also says each
+folded unit carries a short snippet of the text it matched. When knowledge bases behind one tool disagree on the cap, the description
 states none. A process reads the cap once, so after the owner changes it a running process states the old cap until it
 restarts. The document sentences go into the shipped description only. A tuned description from an active policy
 (`_meta/active-policy.yaml`) replaces that whole text, so it says about documents whatever its own text says.
