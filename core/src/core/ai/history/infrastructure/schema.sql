@@ -1,6 +1,6 @@
 -- ---------------------------------------------------------------------------
 -- The chat record's tables: every pydantic-ai message once, every step as entries.
--- Applied with `core.ai.history.contracts.create_record_schema`. Idempotent: every statement creates or adds only what is missing.
+-- Applied with `core.ai.history.contracts.create_record_schema`. Idempotent: every statement creates only what is missing.
 -- A conversation is an id here. The application owns the conversations table and the foreign
 -- keys to it, so deleting a conversation and taking the record with it is the application's doing.
 -- ---------------------------------------------------------------------------

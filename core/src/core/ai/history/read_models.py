@@ -32,7 +32,7 @@ class RunRow:
     started_at: datetime
     metadata: Jsonb[dict[str, str]]
     registration_id: str | None
-    """The durable registration that claimed the run, `None` for a run registered before registrations were kept."""
+    """The durable registration that claimed the run, `None` for a run no durable registration claimed."""
 
 
 @dataclass(frozen=True)
