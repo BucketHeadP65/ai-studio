@@ -35,15 +35,7 @@ from pydantic import JsonValue, TypeAdapter, ValidationError
 from wireup import Injected
 from wireup.integration.fastapi import WireupRoute
 
-from harness.domain.contracts import (
-    DEFAULT_GATE_MODE,
-    GATE_MODES,
-    UNKNOWN_SESSION,
-    AdmissionRefused,
-    admitted_arguments,
-    effective_gate_mode,
-    presentation_of,
-)
+from harness.domain.contracts import DEFAULT_GATE_MODE, GATE_MODES, UNKNOWN_SESSION, AdmissionRefused, admitted_arguments, presentation_of
 from harness.features.running import service
 from harness.features.running.api_models import (
     ApproveRequest,
@@ -229,7 +221,7 @@ _REVIEW_SOURCE = "app:harness"
 def run_automode(session: Runtime, body: AutomodeRequest, run: RunSettings) -> JSONResponse:
     """Set `session`'s live automode on or off.
 
-    It sets `gate_mode` together with `auto_approve`, as a launch does. It is refused with a 409 on
+    On sets `gate_mode` to `"auto"` and off sets it to `"wait"`. It is refused with a 409 on
     the Temporal engine, where automode is chosen at launch, and when nothing is running.
 
     Args:
@@ -340,7 +332,7 @@ def _no_such_session() -> JSONResponse:
     return JSONResponse({"ok": False, "message": UNKNOWN_SESSION}, status_code=404)
 
 
-async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflict's own shape to validate)
+async def _start(  # noqa: PLR0911 (each refusal a launch can meet is its own early return with its own status)
     session: Runtime, body: RunRequest, run: RunCollaborators
 ) -> JSONResponse:
     """Start `body`'s workflow in `session` once the library, the environment and the arguments agree, or refuse."""
@@ -348,10 +340,6 @@ async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflic
         return JSONResponse({"ok": False, "message": f"{session.active.workflow_id} is still running"}, status_code=409)
     if (paused := session.active.paused_run_refusal()) is not None:
         return JSONResponse({"ok": False, "message": paused}, status_code=409)
-    try:
-        resolved_mode = effective_gate_mode(body.gate_mode, auto_approve_gates=body.auto_approve_gates)
-    except ValueError as exc:
-        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
     try:
         spec = await session.library.fetch_workflow(body.workflow_id)
     except (LibraryError, ValidationError) as exc:
@@ -378,7 +366,7 @@ async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflic
             spec=spec,
             workflow_id=body.workflow_id,
             params=arguments,
-            gate_mode=resolved_mode,
+            gate_mode=body.gate_mode,
             run=run.run_settings,
             run_title=body.run_title,
         )

@@ -38,7 +38,7 @@ from harness.domain.events import (
     session_spans,
 )
 from harness.domain.exceptions import CardUnreadableError
-from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode, effective_gate_mode
+from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode
 from harness.domain.page_context import PageContext, compose_prompt, strip_page_context
 from harness.domain.ports import (
     BRIEFING_ONLY_BUDGET,
@@ -130,7 +130,6 @@ __all__ = [
     "card_readiness",
     "compose_prompt",
     "decode",
-    "effective_gate_mode",
     "effective_presentation",
     "encode",
     "last_forgotten_at",

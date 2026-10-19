@@ -28,8 +28,6 @@ class ScheduleIn(BaseModel):
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
     gate_mode: GateMode = "wait"
     """`wait`, `orchestrate`, or `auto`."""
-    auto_approve_gates: bool = False
-    """Kept for old callers. Sending it with a `gate_mode` it disagrees with is refused."""
     capacity_key: str | None = None
     """A name shared with other schedules to cap how many of them run at once."""
     capacity_limit: int | None = None
@@ -54,8 +52,6 @@ class SchedulePatch(BaseModel):
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
     gate_mode: GateMode | None = None
     """`wait`, `orchestrate`, or `auto`."""
-    auto_approve_gates: bool | None = None
-    """Kept for old callers. Sending it with a `gate_mode` it disagrees with is refused."""
     capacity_key: str | None = None
     """A name shared with other schedules to cap how many of them run at once."""
     capacity_limit: int | None = None
@@ -83,7 +79,6 @@ class ScheduleOut(BaseModel):
     enabled: bool
     gate_policy: str
     gate_mode: GateMode
-    auto_approve_gates: bool
     capacity_key: str | None
     capacity_limit: int | None
     blackout: str | None

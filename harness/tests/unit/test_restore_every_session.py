@@ -806,7 +806,7 @@ async def test_the_pause_shows_the_logged_gate_mode_the_start_time_and_the_finis
     _pool_after, runtime, _steps = await _restored(after, session_id)
 
     assert runtime.active.started_at == logged.started_at
-    assert (runtime.active.gate_mode, runtime.active.auto_approve) == ("auto", True)
+    assert runtime.active.gate_mode == "auto"
     assert {"l1", "l2", "r1", "r2"} <= set(runtime.active.progress.done)
 
 
@@ -944,7 +944,6 @@ async def test_a_person_paused_run_resumes_under_the_live_gate_mode_not_the_logg
     )
     await asyncio.wait_for(steps.entered.wait(), timeout=5)
     runtime.active.gate_mode = "wait"
-    runtime.active.auto_approve = False
     assert await service.pause(runtime)
     steps.release.set()
     runtime.library = _BranchesLibrary()

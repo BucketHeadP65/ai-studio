@@ -2061,3 +2061,49 @@ class TestCutPlansMigration:
         run_downgrade(target_url, "0068")
 
         assert not await _relation_exists(target_url, "kb.cut_plans")
+
+
+class TestScheduleGateModeOnlyMigration:
+    """Revision 0071: a schedule's gate behaviour lives in `gate_mode` alone, and `auto_approve_gates` folds into it and goes."""
+
+    def test_the_revision_sits_directly_on_0070(self) -> None:
+        module = _load_migration_module("0071")
+
+        assert module.revision == "0071"
+        assert module.down_revision == "0070"
+
+    async def test_the_switch_folds_into_gate_mode_and_the_downgrade_derives_it_back(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0070")
+        comment_query = "SELECT col_description('public.schedules'::regclass, attnum) FROM pg_attribute WHERE attrelid = 'public.schedules'::regclass AND attname = 'gate_mode'"
+        comment_before = await _rows(target_url, comment_query)
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.executemany(
+                "INSERT INTO public.schedules (id, workflow_id, cadence, gate_mode, auto_approve_gates)"
+                " VALUES (gen_random_uuid(), $1, 'every 1h', $2, $3)",
+                [("wf.switched", "wait", True), ("wf.auto", "auto", True), ("wf.waiting", "wait", False), ("wf.orchestrated", "orchestrate", False)],
+            )
+        finally:
+            await connection.close()
+
+        run_upgrade(target_url, "0071")
+
+        assert "auto_approve_gates" not in await _column_names(target_url, "public.schedules")
+        assert await _rows(target_url, "SELECT workflow_id, gate_mode FROM public.schedules ORDER BY workflow_id") == [
+            ("wf.auto", "auto"),
+            ("wf.orchestrated", "orchestrate"),
+            ("wf.switched", "auto"),
+            ("wf.waiting", "wait"),
+        ], "a row whose switch said auto runs auto, and every other row keeps its mode"
+        assert "auto_approve_gates" not in str(await _rows(target_url, comment_query))
+
+        run_downgrade(target_url, "0070")
+
+        assert await _rows(target_url, "SELECT workflow_id, gate_mode, auto_approve_gates FROM public.schedules ORDER BY workflow_id") == [
+            ("wf.auto", "auto", "True"),
+            ("wf.orchestrated", "orchestrate", "False"),
+            ("wf.switched", "auto", "True"),
+            ("wf.waiting", "wait", "False"),
+        ]
+        assert await _rows(target_url, comment_query) == comment_before

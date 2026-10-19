@@ -41,7 +41,7 @@ from pydantic_ai.messages import ModelMessagesTypeAdapter
 
 from harness.adapters.contracts import hold_run_writes
 from harness.domain import contracts as session_events
-from harness.domain.contracts import SessionType, effective_gate_mode, session_type_of
+from harness.domain.contracts import SessionType, session_type_of
 from harness.features.running.approval import ChatApproval, combined_orchestrated_gates
 from harness.features.running.domain.ended_run import EndedRun, RunArchiveRecord, checked_outcome, jsonable_values
 from harness.features.running.domain.progress import GateVerdict, RunTopics, Watchers
@@ -121,7 +121,6 @@ async def start(  # noqa: PLR0913 (a launch's knobs are one flat contract, a par
     gate_timeout: float | None = DEFAULT_GATE_TIMEOUT,
     runner: str = DEFAULT_RUNNER,
     gate_mode: GateMode = "wait",
-    auto_approve_gates: bool = False,
     run_title: str = "",
 ) -> None:
     """Start a run on whichever engine this deployment selected.
@@ -145,29 +144,25 @@ async def start(  # noqa: PLR0913 (a launch's knobs are one flat contract, a par
             identity.
         gate_mode: What a person gate does. `"wait"` holds it, `"auto"` passes it with nobody asked,
             and `"orchestrate"` hands it to this run's own orchestrator.
-        auto_approve_gates: Kept for old callers. True runs the gates as `"auto"`, and pairing it with
-            `gate_mode="orchestrate"` is refused.
         run_title: What this run is called in front of a person, in the words of whoever started it.
             `""` is a run nobody named, and nothing here invents one.
 
     Raises:
-        ValueError: `gate_mode` and `auto_approve_gates` were both given and disagree.
         ArgumentRefusedError: one argument its parameter's own schema will not admit, on either
             engine. A first-party selection is not checked here, but by whichever entry resolved
             the card.
-        AutomodeUnavailableError: the resolved mode is `"orchestrate"` and this deployment runs on
+        AutomodeUnavailableError: `gate_mode` is `"orchestrate"` and this deployment runs on
             Temporal, which has no orchestrated gate.
         RunEngineUnavailableError: this deployment runs on Temporal and nothing served the
             configured address when the process composed itself. It never falls back to the
             in-process engine.
     """
-    resolved = effective_gate_mode(gate_mode, auto_approve_gates=auto_approve_gates)
     params = normalize_arguments(spec, params)
     if run.run_engine == "temporal":
         if not engine_reachable():
             msg = f"nothing serves Temporal at {run.temporal_address}, so this deployment cannot start a durable run."
             raise RunEngineUnavailableError(msg)
-        if resolved == "orchestrate":
+        if gate_mode == "orchestrate":
             msg = "this deployment runs on Temporal, where an orchestrated gate has no counterpart yet. Start it in wait or auto mode."
             raise AutomodeUnavailableError(msg)
         # The durable engine takes no memo. A durable run never stops, so it has nothing to resume.
@@ -179,7 +174,7 @@ async def start(  # noqa: PLR0913 (a launch's knobs are one flat contract, a par
             spec=spec,
             workflow_id=workflow_id,
             params=params,
-            auto_approve_gates=resolved == "auto",
+            auto_approve_gates=gate_mode == "auto",
             runner=runner,
             run_title=run_title,
         )
@@ -194,7 +189,7 @@ async def start(  # noqa: PLR0913 (a launch's knobs are one flat contract, a par
         memo=memo,
         gate_timeout=gate_timeout,
         runner=runner,
-        gate_mode=resolved,
+        gate_mode=gate_mode,
         run_title=run_title,
     )
 
@@ -212,7 +207,6 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
     gate_timeout: float | None = DEFAULT_GATE_TIMEOUT,
     runner: str = DEFAULT_RUNNER,
     gate_mode: GateMode = "wait",
-    auto_approve_gates: bool = False,
     run_title: str = "",
     session_kind: SessionType | None = None,
 ) -> None:
@@ -236,19 +230,13 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
             spent the gate reaches it spent.
         gate_timeout: How long a gate waits for a person before rejecting. `None` waits forever.
         runner: The launcher the evidence record and the archive name.
-        gate_mode: What a person gate does, resolved together with `auto_approve_gates` exactly as
-            `start` resolves them.
-        auto_approve_gates: Kept for old callers. True runs the gates as `"auto"`, and pairing it with
-            `gate_mode="orchestrate"` is refused.
+        gate_mode: What a person gate does. `"wait"` holds it, `"auto"` passes it with nobody asked,
+            and `"orchestrate"` hands it to this run's own orchestrator.
         run_title: What this run is called. It is written into the run log, so a resume or a restore
             of it carries the same name.
         session_kind: The kind of session the run log names the run as living in. `None` names the kind
             of `session`. A restore passes the logged kind, so a run adopted by another session keeps its own.
-
-    Raises:
-        ValueError: `gate_mode` and `auto_approve_gates` were both given and disagree.
     """
-    resolved = effective_gate_mode(gate_mode, auto_approve_gates=auto_approve_gates)
     started_at = datetime.now(UTC)
     run_id = f"{started_at.strftime('%Y%m%dT%H%M%S%f')}-{uuid4().hex[:8]}"
     records.spend.begin(
@@ -265,7 +253,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
         memo=memo,
         carried=carried,
         run_title=run_title,
-        gate_mode=resolved,
+        gate_mode=gate_mode,
         gate_timeout=gate_timeout,
         runner=runner,
         session_kind=session_kind or session_type_of(session.session_kind),
@@ -400,8 +388,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
     session.active.progress.reset()
     session.active.values = run_log.state.values
     session.active.started_at = started_at.isoformat()
-    session.active.gate_mode = resolved
-    session.active.auto_approve = resolved == "auto"
+    session.active.gate_mode = gate_mode
     session.active.gate_timeout = approval.timeout_seconds
     session.active.auto_gates = approval.auto_gates
     session.active.orchestrated_gates = approval.orchestrated_gates
@@ -610,7 +597,7 @@ def _run_id(session: Runtime) -> str:
 def set_session_automode(session: Runtime, run: RunSettings, *, on: bool) -> None:
     """Turn the live automode of the run in `session` on or off.
 
-    It sets `gate_mode` together with `auto_approve`, as a launch does.
+    On sets `gate_mode` to `"auto"`, off sets it to `"wait"`.
 
     Args:
         session: The session whose run is changed.
@@ -626,7 +613,6 @@ def set_session_automode(session: Runtime, run: RunSettings, *, on: bool) -> Non
     if session.active.task is None or session.active.task.done():
         msg = "nothing is running"
         raise RunStateRefusedError(msg)
-    session.active.auto_approve = on
     session.active.gate_mode = "auto" if on else "wait"
 
 

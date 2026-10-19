@@ -286,7 +286,6 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
     session.active.values = run_log.state.values
     session.active.started_at = started_at.isoformat()
     session.active.gate_mode = "auto" if auto_approve_gates else "wait"
-    session.active.auto_approve = auto_approve_gates
     session.active.gate_timeout = approval.timeout_seconds
     session.active.auto_gates = approval.auto_gates
     session.active.orchestrated_gates = approval.orchestrated_gates

@@ -45,7 +45,6 @@ class FakeSchedules:
             "enabled": changes.enabled,
             "gate_policy": changes.gate_policy,
             "gate_mode": changes.gate_mode,
-            "auto_approve_gates": changes.auto_approve_gates,
             "capacity_key": changes.capacity_key,
             "capacity_limit": changes.capacity_limit,
             "blackout": changes.blackout,

@@ -262,13 +262,13 @@ async def test_a_schedule_fires_the_newest_live_version_of_its_workflow(registry
     await _settle(session.active.task)
 
 
-async def test_a_schedules_own_auto_approve_gates_crosses_the_gate_unattended(registry: StepRegistry, quarterly_report: Workflow, tmp_path: Path) -> None:
+async def test_a_schedules_own_auto_gate_mode_crosses_the_gate_unattended(registry: StepRegistry, quarterly_report: Workflow, tmp_path: Path) -> None:
     """A schedule's own setting reaches the session: nobody is watching a cron fire."""
     records = records_under(tmp_path)
     store = FakeWorkflowStore(specs={"wf.gated": quarterly_report})
     pool = SessionPool(_runtime(registry, store))
     schedules = FakeSchedules()
-    schedule = _schedule(workflow_id="wf.gated", auto_approve_gates=True)
+    schedule = _schedule(workflow_id="wf.gated", gate_mode="auto")
     await schedules.insert(schedule)
 
     await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=RunCollaborators(records=records, topics=FakeBroadcaster(), run_settings=RunSettings()), now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
@@ -276,7 +276,7 @@ async def test_a_schedules_own_auto_approve_gates_crosses_the_gate_unattended(re
     after = await schedules.get(schedule.id)
     assert after is not None
     session = await pool.get(after.session_id)
-    assert session.active.auto_approve is True
+    assert session.active.gate_mode == "auto"
     task = session.active.task
     assert task is not None
     await task

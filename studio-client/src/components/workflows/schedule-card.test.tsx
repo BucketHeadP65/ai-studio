@@ -31,7 +31,6 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
     enabled: true,
     gate_policy: "wait",
     gate_mode: "wait",
-    auto_approve_gates: false,
     capacity_key: null,
     capacity_limit: null,
     blackout: null,

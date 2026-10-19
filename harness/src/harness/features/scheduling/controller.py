@@ -108,7 +108,6 @@ class SchedulingController:
                 cadence=body.cadence,
                 gate_policy=body.gate_policy,
                 gate_mode=body.gate_mode,
-                auto_approve_gates=body.auto_approve_gates,
                 capacity_key=body.capacity_key,
                 capacity_limit=body.capacity_limit,
                 blackout=body.blackout,

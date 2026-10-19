@@ -29,9 +29,6 @@ class RunRequest(BaseModel):
     """`"wait"` holds a person gate for a person, `"auto"` passes every gate with nobody asked,
     `"orchestrate"` hands a person gate to this run's own orchestrator instead of waiting for a
     person. A declared orchestrator gate decides the same way under every one of the three."""
-    auto_approve_gates: bool = False
-    """Kept for old callers. `True` means the same as `gate_mode="auto"`, and a request where the
-    two disagree is refused."""
 
 
 class SteerStepIn(BaseModel):

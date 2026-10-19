@@ -129,17 +129,14 @@ class ActiveRun:
     pending: PendingReview | None = None
     decision: asyncio.Future[GateVerdict] | None = None
     """Resolved by the person clicking Approve or Reject, and awaited inside the gate."""
-    auto_approve: bool = False
-    """Whether every gate this run reaches passes itself, with nobody asked. The record never counts
-    such a pass as human approval. Set at launch from the launcher's own choice (the Run button's
-    checkbox, a schedule's own setting, the agent's own argument) and changeable mid-run through
-    `/api/run/automode`, so a gate reads it live off this field, never off a value the approval was
-    built with. Kept for old callers. It is true exactly when `gate_mode` is `"auto"`."""
     gate_mode: GateMode = "wait"
-    """The mode this run's own gates decide under. `"wait"` holds a person gate, `"auto"` passes it
-    as `auto_approve` does, and `"orchestrate"` hands it to this run's own orchestrator. Only a gate
-    that would otherwise wait on a person reads it. A declared orchestrator gate decides the same way
-    whatever this holds. Set at launch and read live, like `auto_approve`."""
+    """The mode this run's own gates decide under. `"wait"` holds a person gate, `"auto"` passes every
+    gate itself with nobody asked, and `"orchestrate"` hands a person gate to this run's own
+    orchestrator. The record never counts an automatic pass as a person's approval. Set at launch
+    from the launcher's own choice (the Run button, a schedule's own setting, the agent's own
+    argument) and changeable mid-run through `/api/run/automode`, so a gate reads it live off this
+    field, never off a value the approval was built with. A declared orchestrator gate decides the
+    same way whatever this holds."""
     gate_timeout: float | None = 900.0
     """How long this run's own gates wait before giving up, the same figure the run's approval was
     built with. A declared orchestrator gate reads it to bound how long its decider waits for a busy

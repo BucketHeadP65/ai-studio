@@ -123,7 +123,7 @@ async def test_automode_reaches_the_durable_engine_as_a_request_flag(session: Ru
         spec=quarterly_report,
         workflow_id="wf.report",
         params={"quarter": "Q2"},
-        auto_approve_gates=True,
+        gate_mode="auto",
     )
     await service.start(
         session, records=records, topics=FakeBroadcaster(), run=on_temporal, spec=quarterly_report, workflow_id="wf.report", params={"quarter": "Q2"}
@@ -167,11 +167,10 @@ async def test_a_durable_launch_leaves_the_session_in_the_mode_it_started_with(s
         spec=quarterly_report,
         workflow_id="wf.report",
         params={"quarter": "Q2"},
-        auto_approve_gates=True,
+        gate_mode="auto",
     )
 
     assert session.active.gate_mode == "auto"
-    assert session.active.auto_approve is True
     assert not session.active.paused_by_restart
     assert session.active.run_id == "run-abc"
     spend = records.spend.read("run-abc", "wf.report")

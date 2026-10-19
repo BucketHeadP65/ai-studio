@@ -31,7 +31,7 @@ A run behaves identically whichever plugin reached it. History and the archive a
 history is keyed by workflow and run id, not by which session happened to start it.
 
 ```
-POST   /api/run                {"workflow_id", "arguments", "run_title"?, "gate_mode"?, "auto_approve_gates"?}
+POST   /api/run                {"workflow_id", "arguments", "run_title"?, "gate_mode"?}
                                                                                        -> {"ok": true, "running": id} | 409 | 404 | 400
 POST   /api/run/automode        {"on": bool}                                        -> {"ok": true, "auto_approve": bool} | 409
 POST   /api/run/pause                                                                -> {"ok": true, "paused": id} | 409
@@ -1186,10 +1186,9 @@ A run's own gates decide under one of three modes, `GateMode = "wait" | "orchest
 steps a `PersonGate` waiting for a person exactly as before. `"auto"` is automode, passing every gate the run reaches
 with nobody asked. `"orchestrate"` hands a `PersonGate` to this run's own orchestrator instead of leaving it waiting.
 Set at launch (`RunRequest.gate_mode` on `POST /api/run` or `run_workflow`, a schedule's own `gate_mode`) or flipped
-mid-run via `POST /api/run/automode {"on": bool}` (which sets `gate_mode` to `"auto"` or `"wait"` alongside the legacy
-`auto_approve` flag, so the two read as one fact rather than two that could disagree). `auto_approve_gates: true` is
-the legacy spelling of `gate_mode: "auto"` and is still honoured everywhere. Sending it alongside an explicit
-`gate_mode: "orchestrate"` on the same request is refused in words as two different gate behaviors at once. A
+mid-run via `POST /api/run/automode {"on": bool}` (which sets `gate_mode` to `"auto"` or `"wait"`, and answers with
+the `auto_approve` it now reads, derived from `gate_mode`). The agent's own `run_workflow` tool takes one switch,
+`auto_approve_gates`, that launches in `"auto"` when true and in `"wait"` otherwise. A
 workflow may also author an `orchestrator-gate` node in the graph itself, naming its own review brief for this run's
 orchestrator to decide against. That gate is answered the same way under every one of the three modes. A run's
 `gate_mode` only changes what happens to a `PersonGate`, the one kind that would otherwise wait on a person.
@@ -1214,10 +1213,9 @@ were actually seen by a person, which passed themselves, and which this run's ow
 
 ```
 GET    /api/schedules                                                     -> {"schedules": [ScheduleOut, ...]}
-POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?, "auto_approve_gates"?}
+POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?}
                                                                             -> {"schedule": ScheduleOut} (201) | 404 | 400
-PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?,
-                                   "auto_approve_gates"?}
+PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?}
                                                                             -> {"schedule": ScheduleOut} | 404 | 400
 DELETE /api/schedules/{id}                                                 -> {"ok": true} | 404
 POST   /api/schedules/{id}/run-now                                        -> {"ok": true, "outcome": str} | 404
@@ -1235,14 +1233,12 @@ event id is recorded in `coordination.event_deliveries` of the workflow library'
 library cannot read answers 503, records nothing, and the studio delivers again.
 
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
-`gate_mode`, `auto_approve_gates`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
+`gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
 `live`: where its runner session's run stands right now (`"running" | "paused" | "waiting"`, or `null` when nothing is
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
 workflow the row names (the library's `current`), resolved on every read and every fire. The row keeps the id it was
-written with. `gate_mode` and `auto_approve_gates` are
-kept in agreement at rest (alembic `0030` adds the column beside the pre-existing flag). A patch sending either one
-derives and writes both, the same `effective_gate_mode` the run plugins resolve through.
+written with. `gate_mode` is the one stored gate switch (alembic `0071` folded the earlier flag into it).
 
 `spend_today_usd` and `spend_week_usd` are `schedule_spend`'s own two figures (`features/running/spend.py`), computed
 fresh the same way as `live` rather than stored. Each counts only a fire whose spend record names this schedule's own

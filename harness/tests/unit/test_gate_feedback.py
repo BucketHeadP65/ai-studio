@@ -153,7 +153,7 @@ async def test_a_gate_nobody_answered_is_refused_by_the_deadline_and_says_so(tmp
 async def test_automode_crosses_the_gate_with_no_decision_future(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """Automode answers `review` itself: nothing waits, and the gate's own count says so."""
     session = _session(registry, tmp_path)
-    session.active.auto_approve = True
+    session.active.gate_mode = "auto"
     approval = ChatApproval(session=session, workflow="wf.gated", spec=quarterly_report)
     assert (await approval.review("approve", "the draft")).source == "auto"
     assert session.active.decision is None
@@ -167,7 +167,7 @@ async def test_an_automode_run_attests_the_gate_as_auto_not_approved(quarterly_r
     records = records_under(tmp_path)
     session = _session(registry, tmp_path)
     session.session_id = "sess-automode"
-    service.launch(session, records=records, topics=FakeBroadcaster(), spec=quarterly_report, workflow_id="wf.automode", params={"quarter": "Q2"}, auto_approve_gates=True)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=quarterly_report, workflow_id="wf.automode", params={"quarter": "Q2"}, gate_mode="auto")
     task = session.active.task
     assert task is not None
     await task
@@ -238,7 +238,7 @@ async def test_the_automode_endpoint_flips_mid_run_and_refuses_when_idle(tmp_pat
         flipped = await client.post("/api/run/automode", json={"on": True})
         assert flipped.status_code == 200
         assert flipped.json() == {"ok": True, "auto_approve": True}
-        assert pool.default.active.auto_approve is True
+        assert pool.default.active.gate_mode == "auto"
 
         state = await client.get("/api/run/state")
         assert state.json()["auto_approve"] is True, "the poll must see the same flag the flip just set"

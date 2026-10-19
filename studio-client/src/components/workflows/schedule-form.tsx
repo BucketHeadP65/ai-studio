@@ -114,9 +114,7 @@ export interface ScheduleFormPayload {
   arguments: Record<string, JsonValue>;
   cadence: string;
   gatePolicy: string;
-  // Who decides a gate this schedule's own run reaches. Posted as `gate_mode`; the legacy
-  // `auto_approve_gates` field stays in `schedulesApi`'s own request shapes for compatibility,
-  // but this form no longer sends it.
+  // Who decides a gate this schedule's own run reaches, posted as `gate_mode`.
   gateMode: GateMode;
   capacityKey: string | null;
   capacityLimit: number | null;

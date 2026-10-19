@@ -18,14 +18,7 @@ from core.ai.workflows.contracts import LibraryError, unsatisfied_parameters, va
 from core.observability import get_logger
 from pydantic import ValidationError
 
-from harness.domain.contracts import (
-    AdmissionRefused,
-    SessionRenamed,
-    admitted_arguments,
-    effective_gate_mode,
-    presentation_of,
-    selected_knowledge_bases,
-)
+from harness.domain.contracts import AdmissionRefused, SessionRenamed, admitted_arguments, presentation_of, selected_knowledge_bases
 from harness.features.running import contracts as running
 from harness.features.scheduling.domain import (
     AfterRunCadence,
@@ -164,7 +157,6 @@ async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollabor
             gate_timeout=gate_wait_seconds(schedule.gate_policy),
             runner=running.schedule_runner(str(schedule.id)),
             gate_mode=schedule.gate_mode,
-            auto_approve_gates=schedule.auto_approve_gates,
         )
     except running.RunEngineUnavailableError as exc:
         _logger.warning("schedule {schedule} found no engine: {reason}", schedule=str(schedule.id), reason=str(exc))
@@ -240,17 +232,6 @@ def _restored_next_fire(held: Schedule, changes: ScheduleUpdate, now: datetime) 
     if held.next_run_at is not None:
         return None
     return next_after(parse_cadence(changes.cadence if changes.cadence is not None else held.cadence), now)
-
-
-def _patched_gate_mode(changes: ScheduleUpdate) -> tuple[GateMode | None, bool | None]:
-    """The resolved gate mode and `auto_approve_gates` of a change, or two `None`s when it sets neither."""
-    if changes.gate_mode is None and changes.auto_approve_gates is None:
-        return None, None
-    resolved = effective_gate_mode(
-        changes.gate_mode if changes.gate_mode is not None else "wait",
-        auto_approve_gates=changes.auto_approve_gates if changes.auto_approve_gates is not None else changes.gate_mode == "auto",
-    )
-    return resolved, resolved == "auto"
 
 
 def _cadence_or_none(text: str) -> Cadence | None:
@@ -374,7 +355,6 @@ class Scheduler:
         cadence: str,
         gate_policy: str,
         gate_mode: GateMode,
-        auto_approve_gates: bool,
         capacity_key: str | None,
         capacity_limit: int | None,
         blackout: str | None,
@@ -384,7 +364,7 @@ class Scheduler:
     ) -> Schedule:
         """Add a schedule after checking its workflow, its arguments and every setting.
 
-        The checks run in this order: the workflow, its required parameters, its arguments, the gate mode, the cadence, the gate policy, the blackout.
+        The checks run in this order: the workflow, its required parameters, its arguments, the cadence, the gate policy, the blackout.
 
         Args:
             library: The workflow library the workflow is read from.
@@ -394,7 +374,6 @@ class Scheduler:
             cadence: How often the schedule fires.
             gate_policy: `wait`, or `fail_after:<seconds>`.
             gate_mode: `wait`, `orchestrate` or `auto`.
-            auto_approve_gates: The older switch for `auto`. It must not disagree with `gate_mode`.
             capacity_key: A name shared with other schedules to cap how many run at once.
             capacity_limit: How many schedules sharing `capacity_key` may run at once.
             blackout: Daily quiet hours, or `None` for none.
@@ -410,13 +389,12 @@ class Scheduler:
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
-            ScheduleSettingInvalidError: The gate mode, cadence, gate policy or blackout is not one of its shapes, or an after-run cadence names the schedule's own workflow.
+            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, or an after-run cadence names the schedule's own workflow.
         """
         spec = await _checked_workflow(library, registry, workflow_id)
         _require_parameters(workflow_id, spec, arguments)
         admitted = await _admitted(library, workflow_id, spec, arguments, names)
         try:
-            resolved_mode = effective_gate_mode(gate_mode, auto_approve_gates=auto_approve_gates)
             parsed_cadence = parse_cadence(cadence)
             gate_wait_seconds(gate_policy)
             if blackout is not None:
@@ -430,8 +408,7 @@ class Scheduler:
             arguments=admitted,
             cadence=cadence,
             gate_policy=gate_policy,
-            gate_mode=resolved_mode,
-            auto_approve_gates=resolved_mode == "auto",
+            gate_mode=gate_mode,
             capacity_key=capacity_key,
             capacity_limit=capacity_limit,
             blackout=blackout,
@@ -456,7 +433,6 @@ class Scheduler:
 
         A change of workflow or arguments checks the arguments against the workflow the schedule will point at.
         The arguments are written only when `changes` sets them.
-        `gate_mode` and `auto_approve_gates` in `changes` are resolved together before they are written.
         A schedule with no next fire, such as one whose fire failed, gets its next fire from its cadence again.
         A change that sets a cadence waiting for an event clears the next fire, so the schedule rests until something arms it.
         Turning the schedule off stamps it paused at `now`, and turning it on clears the stamp.
@@ -478,7 +454,7 @@ class Scheduler:
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
-            ScheduleSettingInvalidError: The cadence, gate policy, blackout or gate mode is not one of its shapes, or an after-run cadence names the schedule's own workflow.
+            ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, or an after-run cadence names the schedule's own workflow.
         """
         held = await self._schedules.get(schedule_id)
         if held is None:
@@ -490,7 +466,6 @@ class Scheduler:
                 gate_wait_seconds(changes.gate_policy)
             if changes.blackout is not None:
                 parse_blackout(changes.blackout)
-            resolved_mode, resolved_auto = _patched_gate_mode(changes)
         except ValueError as exc:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         await _refuse_firing_after_itself(library, registry, held, changes, cadence)
@@ -499,8 +474,6 @@ class Scheduler:
         resolved = changes.model_copy(
             update={
                 "arguments": patched,
-                "gate_mode": resolved_mode,
-                "auto_approve_gates": resolved_auto,
                 "next_run_at": None if rests else _restored_next_fire(held, changes, moment),
                 "clears_next_fire": rests,
                 "paused_at": held.paused_at_after(enabled=changes.enabled, now=moment),

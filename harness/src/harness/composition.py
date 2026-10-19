@@ -1276,7 +1276,6 @@ def _relaunch_logged_run(session: Runtime, path: Path, records: RunRecords, topi
         session.active.result = "A restart stopped this run. Resume it to carry on."
         session.active.started_at = waiting.started_at or _started_at(waiting.run_id)
         session.active.gate_mode = waiting.gate_mode
-        session.active.auto_approve = waiting.gate_mode == "auto"
         session.active.gate_timeout = waiting.gate_timeout
         session.active.progress.reset()
         for node_id in revive_values(waiting.spec, session.registry, waiting.values):

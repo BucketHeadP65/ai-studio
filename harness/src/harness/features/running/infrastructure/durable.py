@@ -246,7 +246,6 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
     session.active.pending = None
     session.active.decision = None
     session.active.gate_mode = "auto" if auto_approve_gates else "wait"
-    session.active.auto_approve = auto_approve_gates
     session.active.task = asyncio.create_task(
         _follow(session, handle, run=RunCollaborators(records=records, topics=topics, run_settings=run), spec=spec, params=params)
     )

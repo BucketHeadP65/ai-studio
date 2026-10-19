@@ -120,7 +120,7 @@ async def test_stopping_after_an_automode_gate_writes_the_real_gates_auto_not_an
     spec, registry, _call_log = _gated_then_held_spec(hold)
     session = _session(registry, tmp_path)
     session.session_id = "sess-auto"
-    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.report", params={"quarter": "Q2"}, auto_approve_gates=True)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.report", params={"quarter": "Q2"}, gate_mode="auto")
     for _ in range(500):
         if "publish" in session.active.progress.running:
             break

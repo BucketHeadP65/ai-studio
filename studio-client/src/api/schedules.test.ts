@@ -21,7 +21,6 @@ interface RawSchedule {
   enabled: boolean;
   gate_policy: string;
   gate_mode?: string;
-  auto_approve_gates: boolean;
   capacity_key: string | null;
   capacity_limit: number | null;
   blackout: string | null;
@@ -32,7 +31,7 @@ interface RawSchedule {
   last_outcome: string;
   next_run_at: string | null;
   live: string | null;
-  paused_at?: string | null;
+  paused_at: string | null;
 }
 
 function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
@@ -44,7 +43,6 @@ function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
     enabled: true,
     gate_policy: "wait",
     gate_mode: "wait",
-    auto_approve_gates: false,
     capacity_key: null,
     capacity_limit: null,
     blackout: null,
@@ -55,27 +53,8 @@ function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
     last_outcome: "",
     next_run_at: "2026-08-23T10:30:00+00:00",
     live: null,
+    paused_at: null,
     ...overrides,
-  };
-}
-
-// A row shaped like a backend from before these four fields existed: none of the keys are on
-// the wire at all, not even as `null`.
-function legacyScheduleFixture(): Record<string, unknown> {
-  return {
-    id: "sched-1",
-    workflow_id: "wf-sales",
-    arguments: { quarter: "Q1" },
-    cadence: "every 30m",
-    enabled: true,
-    gate_policy: "wait",
-    auto_approve_gates: false,
-    session_id: "",
-    created_at: "2026-08-23T10:00:00+00:00",
-    last_run_at: null,
-    last_outcome: "",
-    next_run_at: "2026-08-23T10:30:00+00:00",
-    live: null,
   };
 }
 
@@ -94,20 +73,11 @@ describe("schedulesApi", () => {
     expect(schedules[0]?.next_run_at).toBe("2026-08-23T10:30:00+00:00");
   });
 
-  it("parses a legacy row that carries none of the four newer fields, nor gate_mode", async () => {
-    server.use(
-      http.get(`${BASE}/api/schedules`, () =>
-        HttpResponse.json({ schedules: [legacyScheduleFixture()] }),
-      ),
-    );
+  it("refuses a row missing gate_mode, which every schedule row carries", async () => {
+    const { gate_mode: _omitted, ...row } = scheduleFixture();
+    server.use(http.get(`${BASE}/api/schedules`, () => HttpResponse.json({ schedules: [row] })));
 
-    const [schedule] = await schedulesApi.list();
-
-    expect(schedule?.capacity_key).toBeNull();
-    expect(schedule?.capacity_limit).toBeNull();
-    expect(schedule?.blackout).toBeNull();
-    expect(schedule?.catch_up).toBe(false);
-    expect(schedule?.gate_mode).toBe("wait");
+    await expect(schedulesApi.list()).rejects.toBeInstanceOf(ZodError);
   });
 
   it("reads gate_mode when a row carries it", async () => {
@@ -122,11 +92,9 @@ describe("schedulesApi", () => {
     expect(schedule?.gate_mode).toBe("orchestrate");
   });
 
-  it("defaults paused_at to null when a row does not carry it", async () => {
+  it("reads a null paused_at for a schedule that is on", async () => {
     server.use(
-      http.get(`${BASE}/api/schedules`, () =>
-        HttpResponse.json({ schedules: [legacyScheduleFixture()] }),
-      ),
+      http.get(`${BASE}/api/schedules`, () => HttpResponse.json({ schedules: [scheduleFixture()] })),
     );
 
     const [schedule] = await schedulesApi.list();

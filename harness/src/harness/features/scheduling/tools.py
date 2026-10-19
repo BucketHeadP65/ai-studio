@@ -79,7 +79,6 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
     names: KnowledgeBaseNames | None = None,
     gate_policy: str = "wait",
     gate_mode: GateMode = "wait",
-    auto_approve_gates: bool = False,
     capacity_key: str | None = None,
     capacity_limit: int | None = None,
     blackout: str | None = None,
@@ -102,8 +101,6 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.
         gate_policy: `wait` to hold a gate for a person forever, or `fail_after:<seconds>`.
         gate_mode: `wait`, `orchestrate`, or `auto`. See `orchestrating-a-run`.
-        auto_approve_gates: The older switch `gate_mode` replaced. Sending both and disagreeing
-            is refused.
         capacity_key: A name shared with other schedules to cap how many of them run at once.
         capacity_limit: How many schedules sharing `capacity_key` may run at once.
         blackout: One or more `HH:MM-HH:MM` daily quiet hours, comma separated.
@@ -115,8 +112,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
 
     Raises:
         ModelRetry: `workflow_id` does not check out here, an argument is not what its parameter
-            declares, `cadence`, `gate_policy`, or `blackout` is not one of its own shapes, or
-            `gate_mode` and `auto_approve_gates` disagree.
+            declares, or `cadence`, `gate_policy`, or `blackout` is not one of its own shapes.
     """
     now = datetime.now(UTC)
     session = ctx.deps
@@ -129,7 +125,6 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
             cadence=cadence,
             gate_policy=gate_policy,
             gate_mode=gate_mode,
-            auto_approve_gates=auto_approve_gates,
             capacity_key=capacity_key,
             capacity_limit=capacity_limit,
             blackout=blackout,
@@ -167,7 +162,6 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
     enabled: bool | None = None,
     gate_policy: str | None = None,
     gate_mode: GateMode | None = None,
-    auto_approve_gates: bool | None = None,
     capacity_key: str | None = None,
     capacity_limit: int | None = None,
     blackout: str | None = None,
@@ -190,8 +184,6 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         enabled: Pause it (false) or resume it (true).
         gate_policy: `wait` or `fail_after:<seconds>`.
         gate_mode: `wait`, `orchestrate`, or `auto`. See `orchestrating-a-run`.
-        auto_approve_gates: The older switch `gate_mode` replaced. Sending both and disagreeing
-            is refused.
         capacity_key: Join or move it into a shared run limit.
         capacity_limit: Change how many schedules sharing `capacity_key` may run at once.
         blackout: Change its daily quiet hours.
@@ -202,8 +194,8 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
 
     Raises:
         ModelRetry: `schedule_id` names no schedule, `workflow_id` does not check out here, an
-            argument is not what its parameter declares, `cadence`, `gate_policy`, or `blackout`
-            is not one of its own shapes, or `gate_mode` and `auto_approve_gates` disagree.
+            argument is not what its parameter declares, or `cadence`, `gate_policy`, or `blackout`
+            is not one of its own shapes.
     """
     schedule_uuid = _parse_id(schedule_id)
     session = ctx.deps
@@ -214,7 +206,6 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         enabled=enabled,
         gate_policy=gate_policy,
         gate_mode=gate_mode,
-        auto_approve_gates=auto_approve_gates,
         capacity_key=capacity_key,
         capacity_limit=capacity_limit,
         blackout=blackout,

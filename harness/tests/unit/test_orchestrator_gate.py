@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 
+from dataclasses import fields
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -33,24 +34,24 @@ from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
 
 from harness import session as session_state
-from harness.domain.gates import effective_gate_mode
 from harness.features.followme.acts import ConsoleApprovals
 from harness.features.running import service
+from harness.features.running.api_models import RunRequest
 from harness.features.running.domain.ended_run import RunArchiveRecord
 from harness.features.running.feedback import orchestrator_decider
-from harness.session import NoSessionLog, Runtime, SessionPool, answerable
-from harness.settings import RunSettings
+from harness.features.scheduling.api_models import ScheduleIn, ScheduleOut, SchedulePatch
+from harness.features.scheduling.domain import Schedule, ScheduleUpdate
+from harness.session import ActiveRun, NoSessionLog, Runtime, SessionPool, answerable
 from harness.workspace import open_workspace
-from tests.support.controllers import a_client_of
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.sessions import APool
-from tests.support.running import a_pool, a_running_controller
 from tests.support.state import a_state, a_throwaway_state, records_under
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+    from pydantic import BaseModel
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models.function import AgentInfo
 
@@ -224,7 +225,7 @@ async def test_automode_does_not_bypass_an_authored_orchestrator_gate(quarterly_
         return _final_result(approve=True)
 
     session, _pool = _session_with_decider(registry, FunctionModel(respond), tmp_path)
-    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.orchestrated-auto", params={"quarter": "Q3"}, auto_approve_gates=True)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.orchestrated-auto", params={"quarter": "Q3"}, gate_mode="auto")
     task = session.active.task
     assert task is not None
     await task
@@ -502,51 +503,14 @@ def test_a_legacy_archive_record_without_gates_orchestrated_still_parses() -> No
     assert legacy.gates_orchestrated == ()
 
 
-# --- the three-way mode: legacy compatibility and its one refusal -------------------------
+# --- the three-way mode is the only gate switch a launch or a schedule takes --------------------
 
 
-def test_auto_and_orchestrate_conflict_is_refused_in_words() -> None:
-    with pytest.raises(ValueError, match="Send one, not both"):
-        effective_gate_mode("orchestrate", auto_approve_gates=True)
+@pytest.mark.parametrize("model", [RunRequest, ScheduleIn, SchedulePatch, ScheduleOut, Schedule, ScheduleUpdate])
+def test_gate_mode_is_the_only_gate_switch(model: type[BaseModel]) -> None:
+    assert "gate_mode" in model.model_fields
+    assert "auto_approve_gates" not in model.model_fields
 
 
-def test_legacy_auto_approve_gates_true_maps_to_auto() -> None:
-    assert effective_gate_mode("wait", auto_approve_gates=True) == "auto"
-    assert effective_gate_mode("wait", auto_approve_gates=False) == "wait"
-    assert effective_gate_mode("orchestrate", auto_approve_gates=False) == "orchestrate"
-
-
-async def test_legacy_auto_approve_gates_still_works_end_to_end(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
-    """`service.start`, the plugin every launch path shares, still honours the bare legacy flag."""
-    records = records_under(tmp_path)
-    session = Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", None), session_log=NoSessionLog(), state=a_state(tmp_path))
-    await service.start(
-        session,
-        records=records,
-        topics=FakeBroadcaster(),
-        run=RunSettings(),
-        spec=quarterly_report,
-        workflow_id="wf.legacy-auto",
-        params={"quarter": "Q2"},
-        auto_approve_gates=True,
-    )
-    task = session.active.task
-    assert task is not None
-    await task
-
-    assert session.active.gate_mode == "auto"
-    assert session.active.pending is None, "automode never holds the gate for a person"
-    attested = _attested(await _events("wf.legacy-auto", records))
-    assert attested[0].gates_auto == ("approve",)
-    assert attested[0].gates_approved == ()
-
-
-async def test_the_run_endpoint_refuses_a_conflicting_gate_mode_in_words(tmp_path: Path) -> None:
-    async with a_client_of(a_running_controller(a_pool(), tmp_path)) as client:
-        response = await client.post(
-            "/api/run",
-            json={"workflow_id": "whatever", "gate_mode": "orchestrate", "auto_approve_gates": True},
-        )
-
-    assert response.status_code == 400
-    assert "Send one, not both" in response.json()["message"]
+def test_an_active_run_reads_automode_off_its_gate_mode() -> None:
+    assert "auto_approve" not in {field.name for field in fields(ActiveRun)}
