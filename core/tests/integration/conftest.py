@@ -1,4 +1,8 @@
-"""A Postgres schema of this tier's own, on the stack's database, dropped and rebuilt for every test."""
+"""A throwaway Postgres container for the session, and a schema of this tier's own in it, rebuilt for every test.
+
+`CORE_TEST_DATABASE_URL` points the tier at another throwaway database instead. The tier skips when
+Docker is not running and no such database is named.
+"""
 
 from __future__ import annotations
 
@@ -13,9 +17,9 @@ import pytest_asyncio
 from core.ai.history.contracts import PoolDatabase, create_record_schema
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterator
 
-DATABASE_URL = os.environ.get("CORE_TEST_DATABASE_URL", "postgresql://wiki:wiki@127.0.0.1:5434/knowledge_bases")
+POSTGRES_IMAGE = "postgres:18"
 TEST_SCHEMA = "core_record_test"
 DROP_RECORD_TABLES = """
     DROP TABLE IF EXISTS
@@ -35,15 +39,39 @@ DROP_RECORD_TABLES = """
 """
 
 
-@pytest_asyncio.fixture
-async def pool() -> AsyncIterator[asyncpg.Pool]:
-    """A pool whose every connection works inside this tier's own schema, or a skip when there is no Postgres."""
+def _docker_available() -> bool:
+    """Whether a Docker daemon answers."""
     try:
-        opened = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=4, server_settings={"search_path": f"{TEST_SCHEMA},public"})
-    except (OSError, asyncpg.PostgresError) as exc:
-        pytest.skip(f"no Postgres at {DATABASE_URL}: {type(exc).__name__}")
-    if opened is None:
-        pytest.skip(f"no Postgres at {DATABASE_URL}")
+        from docker import from_env
+
+        return bool(from_env().ping())
+    except Exception:  # noqa: BLE001 (any docker or transport failure means no Docker)
+        return False
+
+
+@pytest.fixture(scope="session")
+def database_url() -> Iterator[str]:
+    """The admin URL of this session's throwaway Postgres, or a skip when there is none."""
+    named = os.environ.get("CORE_TEST_DATABASE_URL")
+    if named:
+        yield named
+        return
+    if not _docker_available():
+        pytest.skip("Docker unavailable: skipping the integration tests")
+    from testcontainers.postgres import PostgresContainer
+
+    container = PostgresContainer(POSTGRES_IMAGE, username="core", password="core", dbname="core", driver=None)
+    container.start()
+    try:
+        yield container.get_connection_url()
+    finally:
+        container.stop()
+
+
+@pytest_asyncio.fixture
+async def pool(database_url: str) -> AsyncIterator[asyncpg.Pool]:
+    """A pool whose every connection works inside this tier's own schema."""
+    opened = await asyncpg.create_pool(database_url, min_size=1, max_size=4, server_settings={"search_path": f"{TEST_SCHEMA},public"})
     async with opened.acquire() as connection:
         await connection.execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
     try:
