@@ -104,12 +104,10 @@ from studio.knowledge_base.cli_support import (
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
     read_feedback,
-    resolve_knowledge_base_alias,
     resolve_knowledge_base_root,
     resolve_partition,
     settings_knowledge_base_path,
     unreachable_line,
-    vault_option,
 )
 from studio.knowledge_base.cli_vocab import vocab_app
 from studio.knowledge_base.cli_watch_list import watch_list_app
@@ -943,7 +941,6 @@ def index_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
     embed: bool = typer.Option(default=True, help="Run the embedding stage. Pass --no-embed to skip it for a fast dev/CI loop."),
     full: bool = typer.Option(default=False, help="Force a whole knowledge base rebuild. The default re-indexes only the changed (dirty) set."),
     dry_run: bool = typer.Option(default=False, help="Preview the dirty set and write nothing (no upserts/embed/graph). Always exits 0."),
@@ -967,7 +964,7 @@ def index_cmd(
     this run or not, though the rows still load. Refuses before writing anything when the database is
     behind the code's migration head, naming both revisions and the fix.
     """
-    knowledge_base_arg = resolve_knowledge_base_alias(knowledge_base, vault)
+    knowledge_base_arg = knowledge_base
     settings = _resolve_settings(knowledge_base_arg, cwd=Path.cwd())
     configure_logging(settings.application.logging)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))

@@ -1,11 +1,4 @@
-"""Unit tests for the `--vault` alias helpers (`src/studio/knowledge_base/cli_support.py`).
-
-`--vault` is a hidden, deprecated alias of `--knowledge-base` on the knowledge base-taking authoring/index
-commands. Click doesn't report which flag literal a multi-name option matched, so the alias is
-its own separate, hidden parameter with its own callback (`vault_option`) rather than a second
-name on `--knowledge-base` itself; `resolve_knowledge_base_alias` merges the two, `--knowledge-base` winning when both
-are given.
-"""
+"""Unit tests for the command line helpers (`src/studio/knowledge_base/cli_support.py`)."""
 
 from __future__ import annotations
 
@@ -22,9 +15,7 @@ from studio.knowledge_base.cli_support import (
     KnowledgeBaseMissingError,
     _dispatch_index,
     _resolve_knowledge_base_for_authoring,
-    _warn_vault_alias,
     knowledge_base_path_origin,
-    resolve_knowledge_base_alias,
     resolve_knowledge_base_root,
 )
 
@@ -32,22 +23,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from core.cqrs.contracts import Command, Event
-
-
-class TestResolveKnowledgeBaseAlias:
-    """`--knowledge-base` wins when both are set; `--vault` is used only when `--knowledge-base` is absent."""
-
-    def test_knowledge_base_only(self) -> None:
-        assert resolve_knowledge_base_alias("/a", None) == "/a"
-
-    def test_vault_only(self) -> None:
-        assert resolve_knowledge_base_alias(None, "/a") == "/a"
-
-    def test_neither_set(self) -> None:
-        assert resolve_knowledge_base_alias(None, None) is None
-
-    def test_both_set_knowledge_base_wins(self) -> None:
-        assert resolve_knowledge_base_alias("/a", "/b") == "/a"
 
 
 class TestKnowledgeBasePathOrigin:
@@ -123,25 +98,6 @@ class TestResolveKnowledgeBaseForAuthoring:
 
         assert root == here.resolve()
         assert sources_subdir == "Sources"
-
-
-class TestWarnVaultAlias:
-    """The `--vault` option callback warns to stderr only when the flag actually carried a value."""
-
-    def test_value_given_warns_naming_the_fix(self, capsys: pytest.CaptureFixture[str]) -> None:
-        result = _warn_vault_alias("/a")
-
-        err = capsys.readouterr().err
-        assert result == "/a"  # the value passes through unchanged
-        assert "--vault" in err
-        assert "deprecated" in err.lower()
-        assert "--knowledge-base" in err
-
-    def test_no_value_stays_silent(self, capsys: pytest.CaptureFixture[str]) -> None:
-        result = _warn_vault_alias(None)
-
-        assert result is None
-        assert capsys.readouterr().err == ""
 
 
 class _EmittingHandler:

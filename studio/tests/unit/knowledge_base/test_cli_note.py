@@ -282,17 +282,6 @@ class TestValidate:
 
         assert result.exit_code == 0, result.stdout
 
-    def test_vault_option_behaves_like_knowledge_base_and_warns(self, tmp_path: Path):
-        # --vault is the deprecated alias: same resolution as --knowledge-base, plus a warning.
-        override_knowledge_base = _build_knowledge_base(tmp_path / "override")
-        note = _write_note(tmp_path, _CLEAN_NOTE_TEXT, name="lightrag.md")
-
-        result = runner.invoke(app, ["note", "validate", str(note), "--vault", str(override_knowledge_base.path)], obj=_factory(None))
-
-        assert result.exit_code == 0, result.stdout
-        assert "--vault is deprecated" in result.stderr
-        assert "--knowledge-base" in result.stderr
-
     def test_missing_knowledge_base_errors_cleanly(self, tmp_path: Path):
         # No --knowledge-base and the container cannot resolve one → exit 1 with a helpful message, not a traceback.
         note = shutil.copy(_LIGHTRAG_NOTE, tmp_path / "lightrag.md")
@@ -658,18 +647,6 @@ class TestBuildBatch:
         assert out_b.exists()
         assert "built 2/2" in result.stdout
 
-    def test_accepts_vault_alias_identically_and_warns(self, tmp_path: Path):
-        knowledge_base = _build_knowledge_base(tmp_path / "knowledge_base")
-        out_a = tmp_path / "out" / "a.md"
-        manifest = tmp_path / "m.json"
-        manifest.write_text(json.dumps([{"out": str(out_a), "payload": _paper_payload(id="paper.a-2025")}]), encoding="utf-8")
-
-        result = runner.invoke(app, ["note", "build-batch", "--manifest", str(manifest), "--vault", str(knowledge_base.path)], obj=_factory(None))
-
-        assert result.exit_code == 0, result.stdout
-        assert out_a.exists()
-        assert "--vault is deprecated" in result.stderr
-
     def test_one_failing_entry_does_not_block_the_rest(self, tmp_path: Path):
         # The failing entry carries an error-tier issue (a comparative claim with no metric).
         knowledge_base = _build_knowledge_base(tmp_path / "knowledge_base")
@@ -888,7 +865,7 @@ class TestSchema:
     def test_help_shows_the_knowledge_base_default_dot(self):
         # `--knowledge-base`'s literal default is "." (unlike the other five note subcommands) so an
         # operator sees it right in --help, not just in prose — pins the marker so a future
-        # refactor (e.g. switching to a None default for --vault composability) can't drop it silently.
+        # refactor can't drop it silently.
         result = runner.invoke(app, ["note", "schema", "--help"])
 
         assert "[default: .]" in result.stdout
@@ -902,11 +879,11 @@ def test_subcommand_help_exits_zero(subcommand: str):
 
 
 @pytest.mark.parametrize("subcommand", ["validate", "build", "build-batch", "verify", "normalize", "schema"])
-def test_subcommand_help_hides_vault_flag(subcommand: str):
-    # --vault is a deprecated alias of --knowledge-base on every one of these, kept out of --help.
-    result = runner.invoke(app, ["note", subcommand, "--help"])
+def test_subcommand_refuses_the_vault_flag(subcommand: str, tmp_path: Path):
+    result = runner.invoke(app, ["note", subcommand, "--vault", str(tmp_path)])
 
-    assert "--vault" not in result.stdout
+    assert result.exit_code == 2
+    assert "No such option: --vault" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -979,50 +956,6 @@ class TestSchemaNoteSchema:
         assert "technique-tip" in claim_props["quote"]["description"]
         relation_slot = schema["properties"]["claims"]["items"]["properties"]["edges"]["items"]["prefixItems"][0]
         assert relation_slot["enum"] == ["pairs_well_with"]
-
-    def test_recipe_schema_via_vault_alias_matches_knowledge_base_and_warns(self, tmp_path: Path):
-        # --vault resolves the same knowledge base spec as --knowledge-base, plus the deprecation warning.
-        knowledge_base = tmp_path / "cooking-knowledge-base"
-        knowledge_base.mkdir()
-        _write_cooking_spec(knowledge_base)
-
-        knowledge_base_result = runner.invoke(app, ["note", "schema", "--type", "recipe", "--knowledge-base", str(knowledge_base)])
-        vault_result = runner.invoke(app, ["note", "schema", "--type", "recipe", "--vault", str(knowledge_base)])
-
-        assert vault_result.exit_code == 0, vault_result.stdout
-        assert json.loads(vault_result.stdout) == json.loads(knowledge_base_result.stdout)
-        assert "--vault is deprecated" in vault_result.stderr
-
-    def test_explicit_knowledge_base_wins_over_vault_when_both_given(self, tmp_path: Path):
-        # note schema's --knowledge-base keeps a literal "." default (not None, so --help keeps
-        # showing it) — an explicit --knowledge-base still wins over --vault when both are given.
-        knowledge_base = tmp_path / "cooking-knowledge-base"
-        knowledge_base.mkdir()
-        _write_cooking_spec(knowledge_base)
-        other = tmp_path / "empty-knowledge-base"
-        other.mkdir()
-
-        result = runner.invoke(app, ["note", "schema", "--type", "recipe", "--knowledge-base", str(knowledge_base), "--vault", str(other)])
-
-        assert result.exit_code == 0, result.stdout
-        schema = json.loads(result.stdout)
-        assert schema["title"] == "AuthoringPayload[recipe]"  # resolved against --knowledge-base, not --vault
-
-    def test_explicit_knowledge_base_dot_still_wins_over_vault(self, tmp_path: Path):
-        # The regression this pins: "." is both the default value AND a value someone can type
-        # explicitly. --knowledge-base . is an explicit choice, not an omission, so it must still win over
-        # --vault (Click's parameter-source tracking tells the two apart, a string comparison can't).
-        vault_knowledge_base = tmp_path / "cooking-knowledge-base"
-        vault_knowledge_base.mkdir()
-        _write_cooking_spec(vault_knowledge_base)
-
-        result = runner.invoke(app, ["note", "schema", "--type", "recipe", "--knowledge-base", ".", "--vault", str(vault_knowledge_base)])
-
-        # --knowledge-base . resolves against the cwd, which carries no knowledge-base-schema.json (refused) — this
-        # only fails naming "." if --knowledge-base actually won over the vault's cooking spec.
-        assert result.exit_code == 1, result.stdout
-        assert "knowledge-base-schema.json at ." in result.stdout
-        assert "--vault is deprecated" in result.stderr  # the warning still fires even though vault loses
 
     def test_unknown_type_for_cooking_knowledge_base_exits_one(self, tmp_path: Path):
         # "paper" is not a kind in the cooking knowledge base → must exit 1 with a clear message.
@@ -1101,22 +1034,6 @@ class TestAuthoringHonorsKnowledgeBaseFlag:
         assert "id: recipe.pancakes" in text
         assert "type: recipe" in text
 
-    def test_build_accepts_vault_alias_identically_and_warns(self, tmp_path: Path):
-        # --vault behaves exactly like --knowledge-base for build, plus the deprecation warning.
-        knowledge_base = _build_cooking_knowledge_base(tmp_path / "cooking")
-        payload = _write_payload(tmp_path / "p.json", _recipe_payload())
-        out = tmp_path / "recipe.md"
-
-        result = runner.invoke(
-            app, ["note", "build", "--payload", str(payload), "--out", str(out), "--vault", str(knowledge_base)], obj=_factory(None)
-        )
-
-        assert result.exit_code == 0, result.stdout
-        text = out.read_text(encoding="utf-8")
-        assert "id: recipe.pancakes" in text
-        assert "type: recipe" in text
-        assert "--vault is deprecated" in result.stderr
-
     def test_verify_uses_knowledge_base_flag_and_bypasses_the_container(self, tmp_path: Path):
         # A recipe note with no quote claims verifies clean; --knowledge-base resolves the cooking
         # spec so the note parses, with the container resolving no knowledge base at all.
@@ -1129,19 +1046,6 @@ class TestAuthoringHonorsKnowledgeBaseFlag:
         result = runner.invoke(app, ["note", "verify", str(note), "--knowledge-base", str(knowledge_base)], obj=_factory(None))
 
         assert result.exit_code == 0, result.stdout
-
-    def test_verify_accepts_vault_alias_identically_and_warns(self, tmp_path: Path):
-        knowledge_base = _build_cooking_knowledge_base(tmp_path / "cooking")
-        note_text = (
-            "---\nid: recipe.pancakes\ntype: recipe\ntitle: Pancakes\nstatus: draft\n---\n\n## Overview\n\nFluffy.\n\n## Method\n\nFry.\n"
-        )
-        note = _write_note(tmp_path, note_text, name="recipe.md")
-
-        result = runner.invoke(app, ["note", "verify", str(note), "--vault", str(knowledge_base)], obj=_factory(None))
-
-        assert result.exit_code == 0, result.stdout
-        assert "--vault is deprecated" in result.stderr
-
 
 class TestNormalize:
     """`note normalize` merges engram frontmatter into a note IN PLACE, preserving its body."""
@@ -1163,21 +1067,6 @@ class TestNormalize:
         assert "id: recipe.pancakes" in text
         assert "type: recipe" in text
         assert "Crispy edges, fluffy middle." in text  # body preserved verbatim
-
-    def test_accepts_vault_alias_identically_and_warns(self, tmp_path: Path):
-        knowledge_base = _build_cooking_knowledge_base(tmp_path / "cooking")
-        note = _write_note(tmp_path, "Crispy edges, fluffy middle.\n", name="pancakes.md")
-        fm: dict[str, JsonValue] = {"id": "recipe.pancakes", "type": "recipe", "title": "Pancakes", "status": "draft"}
-        fm_path = _write_payload(tmp_path / "fm.json", fm)
-
-        result = runner.invoke(
-            app, ["note", "normalize", str(note), "--frontmatter", str(fm_path), "--vault", str(knowledge_base)], obj=_factory(None)
-        )
-
-        assert result.exit_code == 0, result.stdout
-        text = note.read_text(encoding="utf-8")
-        assert "id: recipe.pancakes" in text
-        assert "--vault is deprecated" in result.stderr
 
     def test_preserves_existing_non_engram_keys(self, tmp_path: Path):
         knowledge_base = _build_cooking_knowledge_base(tmp_path / "cooking")
