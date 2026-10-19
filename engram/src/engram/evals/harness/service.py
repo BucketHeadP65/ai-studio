@@ -378,7 +378,7 @@ async def run_traced_eval_on_dataset(
     kept = _kept_results(config, dataset, stamp) if config.resume else None
     envelope_handler = await container.get(EnvelopeHandler) if config.disclosure else None
     # The cap on hits per document is read once, so every case's `search` description states the same cap.
-    hits_per_document = await read_hits_per_document(await container.get(SearchHandler))
+    hits_per_document = await read_hits_per_document(await container.get(SearchHandler), knowledge_base=schema.slug)
     toolset: RetrievalToolset = build_retrieval_toolset(
         resolved_handlers,
         only=profile.tools,

@@ -234,7 +234,17 @@ class TestReadingTheCap:
 
     @pytest.mark.parametrize("error", [OperationalError("SELECT 1", {}, Exception("gone")), ConnectionRefusedError("refused")], ids=["database", "network"])
     async def test_a_failed_read_states_no_cap(self, error: Exception):
-        assert await read_hits_per_document(SearchHandler(_FailingGateway(error=error), FakeEmbedding())) == 0
+        assert await read_hits_per_document(SearchHandler(_FailingGateway(error=error), FakeEmbedding()), knowledge_base="workdocs") == 0
+
+    async def test_a_failed_read_warns_naming_the_knowledge_base_and_the_error(self, caplog: pytest.LogCaptureFixture):
+        search = SearchHandler(_FailingGateway(error=ConnectionRefusedError("refused by the host")), FakeEmbedding())
+
+        with caplog.at_level("WARNING"):
+            await read_hits_per_document(search, knowledge_base="workdocs")
+
+        assert "workdocs" in caplog.text
+        assert "ConnectionRefusedError" in caplog.text
+        assert "refused by the host" in caplog.text
 
 
 @dataclass
@@ -435,7 +445,6 @@ class TestEveryFetchOpensAFoldedUnitByItsRef:
             assert _opens(await knowledge_base.direct_call_tool("fetch", {"knowledge_base": "research", "unit_id": unit.ref}), unit), unit
 
 
-
 class TestASurfaceWithoutFetchIsNotSentToFetch:
     async def test_the_single_base_toolset(self):
         toolset = build_retrieval_toolset(_handlers(), collection="workdocs", only=frozenset({"search"}), hits_per_document=1)
@@ -456,3 +465,44 @@ class TestASurfaceWithoutFetchIsNotSentToFetch:
 
     def test_the_clause_itself(self):
         assert "`fetch`" not in document_clause(2, can_fetch=False)
+
+
+_LEGS = pytest.mark.parametrize("search_hybrid", [None, True, False], ids=["either_leg", "hybrid", "keyword"])
+
+
+class TestASearchOnlySurfaceNeverTellsTheModelToFetch:
+    @_LEGS
+    async def test_the_single_base_toolset(self, search_hybrid: bool | None):
+        toolset = build_retrieval_toolset(
+            _handlers(), collection="workdocs", only=frozenset({"search"}), search_hybrid=search_hybrid, hits_per_document=1
+        )
+
+        description = (await toolset.get_tools(_ctx()))["search"].tool_def.description or ""
+
+        assert "fetch" not in description.lower()
+        assert "Start here to find candidate sources." in description
+
+    @_LEGS
+    async def test_the_single_base_mcp_server(self, search_hybrid: bool | None):
+        server = FastMCP("documents")
+        register_mcp_tools(server, _handlers(), collection="workdocs", only=frozenset({"search"}), search_hybrid=search_hybrid, hits_per_document=1)
+
+        assert "fetch" not in _description(await server.list_tools()).lower()
+
+    async def test_the_routed_mcp_server(self):
+        server = FastMCP("documents")
+        surfaces = (_capped("workdocs", WORKDOCS, 1), _capped("research", RESEARCH, 1))
+        register_routed_mcp_tools(server, surfaces, default_knowledge_base="workdocs", only=frozenset({"search"}))
+
+        description = _description(await server.list_tools())
+
+        assert "fetch" not in description.lower()
+        assert "Every hit's `ref` already names the knowledge base it came from." in description
+
+    async def test_a_surface_with_fetch_still_sends_the_model_to_it(self):
+        toolset = build_retrieval_toolset(_handlers(), collection="workdocs", search_hybrid=True)
+
+        description = (await toolset.get_tools(_ctx()))["search"].tool_def.description or ""
+
+        assert "then `fetch` a hit's full text by `id`." in description
+        assert "Every hit stays a candidate until you fetch and read it." in description

@@ -532,7 +532,7 @@ async def _build_mcp_server(
     # `admin_gateway`, which the reader role cannot see, and is read again on every tool call.
     read_notes: list[str] = []
     # Every read route shares this database, so its cap on hits per document is read once, here, for every `search` description.
-    hits_per_document = await read_hits_per_document(search_handler)
+    hits_per_document = await read_hits_per_document(search_handler, knowledge_base=schema.slug)
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,

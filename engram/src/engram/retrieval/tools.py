@@ -304,6 +304,23 @@ def _without_sql_plane(description: str) -> str:
     return description.replace(_COLLECTION_CLAUSE, _COLLECTION_CLAUSE_NO_SQL)
 
 
+_FETCH_SENTENCES = (
+    (" Start here to find candidate sources, then `fetch` a hit's full text by its `id`.", " Start here to find candidate sources."),
+    (" Start here to find candidate sources, then `fetch` a hit's full text by `id`.", " Start here to find candidate sources."),
+    ("Every hit stays a candidate until you fetch and read it.", "Every hit stays a candidate: its snippet is an excerpt, never the whole unit."),
+    ("every hit stays a candidate until you fetch and read it.", "every hit stays a candidate: its snippet is an excerpt, never the whole unit."),
+)
+"""Each sentence a shipped `search` description sends the agent to `fetch` with, and how it reads where no `fetch` is served."""
+
+
+def _without_fetch(description: str) -> str:
+    """A search description whose sentences sending the agent to `fetch` read as they do on a surface serving none."""
+    text = description
+    for sentence, without in _FETCH_SENTENCES:
+        text = text.replace(sentence, without)
+    return text
+
+
 def _pinned_description(description: str) -> str:
     """A search description without its collection sentences."""
     text = description
@@ -575,6 +592,8 @@ def _final_descriptions(
     else:
         search_default = SEARCH_DESCRIPTION_KEYWORD
     search_default = _with_document_clause(search_default, hits_per_document, can_fetch=can_fetch)
+    if not can_fetch:
+        search_default = _without_fetch(search_default)
     if not can_sql:
         search_default = _without_sql_plane(search_default)
     if facets_clause is not None:
@@ -776,7 +795,7 @@ def _without_folded_units_past_the_budget(
     knowledge_base: KnowledgeBaseStamp | None,
     max_chars: int,
 ) -> tuple[SearchHit, ...]:
-    """`hits` with folded units dropped from the lowest-ranked hit's last one up, until every hit fits whole or none is left."""
+    """`hits` with folded units dropped from the lowest-ranked hit's last one up, until all the hits fit whole or no folded unit is left."""
     trimmed = list(hits)
 
     def fits_whole() -> bool:
@@ -801,7 +820,7 @@ def bound_search_result(
 ) -> SearchResult:
     """The largest prefix of `hits` whose complete serialized result fits `max_chars`.
 
-    Rank order is kept and a hit's id and ref are never shortened. When every hit does not fit whole, folded units go
+    Rank order is kept and a hit's id and ref are never shortened. When the hits do not all fit whole, folded units go
     first, one at a time from the lowest-ranked hit's last one up, before any title or snippet is cut. Then a hit is
     added whole when it fits, else with its title and snippet bounded, else not at all, and then every later hit is
     left out too. The window counts what was left out. When not even the top hit's id and ref fit, the answer is an
@@ -1858,7 +1877,7 @@ def _routed_descriptions(
     reading = resolve_description(
         FETCH, leveled_fetch_description(home.collection, mode=home.envelope.mode, can_search=can_search), descriptions
     )
-    return _routed_search_description(resolved, choices, home.collection), f"{reading} {_routed_fetch_clause(choices)}"
+    return _routed_search_description(resolved, choices, home.collection, can_fetch=can_fetch), f"{reading} {_routed_fetch_clause(choices)}"
 
 
 def refuse_duplicate_collections(surfaces: tuple[ReadSurface, ...]) -> None:
@@ -1989,12 +2008,13 @@ def _routed_fetch(
     return fetch
 
 
-def _routed_search_description(resolved: str, choices: str, default_collection: str) -> str:
-    """`resolved` pointed at the registered knowledge bases and at the `ref` that reads a hit back."""
+def _routed_search_description(resolved: str, choices: str, default_collection: str, *, can_fetch: bool = True) -> str:
+    """`resolved` pointed at the registered knowledge bases and, where `fetch` is served, at the `ref` that reads a hit back."""
+    reads_back = " so pass a hit's `ref` to `fetch` exactly as returned." if can_fetch else "."
     routed = (
         f"`collection` names which knowledge base to search (one of: {choices}) and omitting it searches "
         f"'{default_collection}'. No other collection is served here. Every hit's `ref` already names the "
-        "knowledge base it came from, so pass a hit's `ref` to `fetch` exactly as returned."
+        f"knowledge base it came from{',' if can_fetch else ''}{reads_back}"
     )
     if _COLLECTION_CLAUSE not in resolved:
         return f"{resolved}\n\n{routed}"

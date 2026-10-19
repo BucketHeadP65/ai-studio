@@ -20,7 +20,8 @@ What this pins:
 * a cap of 2 keeps two hits of a document and folds the rest under its best.
 * `facets` still narrow a capped search.
 * the tuning row starts with a cap of 1 and refuses a cap that is neither a number nor null.
-* the reader reads the cap the search applies, through SQL and through the search handler.
+* the reader reads the cap the search applies, through SQL and through the search handler, and with no tuning row
+  both the reader and the search use the default cap of 1.
 * the comment an agent reads names the cap and the folded units, and one step down puts 0069's search, row, check,
   comment and functions back.
 """
@@ -279,13 +280,23 @@ async def test_the_reader_reads_the_cap_the_search_applies(admin: asyncpg.Connec
     assert await reader.fetchval("SELECT api.search_hits_per_document()") == read
 
 
+async def test_with_no_tuning_row_the_reader_and_the_search_both_use_the_default_cap_of_one(admin: asyncpg.Connection, reader: asyncpg.Connection):
+    await admin.execute("DELETE FROM kb.retrieval_tuning")
+
+    cap = await reader.fetchval("SELECT api.search_hits_per_document()")
+    rows = await _search(reader)
+
+    assert cap == 1
+    assert sorted(_documents(rows)) == ["alpha", "beta", "delta", "epsilon", "gamma", "other"]
+
+
 async def test_the_search_handler_reads_the_cap_through_the_reader_gateway(admin: asyncpg.Connection, reader_url: str):
     await _cap(admin, "2")
     engine = create_async_engine(reader_url, poolclass=NullPool)
     try:
         search = SearchHandler(ReadOnlySqlGateway(engine, collection=_COLLECTION), FakeEmbedding())
         direct = await search.hits_per_document()
-        safe = await read_hits_per_document(search)
+        safe = await read_hits_per_document(search, knowledge_base=_COLLECTION)
     finally:
         await engine.dispose()
 
