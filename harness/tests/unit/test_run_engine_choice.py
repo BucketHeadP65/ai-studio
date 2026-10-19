@@ -16,7 +16,7 @@ from uuid import UUID
 import pytest
 
 from core.ai.history.contracts import ContinuationAttempt, ContinuationUnsafeReplayError
-from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, StepConversationContinuation
+from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, StepConversationContinuation, spec_identity
 
 from harness.adapters.temporal_server import ServerOutcome
 from harness.adapters.wiring import REGISTRATIONS, durable_turns
@@ -263,3 +263,29 @@ async def test_a_turn_whose_run_wrote_no_settled_step_is_refused_rather_than_com
 def test_the_process_that_serves_durable_runs_also_holds_the_ledger_their_lines_live_in() -> None:
     """Choosing the durable engine is choosing to carry a multi-turn line in the record rather than in this process."""
     assert durable_turns in REGISTRATIONS
+
+
+class _SilentHandle:
+    """A workflow handle whose queries go unanswered, as a closed workflow's do."""
+
+    async def query(self, *_args: object, **_kwargs: object) -> object:
+        msg = "no worker answers"
+        raise RuntimeError(msg)
+
+
+async def test_a_durable_runs_evidence_carries_the_content_address_of_the_workflow_it_ran(
+    session: Runtime, quarterly_report: Workflow, tmp_path: Path
+) -> None:
+    """A trust lookup keys on the content address, so a durable run's record must carry it like any other run's."""
+    records = records_under(tmp_path)
+    session.active.workflow_id = "wf.report"
+
+    await durable._record_evidence(
+        session,
+        cast("Any", _SilentHandle()),
+        records=records,
+        ran=durable.DurableRunOutcome(spec=quarterly_report, params={"quarter": "Q2"}, outcome="completed"),
+    )
+
+    (written,) = await records.evidence.events_for("wf.report")
+    assert written.spec_hash == spec_identity(quarterly_report)

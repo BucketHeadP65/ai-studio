@@ -28,6 +28,7 @@ from core.ai.workflows.contracts import (
     RunRequest,
     StepConversationContinuation,
     connect,
+    spec_identity,
 )
 from core.observability import get_logger, span
 from pydantic_ai_harness.step_persistence import StepPersistence, StepStore
@@ -364,6 +365,7 @@ async def _record_evidence(
     await records.evidence.append(
         RunEvidence(
             workflow_id=session.active.workflow_id,
+            spec_hash=spec_identity(ran.spec),
             workflow_version=ran.spec.version,
             outcome=ran.outcome,
             result=Outcome(status="unknown", summary=_NOT_CHECKED),
