@@ -74,9 +74,10 @@ part is left out when no switch is on, as for a fixed-mode knowledge base, and a
 indexed reads `not indexed`. The knowledge base fingerprint hashes the knowledge base's schema, not its index, so
 two runs over the same files before and after the chunk sizes change share a fingerprint and differ
 only in their index build. The header's `search_date_range` says whether `search` took `since` and
-`until`. Every run writes true. A results file whose header or case line is missing a key the run writes,
-other than `source_scoring_version`, predates the current format: `studio evals compare` and `--resume` refuse it, naming the line and the
-missing keys, and the evaluation is run again to write it anew. A failed case is written as incorrect, and its `transient` key
+`until`. Every run writes true. A results file whose header or case line is missing a key the run writes
+predates the current format: `studio evals compare` and `--resume` refuse it, naming the line and the
+missing keys, and the evaluation is run again to write it anew. `--resume` also says to name another results file
+or to run without resuming, which replaces the file. A failed case is written as incorrect, and its `transient` key
 says whether it was a transient failure: a model connection error, a model request timeout, an
 HTTP 429 or 5xx from the model, or a database connection failure. A database connection failure is
 a connection to the knowledge base's database that was refused, could not be opened or closed under
@@ -116,9 +117,8 @@ summary over every case in the file, and the `--source-level` line covers every 
 reads the current knowledge base fingerprint and prints one warning line when it differs from the
 header's, without refusing. A source lookup that fails on a resumed run leaves the header and the
 kept lines as they were, and only the lines run now carry null sources and scores, which the CLI
-says. A later resume does not run them again for that alone. A line that recorded its `transient` key
-before 2026-10-18 recorded a database connection failure as not transient and keeps that value, so a
-resume runs that case again only once its line is dropped from the file.
+says. A later resume does not run them again for that alone. A line's `transient` key is what the run
+that wrote it decided, and a resume never decides it again.
 
 `--source-level` (`EvaluationRunConfig.hit_sources`) scores each line against the dataset's gold
 source ids. A cited ref is read as the bare unit id it names first, so `page:<collection>/<id>`,
@@ -191,7 +191,7 @@ count. `engram.evals.scoring.domain.ranked_sources` builds the ranks for both co
 
 The rule carries a version, `engram.evals.scoring.contracts.SOURCE_SCORING_VERSION` (2 for the rule
 above), and a results file's header records the version its lines were scored under as
-`source_scoring_version`. A header written before the key was recorded reads it as 1. `--resume`
+`source_scoring_version`. `--resume`
 refuses a file scored under another version, naming `source_scoring_version (1 in the file, 2 now)`
 and saying to run without resuming, which replaces the file. `studio evals compare` refuses two runs
 that both carry source-level scores under different versions and names the run to run again with

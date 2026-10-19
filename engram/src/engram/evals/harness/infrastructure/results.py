@@ -5,8 +5,7 @@ dataset always pair case by case. Each line scores recall@4, recall@10 and MRR a
 source ids its citations map to when the run mapped them, one rank per citation, and over its cited page ids otherwise.
 A citation with no source and a repeat of a source cited above it each hold their rank and match nothing. When the run mapped
 sources, each line also carries its seen recall: the share of its gold ids among the sources its tool results named. A
-file missing a field the writer writes predates the current format and is refused. A header with no source scoring
-version reads it as 1.
+file missing a field the writer writes predates the current format and is refused.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ from pydantic_core import to_jsonable_python
 
 from engram.evals.harness.domain.answers import is_official_match, is_strict_match
 from engram.evals.outcomes.contracts import citation_source_metrics, ranked_metrics
+from engram.evals.shared.contracts import case_line_refusal, header_refusal
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
@@ -74,8 +74,8 @@ class ResultsHeader:
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
     """What the lookup of the cited pages' sources raised, or None when it succeeded or the run mapped no sources."""
-    source_scoring_version: int = 1
-    """The version of the source-level scoring rule the lines were scored under. 1 in a header that did not record it."""
+    source_scoring_version: int
+    """The version of the source-level scoring rule the lines were scored under."""
 
 
 @dataclass(frozen=True)
@@ -221,43 +221,20 @@ def read_results(path: Path) -> tuple[ResultsHeader, tuple[ResultsLine, ...]]:
     try:
         header = _HEADER_LINE.validate_json(header_row).header
     except ValidationError as error:
-        missing = _missing_keys(error, under=("header",))
-        msg = (
-            f"line {header_number} of {path} predates the current results format: its header has no {', '.join(missing)}. "
-            "Run the evaluation again to write it in the current format."
-            if missing
-            else f"line {header_number} of {path} is not a results header: {error}"
-        )
-        raise ValueError(msg) from error
+        raise ValueError(header_refusal(path, header_number, error)) from error
     lines: list[ResultsLine] = []
     seen: set[str] = set()
     for number, row in case_rows:
         try:
             line = _CASE_LINE.validate_json(row)
         except ValidationError as error:
-            missing = _missing_keys(error, under=())
-            msg = (
-                f"line {number} of {path} predates the current results format: it has no {', '.join(missing)}. "
-                "Run the evaluation again to write it in the current format."
-                if missing
-                else f"line {number} of {path} is not a case line: {error}"
-            )
-            raise ValueError(msg) from error
+            raise ValueError(case_line_refusal(path, number, error)) from error
         if line.case in seen:
             msg = f"line {number} of {path} repeats the case {line.case}"
             raise ValueError(msg)
         seen.add(line.case)
         lines.append(line)
     return header, tuple(lines)
-
-
-def _missing_keys(error: ValidationError, *, under: tuple[str, ...]) -> tuple[str, ...]:
-    """The keys a line lacks directly under the path `under`, sorted, when every complaint is one of those, else nothing."""
-    complaints = error.errors()
-    depth = len(under) + 1
-    if not complaints or any(complaint["type"] != "missing" or len(complaint["loc"]) != depth or tuple(complaint["loc"][:-1]) != under for complaint in complaints):
-        return ()
-    return tuple(sorted({str(complaint["loc"][-1]) for complaint in complaints}))
 
 
 def dataset_sha256(dataset: EvaluationDataset) -> str:

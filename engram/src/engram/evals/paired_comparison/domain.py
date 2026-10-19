@@ -35,10 +35,7 @@ _MISSING = "missing"
 
 
 class ResultsHeader(BaseModel):
-    """How one evaluation run was set up, as the first line of its results file records it.
-
-    A header with no source scoring version reads it as 1.
-    """
+    """How one evaluation run was set up, as the first line of its results file records it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -74,8 +71,8 @@ class ResultsHeader(BaseModel):
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
     """What the lookup of the cited pages' sources raised, or None when it succeeded or the run mapped no sources."""
-    source_scoring_version: int = 1
-    """The version of the source-level scoring rule the lines were scored under. 1 in a header that did not record it."""
+    source_scoring_version: int
+    """The version of the source-level scoring rule the lines were scored under."""
 
 
 class ResultsLine(BaseModel):

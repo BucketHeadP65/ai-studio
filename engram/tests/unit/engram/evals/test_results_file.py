@@ -334,7 +334,7 @@ def test_an_older_file_is_refused_as_predating_the_current_format_naming_what_it
     path = tmp_path / "older.jsonl"
     _write_older_file(path)
 
-    with pytest.raises(ValueError, match=r"line 1 of .* predates the current results format: its header has no code_mode, index_build, search_date_range, thinking\."):
+    with pytest.raises(ValueError, match=r"line 1 of .* predates the current results format: its header has no code_mode, index_build, search_date_range, source_scoring_version, thinking\."):
         read_results(path)
 
 
@@ -360,16 +360,15 @@ def test_a_header_key_this_reader_does_not_know_is_ignored(tmp_path: Path) -> No
     assert (header, lines) == (_HEADER, ())
 
 
-def test_a_header_with_no_source_scoring_version_reads_it_as_one(tmp_path: Path) -> None:
+def test_a_header_with_no_source_scoring_version_is_refused_as_predating_the_current_format(tmp_path: Path) -> None:
     path = tmp_path / "results.jsonl"
     write_results(path, _HEADER, [])
     row = json.loads(path.read_text(encoding="utf-8"))
     del row["header"]["source_scoring_version"]
     path.write_text(f"{json.dumps(row)}\n", encoding="utf-8")
 
-    header, _lines = read_results(path)
-
-    assert header.source_scoring_version == 1
+    with pytest.raises(ValueError, match=r"line 1 of .* predates the current results format: its header has no source_scoring_version\."):
+        read_results(path)
 
 
 def test_an_empty_file_is_refused(tmp_path: Path) -> None:

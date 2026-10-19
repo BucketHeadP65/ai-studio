@@ -880,10 +880,9 @@ def evals_compare_cmd(
     pinning, search date range or knowledge base differ are refused. Two runs may differ in the knowledge base
     fingerprint and in the index build, and the report shows both runs' values. Two runs under one strategy may
     differ in the SQL switch or in code mode, not in both, and two runs under different strategies must share both and
-    the candidate must be the baseline plus the graph leg. A results file missing a field the run writes, other than its
-    source scoring version, predates the current format and is refused. Two runs that both carry source-level scores
-    under different source scoring versions are refused, naming the run to run again, and a results file with no source
-    scoring version reads it as 1. A refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
+    the candidate must be the baseline plus the graph leg. A results file missing a field the run writes predates the
+    current format and is refused. Two runs that both carry source-level scores under different source scoring versions
+    are refused, naming the run to run again. A refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
     before any file is read.
     """
     pairs = [_compared_pair(value) for value in pair]

@@ -592,16 +592,11 @@ def test_the_reader_reads_the_sources_and_the_retrieval_scores(tmp_path: Path):
     assert (second.sources, second.recall_at_4, second.recall_at_10, second.mrr) == (None, None, None, None)
 
 
-def test_the_reader_reads_the_source_scoring_version_and_a_header_without_it_as_version_one(tmp_path: Path):
+def test_the_reader_reads_the_source_scoring_version_the_header_records(tmp_path: Path):
     path = tmp_path / "a.jsonl"
     write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
-    written = read_results(path).header.source_scoring_version
-    rows = path.read_text(encoding="utf-8").splitlines()
-    header = json.loads(rows[0])
-    del header["header"]["source_scoring_version"]
-    path.write_text("\n".join([json.dumps(header), *rows[1:]]) + "\n", encoding="utf-8")
 
-    assert (written, read_results(path).header.source_scoring_version) == (SOURCE_SCORING_VERSION, 1)
+    assert read_results(path).header.source_scoring_version == SOURCE_SCORING_VERSION
 
 
 def test_the_reader_reads_a_citation_that_holds_no_source(tmp_path: Path):
@@ -648,7 +643,7 @@ def test_the_reader_reads_what_an_evaluation_run_writes(tmp_path: Path):
     assert results.lines == (_line("c1", strict=True, official=True), _line("c2", strict=False, query_type=None, failed=True))
 
 
-@pytest.mark.parametrize("missing", ["code_mode", "thinking", "search_date_range", "index_build"])
+@pytest.mark.parametrize("missing", ["code_mode", "thinking", "search_date_range", "index_build", "source_scoring_version"])
 def test_a_header_missing_a_field_the_writer_writes_is_refused_as_predating_the_current_format(tmp_path: Path, missing: str):
     path = tmp_path / "a.jsonl"
     write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])

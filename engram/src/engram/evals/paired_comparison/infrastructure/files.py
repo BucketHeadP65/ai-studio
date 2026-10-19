@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from engram.evals.paired_comparison.domain import ResultsFile, ResultsHeader, ResultsLine, paired_comparison_markdown
 from engram.evals.paired_comparison.exceptions import ResultsFileUnreadableError
+from engram.evals.shared.contracts import case_line_refusal, header_refusal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -55,43 +56,20 @@ def read_results(path: Path) -> ResultsFile:
     try:
         header = _HeaderLine.model_validate_json(header_row).header
     except ValidationError as error:
-        missing = _missing_keys(error, under=("header",))
-        msg = (
-            f"line {header_number} of {path} predates the current results format: its header has no {', '.join(missing)}. "
-            "Run the evaluation again to write it in the current format."
-            if missing
-            else f"line {header_number} of {path} is not a results header: {error}"
-        )
-        raise ResultsFileUnreadableError(msg) from error
+        raise ResultsFileUnreadableError(header_refusal(path, header_number, error)) from error
     lines: list[ResultsLine] = []
     seen: set[str] = set()
     for number, row in case_rows:
         try:
             line = ResultsLine.model_validate_json(row)
         except ValidationError as error:
-            missing = _missing_keys(error, under=())
-            msg = (
-                f"line {number} of {path} predates the current results format: it has no {', '.join(missing)}. "
-                "Run the evaluation again to write it in the current format."
-                if missing
-                else f"line {number} of {path} is not a case line: {error}"
-            )
-            raise ResultsFileUnreadableError(msg) from error
+            raise ResultsFileUnreadableError(case_line_refusal(path, number, error)) from error
         if line.case in seen:
             msg = f"line {number} of {path} repeats the case {line.case}"
             raise ResultsFileUnreadableError(msg)
         seen.add(line.case)
         lines.append(line)
     return ResultsFile(path=str(path), header=header, lines=tuple(lines))
-
-
-def _missing_keys(error: ValidationError, *, under: tuple[str, ...]) -> tuple[str, ...]:
-    """The keys a line lacks directly under the path `under`, sorted, when every complaint is one of those, else nothing."""
-    complaints = error.errors()
-    depth = len(under) + 1
-    if not complaints or any(complaint["type"] != "missing" or len(complaint["loc"]) != depth or tuple(complaint["loc"][:-1]) != under for complaint in complaints):
-        return ()
-    return tuple(sorted({str(complaint["loc"][-1]) for complaint in complaints}))
 
 
 def write_paired_comparison(comparisons: Sequence[PairedComparison], *, out: Path) -> tuple[Path, Path]:

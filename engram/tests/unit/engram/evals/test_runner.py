@@ -2142,6 +2142,13 @@ def _drop_header_key(path: Path, key: str) -> None:
     path.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
 
 
+def _set_header_key(path: Path, key: str, value: object) -> None:
+    """Rewrite the results file at `path` with `key` set to `value` in its header."""
+    header, *rows = (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
+    header["header"][key] = value
+    path.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
+
+
 def _case_rows(path: Path) -> list[dict[str, object]]:
     """The results file's case lines in file order."""
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()[1:]]
@@ -2344,7 +2351,7 @@ class TestResume(_ResetsLogfire):
         assert asked.asked == []
         assert results.read_text(encoding="utf-8") == written
 
-    @pytest.mark.parametrize("key", ["index_build", "search_date_range", "code_mode", "thinking"])
+    @pytest.mark.parametrize("key", ["index_build", "search_date_range", "code_mode", "thinking", "source_scoring_version"])
     async def test_a_results_file_whose_header_lacks_a_field_is_refused_as_predating_the_current_format(self, tmp_path: Path, key: str):
         results = tmp_path / "results.jsonl"
         dataset = _named_dataset(*_RESUMED_CASES)
@@ -2355,9 +2362,10 @@ class TestResume(_ResetsLogfire):
         written = results.read_text(encoding="utf-8")
         asked = _AskedModel()
 
-        with pytest.raises(ResultsFileNotResumableError, match=rf"predates the current results format: its header has no {key}\b"):
+        with pytest.raises(ResultsFileNotResumableError, match=rf"predates the current results format: its header has no {key}\b") as refused:
             await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
 
+        assert str(refused.value).endswith("Name another results file, or run without resuming to replace this one.")
         assert asked.asked == []
         assert results.read_text(encoding="utf-8") == written
 
@@ -2376,7 +2384,7 @@ class TestResume(_ResetsLogfire):
         config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
         failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
         await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
-        _drop_header_key(results, "source_scoring_version")
+        _set_header_key(results, "source_scoring_version", 1)
         written = results.read_text(encoding="utf-8")
         asked = _AskedModel()
 

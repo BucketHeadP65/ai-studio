@@ -1654,7 +1654,7 @@ class TestImportJudgmentsCli:
 
 
 def _write_results_file(
-    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int | None = None, scored: bool = False
+    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int = SOURCE_SCORING_VERSION, scored: bool = False
 ) -> None:
     header: dict[str, object] = {
         "strategy": "search-hybrid",
@@ -1673,9 +1673,8 @@ def _write_results_file(
         "index_build": "7+500-1000 test-embedding",
         "started": "2026-10-13T09:00:00+00:00",
         "source_lookup_error": None,
+        "source_scoring_version": source_scoring_version,
     }
-    if source_scoring_version is not None:
-        header["source_scoring_version"] = source_scoring_version
     lines = [
         {
             "case": f"c{index}",
@@ -1746,8 +1745,8 @@ class TestCompareCli:
 
     def test_runs_scored_under_different_source_scoring_versions_are_refused_saying_which_to_run_again(self, tmp_path: Path):
         older, newer = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
-        _write_results_file(older, strict=(True, False), scored=True)
-        _write_results_file(newer, strict=(True, True), scored=True, source_scoring_version=SOURCE_SCORING_VERSION)
+        _write_results_file(older, strict=(True, False), scored=True, source_scoring_version=1)
+        _write_results_file(newer, strict=(True, True), scored=True)
         out = tmp_path / "compare.md"
 
         result = runner.invoke(app, ["evals", "compare", "--pair", f"{older},{newer}", "--out", str(out)])
