@@ -28,7 +28,8 @@ SOURCE_SCORING_VERSION = 2
 """The version of the source-level scoring rule this module states, which a results file's header records.
 
 You must raise it whenever a change alters a source-level score. A header that does not record a version was scored
-under version 1, and a resumed run or a paired comparison refuses lines scored under another version.
+under version 1. A resumed run refuses a file scored under another version, and a paired comparison refuses two runs
+that both carry source-level scores under different versions.
 """
 
 

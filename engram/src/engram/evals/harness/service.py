@@ -767,8 +767,9 @@ async def _case_sources(
 class ResultsFileNotResumableError(ValueError):
     """A resumed run cannot keep the cases of its results file.
 
-    The file cannot be read, or it was written by a run whose settings differ in a field the paired comparison holds.
-    The message names the line, or each differing field with both values.
+    The file cannot be read, or it was written by a run whose settings differ in a field the paired comparison holds,
+    in the index build or in the source scoring version. The message names the line, or each differing field with both
+    values.
     """
 
 

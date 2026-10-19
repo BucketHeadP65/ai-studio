@@ -1,7 +1,6 @@
 r"""Unit specs for the shared evaluation-run service (`engram.evals.harness.service`).
 
-The single source of truth the `engram evals` CLI and the `POST /api/evals/run` job both
-delegate to (Phase-3 finding E — the run flow had been copied into both). These specs pin the
+The single source of truth the `studio evals` CLI delegates to. These specs pin the
 three public functions directly, network-free:
 
 * :func:`build_eval_model` returns the right model per spec — ``test-model`` is a network-free

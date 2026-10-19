@@ -6,8 +6,8 @@ source ids its citations map to when the run mapped them, one rank per citation,
 A citation with no source and a repeat of a source cited above it each hold their rank and match nothing. When the run mapped
 sources, each line also carries its seen recall: the share of its gold ids among the sources its tool results named. A
 file written by an older run reads back with code mode off, the thinking level unset, `search_date_range` as the
-opposite of `pinned_search`, the index build unknown, no seen recall, and whether each failure was transient read from
-its error text.
+opposite of `pinned_search`, the index build unknown, the source scoring version 1, no seen recall, and whether each
+failure was transient read from its error text.
 """
 
 from __future__ import annotations
