@@ -19,6 +19,7 @@ from engram.retrieval.infrastructure.embedded import (
     embedded_read_tools,
     embedded_retrieval,
     policy_instructions,
+    read_hits_per_document,
     switch_source,
 )
 from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway, verify_reader_role
@@ -107,6 +108,7 @@ __all__ = [
     "private_reader_role",
     "private_reader_url",
     "qualify_ref",
+    "read_hits_per_document",
     "reranking",
     "search_next_steps",
     "search_result_status",

@@ -63,7 +63,7 @@ from .infrastructure.gateway import read_snapshot
 from .knowledge_base_schema import KB_SEARCH_SCHEMA
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, Mapping
+    from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from core.ai.retrieval.contracts import StampSource
     from mcp.server.fastmcp import FastMCP
@@ -99,6 +99,7 @@ __all__ = [
     "bound_search_result",
     "build_retrieval_toolset",
     "declared_facets_clause",
+    "document_clause",
     "elide_k",
     "envelope_next_steps",
     "fetch_description",
@@ -119,6 +120,7 @@ __all__ = [
     "search_next_steps",
     "search_ref_type",
     "search_result_status",
+    "shared_hits_per_document",
 ]
 
 # A short phrase for each known `hit_level` value, used in the search descriptions. A level absent
@@ -165,6 +167,63 @@ DATE_RANGE_CLAUSE = (
     "A raw chunk is kept when a page made from its source falls in the range."
 )
 """The sentences every `search` description spends on its date range."""
+
+_DOCUMENT = "a source together with every page made from it, or a page made from no source"
+"""What one document is, as a `search` description says it."""
+
+_FOLDED = "best first, each with the `ref` that fetches it, so `fetch` one directly rather than searching again."
+"""How a `search` description says a hit's folded units are listed and read, where the surface serves `fetch`."""
+
+_FOLDED_UNREAD = "best first, each with its `ref`."
+"""How a `search` description says a hit's folded units are listed, where the surface serves no `fetch`."""
+
+_SCORE_SENTENCE_END = "a relevance `score`."
+"""The words every shipped `search` description ends its result sentence with, where the document sentences go."""
+
+
+def document_clause(hits_per_document: int, *, can_fetch: bool = True) -> str:
+    """What a `search` description says about documents under the cap on hits per document the database applies.
+
+    Args:
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it. 0 keeps every hit.
+        can_fetch: Whether the surface serves `fetch`, which the sentences then send the agent to with a folded unit's ref.
+
+    Returns:
+        The sentences for a cap of 1 or more. An empty string for 0, since a search that keeps every hit says nothing
+        about documents.
+    """
+    if hits_per_document <= 0:
+        return ""
+    folded = _FOLDED if can_fetch else _FOLDED_UNREAD
+    if hits_per_document == 1:
+        return f"Each hit is a distinct document: {_DOCUMENT}. A hit's `folded_units` lists more units of its document that matched, {folded}"
+    return (
+        f"At most {hits_per_document} hits come from one document: {_DOCUMENT}. The best hit of a document lists its next "
+        f"matching units as `folded_units`, {folded}"
+    )
+
+
+def shared_hits_per_document(caps: Iterable[int]) -> int:
+    """The cap on hits per document several knowledge bases share, 0 when they disagree or there are none.
+
+    Args:
+        caps: Each knowledge base's cap on hits per document.
+
+    Returns:
+        The one cap every knowledge base applies, or 0, so a description never states a cap one of them does not apply.
+    """
+    distinct = set(caps)
+    return distinct.pop() if len(distinct) == 1 else 0
+
+
+def _with_document_clause(description: str, hits_per_document: int, *, can_fetch: bool = True) -> str:
+    """`description` with the document sentences for `hits_per_document` after its result sentence, or appended."""
+    clause = document_clause(hits_per_document, can_fetch=can_fetch)
+    if not clause:
+        return description
+    if _SCORE_SENTENCE_END in description:
+        return description.replace(_SCORE_SENTENCE_END, f"{_SCORE_SENTENCE_END} {clause}", 1)
+    return f"{description} {clause}"
 
 
 def _facets_clause(facet_keys: tuple[str, ...]) -> str:
@@ -245,6 +304,23 @@ def _without_sql_plane(description: str) -> str:
     return description.replace(_COLLECTION_CLAUSE, _COLLECTION_CLAUSE_NO_SQL)
 
 
+_FETCH_SENTENCES = (
+    (" Start here to find candidate sources, then `fetch` a hit's full text by its `id`.", " Start here to find candidate sources."),
+    (" Start here to find candidate sources, then `fetch` a hit's full text by `id`.", " Start here to find candidate sources."),
+    ("Every hit stays a candidate until you fetch and read it.", "Every hit stays a candidate: its snippet is an excerpt, never the whole unit."),
+    ("every hit stays a candidate until you fetch and read it.", "every hit stays a candidate: its snippet is an excerpt, never the whole unit."),
+)
+"""Each sentence a shipped `search` description sends the agent to `fetch` with, and how it reads where no `fetch` is served."""
+
+
+def _without_fetch(description: str) -> str:
+    """A search description whose sentences sending the agent to `fetch` read as they do on a surface serving none."""
+    text = description
+    for sentence, without in _FETCH_SENTENCES:
+        text = text.replace(sentence, without)
+    return text
+
+
 def _pinned_description(description: str) -> str:
     """A search description without its collection sentences."""
     text = description
@@ -273,8 +349,8 @@ SEARCH_DESCRIPTION_HYBRID = (
     "(names, acronyms, ids) in the `query` rank on the keyword leg while conceptual phrasing ranks "
     "on the vector leg: feed both. Returns the top-`k` ranked "
     "hits, each with its `id`, "
-    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. `query` is the search "
-    f"text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
+    f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
+    f"`query` is the search text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
     " Read the result's `status` for what this search actually found, its `window` for whether "
@@ -442,7 +518,12 @@ _FIND_PATHS_DESCRIPTION = FIND_PATHS_DESCRIPTION
 
 
 def search_description(
-    *, hybrid: bool, can_sql: bool = True, facet_keys: tuple[str, ...] | None = None, takes_collection: bool = True
+    *,
+    hybrid: bool,
+    can_sql: bool = True,
+    facet_keys: tuple[str, ...] | None = None,
+    takes_collection: bool = True,
+    hits_per_document: int = 0,
 ) -> str:
     """The `search` description for a leg the host fixes rather than the agent.
 
@@ -455,11 +536,13 @@ def search_description(
             sentences. `None` (the default) describes a search that takes no `facets`.
         takes_collection: Whether the tool takes a `collection` argument. `False` drops every
             sentence about it, for a search that has none.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the
+            description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
         The full tool description text.
     """
-    text = SEARCH_DESCRIPTION_HYBRID if hybrid else SEARCH_DESCRIPTION_KEYWORD
+    text = _with_document_clause(SEARCH_DESCRIPTION_HYBRID if hybrid else SEARCH_DESCRIPTION_KEYWORD, hits_per_document)
     if not can_sql:
         text = _without_sql_plane(text)
     if not takes_collection:
@@ -497,6 +580,7 @@ def _final_descriptions(
     facets_clause: str | None = None,
     collection: str | None = None,
     served: str | None = None,
+    hits_per_document: int = 0,
 ) -> dict[str, str]:
     """Each tool's description after any override: `facets_clause` `None` takes no `facets`, `served` names the one collection searched."""
     can_search = SEARCH in selected
@@ -507,6 +591,9 @@ def _final_descriptions(
         search_default = SEARCH_DESCRIPTION_HYBRID
     else:
         search_default = SEARCH_DESCRIPTION_KEYWORD
+    search_default = _with_document_clause(search_default, hits_per_document, can_fetch=can_fetch)
+    if not can_fetch:
+        search_default = _without_fetch(search_default)
     if not can_sql:
         search_default = _without_sql_plane(search_default)
     if facets_clause is not None:
@@ -566,7 +653,10 @@ _MINIMAL_STEPS = NextSteps(
 """The next move that replaces a composed block that pushed the answer past its budget."""
 
 _UNVERIFIED_CLAUSE = "Candidates are unverified evidence until you fetch and read them."
-"""What a candidate list is, said on every result that carries hits."""
+"""What a candidate list is, said on every result that carries hits where `fetch` is served."""
+
+_UNVERIFIED_UNREAD_CLAUSE = "Candidates are unverified evidence: each snippet is an excerpt, never the whole unit."
+"""What a candidate list is, said on every result that carries hits where no `fetch` is served."""
 
 
 def _clip(text: str | None, limit: int) -> str | None:
@@ -608,13 +698,13 @@ def search_result_status(hits: tuple[SearchHit, ...]) -> SearchResultStatus:
 
 
 def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, hybrid: bool) -> tuple[SearchHit, ...]:
-    """Project search rows into hits carrying their fetchable ref, their support, and a bounded snippet.
+    """Project search rows into hits carrying their fetchable ref, their support, a bounded snippet and their folded units.
 
     `answered_by` follows the legs that actually selected each hit: the semantic leg contributing
     makes it `hybrid`, its absence makes it `lexical`. A row from a database that publishes no
     component ranks has no per-leg facts to read, so it keeps the leg this call ran and no support
     label. Snippets are bounded here as well as in the generated SQL, so a hit is an excerpt
-    whichever database answered.
+    whichever database answered. Each folded unit carries the ref a hit of its level would carry.
 
     Args:
         rows: The search handler's rows, in rank order.
@@ -633,6 +723,9 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
         selected_semantically = hit.vector_rank is not None if ranked else hybrid
         leg: Literal["lexical", "hybrid"] = "hybrid" if selected_semantically else "lexical"
         snippet = _clip(hit.snippet, SEARCH_SNIPPET_CHARS)
+        folded = tuple(
+            unit.model_copy(update={"ref": qualify_ref(f"{search_ref_type(unit.hit_level)}:{unit.id}", collection)}) for unit in hit.folded_units
+        )
         projected.append(
             hit.model_copy(
                 update={
@@ -642,6 +735,7 @@ def search_hits(rows: tuple[Row, ...], *, collection: str, knowledge_base: str, 
                     "support": support,
                     "snippet": snippet,
                     "snippet_truncated": hit.snippet_truncated or snippet != hit.snippet,
+                    "folded_units": folded,
                 }
             )
         )
@@ -696,6 +790,29 @@ def _fitted(
     return longest_fitting(candidate, shorten=_shortened, fits=fits, longest=max(len(candidate.page_title or ""), len(candidate.snippet or "")))
 
 
+def _without_folded_units_past_the_budget(
+    hits: tuple[SearchHit, ...],
+    *,
+    status: SearchResultStatus,
+    next_steps: NextSteps,
+    knowledge_base: KnowledgeBaseStamp | None,
+    max_chars: int,
+) -> tuple[SearchHit, ...]:
+    """`hits` with folded units dropped from the lowest-ranked hit's last one up, until all the hits fit whole or no folded unit is left."""
+    trimmed = list(hits)
+
+    def fits_whole() -> bool:
+        whole = _windowed(tuple(trimmed), status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
+        return fits_budget(whole, max_chars)
+
+    for position in range(len(trimmed) - 1, -1, -1):
+        while trimmed[position].folded_units:
+            if fits_whole():
+                return tuple(trimmed)
+            trimmed[position] = trimmed[position].model_copy(update={"folded_units": trimmed[position].folded_units[:-1]})
+    return tuple(trimmed)
+
+
 def bound_search_result(
     hits: tuple[SearchHit, ...],
     *,
@@ -706,10 +823,11 @@ def bound_search_result(
 ) -> SearchResult:
     """The largest prefix of `hits` whose complete serialized result fits `max_chars`.
 
-    Rank order is kept and a hit's id and ref are never shortened. A hit is added whole when it fits,
-    else with its title and snippet bounded, else not at all, and then every later hit is left out
-    too. The window counts what was left out. When not even the top hit's id and ref fit, the answer
-    is an empty `budget_refused` result with a fixed next move.
+    Rank order is kept and a hit's id and ref are never shortened. When the hits do not all fit whole, folded units go
+    first, one at a time from the lowest-ranked hit's last one up, before any title or snippet is cut. Then a hit is
+    added whole when it fits, else with its title and snippet bounded, else not at all, and then every later hit is
+    left out too. The window counts what was left out. When not even the top hit's id and ref fit, the answer is an
+    empty `budget_refused` result with a fixed next move.
 
     Args:
         hits: The projected hits, in rank order.
@@ -721,6 +839,7 @@ def bound_search_result(
     Returns:
         The bounded result, its window saying how much of the retrieved list it carries.
     """
+    hits = _without_folded_units_past_the_budget(hits, status=status, next_steps=next_steps, knowledge_base=knowledge_base, max_chars=max_chars)
     kept: tuple[SearchHit, ...] = ()
     for candidate in hits:
         fitted = _fitted(
@@ -752,14 +871,15 @@ def search_next_steps(
     map_collection: str | None,
     dated: bool = False,
     filtered: bool = False,
+    can_fetch: bool = True,
 ) -> NextSteps:
     """The next-move block a `search` result carries: fetch a hit, or widen when there are none.
 
-    The top hit is named by its exact fetchable `ref`, so the option always goes through `fetch`.
-    With no hits, the options are a different query and, when `map_collection` names one, the
-    knowledge base's map. Every summary ends by naming which leg answered. When the semantic leg
-    alone selected the hits, the summary says so and offers saying the knowledge base has no support
-    for the question.
+    The top hit is named by its exact fetchable `ref`, so the option goes through `fetch` where the surface serves it.
+    Where it serves none, no option or summary names `fetch`, the hits are judged by their snippets and no map is
+    offered. With no hits, the options are a different query and, when `map_collection` names one, the knowledge
+    base's map. Every summary ends by naming which leg answered. When the semantic leg alone selected the hits, the
+    summary says so and offers saying the knowledge base has no support for the question.
 
     Args:
         hits: The projected hits, in rank order.
@@ -774,6 +894,7 @@ def search_next_steps(
             the range as a lever.
         filtered: Whether `facets` narrowed the search. With no hits, the widen option then names them
             as a lever.
+        can_fetch: Whether the surface serves `fetch`. `False` names no `fetch` anywhere in the block.
 
     Returns:
         The next-move block.
@@ -781,7 +902,7 @@ def search_next_steps(
     leg = "hybrid" if hybrid else "lexical"
     # The query is bounded like any other display text before it is quoted back.
     echoed = query if len(query) <= SEARCH_SNIPPET_CHARS else f"{query[: SEARCH_SNIPPET_CHARS - 1]}\u2026"
-    browse = None if map_collection is None else f"fetch(unit_id='collection:{map_collection}')"
+    browse = None if map_collection is None or not can_fetch else f"fetch(unit_id='collection:{map_collection}')"
     if not hits:
         widen = _widen_option(dated=dated, filtered=filtered)
         return NextSteps(
@@ -789,7 +910,13 @@ def search_next_steps(
             options=(widen,) if browse is None else (widen, f"{browse} to open the map and browse by structure instead."),
         )
     top = hits[0]
-    read_it = f"fetch(unit_id={top.ref!r}) to read its full text: a hit is an address plus a snippet, never the source."
+    read_it = (
+        f"fetch(unit_id={top.ref!r}) to read its full text: a hit is an address plus a snippet, never the source."
+        if can_fetch
+        else "Judge each hit by its snippet, an excerpt and never the source, and search again with narrower terms to bring "
+        "a different passage into view."
+    )
+    sources = "the sources you fetch" if can_fetch else "the snippets"
     if status == "semantic_candidates_only":
         retry = "Re-run with the exact terms you expect" if browse is None else f"Re-run with the exact terms you expect, or browse by structure: {browse}"
         return NextSteps(
@@ -800,11 +927,12 @@ def search_next_steps(
             options=(
                 read_it,
                 f"{retry}.",
-                "Say this knowledge base has no support for the question if the sources you fetch do not answer it.",
+                f"Say this knowledge base has no support for the question if {sources} do not answer it.",
             ),
         )
     return NextSteps(
-        summary=f"{len(hits)} hit(s) for {echoed!r}, ranked by relevance. {_UNVERIFIED_CLAUSE} Answered by {leg}.",
+        summary=f"{len(hits)} hit(s) for {echoed!r}, ranked by relevance. {_UNVERIFIED_CLAUSE if can_fetch else _UNVERIFIED_UNREAD_CLAUSE} "
+        f"Answered by {leg}.",
         options=(read_it,),
     )
 
@@ -892,6 +1020,7 @@ async def _run_search(
     facet_owner: str = "this knowledge base",
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> SearchResult:
     """Run one search into a bounded result: `pinned` ignores a passed collection, otherwise one unlike `default_collection` is refused."""
     if pinned:
@@ -928,6 +1057,7 @@ async def _run_search(
             map_collection=scoped if browsable else None,
             dated=message.is_dated,
             filtered=bool(message.facets),
+            can_fetch=can_fetch,
         ),
         knowledge_base=knowledge_base,
     )
@@ -972,6 +1102,7 @@ def _build_search_fn(
     facet_keys: tuple[str, ...] = (),
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> Callable[..., Awaitable[SearchResult]]:
     """Build the `search` closure: `k_source` drops `k`, `search_hybrid` drops `bm25_only`, `pinned` ignores `collection`, `browsable` offers the map."""
 
@@ -1001,6 +1132,7 @@ def _build_search_fn(
             facet_keys=facet_keys,
             refuse=refuse,
             browsable=browsable,
+            can_fetch=can_fetch,
         )
 
     if search_hybrid is None:
@@ -1076,6 +1208,7 @@ def _add_search_tool(
     pinned: bool = False,
     facet_keys: tuple[str, ...] = (),
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> None:
     """Register engram's own `search` on the pydantic-ai `toolset`, a pinned one offering no collection (see `_build_search_fn`)."""
     search = _build_search_fn(
@@ -1088,6 +1221,7 @@ def _add_search_tool(
         pinned=pinned,
         facet_keys=facet_keys,
         browsable=browsable,
+        can_fetch=can_fetch,
     )
     toolset.add_function(
         search,
@@ -1122,6 +1256,7 @@ def _add_search_mcp_tool(
     stamp: StampSource | None = None,
     facet_keys: tuple[str, ...] = (),
     browsable: bool = True,
+    can_fetch: bool = True,
 ) -> None:
     """Register engram's own `search` on the FastMCP `server`, refusing through `ToolError` (see `_build_search_fn`)."""
     search = _build_search_fn(
@@ -1134,6 +1269,7 @@ def _add_search_mcp_tool(
         facet_keys=facet_keys,
         refuse=ToolError,
         browsable=browsable,
+        can_fetch=can_fetch,
     )
     server.add_tool(search, name=SEARCH, description=description)
 
@@ -1434,6 +1570,7 @@ def build_retrieval_toolset(
     can_sql: bool = False,
     pinned: bool = False,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> RetrievalToolset:
     """Build a pydantic-ai `FunctionToolset` of engram's retrieval tools, or a subset of them.
 
@@ -1471,6 +1608,8 @@ def build_retrieval_toolset(
             these keys only and refuses any other key with a `ModelRetry` naming them. Its shipped
             description names them, and a `descriptions` override replaces that sentence with the rest.
             Empty (the default) refuses every key, saying the knowledge base declares no facets.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+            `search` description states. 0 (the default) keeps every hit and states nothing about documents.
 
     Returns:
         A `FunctionToolset` exposing the selected subset of `search` / `fetch` / `graph_expand` /
@@ -1491,6 +1630,7 @@ def build_retrieval_toolset(
         facets_clause=_facets_clause(facet_keys),
         collection=collection,
         served=collection,
+        hits_per_document=hits_per_document,
     )
     # `SEARCH` and `FETCH` are always withheld from the shared builder. engram registers them below, so
     # every search result carries `next_steps` and `fetch` reads every id form the other tools hand out.
@@ -1516,6 +1656,7 @@ def build_retrieval_toolset(
             pinned=pinned,
             facet_keys=facet_keys,
             browsable=fetch_opens_map(envelope, selected),
+            can_fetch=FETCH in selected,
         )
     if leveled and envelope is not None:
         toolset.add_function(
@@ -1549,6 +1690,7 @@ def register_mcp_tools(
     k_source: Callable[[], int] | None = None,
     stamp: StampSource | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> None:
     """Register engram's four retrieval tools on a FastMCP `server`.
 
@@ -1580,6 +1722,8 @@ def register_mcp_tools(
         facet_keys: The facet keys the knowledge base's schema declares, which `search` takes in
             `facets` as in `build_retrieval_toolset`. Any other key fails the call with a tool error
             naming them. Empty (the default) refuses every key.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the shipped
+            `search` description states. 0 (the default) keeps every hit and states nothing about documents.
     """
     resolved_hybrid = _resolve_search_hybrid(search_hybrid, switches)
     selected = _switch_gated_selection(TOOL_NAMES if only is None else only, switches)
@@ -1594,6 +1738,7 @@ def register_mcp_tools(
         facets_clause=_facets_clause(facet_keys),
         collection=collection,
         served=collection,
+        hits_per_document=hits_per_document,
     )
     # `SEARCH` and `FETCH` are always withheld from the shared builder, as in `build_retrieval_toolset`.
     _register_mcp_tools(
@@ -1618,6 +1763,7 @@ def register_mcp_tools(
             stamp=stamp,
             facet_keys=facet_keys,
             browsable=fetch_opens_map(envelope, selected),
+            can_fetch=FETCH in selected,
         )
     if not leveled and FETCH in selected:
         flat = flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), refuse=ToolError)
@@ -1678,9 +1824,15 @@ def register_routed_mcp_tools(
     refuse_duplicate_collections(surfaces)
     home = _home_surface(surfaces, default_knowledge_base)
     can_search = only is None or SEARCH in only
-    searching, reading = _routed_descriptions(surfaces, home, descriptions=descriptions, k_source=k_source, can_search=can_search)
+    searching, reading = _routed_descriptions(
+        surfaces, home, descriptions=descriptions, k_source=k_source, can_search=can_search, can_fetch=only is None or FETCH in only
+    )
     if can_search:
-        server.add_tool(_routed_search(surfaces, home, k_source=k_source, refuse=ToolError), name=SEARCH, description=searching)
+        server.add_tool(
+            _routed_search(surfaces, home, k_source=k_source, refuse=ToolError, can_fetch=only is None or FETCH in only),
+            name=SEARCH,
+            description=searching,
+        )
     if only is None or FETCH in only:
         server.add_tool(
             _routed_fetch(surfaces, home, refuse=ToolError, tools=served if served is not None else (TOOL_NAMES if only is None else only)), name=FETCH, description=reading
@@ -1735,15 +1887,23 @@ def _routed_descriptions(
     descriptions: Mapping[str, str] | None,
     k_source: Callable[[], int] | None,
     can_search: bool = True,
+    can_fetch: bool = True,
 ) -> tuple[str, str]:
     """The `search` and `fetch` descriptions a routed registration serves, in that order."""
     choices = ", ".join(surface.collection for surface in surfaces)
     facets_clause = declared_facets_clause({surface.collection: surface.facet_keys for surface in surfaces}, several_per_call=False)
-    resolved = _final_descriptions(search_hybrid=home.hybrid, descriptions=descriptions, k_source=k_source, facets_clause=facets_clause)[SEARCH]
+    resolved = _final_descriptions(
+        search_hybrid=home.hybrid,
+        descriptions=descriptions,
+        k_source=k_source,
+        selected=frozenset({SEARCH, FETCH}) if can_fetch else frozenset({SEARCH}),
+        facets_clause=facets_clause,
+        hits_per_document=shared_hits_per_document(surface.hits_per_document for surface in surfaces),
+    )[SEARCH]
     reading = resolve_description(
         FETCH, leveled_fetch_description(home.collection, mode=home.envelope.mode, can_search=can_search), descriptions
     )
-    return _routed_search_description(resolved, choices, home.collection), f"{reading} {_routed_fetch_clause(choices)}"
+    return _routed_search_description(resolved, choices, home.collection, can_fetch=can_fetch), f"{reading} {_routed_fetch_clause(choices)}"
 
 
 def refuse_duplicate_collections(surfaces: tuple[ReadSurface, ...]) -> None:
@@ -1791,9 +1951,9 @@ def _owning(by_collection: Mapping[str, ReadSurface], home: ReadSurface, collect
 
 
 def _routed_search(
-    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, k_source: Callable[[], int] | None, refuse: Refuse
+    surfaces: tuple[ReadSurface, ...], home: ReadSurface, *, k_source: Callable[[], int] | None, refuse: Refuse, can_fetch: bool = True
 ) -> Callable[..., Awaitable[SearchResult]]:
-    """The routed `search`: `collection` names which registered knowledge base ranks and answers, filtered by its own facet keys."""
+    """The routed `search`: `collection` names which registered knowledge base answers, by its own facet keys, its next steps naming `fetch` only when served."""
     by_collection = {surface.collection: surface for surface in surfaces}
 
     async def run(
@@ -1815,6 +1975,7 @@ def _routed_search(
             facet_owner=_named_base(surface.collection),
             refuse=refuse,
             browsable=surface.envelope.mode != "search_only",
+            can_fetch=can_fetch,
         )
 
     if k_source is None:
@@ -1874,12 +2035,13 @@ def _routed_fetch(
     return fetch
 
 
-def _routed_search_description(resolved: str, choices: str, default_collection: str) -> str:
-    """`resolved` pointed at the registered knowledge bases and at the `ref` that reads a hit back."""
+def _routed_search_description(resolved: str, choices: str, default_collection: str, *, can_fetch: bool = True) -> str:
+    """`resolved` pointed at the registered knowledge bases and, where `fetch` is served, at the `ref` that reads a hit back."""
+    reads_back = " so pass a hit's `ref` to `fetch` exactly as returned." if can_fetch else "."
     routed = (
         f"`collection` names which knowledge base to search (one of: {choices}) and omitting it searches "
         f"'{default_collection}'. No other collection is served here. Every hit's `ref` already names the "
-        "knowledge base it came from, so pass a hit's `ref` to `fetch` exactly as returned."
+        f"knowledge base it came from{',' if can_fetch else ''}{reads_back}"
     )
     if _COLLECTION_CLAUSE not in resolved:
         return f"{resolved}\n\n{routed}"

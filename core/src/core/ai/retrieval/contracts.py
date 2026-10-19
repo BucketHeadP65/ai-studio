@@ -8,6 +8,7 @@ from .domain import (
     FeedbackEntry,
     Fetch,
     FetchResult,
+    FoldedUnit,
     Graph,
     GraphEdge,
     GraphExpand,
@@ -62,7 +63,13 @@ from .policy import (
     save_policy,
 )
 from .schema import Facet, FacetPool, GraphSchema, SearchSchema, SearchSurface, SearchTuning
-from .search_builder import SEARCH_SNIPPET_CHARS, ParadeDBHybridSearchBuilder, PgTextSearchHybridSearchBuilder
+from .search_builder import (
+    FOLDED_UNITS_PER_HIT,
+    SEARCH_SNIPPET_CHARS,
+    ParadeDBHybridSearchBuilder,
+    PgTextSearchHybridSearchBuilder,
+    hits_per_document_body,
+)
 from .statement import RefusedStatementError, single_statement
 from .strategy import DEFAULT_STRATEGY, EVAL_STRATEGY_NAMES, STRATEGY_NAMES, RetrievalProfile, RetrievalStrategy, resolve_strategy
 from .toolset import RetrievalToolset, build_retrieval_toolset, fetch_one, fetch_unit, register_mcp_tools
@@ -73,6 +80,7 @@ __all__ = [
     "EVAL_STRATEGY_NAMES",
     "FETCH",
     "FIND_PATHS",
+    "FOLDED_UNITS_PER_HIT",
     "GRAPH_EXPAND",
     "GRAPH_EXPAND_HOP_LIMIT",
     "GRAPH_PATHS_HOP_LIMIT",
@@ -97,6 +105,7 @@ __all__ = [
     "FeedbackSink",
     "Fetch",
     "FetchResult",
+    "FoldedUnit",
     "Graph",
     "GraphEdge",
     "GraphExpand",
@@ -145,6 +154,7 @@ __all__ = [
     "effective_baseline_policy",
     "fetch_one",
     "fetch_unit",
+    "hits_per_document_body",
     "load_active_policy",
     "load_policy",
     "register_mcp_tools",

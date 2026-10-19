@@ -2,7 +2,8 @@
 
 One shared collection holds a long page whose card and six sections all carry the query's words, a short page whose
 title is exactly the query and whose card carries the words once, and one source whose five raw chunks carry another
-word. Every search runs keyword only, as `kb_reader`.
+word. Every search runs keyword only, as `kb_reader`, with the cap on hits per document off, so the cap on rows per group
+shows alone.
 
 What this pins:
 
@@ -49,9 +50,10 @@ async def _page(admin: asyncpg.Connection, page_id: str, title: str, card_text: 
 
 @pytest.fixture
 async def admin(migrated: str) -> AsyncIterator[asyncpg.Connection]:
-    """An owner connection over the long page, the titled page and the source."""
+    """An owner connection over the long page, the titled page and the source, with no cap on hits per document."""
     connection = await asyncpg.connect(_asyncpg_dsn(migrated))
     try:
+        await connection.execute("UPDATE kb.retrieval_tuning SET tuning = tuning || '{\"max_hits_per_document\": 0}'::jsonb WHERE id = 1")
         await _page(connection, _LONG, "Long notes", f"{_QUERY} {_QUERY} {_QUERY}")
         await connection.executemany(
             "INSERT INTO kb.sections (collection, id, page_id, ord, canon, path, heading, body, body_hash, tokens)"

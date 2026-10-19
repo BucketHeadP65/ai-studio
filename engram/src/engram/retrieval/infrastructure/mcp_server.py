@@ -334,6 +334,7 @@ def create_mcp_server(
     doc_authoring_tools: AuthoringTools | None = None,
     read_surfaces: tuple[ReadSurface, ...] | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> FastMCP:
     """Build the FastMCP server with its tools closing over the injected dependencies.
 
@@ -401,6 +402,9 @@ def create_mcp_server(
             takes in `facets`, inside `run_code` too. Any other key fails the call naming them. Empty (the
             default) refuses every key. Unread with `read_surfaces`, whose `search` filters each surface by
             its own `facet_keys`.
+        hits_per_document: The most hits one document keeps, as the database's tuning row sets it, which the
+            single-base `search` description states, inside `run_code` too. 0 (the default) keeps every hit and
+            states nothing about documents. Unread with `read_surfaces`, each of which carries its own.
 
     Returns:
         The server. The host runs it with `.run(transport="stdio")`.
@@ -450,6 +454,7 @@ def create_mcp_server(
         k_source=k_source,
         stamp=stamp,
         facet_keys=facet_keys,
+        hits_per_document=hits_per_document,
     )
     if handlers is not None and only is not None and RUN_CODE in only:
         _add_run_code(
@@ -466,6 +471,7 @@ def create_mcp_server(
             stamp=stamp,
             read_surfaces=read_surfaces,
             facet_keys=facet_keys,
+            hits_per_document=hits_per_document,
         )
     if seed_repo_factory is not None and datasets_dir is not None and only is not None and PROPOSE_SEEDS in only:
         _add_eval_authoring(server, seed_repo_factory, datasets_dir, thresholds or DEFAULT_DIFFICULTY_THRESHOLDS, collection)
@@ -509,6 +515,7 @@ def _register_read_tools(
     k_source: Callable[[], int] | None,
     stamp: StampSource | None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> None:
     """Add `search` and `fetch`, routed over the registered knowledge bases or scoped to this one, refusals naming `available`."""
     if not (only is None or SEARCH in only or FETCH in only):
@@ -540,6 +547,7 @@ def _register_read_tools(
         k_source=k_source,
         stamp=stamp,
         facet_keys=facet_keys,
+        hits_per_document=hits_per_document,
     )
 
 
@@ -693,6 +701,7 @@ def _register_single_source_tools(
     k_source: Callable[[], int] | None = None,
     stamp: StampSource | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> None:
     """Add the single-source `search` and `fetch` tools, never the graph tools, which are registered separately."""
     _search_fetch_names = frozenset({SEARCH, FETCH})
@@ -711,6 +720,7 @@ def _register_single_source_tools(
         k_source=k_source,
         stamp=stamp,
         facet_keys=facet_keys,
+        hits_per_document=hits_per_document,
     )
 
 
@@ -836,6 +846,7 @@ def _add_run_code(
     stamp: StampSource | None = None,
     read_surfaces: tuple[ReadSurface, ...] | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> None:
     """Register the opt-in `run_code` tool backed by a Monty sandbox."""
     from pydantic_ai_harness.code_mode import CodeModeToolset  # noqa: PLC0415 (loads the Monty sandbox)
@@ -853,6 +864,7 @@ def _add_run_code(
         stamp=stamp,
         read_surfaces=read_surfaces,
         facet_keys=facet_keys,
+        hits_per_document=hits_per_document,
     )
     code_mode_toolset = CodeModeToolset[None](wrapped=sandbox_toolset)
 
@@ -879,6 +891,7 @@ def _build_sandbox_toolset(
     stamp: StampSource | None = None,
     read_surfaces: tuple[ReadSurface, ...] | None = None,
     facet_keys: tuple[str, ...] = (),
+    hits_per_document: int = 0,
 ) -> FunctionToolset[None]:
     """The toolset the code-mode sandbox binds, the same read surface the server serves at top level."""
     if read_surfaces is None:
@@ -893,6 +906,7 @@ def _build_sandbox_toolset(
             stamp=stamp,
             can_sql=True,
             facet_keys=facet_keys,
+            hits_per_document=hits_per_document,
         )
     else:
         # `add_routed_read_tools` adds `search` and `fetch` below, so the graph tools describe all four.

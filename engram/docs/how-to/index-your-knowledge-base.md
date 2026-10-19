@@ -165,7 +165,9 @@ uv run studio fetch ID
 
 `search` also accepts `--level` and `--collection`, and `--facet key=value` repeats to narrow
 on several values or keys. The server caps `-k` at the `k_ceiling` of `kb.retrieval_tuning`, 50 at
-most, and keeps at most `rows_per_group` hits of one page, 3 by default. See the
+most, keeps at most `rows_per_group` hits of one page, 3 by default, and at most `max_hits_per_document`
+hits of one document (a source with the pages made from it, or a page made from no source), 1 by
+default, so `-k` counts documents. See the
 [serve reference](../reference/serve.md) for the full surface.
 
 ## Step 6: Serve it to tools (optional)

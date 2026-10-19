@@ -27,6 +27,7 @@ from core.ai.evaluation.domain.evidence import DELIVERED_PAYLOAD_BYTES
 from core.ai.evaluation.exceptions import DeliveredEvidenceBoundError, DeliveredEvidencePersistenceError
 from core.ai.retrieval.contracts import (
     FetchResult,
+    FoldedUnit,
     GraphEdge,
     GraphNode,
     GraphPath,
@@ -445,6 +446,63 @@ class TestWithheldReferences:
 
         assert isinstance(value, SearchResult)
         assert [hit.ref for hit in value.hits] == [_SAFE, _WITHHELD]
+
+
+def _folding(spelling: str | None) -> SearchResult:
+    """A search answer whose one kept hit folds the withheld unit, its ref spelled `spelling` or absent, and one safe unit."""
+    hit = _hit(_SAFE).model_copy(
+        update={
+            "folded_units": (
+                FoldedUnit(id="withheld", hit_level="section", ref=spelling),
+                FoldedUnit(id="other", hit_level="section", ref="section:research/other"),
+            )
+        }
+    )
+    status = search_result_status((hit,))
+    return SearchResult(
+        hits=(hit,),
+        status=status,
+        window=ResultWindow(returned_items=1),
+        next_steps=search_next_steps((hit,), query="anything", knowledge_base=_COLLECTION, hybrid=True, status=status, map_collection=_COLLECTION),
+    )
+
+
+class TestAWithheldFoldedUnitLeavesItsHit:
+    """A withheld unit folded under a kept hit is removed from that hit, under every spelling, and the call goes through."""
+
+    @pytest.mark.parametrize("spelling", [_WITHHELD, "section:research/withheld", "page:withheld", None], ids=["ref", "other_kind", "unqualified", "id_only"])
+    async def test_the_withheld_folded_unit_is_removed_and_the_call_does_not_raise(self, tmp_path: Path, spelling: str | None):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))
+        trial.tools.search_result = _folding(spelling)
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, SearchResult)
+        assert [hit.ref for hit in value.hits] == [_SAFE]
+        assert [unit.id for unit in value.hits[0].folded_units] == ["other"]
+        assert "research/withheld" not in await trial.stored()
+
+    async def test_a_removed_folded_unit_is_no_exposure_and_no_folded_unit_counts_as_delivered(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))
+        trial.tools.search_result = _folding(_WITHHELD)
+
+        await trial.call("search", query="anything")
+
+        [row] = trial.recorder.trace().tool_calls
+        assert row.status == "ok"
+        assert not row.withheld_exposure
+        assert row.returned_unit_refs == (_SAFE,)
+
+    async def test_a_bare_hit_list_loses_its_withheld_folded_unit_too(self, tmp_path: Path):
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}))
+        trial.tools.search_result = list(_folding(_WITHHELD).hits)
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, list)
+        [hit] = value
+        assert isinstance(hit, SearchHit)
+        assert [unit.id for unit in hit.folded_units] == ["other"]
 
 
 class TestAWithheldUnitIsRefusedUnderEverySpelling:

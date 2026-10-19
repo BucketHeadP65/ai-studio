@@ -50,8 +50,8 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   (`level`/`task`/`stage`/`domain`/`collection`). `GraphExpand` / `GraphPaths` carry the
   seed/endpoint ids, the hop bound (`hops`, at most 6, or `max_hops`, at most 8), an optional
   `rel_types` filter, `include_superseded`, and `k`.
-- **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, and `rerank_score` when a model
-  re-ranked it), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
+- **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, `rerank_score` when a model
+  re-ranked it, and `folded_units`, the other matching units of its document as `FoldedUnit`s), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
   `GraphPathsResult` (ranked multi-hop routes from `find_paths`), `GraphReach` (how far a walk's
   seeds reach, carried on graph results as `reach`), `SchemaDescription` (+ `ObjectInfo` /
   `ColumnInfo`), `StatusReport` (`src/engram/retrieval/domain.py`).
@@ -286,6 +286,10 @@ together), never on the items alone. One fitter does the measuring for all of th
 | `SQL_CELL_CHARS` | 2,000 | Every string a `run_sql` cell carries, including the strings nested inside a JSON cell | `src/engram/retrieval/sql_tools.py` |
 | `SQL_RESULT_CHARS` | 16,000 | The complete `{"rows": ..., "note": ...}` envelope, its `note` counted in | `src/engram/retrieval/sql_tools.py` |
 
+**Folded units go first.** When a `search` answer does not fit whole, its hits' folded units are dropped one at a
+time, from the lowest-ranked hit's last one up, before any title or snippet is cut or any hit is left out. A folded
+unit is a pointer, never content, so losing one loses no text the model would have read.
+
 **Identity never shortens.** Only display text is cut: a hit's `page_title` and `snippet`, a graph
 node's `title`, the strings inside a `run_sql` cell. An `id`, a `ref`, a `provenance_ref` and a score
 come back whole or their item does not come back at all, so every handle an answer carries reads
@@ -384,13 +388,33 @@ read or write, as its owner, and holds each to a bound generated into the functi
 | `k_ceiling` | 50 | 1..50 | The most rows one search returns |
 | `snippet_chars` | 480 | 80..2000 | The longest snippet |
 | `rows_per_group` | 3 | 1..50 | The most hits one page (its card, sections and claims) or one source (its raw chunks) keeps |
+| `max_hits_per_document` | 1 | 0..50, 0 or null keeping every hit | The most hits one document keeps, the next three folded under its best hit |
 | `weights` | `{}` | 0..10 each | A weight per tier and leg, keyed `<tier>:<lexical\|semantic>` (`card:semantic`), 1 when not named |
 
 The owner changes a number with an `UPDATE kb.retrieval_tuning SET tuning = tuning || '{...}'`, and a
-check constraint refuses a value that is not a number. Two rank policies run after the fusion: a card
-whose title equals the query, ignoring case and surrounding spaces, goes first when no other card holds
-that title, outside its page's count, and every other hit keeps at most `rows_per_group` rows per page
-or source. `include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
+check constraint refuses a value that is not a number (`max_hits_per_document` also takes null). Three
+rank policies run after the fusion: a card whose title equals the query, ignoring case and surrounding
+spaces, goes first when no other card holds that title, outside its page's count, every other hit keeps
+at most `rows_per_group` rows per page or source, and then each document keeps at most
+`max_hits_per_document` hits, its best first and the pinned card its best, so `k` counts documents
+(migration 0070). A unit's document is the source it was made from (`kb.pages.source_id`, or a raw
+chunk's own source) when it has one, otherwise its own page, so a page made from a source, its sections,
+its claims and the source's raw chunks are one document. The next three matching units of a document
+come back under its best hit in the last column, `folded_units`, a jsonb array of `{id, hit_level}` best
+first, and every other hit carries an empty array. `search_hits` gives each folded unit the ref a hit of
+its level carries (`section:<collection>/<id>`, `page:` for a card, `unit:` for a claim or a raw chunk),
+so the agent fetches one without searching again: every `fetch`, flat or leveled, over one knowledge base or routed
+over several, opens that ref. A surface that serves `search` without `fetch` (an `only` set naming `search` alone)
+words its description without sending the agent to `fetch` at all, and the next steps of its search answers name no
+`fetch` either: they offer judging the hits by their snippets and searching again, and no map. `api.search_hits_per_document()` answers the cap the search
+applies, read from the same row over the same default and bound, 0 when every hit is kept. A host reads it once, when it
+opens a knowledge base (`read_hits_per_document`, which reads 0 when the database cannot answer), and every `search`
+description states it: a cap of 1 says each hit is a distinct document, a higher cap says how many hits one document may
+have, and 0 says nothing about documents. When knowledge bases behind one tool disagree on the cap, the description
+states none. A process reads the cap once, so after the owner changes it a running process states the old cap until it
+restarts. The document sentences go into the shipped description only. A tuned description from an active policy
+(`_meta/active-policy.yaml`) replaces that whole text, so it says about documents whatever its own text says.
+`include_meta => false`, which the `search` tool always passes, leaves the knowledge base's
 own `meta.*` pages out before `k` is applied, so a search returns `k` rows when that many match. A raw
 `api.search` call keeps them unless it passes the same argument. `since` and `until` keep a page by its page date
 (`kb.pages.page_date`, migration 0066), which is `created` when the schema names no other field. A raw chunk carries

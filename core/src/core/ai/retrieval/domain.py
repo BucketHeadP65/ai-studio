@@ -208,6 +208,20 @@ class SqlResult(BaseModel):
     )
 
 
+class FoldedUnit(BaseModel):
+    """One more matching unit of a hit's document, listed under that hit rather than ranked as a hit of its own."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str = Field(description="The unit's id.")
+    hit_level: str = Field(description="The unit's granularity tier, one of the values a hit's hit_level takes.")
+    ref: str | None = Field(
+        default=None,
+        description="The exact collection-qualified handle to pass to fetch, set by the search tool. None on a row read "
+        "straight from the search function.",
+    )
+
+
 class SearchHit(BaseModel):
     """One ranked hit from a search (the read counterpart of the search function's result row)."""
 
@@ -259,6 +273,11 @@ class SearchHit(BaseModel):
     )
     knowledge_base: str | None = Field(
         default=None, description="The knowledge base this hit came from: the name a `search` takes as its `knowledge_base` argument."
+    )
+    folded_units: tuple[FoldedUnit, ...] = Field(
+        default=(),
+        description="Other units of the document this hit stands for that also matched, best first, listed here instead of as "
+        "hits of their own. Fetch one by its ref to read that part without searching again.",
     )
 
 

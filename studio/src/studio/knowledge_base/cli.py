@@ -72,6 +72,7 @@ from engram.retrieval.contracts import (
     Reranking,
     Search,
     SearchHandler,
+    read_hits_per_document,
     switch_source,
 )
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
@@ -347,10 +348,15 @@ def _read_surfaces(
     active_hybrid: bool,
     notes: list[str],
     rerank: Reranking | None,
+    hits_per_document: int = 0,
 ) -> tuple[ReadSurface, ...]:
     """Every knowledge base this server may read, the served one first. `notes` names each public one that fails to load or clashes."""
     active = active_root.expanduser().resolve()
-    surfaces = [_read_surface(active, active_schema, reader_gateway, admin_gateway, embedder, hybrid=active_hybrid, rerank=rerank)]
+    surfaces = [
+        _read_surface(
+            active, active_schema, reader_gateway, admin_gateway, embedder, hybrid=active_hybrid, rerank=rerank, hits_per_document=hits_per_document
+        )
+    ]
     rows = [row for row in _registered_roots(settings_path, notes=notes) if row.root != active]
     loaded = [(row, _registered_schema(row.name, row.root, notes=[] if row.private else notes)) for row in rows]
     claimed = {claim for surface in surfaces for claim in (surface.name, surface.collection)} | _withheld_claims(loaded)
@@ -361,7 +367,9 @@ def _read_surfaces(
             notes.append(f"Knowledge base {row.name!r} repeats a name or collection already claimed here, so it is not searchable.")
             continue
         hybrid = resolve_strategy(schema.retrieval.profile).search_hybrid is not False
-        surfaces.append(_read_surface(row.root, schema, reader_gateway, admin_gateway, embedder, hybrid=hybrid, rerank=rerank))
+        surfaces.append(
+            _read_surface(row.root, schema, reader_gateway, admin_gateway, embedder, hybrid=hybrid, rerank=rerank, hits_per_document=hits_per_document)
+        )
         claimed |= {schema.slug, schema.retrieval.collection}
     return tuple(surfaces)
 
@@ -421,6 +429,7 @@ def _read_surface(
     *,
     hybrid: bool,
     rerank: Reranking | None,
+    hits_per_document: int = 0,
 ) -> ReadSurface:
     """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
     collection = schema.retrieval.collection
@@ -455,6 +464,7 @@ def _read_surface(
         hybrid=hybrid,
         switch_source=switch_source(gateway, collection) if schema.retrieval.mode == "auto" else None,
         facet_keys=tuple(facet.key for facet in schema.facets),
+        hits_per_document=hits_per_document,
     )
 
 
@@ -521,6 +531,8 @@ async def _build_mcp_server(
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
     # `admin_gateway`, which the reader role cannot see, and is read again on every tool call.
     read_notes: list[str] = []
+    # Every read route shares this database, so its cap on hits per document is read once, here, for every `search` description.
+    hits_per_document = await read_hits_per_document(search_handler, knowledge_base=schema.slug)
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,
@@ -531,6 +543,7 @@ async def _build_mcp_server(
         active_hybrid=profile.search_hybrid is not False,
         notes=read_notes,
         rerank=rerank,
+        hits_per_document=hits_per_document,
     )
     stamp = surfaces[0].stamp
     # The graph tools are mounted once, so an auto-mode knowledge base's graph switch is read once, here.
@@ -595,6 +608,7 @@ async def _build_mcp_server(
         stamp=stamp,
         doc_authoring_tools=doc_authoring_tools,
         read_surfaces=surfaces,
+        hits_per_document=hits_per_document,
     )
     # The admin engine pools connections and `stamp` reads through it. Disposing it before this loop closes
     # makes the served loop open fresh connections instead of reusing ones bound to this loop.
@@ -851,7 +865,7 @@ async def _fetch_with_identity(container: Resolver, settings: ActiveKnowledgeBas
 
 
 def _print_search_hits(result: SqlResult) -> None:
-    """Echo the ranked hits as `score  id  [level]  title/snippet` lines (or a no-hits note)."""
+    """Echo the ranked hits as `score  id  [level]  title/snippet` lines, each folded unit indented under its hit, or a no-hits note."""
     if not result.rows:
         typer.echo("No hits.")
         return
@@ -859,6 +873,8 @@ def _print_search_hits(result: SqlResult) -> None:
         hit = SearchHit.model_validate(dict(row))
         label = hit.page_title or hit.snippet or ""
         typer.echo(f"{hit.score:.3f}  {hit.id}  [{hit.hit_level}]  {label}".rstrip())
+        for unit in hit.folded_units:
+            typer.echo(f"       {unit.id}  [{unit.hit_level}]")
     if result.truncated_message:
         typer.echo(result.truncated_message)
 
@@ -1205,7 +1221,8 @@ def search_cmd(
     """Search the indexed knowledge base with BM25 and vectors together, or with BM25 alone under `--bm25-only`.
 
     Each `--facet key=value` narrows the search on that facet key. Repeat it to accumulate several values
-    under one key or to filter on several keys at once. `--bm25-only` never embeds the query, so it needs
+    under one key or to filter on several keys at once. A hit's folded units, more matching units of its
+    document, print indented under it as `id  [level]`, and `studio fetch ID` reads one. `--bm25-only` never embeds the query, so it needs
     no embedding provider. An omitted `--collection` uses the knowledge base's own declared collection. A
     failed read, such as an unreachable database or a query the role refuses, exits 1 with a message.
     """

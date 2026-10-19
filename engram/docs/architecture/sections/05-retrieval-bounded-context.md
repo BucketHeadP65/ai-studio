@@ -224,13 +224,19 @@ These hold on both dialects and both graph backends, for the read tools and for 
   last. A reader stops a statement after 10 s and gives up on a lock after 5 s.
 - **Bounded, tuned search.** `api.search` keys every row by `(collection, id)` and returns `src_collection`. Each leg of
   each surface ranks at most a budget of rows: a keyword leg reads its BM25 index in score order, a semantic leg orders
-  by exact distance. The budget, the RRF constant, the `k` ceiling, the snippet length, the rows per group and a weight
-  per surface and leg come from `kb.retrieval_tuning`, one row the function reads as its owner and no reader may read,
-  clamped by bounds generated into the function. The defaults are a budget of 50, an RRF constant of 60, `k` at most
-  50, snippets of 480 characters and 3 rows per group.
+  by exact distance. The budget, the RRF constant, the `k` ceiling, the snippet length, the rows per group, the hits per
+  document and a weight per surface and leg come from `kb.retrieval_tuning`, one row the function reads as its owner and
+  no reader may read, clamped by bounds generated into the function. The defaults are a budget of 50, an RRF constant of
+  60, `k` at most 50, snippets of 480 characters, 3 rows per group and 1 hit per document.
 - **Rank policies.** A card whose title equals the query, ignoring case and surrounding spaces, goes first when no other
   candidate holds that title. Then each page keeps its best `rows_per_group` hits across its card, sections and claims,
-  and each source its best raw chunks. `meta.` pages leave before `k` applies.
+  and each source its best raw chunks. Then each document keeps its best `max_hits_per_document` hits, the pinned card
+  its best, so `k` counts documents. A unit's document is the source it was made from when it has one, otherwise its own
+  page. The document's next three matching units ride under its best hit as `folded_units`, each with its id and hit
+  level, and the search tools give each one the ref that fetches it. A cap of 0 or null keeps every hit.
+  `api.search_hits_per_document()` answers the cap, and a `search` description states the cap its process read, with
+  the exceptions the serve reference lists. When an answer runs over its size budget, folded units go first, from the
+  lowest-ranked hit up. `meta.` pages leave before `k` applies.
 - **Several knowledge bases merge by rank.** Each hit keeps its fused `score`, and a re-rank adds `rerank_score`. A
   search over several knowledge bases merges by re-rank probability when every hit has one, else rank by rank.
 - **Graph walks say how far they go.** An expansion walks at most 6 hops and a route at most 8. `api.graph_reach` walks

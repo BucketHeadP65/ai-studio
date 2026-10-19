@@ -2,13 +2,15 @@
 
 The schema here names `observed_on` as its date field. One page written on 2026-05-04 records an observation of
 2019-03-14 and is made from one source mirror, whose raw chunk carries the same made-up term as the page. The knowledge
-base is indexed into a freshly migrated database, and `api.search` keeps the page and its source's raw chunk under a
-range around the observed day and neither under a range around the written day, while `kb.pages.created` keeps the
+base is indexed into a freshly migrated database, and `api.search` keeps the page and its source's raw chunk, one hit
+with the other folded under it, under a range around the observed day and neither under a range around the written day, while `kb.pages.created` keeps the
 written day. The revision that adds the column fills it from `created` for every page already indexed, and one step
 down puts back the search that read `created`. Runs against the `migrated` fixture and skips when Docker is unavailable.
 """
 
 from __future__ import annotations
+
+import json
 
 from datetime import date
 from typing import TYPE_CHECKING
@@ -71,6 +73,7 @@ The {_TERM} tally sheet from the marsh.
 """
 
 _SEARCH = "SELECT hit_level, page_id FROM api.search($1, k => 20, collection => $2, since => $3, until => $4)"
+_UNITS_SEARCH = "SELECT id, hit_level, folded_units FROM api.search($1, k => 20, collection => $2, since => $3, until => $4)"
 _COMMENT = (
     "SELECT obj_description(p.oid, 'pg_proc') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace"
     " WHERE n.nspname = 'api' AND p.proname = 'search'"
@@ -140,6 +143,18 @@ async def _hits(url: str, *, since: date, until: date) -> set[tuple[str, str | N
     return {(row["hit_level"], row["page_id"]) for row in rows}
 
 
+async def _units(url: str, *, since: date, until: date) -> set[tuple[str, str]]:
+    """Every `(hit_level, id)` one dated `api.search` call answers at head, each hit's folded units included."""
+    connection = await asyncpg.connect(_asyncpg_dsn(url))
+    try:
+        rows = await connection.fetch(_UNITS_SEARCH, _TERM, _COLLECTION, since, until)
+    finally:
+        await connection.close()
+    hits = {(row["hit_level"], row["id"]) for row in rows}
+    folded = {(unit["hit_level"], unit["id"]) for row in rows for unit in json.loads(row["folded_units"])}
+    return hits | folded
+
+
 async def _dates(url: str) -> tuple[date | None, date | None]:
     """The indexed page's `created` and `page_date`."""
     connection = await asyncpg.connect(_asyncpg_dsn(url))
@@ -155,10 +170,10 @@ class TestARangeReadsThePageDate:
     async def test_a_range_around_the_named_fields_day_keeps_the_page_and_its_sources_raw_chunk(self, tmp_path: Path, migrated: str) -> None:
         await _index(tmp_path, migrated)
 
-        hits = await _hits(migrated, since=date(2019, 3, 1), until=date(2019, 3, 31))
+        units = await _units(migrated, since=date(2019, 3, 1), until=date(2019, 3, 31))
 
-        assert {page_id for _, page_id in hits if page_id is not None} == {_PAGE_ID}
-        assert "raw" in {level for level, _ in hits}
+        assert {unit_id.partition("#")[0] for level, unit_id in units if level != "raw"} == {_PAGE_ID}
+        assert "raw" in {level for level, _ in units}
 
     async def test_a_range_around_the_day_the_page_was_written_keeps_neither(self, tmp_path: Path, migrated: str) -> None:
         await _index(tmp_path, migrated)

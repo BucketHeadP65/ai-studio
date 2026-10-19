@@ -25,6 +25,7 @@ from engram.retrieval.contracts import (
     parse_ref,
     paths_next_steps,
     qualify_ref,
+    read_hits_per_document,
     search_next_steps,
     search_result_status,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "parse_ref",
     "paths_next_steps",
     "qualify_ref",
+    "read_hits_per_document",
     "search_next_steps",
     "search_result_status",
 ]

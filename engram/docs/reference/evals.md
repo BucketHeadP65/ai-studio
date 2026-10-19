@@ -785,7 +785,7 @@ unit.
 
 | Result | What removal means |
 |---|---|
-| `SearchResult` | The withheld hits drop out, `status` is recomputed from the hits that remain, and `window.returned_items` is corrected |
+| `SearchResult` | The withheld hits drop out, `status` is recomputed from the hits that remain, and `window.returned_items` is corrected. A withheld unit folded under a kept hit drops out of that hit's `folded_units`, under any spelling, and the hit stays |
 | `GraphResult` | The withheld nodes drop out, and so does every edge that touched one or that a withheld claim asserts |
 | `GraphPathsResult` | A route that reaches a withheld node, or rests on a relation a withheld claim asserts, is dropped whole, because a route missing a node is not a shorter route |
 | `DisclosureEnvelope` | The child stubs naming withheld units drop out |
@@ -817,7 +817,8 @@ the trial.
 
 Sources are extracted from the typed result in payload order, first mention only, and canonicalized:
 search hits, fetched units, disclosed units with their child stubs, graph nodes, and each node along
-each returned path. No result in this retrieval surface carries a content hash or a version, so
+each returned path. A search hit's folded units are never sources, since they carry no text. No result in this
+retrieval surface carries a content hash or a version, so
 every `DeliveredSource` records only `source_ref` and leaves `source_content_sha256` and
 `source_version` as `None`. Neither is ever derived from a snippet or a fetched body. A grade that
 depends on source integrity therefore reads `unknown` instead of assuming the source was intact.
@@ -897,6 +898,10 @@ land. `ranked_metrics` (`RankedMetrics`: `recall`, `precision`, `reciprocal_rank
   call boundaries never merged (`SearchRankingMetrics.calls`, one `SearchCallRanking` per `search`
   call). A call that is not `ok`, stored no evidence, or whose payload the reader refuses reads
   `unknown` for that call alone. A trial with no `search` call at all is `not_applicable` (`calls == ()`).
+
+A search hit's folded units carry an id, a level and a ref, never any of the unit's text. A pointer the model was not
+shown the content of is not a unit it saw, so the surfaced layer and each `search` call's ranking count a hit's own
+unit alone and never its folded units, and so does any count of the units a trial saw.
 
 Granularity (`"page"` collapses a reference to everything before its first `#` anchor delimiter,
 `"unit"` scores it exact) is a named argument on every layer function, applied identically to `got`

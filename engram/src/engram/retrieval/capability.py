@@ -65,6 +65,7 @@ from .tools import (
     RefRefusal,
     bound_search_result,
     declared_facets_clause,
+    document_clause,
     elide_k,
     leveled_fetch,
     no_map_refusal,
@@ -75,6 +76,7 @@ from .tools import (
     search_hits,
     search_next_steps,
     search_result_status,
+    shared_hits_per_document,
 )
 
 if TYPE_CHECKING:
@@ -336,6 +338,11 @@ class ReadSurface:
     """The facet keys this knowledge base's schema declares, the only keys `search` filters it by in `facets`.
 
     A call that searches this base refuses any other key. Empty (the default) refuses every key."""
+    hits_per_document: int = 0
+    """The most hits one document keeps in this knowledge base's search, as its database's tuning row sets it.
+
+    The `search` description states it, and only when every knowledge base behind the tool applies the same cap. 0 (the
+    default) keeps every hit and states nothing about documents."""
 
 
 @dataclass
@@ -925,7 +932,13 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         """The `search` description for one knowledge base or several, without `k` under a host-owned cap."""
         leg = (self.surfaces[0].hybrid if len(self.surfaces) == 1 else any(surface.hybrid for surface in self.surfaces)) if hybrid is None else hybrid
         text = (
-            search_description(hybrid=leg, can_sql=False, facet_keys=self.surfaces[0].facet_keys, takes_collection=False)
+            search_description(
+                hybrid=leg,
+                can_sql=False,
+                facet_keys=self.surfaces[0].facet_keys,
+                takes_collection=False,
+                hits_per_document=self.surfaces[0].hits_per_document,
+            )
             if len(self.surfaces) == 1
             else self._library_search_description(hybrid=leg, default_name=default_name)
         )
@@ -937,13 +950,18 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         return (
             f"Search your knowledge bases ({ranking}): returns the top-`k` "
             "ranked hits (a page, a section within one, or a smaller unit) as a list, each with its "
-            "`id`, `hit_level`, `page_id`/`page_title`, a `snippet`, and a relevance `score`.\n\n"
+            f"`id`, `hit_level`, `page_id`/`page_title`, a `snippet`, and a relevance `score`.{self._document_sentences()}\n\n"
             f"`query` is the search text. `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} "
             f"{declared_facets_clause({surface.name: surface.facet_keys for surface in self.surfaces}, several_per_call=self.cross_search)} "
             f"{self._knowledge_base_clause(default_name=default_name)}\n"
             f"{self._knowledge_base_listing()}\n\n"
             "Start here to find candidate sources, then `fetch` a hit's id."
         )
+
+    def _document_sentences(self) -> str:
+        """What the several-base description says about documents, led by a space, or nothing when the bases' caps differ."""
+        clause = document_clause(shared_hits_per_document(surface.hits_per_document for surface in self.surfaces))
+        return f" {clause}" if clause else ""
 
     def _knowledge_base_clause(self, *, default_name: str | None = None) -> str:
         """The sentence `search`'s description spends on `knowledge_base`, ending at the colon before the listing."""

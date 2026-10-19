@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from asyncpg import PostgresError
 from core.ai import create_embedding_model
 from core.ai.embedding import Embeddings, query_model_of
 from core.ai.retrieval.contracts import KnowledgeBaseStamp
@@ -193,6 +194,32 @@ def switch_source(gateway: SqlGateway, collection: str) -> Callable[[], Awaitabl
     return read_switches
 
 
+async def read_hits_per_document(search: SearchHandler, *, knowledge_base: str) -> int:
+    """Read the most hits one document keeps in `search`'s search, the number its tool description states.
+
+    A database error, an unreachable database or a database without the cap's function reads as 0, so no
+    description states a cap the host could not read. That failure is logged as a warning naming the knowledge base
+    and the error.
+
+    Args:
+        search: The search handler whose database is read.
+        knowledge_base: What the host calls the knowledge base `search` reads, named in the warning.
+
+    Returns:
+        The cap, 0 when the search keeps every hit or the cap could not be read.
+    """
+    try:
+        return await search.hits_per_document()
+    except (SQLAlchemyError, PostgresError, OSError) as error:
+        _logger.warning(
+            "reading the cap on hits per document for {knowledge_base!r} failed ({failure}). Its search description states no cap",
+            error=error,
+            knowledge_base=knowledge_base,
+            failure=f"{type(error).__name__}: {error}",
+        )
+        return 0
+
+
 @asynccontextmanager
 async def embedded_retrieval(
     reader_url: str,
@@ -274,7 +301,8 @@ async def embedded_read_tools(
     naming one of them, required unless the host turns on `cross_search`. A knowledge base whose
     spec sets `retrieval.mode` to `"auto"` reads its stored retrieval switches fresh on every call,
     `.embeddings` for the search's vector leg and `.graph` for whether `graph_expand` and `find_paths`
-    are exposed, and a `"fixed"` spec never reads them.
+    are exposed, and a `"fixed"` spec never reads them. Each knowledge base's cap on hits per document is read once,
+    when it opens, and the `search` description states it.
 
     Args:
         connections: One `KnowledgeBaseConnection` per knowledge base, in the order they are listed and searched.
@@ -338,6 +366,7 @@ async def embedded_read_tools(
                     if knowledge_base_spec.retrieval.mode == "auto"
                     else None,
                     facet_keys=tuple(facet.key for facet in knowledge_base_spec.facets),
+                    hits_per_document=await read_hits_per_document(search, knowledge_base=knowledge_base_spec.slug),
                 )
             )
         yield RetrievalKnowledgeBase[AgentDepsT](

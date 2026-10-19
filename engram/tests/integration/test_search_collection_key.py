@@ -15,6 +15,8 @@ What this pins:
 
 from __future__ import annotations
 
+import json
+
 from typing import TYPE_CHECKING
 
 import asyncpg
@@ -115,9 +117,12 @@ class TestTheSeedIsReal:
     """Beta's word ranks for beta: every absence below is a filtered row, never a word nothing matches."""
 
     async def test_beta_finds_its_own_word(self, beta_reader: asyncpg.Connection):
-        hits = await beta_reader.fetch("SELECT hit_level FROM api.search($1, 20, NULL, NULL, '{}'::jsonb, $2, true)", _BETA_WORD, _BETA)
+        hits = await beta_reader.fetch(
+            "SELECT hit_level, folded_units FROM api.search($1, 20, NULL, NULL, '{}'::jsonb, $2, true)", _BETA_WORD, _BETA
+        )
 
-        assert {row["hit_level"] for row in hits} == {"card", "section", "claim", "raw"}
+        folded = {unit["hit_level"] for row in hits for unit in json.loads(row["folded_units"])}
+        assert {row["hit_level"] for row in hits} | folded == {"card", "section", "claim", "raw"}
 
 
 class TestNoRowCrossesThroughASharedId:
