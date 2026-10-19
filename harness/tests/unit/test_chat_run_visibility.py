@@ -132,6 +132,24 @@ async def test_a_chat_run_starts_without_blocking_and_settles_into_an_outcome_tu
     assert "reconcile" in record.values, "the archive keeps every node's output, not just the envelope"
 
 
+async def test_a_chat_run_runs_under_the_gate_mode_it_was_asked_for(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+    """`auto` passes every gate with nobody asked, and the evidence names those gates apart from approvals."""
+    records = records_under(tmp_path)
+    agent, _ = _capturing_agent()
+    session = _session(registry, tmp_path, agent)
+    session.conversation.last_workflow = quarterly_report
+    run = RunCollaborators(records=records, run_settings=RunSettings(), sessions=APool(SessionPool(session)), topics=FakeBroadcaster())
+
+    await run_workflow(_ctx(session), "draft", {"quarter": "Q2"}, run=run, gate_mode="auto")
+    await _settled(session)
+
+    assert session.active.gate_mode == "auto"
+    assert session.active.result.startswith("Finished.")
+    (evidence,) = [event for event in await records.evidence.events_for("draft") if isinstance(event, RunEvidence)]
+    assert evidence.gates_auto, "the gates passed with nobody asked"
+    assert evidence.gates_approved == (), "an automatic pass is never a person's approval"
+
+
 async def test_a_chat_run_logs_the_gate_settings_and_runner_it_runs_with(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:

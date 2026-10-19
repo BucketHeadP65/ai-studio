@@ -105,14 +105,14 @@ async def test_start_hands_the_run_to_temporal_when_selected(session: Runtime, q
     assert started == ["wf.report"]
 
 
-async def test_automode_reaches_the_durable_engine_as_a_request_flag(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_the_gate_mode_reaches_the_durable_engine_as_it_was_asked(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The same launch on either engine: the run itself decides its gates, and the ledger says so."""
     records = records_under(tmp_path)
     on_temporal = RunSettings(run_engine="temporal")
-    flags: list[bool] = []
+    modes: list[object] = []
 
     async def _fake_launch(_session: Runtime, **kwargs: object) -> None:
-        flags.append(bool(kwargs["auto_approve_gates"]))
+        modes.append(kwargs["gate_mode"])
 
     monkeypatch.setattr(durable, "launch", _fake_launch)
     await service.start(
@@ -128,7 +128,7 @@ async def test_automode_reaches_the_durable_engine_as_a_request_flag(session: Ru
     await service.start(
         session, records=records, topics=FakeBroadcaster(), run=on_temporal, spec=quarterly_report, workflow_id="wf.report", params={"quarter": "Q2"}
     )
-    assert flags == [True, False]
+    assert modes == ["auto", "wait"]
 
 
 async def test_a_durable_launch_leaves_the_session_in_the_mode_it_started_with(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

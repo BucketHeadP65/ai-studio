@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import timedelta
 from hashlib import sha256
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 from uuid import UUID, uuid5
 
 from temporalio import activity, workflow
@@ -286,9 +286,9 @@ class RunRequest(BaseModel):
     """Which saved workflow this run is of, so its history names it."""
     run_title: str = ""
     """What this run itself is called, in the words of whoever started it. Empty for a run nobody named."""
-    auto_approve_gates: bool = False
-    """Whether a person gate passes automatically rather than waiting for a signal. Travels with
-    the request, so a history says what this run was allowed to decide on its own."""
+    gate_mode: Literal["wait", "auto"] = "wait"
+    """What a person gate does: `wait` holds it for a signal, `auto` passes it with nobody asked. Travels
+    with the request, so a history says what this run was allowed to decide on its own."""
 
 
 class TurnOnTheWire(BaseModel):
@@ -617,14 +617,14 @@ class DurableWorkflowRun:
         self._workflow: Workflow | None = None
         self._state = WorkflowState(params={})
         self._auto: list[str] = []
-        self.auto_approve_gates = False
+        self.gate_mode: Literal["wait", "auto"] = "wait"
 
     @workflow.run
     async def run(self, request: RunRequest) -> object:
         """Build the graph from the workflow and this worker's registry, then run it.
 
         Args:
-            request: The workflow, its arguments and whether its gates pass automatically.
+            request: The workflow, its arguments and its gate mode.
 
         Returns:
             What the graph run returns.
@@ -637,7 +637,7 @@ class DurableWorkflowRun:
         self._workflow = request.spec
         self._gates = {node.id: node.rejected_to for node in request.spec.nodes if isinstance(node, PersonGate)}
         self._state = WorkflowState(params=dict(request.params), reviewed_artifacts=ReviewedArtifacts(run_id=workflow.info().workflow_id))
-        self.auto_approve_gates = request.auto_approve_gates
+        self.gate_mode = request.gate_mode
         graph = build_graph(
             request.spec,
             binding.registry,
@@ -710,8 +710,8 @@ class DurableWorkflowRun:
         """Wait until somebody signals a verdict for this gate, or pass it when gates pass automatically.
 
         The run waits here as long as it takes and survives a worker dying meanwhile, because the
-        wait is part of the workflow's history. When `auto_approve_gates` is set the gate never
-        waits, and its id is recorded apart from the approvals so the evidence names what decided it.
+        wait is part of the workflow's history. Under gate mode `auto` the gate never waits, and its
+        id is recorded apart from the approvals so the evidence names what decided it.
 
         Args:
             gate_id: Which gate this is.
@@ -722,7 +722,7 @@ class DurableWorkflowRun:
         Returns:
             The person's verdict, or an automatic approval.
         """
-        if self.auto_approve_gates:
+        if self.gate_mode == "auto":
             if gate_id not in self._auto:
                 self._auto.append(gate_id)
             return GateDecision(approve=True, source="auto")

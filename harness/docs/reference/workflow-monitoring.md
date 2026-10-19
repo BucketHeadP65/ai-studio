@@ -1175,10 +1175,10 @@ A run's own gates decide under one of three modes, `GateMode = "wait" | "orchest
 (`harness/domain/gates.py`, see [ADR 0008](../adr/0008-orchestrator-gates-and-run-gate-modes.md)): `"wait"` (default)
 steps a `PersonGate` waiting for a person exactly as before. `"auto"` is automode, passing every gate the run reaches
 with nobody asked. `"orchestrate"` hands a `PersonGate` to this run's own orchestrator instead of leaving it waiting.
-Set at launch (`RunRequest.gate_mode` on `POST /api/run` or `run_workflow`, a schedule's own `gate_mode`) or flipped
-mid-run via `POST /api/run/automode {"on": bool}` (which sets `gate_mode` to `"auto"` or `"wait"`, and answers with
-the `auto_approve` it now reads, derived from `gate_mode`). The agent's own `run_workflow` tool takes one switch,
-`auto_approve_gates`, that launches in `"auto"` when true and in `"wait"` otherwise. A
+Set at launch (`RunRequest.gate_mode` on `POST /api/run`, the `gate_mode` argument of the agent's own `run_workflow`
+tool, a schedule's own `gate_mode`) or flipped mid-run via `POST /api/run/automode {"on": bool}` (which sets
+`gate_mode` to `"auto"` or `"wait"`, and answers with the `auto_approve` it now reads, derived from `gate_mode`). A
+durable run carries its mode in core's Temporal `RunRequest.gate_mode`, `"wait"` or `"auto"` only. A
 workflow may also author an `orchestrator-gate` node in the graph itself, naming its own review brief for this run's
 orchestrator to decide against. That gate is answered the same way under every one of the three modes. A run's
 `gate_mode` only changes what happens to a `PersonGate`, the one kind that would otherwise wait on a person.

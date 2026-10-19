@@ -174,7 +174,7 @@ async def start(  # noqa: PLR0913 (a launch's knobs are one flat contract, a par
             spec=spec,
             workflow_id=workflow_id,
             params=params,
-            auto_approve_gates=gate_mode == "auto",
+            gate_mode=gate_mode,
             runner=runner,
             run_title=run_title,
         )

@@ -16,7 +16,7 @@ from uuid import UUID
 
 import pytest
 
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from temporalio import workflow
 from temporalio.exceptions import ApplicationError, TemporalError
 from temporalio.testing import ActivityEnvironment
@@ -499,8 +499,8 @@ async def test_an_auto_approved_gate_answers_itself_and_is_recorded_apart() -> N
     about must not read as a person's approval.
     """
     run = DurableWorkflowRun()
-    assert run.auto_approve_gates is False, "asking a person is the default"
-    run.auto_approve_gates = True
+    assert run.gate_mode == "wait", "asking a person is the default"
+    run.gate_mode = "auto"
 
     assert (await run.review("approve", "a draft")).source == "auto"
     assert run.waiting_at() is None, "an auto-approved gate never waits, so no panel shows a question nobody was asked"
@@ -527,7 +527,7 @@ async def test_a_gate_still_waits_for_a_person_when_automode_is_off() -> None:
 
 
 def test_a_run_request_asks_a_person_unless_it_says_otherwise() -> None:
-    """The flag travels with the request, so what a run does about gates is in its own history."""
+    """The gate mode travels with the request, so what a run does about gates is in its own history."""
     spec = Workflow(
         name="one-step",
         version=1,
@@ -536,8 +536,10 @@ def test_a_run_request_asks_a_person_unless_it_says_otherwise() -> None:
         nodes=(RunNode(id="fetch_sales", work="fetch_sales", inputs={"quarter": FromParameter(parameter="quarter")}),),
         output=FromNode(node="fetch_sales"),
     )
-    assert RunRequest(spec=spec, params={}, workflow_id="wf.one").auto_approve_gates is False
-    assert RunRequest(spec=spec, params={}, workflow_id="wf.one", auto_approve_gates=True).auto_approve_gates is True
+    assert RunRequest(spec=spec, params={}, workflow_id="wf.one").gate_mode == "wait"
+    assert RunRequest(spec=spec, params={}, workflow_id="wf.one", gate_mode="auto").gate_mode == "auto"
+    with pytest.raises(ValidationError, match="gate_mode"):
+        RunRequest.model_validate({"spec": spec.model_dump(mode="json"), "params": {}, "workflow_id": "wf.one", "gate_mode": "orchestrate"})
 
 
 def test_a_run_requests_arguments_cross_the_wire_as_the_json_they_are() -> None:

@@ -262,7 +262,7 @@ def _run_workflow_tool(run: RunCollaborators) -> Callable[..., Awaitable[str]]:
     """The `run_workflow` tool, closed over what a run this capability starts reaches."""
 
     async def run_workflow_tool(
-        ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, auto_approve_gates: bool = False
+        ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, gate_mode: GateMode = "wait"
     ) -> str:
         """Start a saved workflow, or the current draft, running in the background. The graph runs it, you do not.
 
@@ -280,10 +280,11 @@ def _run_workflow_tool(run: RunCollaborators) -> Callable[..., Awaitable[str]]:
             arguments: The workflow's parameters, one per declared parameter, each as the JSON
                 value that parameter's own type asks for: a list where it declares a list, a
                 number where it declares a number, true or false where it declares a boolean.
-            auto_approve_gates: Put every gate this run reaches on the record without asking anyone,
-                on the person's explicit instruction only. Never counted as human approval.
+            gate_mode: What a person gate does. `wait` holds it for the person, `orchestrate` hands it to
+                this run's own orchestrator, and `auto` passes it with nobody asked, on the person's
+                explicit instruction only. An automatic pass is never counted as a person's approval.
         """
-        return await run_workflow(ctx, workflow_id, arguments, run=run, auto_approve_gates=auto_approve_gates)
+        return await run_workflow(ctx, workflow_id, arguments, run=run, gate_mode=gate_mode)
 
     return run_workflow_tool
 
