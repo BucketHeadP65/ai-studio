@@ -16,6 +16,8 @@ Two surfaces in `src/engram/indexing/infrastructure/knowledge_base_reader.py` an
 
 from __future__ import annotations
 
+import inspect
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -108,6 +110,13 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
 class TestFilesystemKnowledgeBaseReaderGlobs:
     """The four read surfaces: only `.md`, knowledge-base-relative paths, sorted, fault-tolerant."""
 
+    def test_a_caller_must_name_the_note_folders(self):
+        """Forgetting the schema's folders is a type error at the call, never a reader that silently reads no page."""
+        note_folders = inspect.signature(FilesystemKnowledgeBaseReader).parameters["note_folders"]
+
+        assert note_folders.default is inspect.Parameter.empty
+        assert note_folders.kind is inspect.Parameter.KEYWORD_ONLY
+
     def test_memory_notes_globs_only_markdown_recursively(self, tmp_path: Path):
         reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
@@ -173,7 +182,7 @@ class TestFilesystemKnowledgeBaseReaderGlobs:
         (tmp_path / "Sources").mkdir()
         (tmp_path / "Sources" / "stale.md").write_text("# decoy", encoding="utf-8")
 
-        reader = FilesystemKnowledgeBaseReader(tmp_path, sources_subdir="Refs")
+        reader = FilesystemKnowledgeBaseReader(tmp_path, sources_subdir="Refs", note_folders=())
 
         paths = [doc.path for doc in reader.source_mirrors()]
 

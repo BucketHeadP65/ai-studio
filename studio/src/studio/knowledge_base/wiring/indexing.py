@@ -157,7 +157,9 @@ def knowledge_base_reader_provider(knowledge_base: KnowledgeBaseSettings, schema
     Returns:
         The knowledge base reader.
     """
-    return FilesystemKnowledgeBaseReader(knowledge_base.path, knowledge_base.sources_subdir, schema.note_folders, note_files=schema.note_files)
+    return FilesystemKnowledgeBaseReader(
+        knowledge_base.path, knowledge_base.sources_subdir, note_folders=schema.note_folders, note_files=schema.note_files
+    )
 
 
 @injectable

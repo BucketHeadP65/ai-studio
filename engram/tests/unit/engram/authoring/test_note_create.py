@@ -34,7 +34,7 @@ def test_a_checked_note_lands_under_its_page_types_folder(tmp_path: Path) -> Non
     writer = NoteWriter(_target(tmp_path))
     created = writer.create(writer.check(DRAFT.payload(NOTE_ID)))
     assert created.id == NOTE_ID
-    assert created.path == tmp_path / "Units" / "Notes" / "0123456789abcdef01234567.md"
+    assert created.path == tmp_path / "Notes" / "0123456789abcdef01234567.md"
     text = created.path.read_text(encoding="utf-8")
     assert "## TL;DR" in text
     assert "It holds under the stated conditions." in text
@@ -64,7 +64,7 @@ def test_a_payload_that_breaks_the_grammar_never_reaches_a_create(tmp_path: Path
     wrong_prefix = DRAFT.payload("entrymine")
     with pytest.raises(NoteRefusedError):
         writer.check(wrong_prefix)
-    assert not (tmp_path / "Units").exists()
+    assert not (tmp_path / "Notes").exists()
 
 
 def test_the_same_draft_renders_the_same_bytes_whatever_the_day(tmp_path: Path) -> None:

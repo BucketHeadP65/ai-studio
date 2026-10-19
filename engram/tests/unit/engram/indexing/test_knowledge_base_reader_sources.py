@@ -14,8 +14,8 @@ def _write(root: Path, rel: str, text: str) -> None:
 class TestReaderSources:
     def test_note_files_are_yielded(self, tmp_path: Path) -> None:
         _write(tmp_path, "CONTEXT-MAP.md", "---\nid: context-map\n---\nbody")
-        reader = FilesystemKnowledgeBaseReader(tmp_path / "docs", note_files=("../CONTEXT-MAP.md",))
-        (tmp_path / "docs" / "Units").mkdir(parents=True)
+        reader = FilesystemKnowledgeBaseReader(tmp_path / "docs", note_folders=(), note_files=("../CONTEXT-MAP.md",))
+        (tmp_path / "docs").mkdir(parents=True)
         docs = list(reader.unit_documents())
         assert [d.path for d in docs] == ["../CONTEXT-MAP.md"]
 
@@ -24,8 +24,8 @@ class TestReaderSources:
         # in-batch dedupe the same way — forward-slash-only — or the same file reached by
         # two spellings could index twice.
         _write(tmp_path, "CONTEXT-MAP.md", "---\nid: context-map\n---\nbody")
-        reader = FilesystemKnowledgeBaseReader(tmp_path / "docs", note_files=("../CONTEXT-MAP.md",))
-        (tmp_path / "docs" / "Units").mkdir(parents=True)
+        reader = FilesystemKnowledgeBaseReader(tmp_path / "docs", note_folders=(), note_files=("../CONTEXT-MAP.md",))
+        (tmp_path / "docs").mkdir(parents=True)
 
         docs = list(reader.unit_documents())
 

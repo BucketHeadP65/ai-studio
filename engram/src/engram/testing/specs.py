@@ -28,8 +28,8 @@ def minimal_spec() -> KnowledgeBaseSchema:
         {
             "slug": "minimal",
             "page_types": [
-                {"page_type": "note", "id_prefix": "note", "folder": "Units/Notes"},
-                {"page_type": "entry", "id_prefix": "entry", "folder": "Units/Entries"},
+                {"page_type": "note", "id_prefix": "note", "folder": "Notes"},
+                {"page_type": "entry", "id_prefix": "entry", "folder": "Entries"},
             ],
         }
     )

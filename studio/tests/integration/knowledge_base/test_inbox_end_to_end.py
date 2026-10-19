@@ -343,7 +343,7 @@ Raft is presented as the more approachable protocol for production systems.
         # `Sources/` mirror parsed to a `MirrorDoc`, keyed by the mirror's own `source_key` -- looked up here
         # by the talk page's own citation field, proving the citation "finds" its mirror before the quote is
         # checked against it.
-        reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=inbox_spec.note_folders)
         mirror_docs = (MirrorDoc.from_text(raw.path, raw.text, "inbox") for raw in reader.source_mirrors())
         mirror_texts = {doc.source_key: doc.text for doc in mirror_docs}
         cited_text = mirror_texts.get(_KEY_A)

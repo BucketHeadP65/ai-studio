@@ -35,7 +35,8 @@ class FilesystemKnowledgeBaseReader:
         self,
         knowledge_base_path: Path,
         sources_subdir: str = "Sources",
-        note_folders: tuple[str, ...] = (),
+        *,
+        note_folders: tuple[str, ...],
         note_files: tuple[str, ...] = (),
     ) -> None:
         """Read the knowledge base at `knowledge_base_path`.
