@@ -196,7 +196,7 @@ def test_revive_types_a_multi_turn_maps_dotted_values_independently() -> None:
 
 
 def test_revive_drops_a_wrong_shaped_dotted_value_alone() -> None:
-    """One turn's run_log predates a shape change.
+    """One turn's value in the run log has the wrong shape.
 
     That turn's list is dropped, the map's own value stays, and the indexer re-runs a map
     missing any turn's list whole.

@@ -906,7 +906,7 @@ def test_a_patch_replaces_only_the_fields_it_carries() -> None:
 
 
 def test_a_patch_onto_nothing_starts_from_an_empty_presentation() -> None:
-    """A legacy card carries none, and a partial patch onto it stays partial rather than inventing the rest."""
+    """An undescribed card carries none, and a partial patch onto it stays partial rather than inventing the rest."""
     merged = effective_presentation(None, WorkflowPresentationPatch(purpose="Ship the same way every time."))
 
     assert merged.purpose == "Ship the same way every time."

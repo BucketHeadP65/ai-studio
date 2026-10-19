@@ -335,7 +335,7 @@ async def test_forget_watermark_ignores_a_forget_stamped_for_a_different_session
     assert sessions[0][6] == 1, "session B's own Forget must not clear session A's turn"
 
 
-SESSION_LEGACY = "33333333-3333-3333-3333-333333333333"
+SESSION_CHECKOUT = "33333333-3333-3333-3333-333333333333"
 SESSION_C = "44444444-4444-4444-4444-444444444444"
 
 
@@ -376,9 +376,9 @@ async def test_sweep_projects_visits_every_session_in_every_registered_project(t
     checkout_log = a_session_log(tmp_path / "checkout-state")
     checkout_store = a_transcript(tmp_path / "checkout-state")
 
-    checkout_log.record(SessionStarted(session_id=SESSION_LEGACY, session_kind="chat"))
-    checkout_log.record(TurnStarted(entry="spa", chars=3, prompt_excerpt=None, session_id=SESSION_LEGACY))
-    checkout_log.record(TurnSettled(run_id="run-legacy", started_seq=2))
+    checkout_log.record(SessionStarted(session_id=SESSION_CHECKOUT, session_kind="chat"))
+    checkout_log.record(TurnStarted(entry="spa", chars=3, prompt_excerpt=None, session_id=SESSION_CHECKOUT))
+    checkout_log.record(TurnSettled(run_id="run-checkout", started_seq=2))
 
     workspace = open_workspace(other_root)
     workspace.session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
@@ -397,10 +397,10 @@ async def test_sweep_projects_visits_every_session_in_every_registered_project(t
 
     assert spy.pools == [pool, pool, pool], "every refresh writes through the one pool the sweep was given"
     swept_session_ids = {session_id for _root, session_id in spy.calls}
-    assert swept_session_ids == {SESSION_LEGACY, SESSION_B, SESSION_C}, "a boot must never leave fewer rows than the session logs hold"
+    assert swept_session_ids == {SESSION_CHECKOUT, SESSION_B, SESSION_C}, "a boot must never leave fewer rows than the session logs hold"
 
-    legacy_call = next(call for call in spy.calls if call[1] == SESSION_LEGACY)
-    assert legacy_call[0] == str(checkout.resolve()), "the legacy session is swept off the checkout's own root, not a workspace"
+    checkout_call = next(call for call in spy.calls if call[1] == SESSION_CHECKOUT)
+    assert checkout_call[0] == str(checkout.resolve()), "the checkout's own session is swept off the checkout's own root, not a workspace"
     other_roots = {root for root, session_id in spy.calls if session_id in {SESSION_B, SESSION_C}}
     assert other_roots == {str(other_root.resolve())}
 
@@ -430,7 +430,7 @@ async def test_last_activity_at_is_each_sessions_own_last_turn_not_the_sweeps_mo
     settled_a = recorded(session_log, TurnSettled(run_id="run-a", started_seq=started_a.seq))
     started_b = recorded(session_log, TurnStarted(entry="spa", chars=4, session_id=SESSION_B, prompt_excerpt=None))
     settled_b = recorded(session_log, TurnSettled(run_id="run-b", started_seq=started_b.seq))
-    started_c = recorded(session_log, TurnStarted(entry="spa", chars=3, session_id=SESSION_LEGACY, prompt_excerpt=None))
+    started_c = recorded(session_log, TurnStarted(entry="spa", chars=3, session_id=SESSION_CHECKOUT, prompt_excerpt=None))
     settled_c = recorded(session_log, TurnSettled(run_id="run-c", started_seq=started_c.seq))
     events = session_log.events()
 
@@ -440,8 +440,8 @@ async def test_last_activity_at_is_each_sessions_own_last_turn_not_the_sweeps_mo
     by_id = {row[0]: row for row in sessions}
     assert by_id[SESSION_A][4] == settled_a.at, "A's last activity is A's own settle"
     assert by_id[SESSION_B][4] == settled_b.at, "B's last activity is B's own settle"
-    assert by_id[SESSION_LEGACY][4] == settled_c.at, "the last-opened session's own settle, incidentally also the session log's newest line"
-    assert len({by_id[SESSION_A][4], by_id[SESSION_B][4], by_id[SESSION_LEGACY][4]}) == 3, (
+    assert by_id[SESSION_CHECKOUT][4] == settled_c.at, "the last-opened session's own settle, incidentally also the session log's newest line"
+    assert len({by_id[SESSION_A][4], by_id[SESSION_B][4], by_id[SESSION_CHECKOUT][4]}) == 3, (
         "the bug stamped every open session with the sweep's one newest timestamp -- these three must differ"
     )
 

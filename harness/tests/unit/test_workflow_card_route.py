@@ -162,7 +162,7 @@ async def test_the_get_door_carries_the_card_beside_everything_it_already_answer
         "Use monthly.",
     )
     assert payload["provisional"] is True
-    # Legacy fields an existing consumer already reads must still be there, unmoved.
+    # The fields an existing consumer already reads are still there, unmoved.
     assert payload["name"] == quarterly_report.name
     assert payload["version"] == quarterly_report.version
     assert "graph" in payload
@@ -370,8 +370,8 @@ async def _patch_body(controller: BrowsingController, workflow_id: str, body: Wo
     return response.status_code, json.loads(bytes(response.body))
 
 
-def _legacy(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> tuple[FakeCardStore, BrowsingController]:
-    """A card from before anybody wrote the author's words down: prose in three fields, no presentation."""
+def _undescribed(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> tuple[FakeCardStore, BrowsingController]:
+    """A card nobody has described yet: prose in three fields, no presentation."""
     library = FakeCardStore(
         {"wf.report": quarterly_report},
         {"wf.report": SavedWorkflow(id="wf.report", title="Quarterly report", summary="Rolls up the quarter.", applicability="Use monthly.")},
@@ -388,11 +388,11 @@ def _refused(body: dict[str, Any]) -> list[str]:
     return [line.split(":", maxsplit=1)[0].strip() for line in body["message"].splitlines()[1:]]
 
 
-async def test_a_legacy_card_takes_a_valid_title_and_still_reports_what_it_lacks(
+async def test_an_undescribed_card_takes_a_valid_title_and_still_reports_what_it_lacks(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
     """A partial edit is allowed to land. It is never allowed to look finished."""
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
     before = await _get(controller, "wf.report")
 
     status, body = await _patch_body(controller, "wf.report", WorkflowCardPatch(title="Quarterly close"))
@@ -412,7 +412,7 @@ async def test_a_legacy_card_takes_a_valid_title_and_still_reports_what_it_lacks
 async def test_a_placeholder_title_is_refused_and_nothing_is_written(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     status, body = await _patch_body(controller, "wf.report", WorkflowCardPatch(title="(not stated)"))
 
@@ -427,7 +427,7 @@ async def test_a_placeholder_title_is_refused_and_nothing_is_written(
 
 
 async def test_a_title_over_eighty_characters_is_refused(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     status, body = await _patch_body(controller, "wf.report", WorkflowCardPatch(title="x" * 81))
 
@@ -466,7 +466,7 @@ async def test_the_get_door_carries_the_same_readiness_the_patch_answers_with(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
     """One reading, wherever it is asked for, so a form never disagrees with the gate."""
-    _library, controller = _legacy(quarterly_report, registry, tmp_path)
+    _library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     payload = await _get(controller, "wf.report")
 
@@ -484,11 +484,11 @@ FOUR_SENTENCES = WorkflowPresentationPatch(
 )
 
 
-async def test_a_legacy_card_can_be_described_through_the_card_route(
+async def test_an_undescribed_card_can_be_described_through_the_card_route(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
     """The one screen a person can answer the gate from: the four sentences land and it reads described."""
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     status, body = await _patch_body(controller, "wf.report", WorkflowCardPatch(presentation=FOUR_SENTENCES))
 
@@ -505,7 +505,7 @@ async def test_a_legacy_card_can_be_described_through_the_card_route(
 async def test_a_placeholder_sentence_is_refused_and_nothing_is_written(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     status, body = await _patch_body(
         controller, "wf.report", WorkflowCardPatch(presentation=FOUR_SENTENCES.model_copy(update={"produces": "  Coming   Soon "}))
@@ -520,7 +520,7 @@ async def test_a_placeholder_sentence_is_refused_and_nothing_is_written(
 
 async def test_one_sentence_at_a_time_keeps_the_others(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """Absent means unchanged one level down too, so a form that owns one box sends that box."""
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
     await _patch_body(controller, "wf.report", WorkflowCardPatch(presentation=FOUR_SENTENCES))
 
     status, body = await _patch_body(
@@ -539,7 +539,7 @@ async def test_one_sentence_at_a_time_keeps_the_others(quarterly_report: Workflo
 async def test_a_title_only_patch_leaves_the_words_the_library_holds(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
     await _patch_body(controller, "wf.report", WorkflowCardPatch(presentation=FOUR_SENTENCES))
 
     status, _body = await _patch_body(controller, "wf.report", WorkflowCardPatch(title="Quarterly close"))
@@ -555,7 +555,7 @@ async def test_a_presentation_naming_what_the_spec_does_not_declare_is_refused(
     quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
 ) -> None:
     """The library's own check reaches the route as a refusal, never as a crash."""
-    library, controller = _legacy(quarterly_report, registry, tmp_path)
+    library, controller = _undescribed(quarterly_report, registry, tmp_path)
 
     status, body = await _patch_body(
         controller,

@@ -10,13 +10,14 @@ from __future__ import annotations
 import asyncio
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, NoReturn
 from uuid import UUID
 
 import pytest
 
 from core.ai.history.contracts import ContinuationAttempt, ContinuationUnsafeReplayError
-from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, StepConversationContinuation, spec_identity
+from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, DurableWorkflowRun, StepConversationContinuation, spec_identity
+from temporalio.client import WorkflowHandle
 
 from harness.adapters.temporal_server import ServerOutcome
 from harness.adapters.wiring import REGISTRATIONS, durable_turns
@@ -29,6 +30,7 @@ from harness.session import NoSessionLog, Runtime
 from harness.settings import HarnessSettings, RunSettings
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.step_store import FakeContinuationCheckpoints, FakeStepStore
+from tests.support.runtime import a_runtime
 from tests.support.state import a_state, records_under
 
 if TYPE_CHECKING:
@@ -48,8 +50,8 @@ def _the_engine_answers_unless_a_test_says_otherwise() -> Iterator[None]:
 
 @pytest.fixture
 def session(registry: StepRegistry, tmp_path: Path) -> Runtime:
-    """A session with no store and no agent, as `test_attestation` builds one: dispatch never reaches them."""
-    return Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", None), session_log=NoSessionLog(), state=a_state(tmp_path))
+    """A session over an empty library and an agent that reaches no model. Dispatch never reaches either."""
+    return a_runtime(registry=registry, session_log=NoSessionLog(), state=a_state(tmp_path))
 
 
 def test_the_default_engine_is_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -265,10 +267,13 @@ def test_the_process_that_serves_durable_runs_also_holds_the_ledger_their_lines_
     assert durable_turns in REGISTRATIONS
 
 
-class _SilentHandle:
-    """A workflow handle whose queries go unanswered, as a closed workflow's do."""
+class _SilentHandle(WorkflowHandle[DurableWorkflowRun, object]):
+    """A workflow handle whose queries go unanswered, as a closed workflow's do. Built without a client, which no query reaches."""
 
-    async def query(self, *_args: object, **_kwargs: object) -> object:
+    def __init__(self) -> None:
+        """Hold nothing: the one call a test makes on this handle raises before it needs a client."""
+
+    async def query(self, *_args: object, **_kwargs: object) -> NoReturn:
         msg = "no worker answers"
         raise RuntimeError(msg)
 
@@ -282,7 +287,7 @@ async def test_a_durable_runs_evidence_carries_the_content_address_of_the_workfl
 
     await durable._record_evidence(
         session,
-        cast("Any", _SilentHandle()),
+        _SilentHandle(),
         records=records,
         ran=durable.DurableRunOutcome(spec=quarterly_report, params={"quarter": "Q2"}, outcome="completed"),
     )

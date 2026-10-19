@@ -110,7 +110,7 @@ async def test_an_artifact_whose_environment_moved_names_what_moved(library: Fol
     assert any("digest-one" in finding and moved in finding for finding in body["staleness"])
 
 
-async def test_an_artifact_that_predates_stamps_reads_as_unknown_not_fresh(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+async def test_an_unstamped_artifact_reads_as_unknown_not_fresh(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """The tri-state, at the one place a person meets it. `null` is not `[]`."""
     workflow_id = await library.put(quarterly_report, title="Q", summary="s", applicability="a", provenance={"saved_by": "test"})
     controller = _install(registry, library, tmp_path)

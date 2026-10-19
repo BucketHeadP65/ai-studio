@@ -31,8 +31,8 @@ def test_the_span_fold_carries_the_kind_the_start_event_named(tmp_path: Path) ->
 
 
 def test_a_span_with_no_start_event_defaults_to_chat(tmp_path: Path) -> None:
-    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-legacy", prompt_excerpt=None))
-    span = next(span for span in session_spans(a_session_log(tmp_path).events()) if span.session_id == "s-legacy")
+    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-unstarted", prompt_excerpt=None))
+    span = next(span for span in session_spans(a_session_log(tmp_path).events()) if span.session_id == "s-unstarted")
     assert span.session_kind == "chat"
 
 

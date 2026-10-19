@@ -307,7 +307,7 @@ async def test_two_checkout_rooted_sessions_park_their_runs_in_different_files(t
     assert session_state.run_log_path(pool.default) not in {first_path, second_path}
 
 
-async def test_the_process_own_session_keeps_the_legacy_waiting_run_path(tmp_path: Path) -> None:
+async def test_the_process_own_session_keeps_the_unscoped_waiting_run_path(tmp_path: Path) -> None:
     """The unscoped run entries and the boot-time restore read one file, and it does not move."""
     pool = SessionPool(_default_session(tmp_path))
 

@@ -119,8 +119,8 @@ async def test_the_listing_names_the_newest_live_version_a_schedule_will_fire(re
         assert [row["workflow_id"] for row in listed] == ["wf.sales.v2"]
 
 
-async def test_create_without_the_new_fields_still_works_and_defaults_them(registry: StepRegistry, tmp_path: Path) -> None:
-    """A legacy client posting the original shape still works; the new fields default quietly."""
+async def test_a_create_naming_only_workflow_arguments_and_cadence_defaults_every_other_setting(registry: StepRegistry, tmp_path: Path) -> None:
+    """A create naming only the workflow, its arguments and its cadence gets every other setting's default."""
     async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), FakeSchedules(), tmp_path, registry=registry) as (client, _):
         created = await client.post("/api/schedules", json={"workflow_id": "wf-sales", "arguments": {"quarter": "Q1"}, "cadence": "every 30m"})
 
