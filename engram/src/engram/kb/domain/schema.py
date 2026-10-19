@@ -625,17 +625,6 @@ DisclosureModeName = Literal["strict", "search_only"]
 _RETRIEVAL_SWITCH_NAMES: tuple[str, ...] = ("embeddings", "sql", "graph")
 """The switch names `RetrievalSpec.floor` and `ceiling` may pin, the same as `engram.indexing.domain.switches.SWITCH_NAMES`."""
 
-_OLD_PRIVACY_KEY = "library"
-"""The retired key for `RetrievalSpec.private`, which carried the opposite meaning."""
-
-_OLD_PRIVACY_KEY_REFUSAL = (
-    f"retrieval.{_OLD_PRIVACY_KEY} is the name retrieval.private carried before, and it means the opposite "
-    "(false there is true here), so reading it as either answer would be a guess. Rewrite this knowledge base's "
-    "knowledge-base-schema.json with `uv run python -m studio.migrations.wave4`, then run `studio index` so the "
-    "indexed copy of the schema follows."
-)
-"""What a caller is told when a payload still carries the old privacy key."""
-
 
 class RetrievalSpec(BaseModel):
     """Retrieval profile for the MCP server engram ships.
@@ -670,14 +659,6 @@ class RetrievalSpec(BaseModel):
     """The frontmatter field each page's page date is read from, the day a search's date range reads.
 
     It must be `created` or a scalar frontmatter field a page type declares. A page whose field holds no date has no page date."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _refuse_the_old_privacy_key(cls, data: object) -> object:
-        """Refuse a `library` key rather than drop it, since dropping it would open a private knowledge base."""
-        if isinstance(data, Mapping) and _OLD_PRIVACY_KEY in data:
-            raise ValueError(_OLD_PRIVACY_KEY_REFUSAL)
-        return data
 
     @model_validator(mode="after")
     def _check_switch_pins(self) -> RetrievalSpec:

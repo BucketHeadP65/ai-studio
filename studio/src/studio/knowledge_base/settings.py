@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, TypedDict, Unpack
 
@@ -143,17 +142,6 @@ class Schedule(BaseModel):
         return self
 
 
-_OLD_PRIVACY_KEY = "library"
-"""The key a registered knowledge base must not carry, whose meaning is the opposite of `private`."""
-
-_OLD_PRIVACY_KEY_REFUSAL = (
-    f"{_OLD_PRIVACY_KEY} is the name private carried before, and it means the opposite (false there is true here), "
-    "so reading it as either answer would be a guess. Rewrite the settings file's knowledge base rows with "
-    "`uv run python -m studio.migrations.wave4`."
-)
-"""What a caller is told when a registered knowledge base carries the `library` key."""
-
-
 class KnowledgeBaseEntry(_EngramKnowledgeBaseEntry):
     """A registered knowledge base as engram declares it, plus two studio-only fields: a refresh `schedule` and `private`.
 
@@ -164,14 +152,6 @@ class KnowledgeBaseEntry(_EngramKnowledgeBaseEntry):
 
     schedule: Schedule | None = None
     private: bool = False
-
-    @model_validator(mode="before")
-    @classmethod
-    def _refuse_the_old_privacy_key(cls, data: object) -> object:
-        """Refuse a row that carries a `library` key, so `read_registry` reports it as broken and never reads it as shared."""
-        if isinstance(data, Mapping) and _OLD_PRIVACY_KEY in data:
-            raise ValueError(_OLD_PRIVACY_KEY_REFUSAL)
-        return data
 
 
 _ENTRY_ADAPTER = TypeAdapter(KnowledgeBaseEntry)

@@ -919,16 +919,8 @@ class TestKnowledgeBaseEntrySchedule:
             KnowledgeBaseEntry(path=tmp_path / "does-not-exist")
 
 
-class TestKnowledgeBaseEntryRefusesTheOldPrivacyKey:
-    """A row still keyed `library` is refused, never read as the default `private: False`, which would mean shared."""
-
-    def test_a_row_carrying_library_is_refused_naming_the_rewrite(self, tmp_path: Path):
-        with pytest.raises(ValidationError, match=r"studio\.migrations\.wave4"):
-            KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path)), "library": False})
-
-    def test_a_row_carrying_library_true_is_refused_too(self, tmp_path: Path):
-        with pytest.raises(ValidationError, match=r"studio\.migrations\.wave4"):
-            KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path)), "library": True})
+class TestKnowledgeBaseEntryPrivacy:
+    """A registered row's `private` key, the one key that keeps it out of a host's read over several knowledge bases."""
 
     def test_a_row_carrying_private_validates(self, tmp_path: Path):
         entry = KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path)), "private": True})
@@ -938,14 +930,10 @@ class TestKnowledgeBaseEntryRefusesTheOldPrivacyKey:
     def test_a_row_carrying_neither_validates_as_shared(self, tmp_path: Path):
         assert KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path))}).private is False
 
-    def test_read_registry_reports_such_a_row_as_broken(self, tmp_path: Path):
-        knowledge_base = _make_knowledge_base(tmp_path / "kb")
-        settings_path = _write_app_json(tmp_path, {"knowledge_bases": {"alpha": {"path": str(knowledge_base), "library": False}}})
+    def test_an_undeclared_library_key_leaves_private_as_declared(self, tmp_path: Path):
+        entry = KnowledgeBaseEntry.model_validate({"path": str(_make_knowledge_base(tmp_path)), "private": True, "library": True})
 
-        valid, broken = read_registry(settings_path)
-
-        assert valid == {}
-        assert broken == {"alpha": str(knowledge_base)}
+        assert entry.private is True
 
 
 class TestApplyStalenessMax:

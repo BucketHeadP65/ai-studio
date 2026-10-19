@@ -1476,13 +1476,9 @@ def serve_http_cmd(
     process's environment so it reads the same settings, and restarted with backoff when it exits.
     `--no-worker` leaves it out for a deployment that runs the worker itself. The API queues jobs
     either way and never runs one in its own process.
-
-    On boot, any registered knowledge base still written in the old words is rewritten, and what
-    changed is logged. A failure there is logged and skipped, and the API still serves.
     """
     settings = fetch_application_settings()
     configure_logging(settings.logging)
-    _migrate_knowledge_base_words()
     import uvicorn  # noqa: PLC0415 (lazy: fastapi/uvicorn load only when serving, not on every CLI call)
 
     from engram.evals.harness.contracts import configure_logfire  # noqa: PLC0415 (same: keep logfire off the hot CLI path)
@@ -1493,22 +1489,6 @@ def serve_http_cmd(
     app_instance = create_app(settings, worker=_worker_child() if worker else None)
     server = uvicorn.Server(uvicorn.Config(app_instance, host=host, port=port, log_level="info"))
     server.run()
-
-
-def _migrate_knowledge_base_words() -> None:
-    """Rewrite any registered knowledge base still written in the old words, logging and continuing on failure."""
-    from studio.migrations.contracts import BOOT_MIGRATIONS  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
-
-    for name, needed, run in BOOT_MIGRATIONS:
-        try:
-            if not needed():
-                continue
-            report = run()
-        except Exception:  # a migration is a repair, and a repair must not stop the app
-            _logger.exception("the {migration} vocabulary migration could not run, serving with the state as it stands", migration=name)
-            continue
-        for line in report.lines():
-            _logger.info("{migration} migration: {line}", migration=name, line=line)
 
 
 if __name__ == "__main__":  # pragma: no cover

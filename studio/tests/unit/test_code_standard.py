@@ -11,7 +11,6 @@ CONVERTED = (
     "studio.knowledge_base.indexing",
     "studio.knowledge_base.refresh",
     "studio.knowledge_base.retention",
-    "studio.migrations",
 )
 """Every converted slice, by its dotted name. A slice joins when its conversion lands and never leaves."""
 DOCUMENTED: tuple[str, ...] = (
