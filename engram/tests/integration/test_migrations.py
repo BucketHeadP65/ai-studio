@@ -2128,7 +2128,7 @@ class TestGateModeAndRefreshResultsMigration:
 
         run_upgrade(target_url, "0071")
 
-        rows = dict(await _rows(target_url, "SELECT key, result FROM coordination.jobs ORDER BY key"))
+        rows = {str(key): result for key, result in await _rows(target_url, "SELECT key, result FROM coordination.jobs ORDER BY key")}
         assert json.loads(str(rows["text"])) == {
             "detail": "scanned 0 entries, synced 1 created, indexed 3 pages",
             "counts": {"sources_created": 0, "requested_by_entry": {}, "created_by_connector": {}},
