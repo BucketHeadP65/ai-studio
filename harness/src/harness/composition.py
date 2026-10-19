@@ -14,7 +14,6 @@ import sys
 from collections.abc import Awaitable
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from types import NoneType
 from typing import TYPE_CHECKING, get_args, get_origin
@@ -1246,14 +1245,6 @@ def restore_waiting_run(session: Runtime, records: RunRecords, topics: TopicSink
     _relaunch_logged_run(session, path, records, topics)
 
 
-def _started_at(run_id: str) -> str:
-    """When the run `run_id` started, as a launch writes it, or `""` when the id carries no start time."""
-    try:
-        return datetime.strptime(f"{run_id.split('-', maxsplit=1)[0]}+0000", "%Y%m%dT%H%M%S%f%z").isoformat()
-    except ValueError:
-        return ""
-
-
 def _relaunch_logged_run(session: Runtime, path: Path, records: RunRecords, topics: TopicSink) -> None:
     """Relaunch the run the log at `path` holds in `session`, pause it, or drop the log when its workflow no longer validates."""
     task = session.active.task
@@ -1274,7 +1265,7 @@ def _relaunch_logged_run(session: Runtime, path: Path, records: RunRecords, topi
         session.active.run_id = waiting.run_id or None
         session.active.run_title = waiting.run_title
         session.active.result = "A restart stopped this run. Resume it to carry on."
-        session.active.started_at = waiting.started_at or _started_at(waiting.run_id)
+        session.active.started_at = waiting.started_at
         session.active.gate_mode = waiting.gate_mode
         session.active.gate_timeout = waiting.gate_timeout
         session.active.progress.reset()

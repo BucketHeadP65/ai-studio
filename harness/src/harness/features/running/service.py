@@ -830,8 +830,8 @@ def archive_run(  # noqa: PLR0913 (mirrors the evidence both ending paths alread
     gates_approved: tuple[str, ...],
     gates_rejected: dict[str, int],
     gates_auto: tuple[str, ...],
+    result: Outcome,
     gates_orchestrated: tuple[str, ...] = (),
-    result: Outcome | None = None,
     reviewed: tuple[ReviewedValue, ...] = (),
     run_id: str | None = None,
 ) -> None:

@@ -514,9 +514,7 @@ async def recent_runs(archive: RunArchiveQueries, limit: int = 10) -> str:
 
 
 def _checked(record: RunArchiveRecord) -> str:
-    """One run's checked outcome in a phrase, saying plainly when nothing was checked."""
-    if record.result is None:
-        return "unknown (this run predates outcome reporting)"
+    """One run's checked outcome in a phrase."""
     result = record.result
     if result.attempted == 0:
         return result.status

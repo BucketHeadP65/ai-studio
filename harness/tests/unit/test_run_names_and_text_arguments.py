@@ -1,10 +1,9 @@
-"""Records written before today's contracts existed, read back through the surfaces that serve them.
+"""Archived runs and stored schedules read back through the surfaces that serve them.
 
 Every stored shape here is hand-typed JSON rather than a dump of a current model, so a field that
-starts being written by default fails loudly here instead of the fixture quietly growing it. What
-each one asserts is the honest fallback: a run nobody named reads as unnamed, a run whose outcome
-was never captured reads as unknown, and a value stored as text reaches the step as the JSON its
-parameter declares.
+starts being written by default fails loudly here instead of the fixture quietly growing it. A run
+nobody named reads as unnamed and never borrows its session's name, and a value stored as text
+reaches the step as the JSON its parameter declares.
 """
 
 from __future__ import annotations
@@ -37,19 +36,19 @@ if TYPE_CHECKING:
 
     from core.ai.workflows.contracts import Workflow
 
-# --- one run archived before runs were named or their outcome was checked -------------------------
+# --- one archived run nobody named ---------------------------------------------------------------
 
-_LEGACY_RUN_JSON = (
-    '{"run_id":"run-legacy","workflow_id":"wf.quarterly-close","outcome":"completed",'
+_ARCHIVED_RUN_JSON = (
+    '{"run_id":"run-unnamed","workflow_id":"wf.quarterly-close","outcome":"completed",'
+    '"result":{"status":"unknown","summary":"no result declared"},'
     '"started_at":"2026-01-05T09:00:00+00:00","ended_at":"2026-01-05T09:04:00+00:00",'
-    '"runner":"app:harness","session_id":"sess-legacy","params":{"quarter":"Q1"},'
+    '"runner":"app:harness","session_id":"sess-shared","params":{"quarter":"Q1"},'
     '"spec":{"name":"quarterly-close","version":1},'
     '"values":{"collect_sales":{"total":900}},'
     '"events":[{"seq":1,"node":"collect_sales","at":0.2,"finished":true,"failed":false}],'
     '"gates_approved":["approve_report"]}'
 )
-"""One archived run exactly as it was written before `run_title` and `result` existed: no name of
-its own, and no record of what it was checked to have done."""
+"""One archived run its launch gave no name."""
 
 _SESSION_TITLE = "Tuesday morning, catching up on the quarter"
 """What the session this run happened to live in was called. A conversation's name, not a run's,
@@ -66,19 +65,19 @@ def _archived(home: Path, payload: str) -> FileRunArchive:
     return FileRunArchive(root, retention_days=KEPT_DAYS)
 
 
-def test_a_run_archived_before_runs_were_named_reads_as_unnamed(tmp_path: Path) -> None:
+def test_a_run_nobody_named_reads_as_unnamed(tmp_path: Path) -> None:
     """Nothing fills in a name. A reader that wants one falls back on its own side of the wire."""
-    record = _archived(tmp_path, _LEGACY_RUN_JSON).get("run-legacy")
+    record = _archived(tmp_path, _ARCHIVED_RUN_JSON).get("run-unnamed")
 
     assert record is not None
     assert record.run_title == ""
-    assert record.session_id == "sess-legacy"
+    assert record.session_id == "sess-shared"
 
 
-async def test_the_served_history_of_a_legacy_run_carries_no_session_title(tmp_path: Path) -> None:
+async def test_the_served_history_of_an_unnamed_run_carries_no_session_title(tmp_path: Path) -> None:
     """A session is a container with a name of its own. No projection of a run joins that name on."""
     controller = a_running_controller(a_pool(state=tmp_path), tmp_path)
-    _archived(tmp_path, _LEGACY_RUN_JSON)
+    _archived(tmp_path, _ARCHIVED_RUN_JSON)
 
     async with a_client_of(controller) as client:
         listed = await client.get("/api/workflows/wf.quarterly-close/history")
@@ -87,49 +86,19 @@ async def test_the_served_history_of_a_legacy_run_carries_no_session_title(tmp_p
     rows = listed.json()["runs"]
     assert [row["run_title"] for row in rows] == [""]
     assert _SESSION_TITLE not in json.dumps(rows), "no run projection may wear the name of the conversation it ran in"
-    assert [row["session_id"] for row in rows] == ["sess-legacy"], "which container it ran in is still said, plainly"
+    assert [row["session_id"] for row in rows] == ["sess-shared"], "which container it ran in is still said, plainly"
 
 
-async def test_a_run_archived_before_outcomes_were_checked_reads_as_unknown(tmp_path: Path) -> None:
-    """The record cannot say, so the projection says exactly that rather than inventing a verdict."""
-    controller = a_running_controller(a_pool(state=tmp_path), tmp_path)
-    _archived(tmp_path, _LEGACY_RUN_JSON)
+# --- a schedule whose arguments are text -----------------------------------------------------------
 
-    async with a_client_of(controller) as client:
-        listed = await client.get("/api/runs/recent")
-        detail = await client.get("/api/runs/history/run-legacy")
-
-    row = listed.json()["runs"][0]
-    assert row["result"]["status"] == "unknown"
-    assert row["result"]["attempted"] == 0, "counts are always numbers; what is unknown is said by the status"
-    assert detail.json()["result"]["status"] == "unknown", "the listing and the run's own page read the same way"
-    assert "result" not in json.loads((a_state(tmp_path).archive / "wf.quarterly-close" / "run-legacy.json").read_text()), (
-        "a projection is a reading, never a verdict written back onto the record"
-    )
-
-
-async def test_an_unknown_legacy_outcome_is_never_rewritten_into_a_verdict(tmp_path: Path) -> None:
-    """An approved gate and a produced value on an old record still add up to nothing checkable."""
-    controller = a_running_controller(a_pool(state=tmp_path), tmp_path)
-    _archived(tmp_path, _LEGACY_RUN_JSON)
-
-    async with a_client_of(controller) as client:
-        row = (await client.get("/api/runs/recent")).json()["runs"][0]
-
-    assert row["gates_approved"] == ["approve_report"]
-    assert row["result"]["status"] == "unknown", "a gate somebody approved is not evidence of what the work did"
-
-
-# --- a schedule stored when every argument was text ------------------------------------------------
-
-_LEGACY_SCHEDULE_JSON = (
+_TEXT_SCHEDULE_JSON = (
     '{"id":"3f0d6d1e-0c0e-4a6e-9a6a-9b7a1c2d3e4f","workflow_id":"wf-typed",'
     '"arguments":{"knowledge_bases":"[\\"research\\", \\"repo-docs\\"]","include_rejected":"true"},'
     '"cadence":"every 30m","enabled":true,"gate_policy":"wait","gate_mode":"wait",'
-    '"auto_approve_gates":false,"session_id":"","created_at":"2026-01-05T09:00:00+00:00",'
+    '"session_id":"","created_at":"2026-01-05T09:00:00+00:00",'
     '"last_run_at":null,"last_outcome":"","next_run_at":"2026-08-24T12:00:00+00:00","paused_at":null}'
 )
-"""One stored schedule from when a form could send nothing but text: an array and a boolean, both
+"""One stored schedule from a client that sends nothing but text: an array and a boolean, both
 written down as the strings somebody typed."""
 
 
@@ -157,7 +126,7 @@ async def _fire(tmp_path: Path, row: Schedule, seen: list[tuple[list[str], bool]
 
 def test_a_schedule_stored_as_text_still_parses() -> None:
     """The row loads as it was written. Nothing is rewritten on the way in."""
-    row = Schedule.model_validate_json(_LEGACY_SCHEDULE_JSON)
+    row = Schedule.model_validate_json(_TEXT_SCHEDULE_JSON)
 
     assert row.arguments == {"knowledge_bases": '["research", "repo-docs"]', "include_rejected": "true"}
 
@@ -166,7 +135,7 @@ async def test_a_text_only_schedule_fires_with_the_types_its_workflow_declares(t
     """A stored string reaches an array parameter as an array, and a boolean one as a boolean."""
     seen: list[tuple[list[str], bool]] = []
 
-    after = await _fire(tmp_path, Schedule.model_validate_json(_LEGACY_SCHEDULE_JSON), seen)
+    after = await _fire(tmp_path, Schedule.model_validate_json(_TEXT_SCHEDULE_JSON), seen)
 
     assert after.last_outcome == "launched"
     assert seen == [(["research", "repo-docs"], True)], "never the text of a list, never the four characters 'true'"
@@ -176,7 +145,7 @@ async def test_a_text_only_schedule_keeps_its_stored_text_after_firing(tmp_path:
     """Admission is what a launch is given, never a migration of the row behind it."""
     seen: list[tuple[list[str], bool]] = []
 
-    after = await _fire(tmp_path, Schedule.model_validate_json(_LEGACY_SCHEDULE_JSON), seen)
+    after = await _fire(tmp_path, Schedule.model_validate_json(_TEXT_SCHEDULE_JSON), seen)
 
     assert after.arguments == {"knowledge_bases": '["research", "repo-docs"]', "include_rejected": "true"}
 
@@ -184,7 +153,7 @@ async def test_a_text_only_schedule_keeps_its_stored_text_after_firing(tmp_path:
 async def test_a_stored_python_repr_is_refused_rather_than_read(tmp_path: Path) -> None:
     """Text that is not JSON is a refusal. Nothing guesses what a repr was meant to say."""
     seen: list[tuple[list[str], bool]] = []
-    row = Schedule.model_validate_json(_LEGACY_SCHEDULE_JSON).model_copy(
+    row = Schedule.model_validate_json(_TEXT_SCHEDULE_JSON).model_copy(
         update={"arguments": {"knowledge_bases": "['research', 'repo-docs']", "include_rejected": "True"}}
     )
 
@@ -276,7 +245,7 @@ def test_an_optional_parameter_that_was_answered_keeps_its_answer() -> None:
 
 def test_a_named_run_and_the_session_it_runs_in_are_two_separate_facts(tmp_path: Path) -> None:
     """The archive keeps the name the launch gave the run, and says separately which session held it."""
-    named = json.loads(_LEGACY_RUN_JSON)
+    named = json.loads(_ARCHIVED_RUN_JSON)
     named["run_id"] = "run-named"
     named["run_title"] = "Which cache do we use?"
     archive = _archived(tmp_path, json.dumps(named))
@@ -285,7 +254,7 @@ def test_a_named_run_and_the_session_it_runs_in_are_two_separate_facts(tmp_path:
 
     assert record is not None
     assert record.run_title == "Which cache do we use?"
-    assert record.session_id == "sess-legacy"
+    assert record.session_id == "sess-shared"
     assert record.run_title != _SESSION_TITLE
 
 
@@ -293,7 +262,7 @@ async def test_both_runs_of_one_session_are_projected_under_their_own_names(tmp_
     """One session can hold several runs, so the container's name could never have named any of them."""
     controller = a_running_controller(a_pool(state=tmp_path), tmp_path)
     for run_id, title in (("run-a", "Which cache do we use?"), ("run-b", "Which queue do we use?")):
-        payload = json.loads(_LEGACY_RUN_JSON)
+        payload = json.loads(_ARCHIVED_RUN_JSON)
         payload["run_id"], payload["run_title"] = run_id, title
         _archived(tmp_path, json.dumps(payload))
 
@@ -301,7 +270,7 @@ async def test_both_runs_of_one_session_are_projected_under_their_own_names(tmp_
         rows = (await client.get("/api/runs/recent")).json()["runs"]
 
     assert sorted(row["run_title"] for row in rows) == ["Which cache do we use?", "Which queue do we use?"]
-    assert {row["session_id"] for row in rows} == {"sess-legacy"}
+    assert {row["session_id"] for row in rows} == {"sess-shared"}
 
 
 def test_the_registry_the_schedule_fixtures_run_against_holds_the_step_they_name() -> None:

@@ -38,6 +38,7 @@ from core.ai.workflows.contracts import (
     reviewed_value_digest,
 )
 from core.ai.workflows.domain.vocabulary import RequiredGateCheck
+from pydantic import ValidationError
 
 from harness.container import create_container
 from harness.features.running.contracts import RunArchive
@@ -79,6 +80,7 @@ def _record(
         values={"reconcile": {"net": 400}},
         conversations=conversations or {},
         events=[{"seq": 1, "node": "reconcile", "at": 0.1, "finished": True, "failed": False}],
+        result=Outcome(status="unknown", summary="no result declared"),
         pinned=pinned,
     )
 
@@ -96,6 +98,14 @@ def _spec() -> Workflow:
         nodes=(RunNode(id="reconcile", work="reconcile", inputs={}),),
         output=FromNode(node="reconcile"),
     )
+
+
+def test_a_record_with_no_checked_outcome_is_refused() -> None:
+    payload = _record(run_id="r-1").model_dump(mode="json")
+    del payload["result"]
+
+    with pytest.raises(ValidationError, match="result"):
+        RunArchiveRecord.model_validate(payload)
 
 
 def test_put_get_and_list_for_round_trip(tmp_path: Path) -> None:
@@ -221,6 +231,7 @@ def test_archive_days_zero_means_archive_run_is_a_no_op(tmp_path: Path) -> None:
         gates_approved=(),
         gates_rejected={},
         gates_auto=(),
+        result=Outcome(status="unknown", summary="no result declared"),
     )
 
     assert records.archive.recent(10) == []
@@ -246,6 +257,7 @@ def test_an_archived_run_carries_started_at_before_ended_at(tmp_path: Path, monk
         gates_approved=("approve",),
         gates_rejected={},
         gates_auto=(),
+        result=Outcome(status="unknown", summary="no result declared"),
     )
 
     listed = records.archive.recent(10)
@@ -399,42 +411,6 @@ def test_a_listing_row_leaves_the_reviewed_values_out_and_still_carries_the_chec
     assert row.reviewed == (), "a listing row stays light"
     assert row.result is not None
     assert row.result.status == "succeeded"
-
-
-def test_a_record_archived_before_checked_outcomes_still_parses_and_says_nothing(tmp_path: Path) -> None:
-    archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
-    archive.put(_record(run_id="run-old"))
-
-    read_back = archive.get("run-old")
-
-    assert read_back is not None
-    assert read_back.result is None
-    assert read_back.reviewed == ()
-
-
-_LEGACY_ARCHIVE_JSON = (
-    '{"run_id":"run-legacy","workflow_id":"wf.quarterly-close","outcome":"completed",'
-    '"started_at":"2026-01-05T09:00:00+00:00","ended_at":"2026-01-05T09:04:00+00:00",'
-    '"runner":"app:harness","session_id":"sess-legacy","params":{"quarter":"Q1"},'
-    '"spec":{"name":"quarterly-close","version":1},'
-    '"values":{"collect_sales":{"total":900}},'
-    '"events":[{"seq":1,"node":"collect_sales","at":0.2,"finished":true,"failed":false}],'
-    '"gates_approved":["approve_report"]}'
-)
-"""One archived run exactly as it would have been written to disk before `result` and `reviewed`
-existed -- hand-typed, never dumped from today's model, so a change to what gets defaulted would
-fail loudly here rather than the fixture quietly growing the field along with the code."""
-
-
-def test_a_record_literally_written_before_result_and_reviewed_existed_still_parses() -> None:
-    legacy = RunArchiveRecord.model_validate_json(_LEGACY_ARCHIVE_JSON)
-
-    assert legacy.result is None, "an archive predating the checked outcome cannot say what happened -- unknown, honestly"
-    assert legacy.reviewed == ()
-    assert legacy.gates_rejected == {}
-    assert legacy.gates_auto == ()
-    assert legacy.gates_orchestrated == ()
-    assert legacy.conversations == {}
 
 
 # --- a required gate reviewing a downstream render, over a real graph ---------------------------
@@ -683,6 +659,7 @@ def test_an_archived_run_carries_the_title_its_launch_gave_it(tmp_path: Path) ->
         gates_approved=(),
         gates_rejected={},
         gates_auto=(),
+        result=Outcome(status="unknown", summary="no result declared"),
     )
 
     (listed,) = records.archive.recent(10)

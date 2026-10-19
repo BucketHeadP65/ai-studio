@@ -37,7 +37,6 @@ from harness import session as session_state
 from harness.features.followme.acts import ConsoleApprovals
 from harness.features.running import service
 from harness.features.running.api_models import RunRequest
-from harness.features.running.domain.ended_run import RunArchiveRecord
 from harness.features.running.feedback import orchestrator_decider
 from harness.features.scheduling.api_models import ScheduleIn, ScheduleOut, SchedulePatch
 from harness.features.scheduling.domain import Schedule, ScheduleUpdate
@@ -489,18 +488,6 @@ async def test_a_decider_turn_binds_the_sessions_own_workspace_root(tmp_path: Pa
     await decide("approve", CHARGE, "the draft")
 
     assert seen == [tmp_path]
-
-
-# --- honest records: the legacy shapes still parse -----------------------------------------
-
-
-def test_a_legacy_archive_record_without_gates_orchestrated_still_parses() -> None:
-    legacy = RunArchiveRecord.model_validate_json(
-        '{"run_id": "r1", "workflow_id": "wf", "outcome": "completed", "started_at": "t", '
-        '"ended_at": "t", "runner": "app:harness", "session_id": "", "params": {}, '
-        '"spec": {}, "values": {}, "events": []}'
-    )
-    assert legacy.gates_orchestrated == ()
 
 
 # --- the three-way mode is the only gate switch a launch or a schedule takes --------------------

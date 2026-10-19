@@ -299,15 +299,17 @@ def test_the_log_carries_every_generation_of_facts_and_the_input_each_belongs_to
     assert settled["1:1:bb"].detail == "the fetch timed out"
 
 
-def test_a_log_written_before_a_run_said_what_its_work_did_reads_as_unknown_rather_than_regenerated(tmp_path: Path) -> None:
-    path = tmp_path / "run-log.json"
-    path.write_text(json.dumps({"workflow_id": "wf.report", "spec": _MINIMAL_SPEC, "params": {}, "values": {}}), encoding="utf-8")
+@pytest.mark.parametrize("key", ["work_facts", "batches", "retry_feedback", "gate_decisions", "gate_generations", "run_id"])
+def test_a_log_missing_any_of_its_run_state_is_a_log_nothing_resumes_from(
+    tmp_path: Path, quarterly_report: Workflow, key: str
+) -> None:
+    log = begun(tmp_path / "run-log.json", quarterly_report)
+    log.started("fetch_costs")
+    raw = json.loads((tmp_path / "run-log.json").read_text(encoding="utf-8"))
+    del raw[key]
+    (tmp_path / "run-log.json").write_text(json.dumps(raw), encoding="utf-8")
 
-    waiting = load_waiting(path)
-
-    assert waiting is not None
-    assert waiting.work_facts == []
-    assert waiting.batches == {}, "no batch means the primary work cannot be classified at all"
+    assert load_waiting(tmp_path / "run-log.json") is None
 
 
 def test_a_damaged_batch_costs_the_batches_and_not_the_whole_log(tmp_path: Path) -> None:
@@ -424,19 +426,15 @@ def test_a_run_log_keeps_the_gate_mode_timeout_and_runner_it_was_launched_with(t
     assert waiting.session_kind == "runner"
 
 
-def test_a_run_log_written_before_the_launch_settings_reads_back_the_launch_defaults(tmp_path: Path, quarterly_report: Workflow) -> None:
+@pytest.mark.parametrize("key", ["gate_mode", "gate_timeout", "runner", "session_kind", "run_title", "started_at"])
+def test_a_run_log_missing_a_launch_setting_is_a_log_nothing_resumes_from(tmp_path: Path, quarterly_report: Workflow, key: str) -> None:
     log = begun(tmp_path / "run-log.json", quarterly_report)
     log.started("fetch_costs")
     raw = json.loads((tmp_path / "run-log.json").read_text(encoding="utf-8"))
-    for key in ("gate_mode", "gate_timeout", "runner", "session_kind"):
-        raw.pop(key, None)
+    del raw[key]
     (tmp_path / "run-log.json").write_text(json.dumps(raw), encoding="utf-8")
 
-    waiting = load_waiting(tmp_path / "run-log.json")
-
-    assert waiting is not None
-    assert (waiting.gate_mode, waiting.gate_timeout, waiting.runner) == ("wait", 900.0, "app:harness")
-    assert waiting.session_kind == "chat"
+    assert load_waiting(tmp_path / "run-log.json") is None
 
 
 def test_a_run_log_reads_an_unknown_session_kind_as_chat_and_keeps_its_start_time(tmp_path: Path, quarterly_report: Workflow) -> None:

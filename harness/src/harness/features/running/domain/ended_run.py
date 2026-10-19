@@ -52,38 +52,33 @@ class RunArchiveRecord(BaseModel):
     run_id: str
     workflow_id: str
     run_title: str = ""
-    """What whoever started this run called it. Empty for a run nobody named and for a record written
-    before runs had names. Never borrowed from the session the run ran in."""
+    """What whoever started this run called it. Empty for a run nobody named. Never borrowed from the
+    session the run ran in."""
     outcome: Literal["completed", "failed", "stopped"]
     """How the execution ended. What the run actually did is `result`, and the two are separate."""
-    result: Outcome | None = None
-    """The run's checked outcome, classified from its own facts when it ended.
-
-    `None` for a record written before runs reported one. It is never filled in afterwards."""
+    result: Outcome
+    """The run's checked outcome, classified from its own facts when it ended."""
     failure: str = ""
     started_at: str
     ended_at: str
     runner: str
     session_id: str
     params: WorkflowArguments
-    """What the run was given, as the JSON each parameter declares. A record written when every
-    argument was text still parses, and still reads as that text."""
+    """What the run was given, as the JSON each parameter declares."""
     spec: dict[str, object]
     """The snapshot of the workflow that actually ran, as `Workflow.model_dump(mode="json")`."""
     values: dict[str, object]
     """Jsonable per-node outputs, the run log's own state dict at the moment it closed."""
     conversations: dict[str, list[dict[str, object]]] = Field(default_factory=dict)
     """Each step conversation's messages at the moment the run ended, keyed `"node[item]"` and
-    jsonable via `ModelMessagesTypeAdapter`. Empty for a record written before steps kept their
-    messages."""
+    jsonable via `ModelMessagesTypeAdapter`."""
     events: list[StepEvent]
     gates_approved: tuple[str, ...] = ()
     gates_rejected: dict[str, int] = Field(default_factory=dict)
     gates_auto: tuple[str, ...] = ()
     gates_orchestrated: tuple[str, ...] = ()
     """Gate ids this run's own orchestrator decided rather than a person: declared orchestrator gates
-    and person gates `gate_mode="orchestrate"` converted. Empty for a record written before this
-    field existed."""
+    and person gates `gate_mode="orchestrate"` converted."""
     reviewed: tuple[ReviewedValue, ...] = ()
     """Every value this run's gates reviewed, copied here as the run ended so a reference to one
     outlives the run log. The copies are swept together with the record."""

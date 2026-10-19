@@ -222,7 +222,7 @@ def run_evidence(source: SourceRun, feedback: str) -> str:
     """Why a child exists, as prose: the run behind it, what that run was observed to do, and the owner's words.
 
     Each fact is its own line and nothing here grades any of them.
-    The outcome is quoted as the run's own checked answer, and a run with no checked outcome says so.
+    The outcome is quoted as the run's own checked answer.
 
     Args:
         source: The run the child was adapted from.
@@ -234,13 +234,10 @@ def run_evidence(source: SourceRun, feedback: str) -> str:
     lines = [f"Adapted from run {source.run_id} of {source.workflow_id}."]
     if source.run_title:
         lines.append(f"That run was called {source.run_title!r}.")
-    if source.outcome is None:
-        lines.append("Observed outcome: unknown, that run predates checked outcomes.")
-    else:
-        lines.append(f"Observed outcome: {source.outcome.status}. {source.outcome.summary}")
-        fixed = ", ".join(f"{artifact.id}@{artifact.value_digest}" for artifact in source.outcome.artifacts)
-        if fixed:
-            lines.append(f"Artifacts that run fixed: {fixed}")
+    lines.append(f"Observed outcome: {source.outcome.status}. {source.outcome.summary}")
+    fixed = ", ".join(f"{artifact.id}@{artifact.value_digest}" for artifact in source.outcome.artifacts)
+    if fixed:
+        lines.append(f"Artifacts that run fixed: {fixed}")
     if feedback.strip():
         lines.append(f"What the owner asked for: {feedback.strip()}")
     return "\n".join(lines)

@@ -232,20 +232,20 @@ class WaitingRun:
     """Node id -> the input that node is on, and the identities it owes a disposition. Empty when
     the log holds none, and then a primary work missing here can be classified as nothing at all."""
     run_id: str = ""
-    """The run whose reviewed values sit beside this log. `""` for a log written without them."""
+    """The run whose reviewed values sit beside this log."""
     run_title: str = ""
-    """What the run this log belongs to was called. `""` when the log names none, and a resume
+    """What the run this log belongs to was called. `""` for a run nobody named, and a resume
     then carries the run on unnamed."""
     gate_mode: GateMode = DEFAULT_GATE_MODE
-    """What the run's person gates did. The default mode when the log predates the field."""
+    """What the run's person gates did."""
     gate_timeout: float | None = DEFAULT_GATE_TIMEOUT
-    """How long a gate waited for a person before rejecting, `None` for forever. The launch default when the log predates the field."""
+    """How long a gate waited for a person before rejecting, `None` for forever."""
     runner: str = DEFAULT_RUNNER
-    """The launcher the run named. The launch default when the log predates the field."""
+    """The launcher the run named."""
     session_kind: SessionType = DEFAULT_SESSION_TYPE
-    """The kind of session the run lived in. `"chat"` when the log predates the field."""
+    """The kind of session the run lived in."""
     started_at: str = ""
-    """When the launch started the run, as ISO 8601 text. `""` when the log predates the field."""
+    """When the launch started the run, as ISO 8601 text."""
 
 
 @dataclass(frozen=True)
@@ -520,7 +520,8 @@ class RunLog:
 def load_waiting(path: Path) -> WaitingRun | None:
     """Read the run log a dead process left behind.
 
-    It never raises. A damaged or outdated run log is logged as a warning and read as nothing to resume.
+    It never raises. A damaged run log, or one missing a key every run log carries, is logged as a warning and read as
+    nothing to resume.
 
     Args:
         path: The run log's path.
@@ -535,21 +536,21 @@ def load_waiting(path: Path) -> WaitingRun | None:
             spec=Workflow.model_validate(raw["spec"]),
             params=_PARAMS.validate_python(raw["params"]),
             values=dict(raw["values"]),
-            retry_feedback=TypeAdapter(dict[str, list[RetryFeedback]]).validate_python(raw.get("retry_feedback", {})),
-            gate_decisions=TypeAdapter(list[GateDecisionFact]).validate_python(raw.get("gate_decisions", [])),
-            gate_generations=TypeAdapter(dict[str, int]).validate_python(raw.get("gate_generations", {})),
-            work_facts=TypeAdapter(list[WorkItemFact]).validate_python(raw.get("work_facts", [])),
+            retry_feedback=TypeAdapter(dict[str, list[RetryFeedback]]).validate_python(raw["retry_feedback"]),
+            gate_decisions=TypeAdapter(list[GateDecisionFact]).validate_python(raw["gate_decisions"]),
+            gate_generations=TypeAdapter(dict[str, int]).validate_python(raw["gate_generations"]),
+            work_facts=TypeAdapter(list[WorkItemFact]).validate_python(raw["work_facts"]),
             batches={
                 node: MapBatch(generation=batch.generation, ordered_digest=batch.ordered_digest, items=batch.items)
-                for node, batch in _BATCHES.validate_python(raw.get("batches", {})).items()
+                for node, batch in _BATCHES.validate_python(raw["batches"]).items()
             },
-            run_id=str(raw.get("run_id", "")),
-            run_title=str(raw.get("run_title", "")),
-            gate_mode=_GATE_MODE.validate_python(raw.get("gate_mode", DEFAULT_GATE_MODE)),
-            gate_timeout=_GATE_TIMEOUT.validate_python(raw.get("gate_timeout", DEFAULT_GATE_TIMEOUT)),
-            runner=str(raw.get("runner", DEFAULT_RUNNER)),
-            session_kind=session_type_of(str(raw.get("session_kind", DEFAULT_SESSION_TYPE))),
-            started_at=str(raw.get("started_at", "")),
+            run_id=str(raw["run_id"]),
+            run_title=str(raw["run_title"]),
+            gate_mode=_GATE_MODE.validate_python(raw["gate_mode"]),
+            gate_timeout=_GATE_TIMEOUT.validate_python(raw["gate_timeout"]),
+            runner=str(raw["runner"]),
+            session_kind=session_type_of(str(raw["session_kind"])),
+            started_at=str(raw["started_at"]),
         )
     except FileNotFoundError:
         return None
@@ -584,7 +585,7 @@ def revive_values(spec: Workflow, registry: StepRegistry, values: dict[str, obje
         try:
             revived[node_id] = TypeAdapter[object](annotation).validate_python(raw)
         except ValidationError:
-            continue  # the run log predates a change to this step, so the node re-runs
+            continue  # the step changed since this value was logged, so the node re-runs
     return revived
 
 

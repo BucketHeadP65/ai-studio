@@ -150,8 +150,8 @@ POST /api/sessions/{session_id}/adapt
 It answers with the child on that session's own screen, as a draft: the parent workflow is read and
 never written, the cited run's record is read and never written, nothing is saved into the library,
 and no run starts. The child's `Lineage.evidence` records the three facts separately -- the run it
-came from, what that run was **observed** to do (`RunArchiveRecord.result`, the checked outcome,
-which reads as unknown for a record archived before outcomes were checked), and the owner's own
+came from, what that run was **observed** to do (`RunArchiveRecord.result`, the checked outcome),
+and the owner's own
 reason in their own words. None of the three is graded by anything. Whatever `evidence` the
 caller sent is kept under those three rather than taken out by them, so citing a run never costs a
 reader the sentence the caller wrote.

@@ -39,8 +39,7 @@ class SourceRun(BaseModel):
     """One ended run offered as the reason a new version of its workflow exists.
 
     Read-only: an adaptation cites a run, and citing one never writes to its record. `outcome` is
-    what that run was observed to do, `None` for a record archived before outcomes were checked --
-    which reads as unknown rather than as a run that did nothing.
+    what that run was observed to do.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -48,7 +47,7 @@ class SourceRun(BaseModel):
     run_id: str
     workflow_id: str
     run_title: str = ""
-    outcome: Outcome | None = None
+    outcome: Outcome
 
 
 class ToolResultIn(BaseModel):

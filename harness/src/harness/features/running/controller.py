@@ -78,9 +78,6 @@ _JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 _UNKNOWN_RUN = "no run with that id here"
 
-_LEGACY_RESULT = Outcome(status="unknown", summary="This run predates outcome reporting.")
-"""What a record that carries no checked outcome reads as. Never written back to the record."""
-
 _LIVE_RESULT = Outcome(status="unknown", summary="This run has not ended, so there is nothing to check yet.")
 """What a run still in flight projects as, so a listing row has the same shape whatever it holds."""
 
@@ -461,7 +458,7 @@ def _envelope(record: RunArchiveRecord, spend: SpendLogQueries) -> dict[str, obj
     """One archived run without its heavy fields, as a listing reads it, a missing checked outcome read as unknown."""
     return {
         **record.model_dump(mode="json", exclude={"spec", "values", "events", "conversations", "reviewed"}),
-        "result": (record.result or _LEGACY_RESULT).model_dump(mode="json"),
+        "result": record.result.model_dump(mode="json"),
         "spend": view_of(spend.find(record.run_id)),
     }
 
@@ -821,7 +818,7 @@ class RunningController:
             graph = graph_payload(spec, ready.registry, {})
         return {
             **record.model_dump(mode="json", exclude={"reviewed"}),
-            "result": (record.result or _LEGACY_RESULT).model_dump(mode="json"),
+            "result": record.result.model_dump(mode="json"),
             "values": {node_id: render_for_review(value) for node_id, value in record.values.items()},
             "graph": graph,
             "spend": view_of(self._run.records.spend.find(record.run_id)),

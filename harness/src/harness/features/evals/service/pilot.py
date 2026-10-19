@@ -216,8 +216,8 @@ class ArchivedRunOutcomeQueries:
             workflow_design=workflow_design(record, intent),
             evidence_support=evidence_support(record),
             task_success=task_success(result, case.labels),
-            observed_result=result.summary if result is not None else None,
-            artifact_refs=result.artifacts if result is not None else (),
+            observed_result=result.summary,
+            artifact_refs=result.artifacts,
             usage=self.usage_of(run_id),
         )
 
