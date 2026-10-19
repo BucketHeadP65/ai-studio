@@ -266,7 +266,7 @@ class RegisterKnowledgeBaseRequest(BaseModel):
     model_config = ConfigDict(use_attribute_docstrings=True, frozen=True)
 
     path: Path
-    """The knowledge base's folder. It may hold no hidden folder, and it must hold a `knowledge-base-schema.json` or the older `Units/` and `_meta/` pair."""
+    """The knowledge base's folder. It may hold no hidden folder, and it must hold a `knowledge-base-schema.json`."""
     description: str = ""
 
 

@@ -150,7 +150,7 @@ class _IndexFactory:
     """A `ctx.obj` factory whose bus runs a real-PG, fake-embed index handler (e2e shape)."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader, FakeEmbedding(), KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=load_knowledge_base_schema(knowledge_base)
         )
@@ -191,12 +191,12 @@ def _build_knowledge_base(root: Path) -> tuple[Path, KnowledgeBaseSettings]:
     filesystem knowledge base reader will later index it.
     """
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Entities", "lightrag", _ENTITY)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
     builder.add_source_mirror("lightrag-mirror", _MIRROR_EXCERPT)
     builder.add_vocabulary()
     builder.add_meta_stubs()
     builder.add_knowledge_base_schema()
-    (root / "Units" / "Papers").mkdir(parents=True, exist_ok=True)
+    (root / "Wiki" / "Papers").mkdir(parents=True, exist_ok=True)
     return root, KnowledgeBaseSettings.model_validate({"path": str(root)})
 
 
@@ -234,7 +234,7 @@ class TestNoteBuildRoundtrip:
         knowledge_base_root, knowledge_base = _build_knowledge_base(tmp_path / "knowledge_base")
         payload_path = tmp_path / "payload.json"
         payload_path.write_text(json.dumps(_payload()), encoding="utf-8")
-        out = knowledge_base_root / "Units" / "Papers" / "built.md"
+        out = knowledge_base_root / "Wiki" / "Papers" / "built.md"
 
         # 1. Build the note from the payload, verifying quotes against the mirror before writing.
         built = runner.invoke(

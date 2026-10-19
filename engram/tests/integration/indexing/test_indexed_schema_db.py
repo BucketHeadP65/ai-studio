@@ -38,7 +38,7 @@ def _tiny_knowledge_base(tmp_path: Path) -> Path:
     `report.mode` and can stay fileless.
     """
     builder = KnowledgeBaseBuilder(tmp_path)
-    builder.add_unit_document("Papers", "lightrag-2025", GOLDEN_LIGHTRAG_PAPER.read_text(encoding="utf-8"))
+    builder.add_unit_document("Wiki/Papers", "lightrag-2025", GOLDEN_LIGHTRAG_PAPER.read_text(encoding="utf-8"))
     builder.build_minimal()
     return tmp_path
 
@@ -72,7 +72,7 @@ class TestIncrementalCompileFillsInTheSpecColumn:
         await orm.register_pgvector(engine)
         try:
             handler = IndexKnowledgeBaseHandler(
-                FilesystemKnowledgeBaseReader(knowledge_base),
+                FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders),
                 FakeEmbedding(),
                 lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
                 FakeValidationReportSink(),

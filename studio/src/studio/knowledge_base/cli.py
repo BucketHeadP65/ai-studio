@@ -432,7 +432,7 @@ def _read_surface(
     """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
     collection = schema.retrieval.collection
     gateway = reader_gateway.for_collection(collection)
-    reader = FilesystemKnowledgeBaseReader(root)
+    reader = FilesystemKnowledgeBaseReader(root, note_folders=schema.note_folders, note_files=schema.note_files)
 
     async def stamp() -> KnowledgeBaseStamp:
         return await read_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)

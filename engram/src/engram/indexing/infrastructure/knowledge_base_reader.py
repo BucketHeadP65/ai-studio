@@ -27,7 +27,8 @@ def _is_generated(text: str) -> bool:
 class FilesystemKnowledgeBaseReader:
     """Reads the knowledge base's markdown surfaces off disk (a `KnowledgeBaseReader`).
 
-    `sources_subdir` must match the `knowledge_base.sources_subdir` the mirrors are written under.
+    You must pass the folders and files the schema declares for its page types. The reader reads no note folder of
+    its own. `sources_subdir` must match the `knowledge_base.sources_subdir` the mirrors are written under.
     """
 
     def __init__(
@@ -42,12 +43,12 @@ class FilesystemKnowledgeBaseReader:
         Args:
             knowledge_base_path: The knowledge base root.
             sources_subdir: The mirrors folder under the root.
-            note_folders: Root-relative folders read recursively for notes, beyond `Units/`.
+            note_folders: Root-relative folders read recursively for notes.
             note_files: Root-relative markdown files read as notes, `..` segments allowed.
         """
         self._root = Path(knowledge_base_path)
         self._sources_subdir = sources_subdir
-        # Root-relative folders the schema's page types declare, read on top of `Units/`.
+        # Root-relative folders the schema's page types declare.
         self._note_folders = note_folders
         # Root-relative markdown files for pages outside any folder a glob reaches.
         self._note_files = note_files
@@ -59,7 +60,7 @@ class FilesystemKnowledgeBaseReader:
         return self._root
 
     def unit_documents(self) -> Iterator[RawDocument]:
-        """The unit documents under `Units/`, the declared note folders, and the declared note files.
+        """The unit documents under the declared note folders, and the declared note files.
 
         Folders are read recursively. A file reached more than once is yielded once, and a file opening
         with the generated banner is never yielded.
@@ -68,7 +69,7 @@ class FilesystemKnowledgeBaseReader:
             The documents, sorted by knowledge-base-relative path.
         """
         seen: dict[str, RawDocument] = {}
-        for folder in ("Units", *self._note_folders):
+        for folder in self._note_folders:
             for document in self._glob(folder, recursive=True):
                 seen.setdefault(document.path, document)
         for rel in self._note_files:

@@ -272,7 +272,7 @@ def _registered_knowledge_base(root: Path, *, pages: int) -> KnowledgeBaseSchema
     builder = KnowledgeBaseBuilder(root)
     builder.add_knowledge_base_schema(spec)
     for index in range(pages):
-        builder.add_unit_document("Notes", f"note-{index}", f"# {root.name} {index}\n")
+        builder.add_unit_document("Units/Notes", f"note-{index}", f"# {root.name} {index}\n")
     return spec
 
 
@@ -284,7 +284,7 @@ def _private_knowledge_base(root: Path, *, collection: str) -> KnowledgeBaseSche
     )
     builder = KnowledgeBaseBuilder(root)
     builder.add_knowledge_base_schema(spec)
-    builder.add_unit_document("Notes", "note-0", f"# {root.name}\n")
+    builder.add_unit_document("Units/Notes", "note-0", f"# {root.name}\n")
     return spec
 
 
@@ -294,7 +294,7 @@ def _shared_knowledge_base(root: Path, *, collection: str) -> KnowledgeBaseSchem
     spec = spec.model_copy(update={"slug": root.name, "retrieval": spec.retrieval.model_copy(update={"collection": collection})})
     builder = KnowledgeBaseBuilder(root)
     builder.add_knowledge_base_schema(spec)
-    builder.add_unit_document("Notes", "note-0", f"# {root.name}\n")
+    builder.add_unit_document("Units/Notes", "note-0", f"# {root.name}\n")
     return spec
 
 

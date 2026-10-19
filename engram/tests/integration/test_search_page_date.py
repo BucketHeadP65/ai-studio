@@ -88,6 +88,7 @@ def _spec() -> KnowledgeBaseSchema:
             PageTypeSpec(
                 page_type="record",
                 id_prefix="record.",
+                folder="Wiki/Records",
                 canonical_sections=(CanonicalSection(slug="notes"),),
                 frontmatter_fields=(
                     FrontmatterFieldSpec(name="observed_on", type="scalar"),
@@ -110,7 +111,7 @@ def _knowledge_base(root: Path, spec: KnowledgeBaseSchema) -> Path:
         if relative.startswith("_meta/vocabulary/"):
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             (root / relative).write_text(body, encoding="utf-8")
-    builder.add_unit_document("record", "heron-count", _PAGE)
+    builder.add_unit_document("Wiki/Records", "heron-count", _PAGE)
     builder.add_source_mirror("field-notes", _MIRROR)
     return root
 
@@ -122,7 +123,7 @@ async def _index(root: Path, migrated: str) -> None:
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(_knowledge_base(root, spec)),
+            FilesystemKnowledgeBaseReader(_knowledge_base(root, spec), note_folders=spec.note_folders),
             FakeEmbedding(),
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
             FakeValidationReportSink(),

@@ -326,9 +326,9 @@ A graph-indexed retrieval technique.
 
 def _two_paper_knowledge_base(tmp_path: Path) -> Path:
     builder = KnowledgeBaseBuilder(tmp_path)
-    builder.add_unit_document("Papers", "lightrag-2025", _FULL_PAPER_A)
-    builder.add_unit_document("Papers", "graphrag-2024", _FULL_PAPER_B)
-    builder.add_unit_document("Entities", "lightrag", _FULL_ENTITY)
+    builder.add_unit_document("Wiki/Papers", "lightrag-2025", _FULL_PAPER_A)
+    builder.add_unit_document("Wiki/Papers", "graphrag-2024", _FULL_PAPER_B)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _FULL_ENTITY)
     builder.add_vocabulary()
     builder.add_meta_stubs()
     return tmp_path
@@ -337,7 +337,7 @@ def _two_paper_knowledge_base(tmp_path: Path) -> Path:
 def _full_handler(knowledge_base_root: Path, *, uow: FakeKnowledgeBaseUnitOfWork) -> IndexKnowledgeBaseHandler:
     ticks = iter([0.0, 1.5, 3.0, 4.5, 6.0])
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base_root),
+        FilesystemKnowledgeBaseReader(knowledge_base_root, note_folders=research_spec().note_folders),
         FakeEmbedding(),
         lambda: uow,
         FakeValidationReportSink(),

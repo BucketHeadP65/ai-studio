@@ -74,7 +74,7 @@ def _handler(*, uow: FakeKnowledgeBaseUnitOfWork, summary_stage: SummaryStage | 
 def _knowledge_base_handler(knowledge_base_root: Path, *, uow: FakeKnowledgeBaseUnitOfWork, summary_stage: SummaryStage | None) -> IndexKnowledgeBaseHandler:
     """Build the handler over a real on-disk knowledge base (the incremental-path fixtures need real files)."""
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base_root),
+        FilesystemKnowledgeBaseReader(knowledge_base_root, note_folders=research_spec().note_folders),
         FakeEmbedding(),
         lambda: uow,
         FakeValidationReportSink(),
@@ -202,7 +202,7 @@ class TestSummariesFlagOnIncrementalPath:
 
     async def test_calls_the_summarizer_on_an_incremental_run(self, tmp_path: Path):
         builder = KnowledgeBaseBuilder(tmp_path)
-        builder.add_unit_document("Entities", "lightrag", _ENTITY)
+        builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
         builder.build_minimal()
         uow = FakeKnowledgeBaseUnitOfWork()
         unit = SummaryUnit(unit_id="mu.x", unit_type="page", title="X", body="Body.", source_hash="h1")
@@ -226,7 +226,7 @@ class TestSummariesFlagOnIncrementalPath:
 
     async def test_summaries_false_on_an_incremental_run_does_not_touch_the_stage(self, tmp_path: Path):
         builder = KnowledgeBaseBuilder(tmp_path)
-        builder.add_unit_document("Entities", "lightrag", _ENTITY)
+        builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
         builder.build_minimal()
         uow = FakeKnowledgeBaseUnitOfWork()
         unit = SummaryUnit(unit_id="mu.x", unit_type="page", title="X", body="Body.", source_hash="h1")

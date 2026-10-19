@@ -269,12 +269,12 @@ The previously-unwritten technique the paper builds on.
 
 def _build_baseline(builder: KnowledgeBaseBuilder) -> None:
     """Lay down the shared baseline knowledge base: paper + two entities + mirror + registries + meta."""
-    builder.add_unit_document("Papers", "lightrag-2025", _PAPER)
-    builder.add_unit_document("Entities", "lightrag", _ENTITY_LIGHTRAG)
-    builder.add_unit_document("Entities", "graphrag", _ENTITY_GRAPHRAG)
-    builder.add_unit_document("Entities", "sections-demo", _ENTITY_SECTIONS)
-    builder.add_unit_document("Comparisons", "rag-approaches", _COMPARISON_EDITED)
-    builder.add_unit_document("Comparisons", "retrieval-modes", _COMPARISON_UNTOUCHED)
+    builder.add_unit_document("Wiki/Papers", "lightrag-2025", _PAPER)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY_LIGHTRAG)
+    builder.add_unit_document("Wiki/Entities", "graphrag", _ENTITY_GRAPHRAG)
+    builder.add_unit_document("Wiki/Entities", "sections-demo", _ENTITY_SECTIONS)
+    builder.add_unit_document("Wiki/Comparisons", "rag-approaches", _COMPARISON_EDITED)
+    builder.add_unit_document("Wiki/Comparisons", "retrieval-modes", _COMPARISON_UNTOUCHED)
     builder.add_source_mirror("lightrag-2025", _MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -347,13 +347,13 @@ async def _seed_derived_rows(engine: AsyncEngine, *, scenario: _Scenario, final_
 
 def _edit_body_only(knowledge_base: Path) -> None:
     """E1.1 — a body-only edit: reword the paper's TL;DR (no resolution-key change)."""
-    paper = knowledge_base / "Units" / "Papers" / "lightrag-2025.md"
+    paper = knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md"
     paper.write_text(_PAPER.replace("retrieves at two levels.", "retrieves at two distinct levels of granularity."), encoding="utf-8")
 
 
 def _edit_add_preamble(knowledge_base: Path) -> None:
     """Add introduction prose, creating the reserved section row."""
-    paper = knowledge_base / "Units" / "Papers" / "lightrag-2025.md"
+    paper = knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md"
     paper.write_text(
         _PAPER.replace("\n## TL;DR", "\nPreamble-only retrieval phrase.\n\n## TL;DR"),
         encoding="utf-8",
@@ -362,31 +362,31 @@ def _edit_add_preamble(knowledge_base: Path) -> None:
 
 def _edit_title_change(knowledge_base: Path) -> None:
     """E1.2 — a title change on an inbound-linked entity (the `graphrag` claim target)."""
-    entity = knowledge_base / "Units" / "Entities" / "graphrag.md"
+    entity = knowledge_base / "Wiki" / "Entities" / "graphrag.md"
     entity.write_text(_ENTITY_GRAPHRAG.replace("title: GraphRAG", "title: Graph RAG (renamed)"), encoding="utf-8")
 
 
 def _edit_file_rename(knowledge_base: Path) -> None:
     """E1.3 — a file rename (stem change) of the `lightrag` entity the paper proposes."""
-    entities = knowledge_base / "Units" / "Entities"
+    entities = knowledge_base / "Wiki" / "Entities"
     (entities / "lightrag.md").unlink()
     (entities / "lightrag-technique.md").write_text(_ENTITY_LIGHTRAG, encoding="utf-8")
 
 
 def _edit_id_rename(knowledge_base: Path) -> None:
     """E1.4 — an `id` rename on the `graphrag` entity (old id deleted, new id added)."""
-    entity = knowledge_base / "Units" / "Entities" / "graphrag.md"
+    entity = knowledge_base / "Wiki" / "Entities" / "graphrag.md"
     entity.write_text(_ENTITY_GRAPHRAG.replace("id: ent.graphrag", "id: ent.graphrag-v2"), encoding="utf-8")
 
 
 def _edit_add_satisfying_note(knowledge_base: Path) -> None:
     """E1.5: add a new entity note that no other page links to."""
-    (knowledge_base / "Units" / "Entities" / "newtech.md").write_text(_ENTITY_NEWTECH, encoding="utf-8")
+    (knowledge_base / "Wiki" / "Entities" / "newtech.md").write_text(_ENTITY_NEWTECH, encoding="utf-8")
 
 
 def _edit_delete_link_target(knowledge_base: Path) -> None:
     """E1.6 — delete a link target (the `graphrag` entity the claim resolves to)."""
-    (knowledge_base / "Units" / "Entities" / "graphrag.md").unlink()
+    (knowledge_base / "Wiki" / "Entities" / "graphrag.md").unlink()
 
 
 def _edit_change_source_mirror(knowledge_base: Path) -> None:
@@ -402,7 +402,7 @@ def _edit_noop(knowledge_base: Path) -> None:
 
 def _sections_demo(knowledge_base: Path) -> Path:
     """The entity note whose section set the removal scenarios shrink."""
-    return knowledge_base / "Units" / "Entities" / "sections-demo.md"
+    return knowledge_base / "Wiki" / "Entities" / "sections-demo.md"
 
 
 def _edit_remove_h3(knowledge_base: Path) -> None:
@@ -426,13 +426,13 @@ def _edit_remove_preamble(knowledge_base: Path) -> None:
 
 def _edit_remove_claim_anchor(knowledge_base: Path) -> None:
     """Remove one `^cN` claim block from the paper, leaving the other."""
-    paper = knowledge_base / "Units" / "Papers" / "lightrag-2025.md"
+    paper = knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md"
     paper.write_text(_PAPER.split("- LightRAG builds on an as-yet-unwritten technique. ^c2", maxsplit=1)[0], encoding="utf-8")
 
 
 def _edit_strip_page_children(knowledge_base: Path) -> None:
     """Strip the paper's whole body, so the page keeps no section and no claim at all."""
-    paper = knowledge_base / "Units" / "Papers" / "lightrag-2025.md"
+    paper = knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md"
     frontmatter, _, _body = _PAPER.partition("---\n\n")
     paper.write_text(frontmatter + "---\n", encoding="utf-8")
 
@@ -596,7 +596,7 @@ async def _index(engine: AsyncEngine, knowledge_base: Path, *, full: bool, embed
     leaving every row's vector NULL.
     """
     handler = IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base),
+        FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders),
         FakeEmbedding(),
         KnowledgeBaseUnitOfWorkFactory(engine),
         FileValidationReportSink(knowledge_base),

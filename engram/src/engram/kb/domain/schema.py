@@ -1027,8 +1027,8 @@ class KnowledgeBaseSchema(BaseModel):
     def note_folders(self) -> tuple[str, ...]:
         """Distinct knowledge-base-root-relative folders declared by the page types, for index discovery.
 
-        The index reader globs these as well as the `Memory/` tree. Order follows first declaration,
-        merging each page type's `folder` and `folders`. A page type with neither contributes nothing.
+        The index reader globs these and no other folder. Order follows first declaration, merging each page
+        type's `folder` and `folders`. A page type with neither contributes nothing.
         """
         seen: dict[str, None] = {}
         for pt in self.page_types:

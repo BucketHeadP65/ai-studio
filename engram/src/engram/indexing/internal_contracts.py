@@ -56,7 +56,7 @@ class KnowledgeBaseReader(Protocol):
         ...
 
     def unit_documents(self) -> Iterator[RawDocument]:
-        """Yield every note document: the pages under `Units/` and under the declared note folders, and the declared note files.
+        """Yield every note document: the pages under the declared note folders, and the declared note files.
 
         A file reached more than once is yielded once, and a file opening with the generated banner is never yielded.
 

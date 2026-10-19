@@ -53,7 +53,7 @@ def _topic(stem: str, *, superseded_by: str | None = None) -> str:
 
 def _spec() -> KnowledgeBaseSchema:
     """Topic pages and nothing else."""
-    return KnowledgeBaseSchema(slug=_COLLECTION, page_types=(PageTypeSpec(page_type="topic", id_prefix="topic."),))
+    return KnowledgeBaseSchema(slug=_COLLECTION, page_types=(PageTypeSpec(page_type="topic", id_prefix="topic.", folder="Wiki/Topics"),))
 
 
 def _scaffold(root: Path, spec: KnowledgeBaseSchema) -> KnowledgeBaseBuilder:
@@ -72,8 +72,8 @@ def _knowledge_base(root: Path, spec: KnowledgeBaseSchema, *, alpha_superseded_b
     """Write `alpha`, superseded by the page `alpha_superseded_by` names, and `beta`, answering each page's file by id."""
     builder = _scaffold(root, spec)
     return {
-        "topic.alpha": builder.add_unit_document("topic", "alpha", _topic("alpha", superseded_by=alpha_superseded_by)),
-        "topic.beta": builder.add_unit_document("topic", "beta", _topic("beta")),
+        "topic.alpha": builder.add_unit_document("Wiki/Topics", "alpha", _topic("alpha", superseded_by=alpha_superseded_by)),
+        "topic.beta": builder.add_unit_document("Wiki/Topics", "beta", _topic("beta")),
     }
 
 
@@ -83,7 +83,7 @@ async def _index(knowledge_base: Path, migrated: str, spec: KnowledgeBaseSchema,
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(knowledge_base),
+            FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders),
             FakeEmbedding(),
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
             FakeValidationReportSink(),
@@ -152,7 +152,7 @@ class TestASupersededByLinkToAPageNotYetWritten:
         assert await _pages(migrated) == [("topic.alpha", ""), ("topic.beta", "")]
         assert _dangling(first) == [("topic.alpha", "unresolved superseded_by link 'gamma'")]
 
-        KnowledgeBaseBuilder(tmp_path).add_unit_document("topic", "gamma", _topic("gamma"))
+        KnowledgeBaseBuilder(tmp_path).add_unit_document("Wiki/Topics", "gamma", _topic("gamma"))
         report = await _index(tmp_path, migrated, spec, full=False)
 
         assert report.mode == "incremental"
@@ -164,10 +164,10 @@ class TestASupersededByLinkAcrossInsertBatches:
         spec = _spec()
         builder = _scaffold(tmp_path, spec)
         # Pages load in path order, so `early` lands in the first insert batch and `late` in the second.
-        builder.add_unit_document("topic", "early", _topic("early", superseded_by="late"))
+        builder.add_unit_document("Wiki/Topics", "early", _topic("early", superseded_by="late"))
         for number in range(_PAGES_PER_BATCH):
-            builder.add_unit_document("topic", f"filler-{number:05d}", _topic(f"filler-{number:05d}"))
-        builder.add_unit_document("topic", "late", _topic("late"))
+            builder.add_unit_document("Wiki/Topics", f"filler-{number:05d}", _topic(f"filler-{number:05d}"))
+        builder.add_unit_document("Wiki/Topics", "late", _topic("late"))
 
         await _index(tmp_path, migrated, spec, full=True)
 

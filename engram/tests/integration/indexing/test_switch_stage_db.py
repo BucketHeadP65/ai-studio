@@ -136,7 +136,7 @@ class TestSwitchStageOnALiveCompile:
         await orm.register_pgvector(engine)
         try:
             handler = IndexKnowledgeBaseHandler(
-                FilesystemKnowledgeBaseReader(knowledge_base),
+                FilesystemKnowledgeBaseReader(knowledge_base, note_folders=research_spec().note_folders),
                 FakeEmbedding(),
                 lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
                 FakeValidationReportSink(),
@@ -157,7 +157,7 @@ class TestSwitchStageOnALiveCompile:
         await orm.register_pgvector(engine)
         try:
             handler = IndexKnowledgeBaseHandler(
-                FilesystemKnowledgeBaseReader(knowledge_base),
+                FilesystemKnowledgeBaseReader(knowledge_base, note_folders=research_spec().note_folders),
                 FakeEmbedding(),
                 lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
                 FakeValidationReportSink(),
@@ -193,7 +193,7 @@ class TestSwitchStageOnALiveCompile:
                 await db.commit()
 
             handler = IndexKnowledgeBaseHandler(
-                FilesystemKnowledgeBaseReader(knowledge_base),
+                FilesystemKnowledgeBaseReader(knowledge_base, note_folders=research_spec().note_folders),
                 FakeEmbedding(),
                 lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
                 FakeValidationReportSink(),

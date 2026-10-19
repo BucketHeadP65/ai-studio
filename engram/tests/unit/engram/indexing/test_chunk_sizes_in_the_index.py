@@ -41,7 +41,7 @@ def _mirror_text(source_key: str) -> str:
 
 def _handler(root: Path, uow: FakeKnowledgeBaseUnitOfWork, sizes: ChunkSizes = _SIZES) -> IndexKnowledgeBaseHandler:
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(root), FakeEmbedding(), lambda: uow, FakeValidationReportSink(), spec=research_spec(), chunk_sizes=sizes
+        FilesystemKnowledgeBaseReader(root, note_folders=research_spec().note_folders), FakeEmbedding(), lambda: uow, FakeValidationReportSink(), spec=research_spec(), chunk_sizes=sizes
     )
 
 

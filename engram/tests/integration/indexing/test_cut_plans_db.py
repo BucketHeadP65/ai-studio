@@ -73,7 +73,7 @@ async def test_a_second_full_index_reuses_the_stored_plan_and_writes_the_same_ch
     planner = FakeChunkPlanner((5, 9), identity="example-model/prompt-1")
     stage = CutPlanStage(planner, SqlAlchemyCutPlans(engine), SqlAlchemyCutPlans(engine))
     handler = IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(tmp_path),
+        FilesystemKnowledgeBaseReader(tmp_path, note_folders=research_spec().note_folders),
         FakeEmbedding(),
         lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
         FakeValidationReportSink(),

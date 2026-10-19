@@ -246,9 +246,6 @@ def init_all_cmd(
     # application settings name.
     os.environ["APP_INFRASTRUCTURE__DATABASE__URL"] = resolved_url
     os.environ["APP_INFRASTRUCTURE__DATABASE__READER_URL"] = resolved_url
-    # The knowledge base settings require Units/, which a new knowledge base may lack. An empty
-    # Units/ indexes to 0 pages.
-    (knowledge_base_path / "Units").mkdir(parents=True, exist_ok=True)
     typer.echo(f"Running index smoke ({'--embed' if embed else '--no-embed'}) …")
     smoke_settings = ActiveKnowledgeBase(
         application=fetch_application_settings(), knowledge_base=KnowledgeBaseSettings(path=knowledge_base_path.resolve())

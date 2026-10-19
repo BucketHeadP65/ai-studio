@@ -148,12 +148,11 @@ def job_queries_provider(jobs: JobsAndQueries) -> JobQueries:
 def knowledge_base_reader_provider(knowledge_base: KnowledgeBaseSettings, schema: KnowledgeBaseSchema) -> KnowledgeBaseReader:
     """Provide the filesystem reader of the knowledge base's notes, the input of the parse stage.
 
-    It finds notes in the `Units/` tree and in the folders and files the schema declares for its page types, relative to the
-    knowledge base root.
+    It finds notes in the folders and files the schema declares for its page types, relative to the knowledge base root.
 
     Args:
         knowledge_base: The knowledge base whose root and sources folder the reader walks.
-        schema: The knowledge base's schema, whose `note_folders` and `note_files` the reader also walks.
+        schema: The knowledge base's schema, whose `note_folders` and `note_files` the reader walks.
 
     Returns:
         The knowledge base reader.

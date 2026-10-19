@@ -77,8 +77,8 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
     builder.build_minimal()
     (tmp_path / "_meta" / "vocabulary").mkdir(parents=True, exist_ok=True)
     (tmp_path / "_meta" / "vocabulary" / "facets.md").write_text(_FACETS, encoding="utf-8")
-    builder.add_unit_document("Papers", "earlier", _paper("earlier", ""))
-    builder.add_unit_document("Papers", "later", _paper("later", "paper.earlier"))
+    builder.add_unit_document("Wiki/Papers", "earlier", _paper("earlier", ""))
+    builder.add_unit_document("Wiki/Papers", "later", _paper("later", "paper.earlier"))
     return tmp_path
 
 

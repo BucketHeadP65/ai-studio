@@ -122,7 +122,7 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
     (tmp_path / "_meta" / "vocabulary").mkdir(parents=True, exist_ok=True)
     (tmp_path / "_meta" / "vocabulary" / "facets.md").write_text(_FACETS, encoding="utf-8")
     builder.add_source_mirror("seven", _MIRROR)
-    builder.add_unit_document("Papers", "seven", _paper(datetime.now(tz=UTC).date()))
+    builder.add_unit_document("Wiki/Papers", "seven", _paper(datetime.now(tz=UTC).date()))
     return tmp_path
 
 
