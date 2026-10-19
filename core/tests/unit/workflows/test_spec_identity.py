@@ -91,22 +91,22 @@ def test_a_field_omitted_and_a_field_set_to_its_default_are_one_identity(quarter
     assert spec_identity(Workflow.model_validate(written)) == spec_identity(quarterly_report)
 
 
-def test_an_absent_result_keeps_the_legacy_dump_and_an_explicit_result_moves_identity(quarterly_report: Workflow) -> None:
-    legacy_dump = quarterly_report.model_dump(mode="json")
+def test_an_absent_result_stays_out_of_the_dump_and_an_explicit_result_moves_identity(quarterly_report: Workflow) -> None:
+    undeclared_dump = quarterly_report.model_dump(mode="json")
     declared = quarterly_report.model_copy(update={"result": WorkflowResultSpec(summary="A reconciled quarterly report.", primary_work="draft_report")})
 
-    assert "result" not in legacy_dump
+    assert "result" not in undeclared_dump
     assert declared.model_dump(mode="json")["result"] == {"summary": "A reconciled quarterly report.", "primary_work": "draft_report", "empty_primary": "unknown", "required_gates": [], "artifacts": []}
     assert spec_identity(declared) != spec_identity(quarterly_report)
 
 
-def test_a_field_none_artifact_has_the_legacy_whole_value_identity() -> None:
+def test_a_field_none_artifact_has_the_whole_value_identity() -> None:
     result = WorkflowResultSpec(
         summary="The rendered brief.",
         primary_work="render",
         artifacts=(ResultArtifactSpec(id="brief", label="Brief", source=FromNode(node="render"), media_type="text/markdown"),),
     )
-    legacy = Workflow(
+    whole = Workflow(
         name="whole-result",
         version=1,
         description="A workflow whose artifact is the full value produced by its render node.",
@@ -114,7 +114,7 @@ def test_a_field_none_artifact_has_the_legacy_whole_value_identity() -> None:
         output=FromNode(node="render"),
         result=result,
     )
-    with_explicit_none = legacy.model_copy(
+    with_explicit_none = whole.model_copy(
         update={
             "result": result.model_copy(
                 update={"artifacts": (result.artifacts[0].model_copy(update={"field": None}),)}
@@ -123,8 +123,8 @@ def test_a_field_none_artifact_has_the_legacy_whole_value_identity() -> None:
     )
 
     assert "field" not in result.artifacts[0].model_dump(mode="json")
-    assert legacy == with_explicit_none
-    assert spec_identity(legacy) == spec_identity(with_explicit_none)
+    assert whole == with_explicit_none
+    assert spec_identity(whole) == spec_identity(with_explicit_none)
 
 
 def test_every_field_of_the_spec_moves_the_identity(quarterly_report: Workflow) -> None:

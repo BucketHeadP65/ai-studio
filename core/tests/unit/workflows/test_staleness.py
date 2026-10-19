@@ -2,8 +2,8 @@
 
 Ruling: the verdict is rendered INTO the fetch result, not waiting behind a tool the model
 has to remember exists. Three answers are possible and all three are honest: `[]` means
-checked and fresh; a list names exactly what moved; `None` means the artifact predates
-stamps, and unknown is neither fresh nor stale.
+checked and fresh; a list names exactly what moved; `None` means the artifact carries no
+stamp, and unknown is neither fresh nor stale.
 """
 
 from __future__ import annotations

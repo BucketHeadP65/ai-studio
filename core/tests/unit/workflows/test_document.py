@@ -84,7 +84,7 @@ def test_an_intent_rides_in_the_frontmatter_and_comes_back_as_it_went_in(quarter
 
 
 def test_a_document_written_without_an_intent_carries_no_intent_key(quarterly_report: Workflow) -> None:
-    """Absent stays absent: a file that predates intents is byte-identical to one saved without one."""
+    """Absent stays absent: a file saved without an intent carries no intent key."""
     text = dump_spec_document(quarterly_report, frontmatter={"title": "Quarterly report"}, body="body")
 
     loaded = load_spec_document(text)

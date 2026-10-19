@@ -426,7 +426,7 @@ async def test_a_presentation_comes_back_unchanged_from_every_folder_surface(tmp
 
 
 async def test_a_card_written_without_a_presentation_reads_as_none_and_keeps_its_own_words(tmp_path: Path) -> None:
-    """A legacy file carries no presentation, and nothing invents one for it."""
+    """A file saved without a presentation carries none, and nothing invents one for it."""
     store = FolderLibrary(tmp_path / "workflows")
     workflow_id = await store.put(
         _spec(),
@@ -925,7 +925,7 @@ async def test_a_request_only_intent_is_kept_exactly_as_incomplete_as_it_was_sta
 
 
 async def test_a_file_written_without_an_intent_reads_as_none_and_carries_no_key(tmp_path: Path) -> None:
-    """A file that predates intents holds what it always held, and nothing infers one from the spec."""
+    """A file saved without an intent holds none, and nothing infers one from the spec."""
     store = FolderLibrary(tmp_path / "workflows")
     workflow_id = await store.put(
         _spec(),
