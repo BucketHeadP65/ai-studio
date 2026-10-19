@@ -38,6 +38,7 @@ _RRF_CONSTANT = "{rrf_constant}"
 _SNIPPET_CHARS = "{snippet_chars}"
 _ROWS_PER_GROUP = "{rows_per_group}"
 _MAX_HITS = "{max_hits_per_document}"
+_FOLDED_SNIPPET_CHARS = "{folded_snippet_chars}"
 
 # The bounds generated into a tuned search, which hold whatever its tuning row says.
 _BUDGET_BOUND = 200
@@ -47,6 +48,12 @@ _SNIPPET_BOUNDS = (80, 2000)
 _WEIGHT_BOUNDS = (0, 10)
 _ROWS_PER_GROUP_BOUND = 50
 _MAX_HITS_BOUND = 50
+_FOLDED_SNIPPET_BOUNDS = (20, 2000)
+
+# The tuning row of each hit's own partition, read by a search tuned per partition, and the columns it answers.
+_PARTITION_TUNING = "partition_tuning"
+_DOCUMENT_CAP = "document_cap"
+_FOLDED_CHARS = "folded_chars"
 
 FOLDED_UNITS_PER_HIT = 3
 """The most folded units a capped search lists under one hit, best first."""
@@ -93,16 +100,27 @@ def _capped(schema: SearchSchema) -> bool:
     return schema.tuning is not None and schema.tuning.max_hits_per_document is not None
 
 
+def _snippeted(schema: SearchSchema) -> bool:
+    """Whether each folded unit carries a snippet."""
+    return schema.tuning is not None and schema.tuning.folded_snippet_chars is not None
+
+
+def _tuned_per_partition(schema: SearchSchema) -> bool:
+    """Whether the search reads the cap and the folded snippet length of each hit's own partition."""
+    return schema.tuning is not None and bool(schema.tuning.partition_col)
+
+
 def _tuned_names(schema: SearchSchema) -> tuple[str, ...]:
     """Every variable a tuned search declares for its query, in binding order, or none for an untuned one."""
     if schema.tuning is None:
         return ()
     capped = ("max_hits_per_document",) if _capped(schema) else ()
-    return (*_TUNED_NUMBERS, *(_weight(surface, leg) for surface in schema.surfaces for leg in SEARCH_LEGS), *capped)
+    snippeted = ("folded_snippet_chars",) if _snippeted(schema) else ()
+    return (*_TUNED_NUMBERS, *(_weight(surface, leg) for surface in schema.surfaces for leg in SEARCH_LEGS), *capped, *snippeted)
 
 
 def _declarations(schema: SearchSchema) -> str:
-    """The function's `DECLARE` lines: the clamped `k` alone untuned, or every number read from the tuning row."""
+    """The function's `DECLARE` lines: the clamped `k` alone untuned, or every number read from the tuning relation's default row."""
     tuning = schema.tuning
     if tuning is None:
         return "  capped_k int := least(greatest(k, 1), 50);"
@@ -122,6 +140,8 @@ def _declarations(schema: SearchSchema) -> str:
     )
     if _capped(schema):
         lines.append(f"  max_hits_per_document int := {_max_hits_clamp('tuning')};")
+    if _snippeted(schema):
+        lines.append(f"  folded_snippet_chars int := {_folded_snippet_clamp('tuning')};")
     return "\n".join(lines)
 
 
@@ -130,11 +150,32 @@ def _max_hits_clamp(tuning: str) -> str:
     return f"least(greatest(coalesce(({tuning} ->> 'max_hits_per_document')::numeric::int, 0), 0), {_MAX_HITS_BOUND})"
 
 
+def _folded_snippet_clamp(tuning: str) -> str:
+    """The folded snippet length read from the jsonb `tuning` names, held to its bounds."""
+    low, high = _FOLDED_SNIPPET_BOUNDS
+    return f"least(greatest(({tuning} ->> 'folded_snippet_chars')::numeric::int, {low}), {high})"
+
+
+def _overridden(row: str, key: str, clamped: str, fallback: str) -> str:
+    """`clamped` when the jsonb `row` names `key`, else `fallback`."""
+    return f"CASE WHEN {row} ? '{key}' THEN {clamped} ELSE {fallback} END"
+
+
+def _folded_snippet(snippet: str, length: str) -> str:
+    """`snippet` cut to `length` at the last whole word that fits, ending in an ellipsis, or whole when it fits."""
+    return (
+        f"CASE WHEN char_length({snippet}) <= {length} THEN {snippet}"
+        f" ELSE coalesce(substring(left({snippet}, {length}) FROM '^(.*\\S)\\s'), left({snippet}, {length} - 1)) || '\u2026' END"
+    )
+
+
 def hits_per_document_body(schema: SearchSchema, *, function_name: str) -> str:
     """Return the `CREATE FUNCTION` statement answering the cap on hits per document a capped search applies.
 
-    The function reads the tuning row as its owner, over the same defaults and bound the search carries, so it answers
-    the number the search reads when it runs. It answers 0 when the search keeps every hit.
+    The function reads the tuning relation as its owner, over the same defaults and bound the search carries, so it
+    answers the number the search reads when it runs. It answers 0 when the search keeps every hit. A search tuned per
+    partition gets a function taking the partition, named like the schema's collection facet and defaulting to the
+    reader session's own, which answers that partition's cap.
 
     Args:
         schema: The knowledge base schema whose search caps hits per document.
@@ -150,17 +191,21 @@ def hits_per_document_body(schema: SearchSchema, *, function_name: str) -> str:
     if tuning is None or tuning.max_hits_per_document is None:
         msg = "this search caps no hits per document, so it has no cap to answer"
         raise ValueError(msg)
+    preamble = f"LANGUAGE sql STABLE SECURITY DEFINER SET search_path = {_search_path_schemas(schema)} AS $$\n"
+    settings = f"FROM (SELECT {_tuning_source(tuning)} AS tuning) AS settings\n"
+    if not tuning.partition_col:
+        return f"CREATE FUNCTION {function_name}() RETURNS int\n{preamble}SELECT {_max_hits_clamp('settings.tuning')}\n{settings}$$"
+    cap = _overridden("p.tuning", "max_hits_per_document", _max_hits_clamp("p.tuning"), _max_hits_clamp("settings.tuning"))
     return (
-        f"CREATE FUNCTION {function_name}() RETURNS int\n"
-        f"LANGUAGE sql STABLE SECURITY DEFINER SET search_path = {_search_path_schemas(schema)} AS $$\n"
-        f"SELECT {_max_hits_clamp('settings.tuning')}\n"
-        f"FROM (SELECT {_tuning_source(tuning)} AS tuning) AS settings\n"
+        f"CREATE FUNCTION {function_name}({schema.collection_facet} text DEFAULT {_SESSION_COLLECTION_DEFAULT}) RETURNS int\n"
+        f"{preamble}SELECT {cap}\n{settings}"
+        f"LEFT JOIN {tuning.relation} p ON p.{tuning.partition_col} = $1\n"
         "$$"
     )
 
 
 def _tuning_source(tuning: SearchTuning) -> str:
-    """The defaults as a jsonb literal, overridden by key by the tuning row when the tuning names one."""
+    """The defaults as a jsonb literal, overridden by key by the tuning relation's single or default row when the tuning names one."""
     defaults: dict[str, int | float | dict[str, float]] = {
         "budget": tuning.budget,
         "rrf_constant": float(tuning.rrf_constant),
@@ -171,10 +216,13 @@ def _tuning_source(tuning: SearchTuning) -> str:
     }
     if tuning.max_hits_per_document is not None:
         defaults["max_hits_per_document"] = tuning.max_hits_per_document
+    if tuning.folded_snippet_chars is not None:
+        defaults["folded_snippet_chars"] = tuning.folded_snippet_chars
     literal = "'" + json.dumps(defaults).replace("'", "''") + "'::jsonb"
     if not tuning.relation:
         return literal
-    return f"{literal} || coalesce((SELECT t.tuning FROM {tuning.relation} t WHERE t.id = 1), '{{}}'::jsonb)"
+    row = f"t.{tuning.partition_col} IS NULL" if tuning.partition_col else "t.id = 1"
+    return f"{literal} || coalesce((SELECT t.tuning FROM {tuning.relation} t WHERE {row}), '{{}}'::jsonb)"
 
 
 # The DEFAULT of the schema's `collection_facet`: the reader session's own collection.
@@ -213,6 +261,29 @@ def _search_path_schemas(schema: SearchSchema) -> str:
             if qualifier not in seen:
                 seen.append(qualifier)
     return pinned_search_path(seen)
+
+
+def _partition_tuning_cte(tuning: SearchTuning) -> str:
+    """The cap and the folded snippet length each partition's own tuning row sets, the default row's where it sets none."""
+    row = "t.tuning"
+    columns = [
+        f"t.{tuning.partition_col} AS {_PARTITION_KEY}",
+        f"{_overridden(row, 'max_hits_per_document', _max_hits_clamp(row), _MAX_HITS)} AS {_DOCUMENT_CAP}",
+    ]
+    if tuning.folded_snippet_chars is not None:
+        columns.append(f"{_overridden(row, 'folded_snippet_chars', _folded_snippet_clamp(row), _FOLDED_SNIPPET_CHARS)} AS {_FOLDED_CHARS}")
+    separator = ",\n         "
+    return f"{_PARTITION_TUNING} AS (\n  SELECT {separator.join(columns)}\n  FROM {tuning.relation} t\n  WHERE t.{tuning.partition_col} IS NOT NULL\n)"
+
+
+def _document_cap(schema: SearchSchema) -> str:
+    """What a capped search compares a hit's place in its document with: its partition's cap, or the one cap."""
+    return f"documented.{_DOCUMENT_CAP}" if _tuned_per_partition(schema) else _MAX_HITS
+
+
+def _folded_length(schema: SearchSchema) -> str:
+    """The length a folded unit's snippet is cut to: its partition's, or the one length."""
+    return f"documented.{_FOLDED_CHARS}" if _tuned_per_partition(schema) else _FOLDED_SNIPPET_CHARS
 
 
 def _returns_columns(schema: SearchSchema) -> str:
@@ -370,25 +441,42 @@ class BaseHybridSearchBuilder(abc.ABC):
     def _document_ctes(self, schema: SearchSchema) -> list[str]:
         """Each kept candidate's place within its document, and the hits past the cap folded per document."""
         partitioned = bool(schema.partition_result_col)
+        per_partition = _tuned_per_partition(schema)
         documents = f"ruled.{_PARTITION_KEY}, ruled.document_key" if partitioned else "ruled.document_key"
+        tuned_columns = (
+            f"coalesce({_PARTITION_TUNING}.{_DOCUMENT_CAP}, {_MAX_HITS}) AS {_DOCUMENT_CAP}, "
+            + (f"coalesce({_PARTITION_TUNING}.{_FOLDED_CHARS}, {_FOLDED_SNIPPET_CHARS}) AS {_FOLDED_CHARS}, " if _snippeted(schema) else "")
+            if per_partition
+            else ""
+        )
+        tuned_join = (
+            f"  LEFT JOIN {_PARTITION_TUNING} ON {_PARTITION_TUNING}.{_PARTITION_KEY} = ruled.{_PARTITION_KEY}\n" if per_partition else ""
+        )
         documented = (
             "documented AS (\n"
-            f"  SELECT ruled.*, row_number() OVER (PARTITION BY {documents} ORDER BY ruled.pin_alone DESC, ruled.rrf DESC, ruled.id) AS in_document\n"
+            f"  SELECT ruled.*, {tuned_columns}"
+            f"row_number() OVER (PARTITION BY {documents} ORDER BY ruled.pin_alone DESC, ruled.rrf DESC, ruled.id) AS in_document\n"
             "  FROM ruled\n"
+            f"{tuned_join}"
             f"  WHERE ruled.pin_alone OR ruled.in_group <= {_ROWS_PER_GROUP}\n"
             ")"
         )
         keys = f"documented.{_PARTITION_KEY}, documented.document_key" if partitioned else "documented.document_key"
+        cap = _document_cap(schema)
+        snippet = f", 'snippet', {_folded_snippet('documented.snippet', _folded_length(schema))}" if _snippeted(schema) else ""
         folded = (
             "folded AS (\n"
             f"  SELECT {keys},\n"
-            "         jsonb_agg(jsonb_build_object('id', documented.id, 'hit_level', documented.lvl) ORDER BY documented.in_document) AS units\n"
+            f"         jsonb_agg(jsonb_build_object('id', documented.id, 'hit_level', documented.lvl{snippet}) ORDER BY documented.in_document) AS units\n"
             "  FROM documented\n"
-            f"  WHERE {_MAX_HITS} > 0 AND documented.in_document > {_MAX_HITS}\n"
-            f"    AND documented.in_document <= {_MAX_HITS} + {FOLDED_UNITS_PER_HIT}\n"
+            f"  WHERE {cap} > 0 AND documented.in_document > {cap}\n"
+            f"    AND documented.in_document <= {cap} + {FOLDED_UNITS_PER_HIT}\n"
             f"  GROUP BY {keys}\n"
             ")"
         )
+        tuning = schema.tuning
+        if tuning is not None and tuning.partition_col:
+            return [_partition_tuning_cte(tuning), documented, folded]
         return [documented, folded]
 
     def _policy_select(self, schema: SearchSchema) -> str:
@@ -416,7 +504,7 @@ class BaseHybridSearchBuilder(abc.ABC):
             "       coalesce(folded.units, '[]'::jsonb)\n"
             "FROM documented\n"
             f"LEFT JOIN folded ON {same_partition}folded.document_key = documented.document_key AND documented.in_document = 1\n"
-            f"WHERE {_MAX_HITS} = 0 OR documented.in_document <= {_MAX_HITS}\n"
+            f"WHERE {_document_cap(schema)} = 0 OR documented.in_document <= {_document_cap(schema)}\n"
             "ORDER BY documented.pin_alone DESC, documented.rrf DESC, documented.id\n"
             f"LIMIT {_CAPPED_K}"
         )

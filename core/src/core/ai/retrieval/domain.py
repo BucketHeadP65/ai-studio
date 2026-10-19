@@ -215,6 +215,11 @@ class FoldedUnit(BaseModel):
 
     id: str = Field(description="The unit's id.")
     hit_level: str = Field(description="The unit's granularity tier, one of the values a hit's hit_level takes.")
+    snippet: str | None = Field(
+        default=None,
+        description="A short excerpt of the text the unit matched, cut at a whole word, enough to judge whether to fetch "
+        "it, never the whole unit. None when the search listed no snippet.",
+    )
     ref: str | None = Field(
         default=None,
         description="The exact collection-qualified handle to pass to fetch, set by the search tool. None on a row read "
@@ -277,7 +282,7 @@ class SearchHit(BaseModel):
     folded_units: tuple[FoldedUnit, ...] = Field(
         default=(),
         description="Other units of the document this hit stands for that also matched, best first, listed here instead of as "
-        "hits of their own. Fetch one by its ref to read that part without searching again.",
+        "hits of their own, each with a short snippet. Fetch one by its ref to read the whole unit without searching again.",
     )
 
 

@@ -224,8 +224,9 @@ class SearchTuning:
     measurement changes a number with an `UPDATE` and no new function. The bounds hold whatever the row says.
 
     Attributes:
-        relation: A relation holding one row, `id = 1`, whose jsonb column `tuning` overrides the defaults by key, or
-            empty to read the defaults alone. The function reads it as its owner, so a reader needs no grant on it.
+        relation: A relation whose jsonb column `tuning` overrides the defaults by key, or empty to read the defaults
+            alone. It holds one row, `id = 1`, unless `partition_col` is set. The function reads it as its owner, so a
+            reader needs no grant on it.
         budget: The most rows each leg of each surface ranks and hands to the fusion. Bound to 1..200, and never below
             the search's `k`.
         rrf_constant: The constant of reciprocal rank fusion. Bound to 1..1000.
@@ -239,6 +240,13 @@ class SearchTuning:
             pinned title its best. Its next `FOLDED_UNITS_PER_HIT` hits are listed under its best hit as folded units,
             in a `folded_units` jsonb column returned last. Bound to 0..50, and 0 or a null in the row keeps every hit.
             `None` generates neither the cap nor the column.
+        folded_snippet_chars: The longest snippet a folded unit carries, in characters. It is the unit's own snippet
+            cut at a whole word with an ellipsis, so it is never longer than `snippet_chars`. Bound to 20..2000.
+            `None` lists folded units without a snippet. It needs `max_hits_per_document`.
+        partition_col: The column of `relation` naming the partition a row tunes. Set, the row whose column is null
+            holds the numbers for every partition, and a partition's own row may set `max_hits_per_document` and
+            `folded_snippet_chars` for that partition's hits. Empty, `relation` holds one row, `id = 1`. It needs
+            `relation` and `max_hits_per_document`, and a schema with a partition and a collection facet.
     """
 
     relation: str = ""
@@ -249,6 +257,30 @@ class SearchTuning:
     rows_per_group: int = 3
     weights: tuple[tuple[str, float], ...] = ()
     max_hits_per_document: int | None = None
+    folded_snippet_chars: int | None = None
+    partition_col: str = ""
+
+    def __post_init__(self) -> None:
+        """Validate the folded snippet length and the partition column against the cap and the relation.
+
+        Raises:
+            ValueError: When `folded_snippet_chars` is set without `max_hits_per_document`, or `partition_col` is set
+                without `relation` or `max_hits_per_document`, or is not an identifier.
+        """
+        if self.folded_snippet_chars is not None and self.max_hits_per_document is None:
+            msg = "SearchTuning.folded_snippet_chars needs max_hits_per_document, since only a capped search folds units"
+            raise ValueError(msg)
+        if not self.partition_col:
+            return
+        if not _IDENTIFIER.fullmatch(self.partition_col):
+            msg = f"SearchTuning.partition_col {self.partition_col!r} must be an identifier"
+            raise ValueError(msg)
+        if not self.relation:
+            msg = "SearchTuning.partition_col needs a relation, since its rows are what a partition tunes"
+            raise ValueError(msg)
+        if self.max_hits_per_document is None:
+            msg = "SearchTuning.partition_col needs max_hits_per_document, the one number a partition's row sets beside the folded snippet length"
+            raise ValueError(msg)
 
 
 @dataclass(frozen=True)
@@ -284,7 +316,9 @@ class SearchSchema:
         tuning: The numbers the search reads when it runs. Set, every leg stops at a budget, the semantic leg
             ranks its nearest rows by exact distance, the fusion weighs each leg, a lone exact title goes first,
             each group keeps at most `rows_per_group` hits and, when the tuning sets `max_hits_per_document`, each
-            document keeps at most that many and folds the rest under its best hit. Unset, the search renders
+            document keeps at most that many and folds the rest under its best hit, each folded unit with a snippet
+            when the tuning sets `folded_snippet_chars`. A tuning with `partition_col` reads both of those numbers
+            for each hit's own partition. Unset, the search renders
             its fixed constants, unchanged from before tuning existed. Every surface name must then be a plain
             identifier, since it names a weight.
     """
@@ -305,7 +339,8 @@ class SearchSchema:
             ValueError: When there are no surfaces, or a surface name / hit level / BM25 index, a
                 pool name, or a facet name is not unique, or `level_facet` / `collection_facet` names
                 no declared facet, or the surfaces' partition columns disagree with
-                `partition_result_col`.
+                `partition_result_col`, or a tuning read per partition sits on a schema with no partition or no
+                collection facet.
         """
         if not self.surfaces:
             msg = "SearchSchema.surfaces must declare at least one surface"
@@ -338,13 +373,27 @@ class SearchSchema:
         if unknown:
             msg = f"SearchSchema.tuning weighs no surface and leg of this schema: {', '.join(unknown)}"
             raise ValueError(msg)
+        self._check_tuning_per_partition()
         declared = {"tuning", "capped_k", "leg_budget", "rrf_constant", "snippet_chars", "rows_per_group"}
         if self.tuning.max_hits_per_document is not None:
             declared.add("max_hits_per_document")
+        if self.tuning.folded_snippet_chars is not None:
+            declared.add("folded_snippet_chars")
         declared |= {f"weight_{surface.name}_{leg}" for surface in self.surfaces for leg in SEARCH_LEGS}
         taken = sorted(facet.name for facet in self.facets if facet.name in declared)
         if taken:
             msg = f"SearchSchema.tuning declares a variable these facets are named after: {', '.join(taken)}"
+            raise ValueError(msg)
+
+    def _check_tuning_per_partition(self) -> None:
+        """Raise `ValueError` when a tuning read per partition sits on a schema with no partition or no collection facet."""
+        if self.tuning is None or not self.tuning.partition_col:
+            return
+        if not self.partition_result_col:
+            msg = "SearchTuning.partition_col reads a row per partition, so the schema must set partition_result_col"
+            raise ValueError(msg)
+        if not self.collection_facet:
+            msg = "SearchTuning.partition_col needs the schema's collection_facet, which names the partition a cap is read for"
             raise ValueError(msg)
 
     def _check_partition(self) -> None:

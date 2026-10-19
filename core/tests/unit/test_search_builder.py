@@ -791,3 +791,165 @@ def test_a_capped_search_answers_its_cap_through_a_function_that_reads_the_tunin
 def test_a_search_that_caps_nothing_has_no_cap_to_answer() -> None:
     with pytest.raises(ValueError, match="caps no hits per document"):
         hits_per_document_body(_pinned_corpus(), function_name="api.search_hits_per_document")
+
+
+# -- folded snippets ---------------------------------------------------------------
+
+
+def _snippeted_corpus(*, partitioned: bool = False) -> SearchSchema:
+    """`_documented_corpus()` whose folded units each carry a snippet of the text they matched."""
+    schema = _documented_corpus(partitioned=partitioned)
+    assert schema.tuning is not None
+    return replace(schema, tuning=replace(schema.tuning, folded_snippet_chars=160))
+
+
+_FOLDED_SNIPPET = (
+    "CASE WHEN char_length(documented.snippet) <= folded_snippet_chars THEN documented.snippet"
+    " ELSE coalesce(substring(left(documented.snippet, folded_snippet_chars) FROM '^(.*\\S)\\s'),"
+    " left(documented.snippet, folded_snippet_chars - 1)) || '…' END"
+)
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_a_folded_snippet_length_is_read_from_the_tuning_row_and_held_to_its_bound(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_snippeted_corpus())
+
+    assert '"folded_snippet_chars": 160' in body
+    assert "folded_snippet_chars int := least(greatest((tuning ->> 'folded_snippet_chars')::numeric::int, 20), 2000);" in body
+
+
+def test_each_folded_unit_carries_its_hit_snippet_cut_at_a_whole_word_to_the_folded_snippet_length() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_snippeted_corpus())
+
+    assert (
+        f"jsonb_agg(jsonb_build_object('id', documented.id, 'hit_level', documented.lvl, 'snippet', {_FOLDED_SNIPPET}) "
+        "ORDER BY documented.in_document) AS units"
+    ) in body
+
+
+def test_paradedb_binds_the_folded_snippet_length_by_position() -> None:
+    body = ParadeDBHybridSearchBuilder().api_search_body(_snippeted_corpus())
+
+    assert "weight_chunk_lexical, weight_chunk_semantic, max_hits_per_document, folded_snippet_chars;" in body
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_no_placeholder_leaks_into_a_snippeted_body(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_snippeted_corpus())
+    inner = body[body.index("BEGIN") :]
+
+    assert "{" not in inner.replace("'{}'::jsonb", "")
+
+
+def test_a_capped_search_with_no_folded_snippet_length_folds_units_without_a_snippet() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_documented_corpus())
+
+    assert "folded_snippet_chars" not in body
+    assert "'snippet'" not in body
+
+
+def test_a_folded_snippet_length_without_a_cap_is_refused() -> None:
+    with pytest.raises(ValueError, match="folded_snippet_chars"):
+        SearchTuning(folded_snippet_chars=160)
+
+
+def test_a_facet_named_like_the_folded_snippet_length_is_refused() -> None:
+    schema = _corpus()
+    with pytest.raises(ValueError, match="folded_snippet_chars"):
+        replace(
+            schema,
+            facets=(*schema.facets, Facet("folded_snippet_chars", "int")),
+            tuning=SearchTuning(max_hits_per_document=1, folded_snippet_chars=160),
+        )
+
+
+# -- tuning per partition ----------------------------------------------------------
+
+
+def _tuned_per_partition_corpus() -> SearchSchema:
+    """`_snippeted_corpus(partitioned=True)` whose tuning relation holds a default row and one row per tenant."""
+    schema = _snippeted_corpus(partitioned=True)
+    assert schema.tuning is not None
+    return replace(
+        schema,
+        facets=(*schema.facets, Facet("tenant", "text")),
+        collection_facet="tenant",
+        tuning=replace(schema.tuning, partition_col="tenant"),
+    )
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_a_search_tuned_per_partition_reads_every_number_from_the_default_row(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_tuned_per_partition_corpus())
+
+    assert "coalesce((SELECT t.tuning FROM kb.search_tuning t WHERE t.tenant IS NULL), '{}'::jsonb)" in body
+    assert "t.id = 1" not in body
+
+
+def test_a_partitions_own_row_sets_the_cap_and_the_folded_snippet_length_of_its_hits() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_tuned_per_partition_corpus())
+
+    assert (
+        "partition_tuning AS (\n"
+        "  SELECT t.tenant AS partition_key,\n"
+        "         CASE WHEN t.tuning ? 'max_hits_per_document' "
+        "THEN least(greatest(coalesce((t.tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), 50) "
+        "ELSE max_hits_per_document END AS document_cap,\n"
+        "         CASE WHEN t.tuning ? 'folded_snippet_chars' "
+        "THEN least(greatest((t.tuning ->> 'folded_snippet_chars')::numeric::int, 20), 2000) "
+        "ELSE folded_snippet_chars END AS folded_chars\n"
+        "  FROM kb.search_tuning t\n"
+        "  WHERE t.tenant IS NOT NULL\n"
+        ")"
+    ) in body
+    assert "coalesce(partition_tuning.document_cap, max_hits_per_document) AS document_cap" in body
+    assert "coalesce(partition_tuning.folded_chars, folded_snippet_chars) AS folded_chars" in body
+    assert "LEFT JOIN partition_tuning ON partition_tuning.partition_key = ruled.partition_key" in body
+
+
+def test_a_search_tuned_per_partition_caps_each_document_by_its_partitions_cap() -> None:
+    body = PgTextSearchHybridSearchBuilder().api_search_body(_tuned_per_partition_corpus())
+
+    assert "WHERE documented.document_cap = 0 OR documented.in_document <= documented.document_cap" in body
+    assert "WHERE documented.document_cap > 0 AND documented.in_document > documented.document_cap" in body
+    assert f"documented.in_document <= documented.document_cap + {FOLDED_UNITS_PER_HIT}" in body
+    assert "left(documented.snippet, documented.folded_chars - 1)" in body
+    assert "WHERE max_hits_per_document = 0" not in body
+
+
+@pytest.mark.parametrize("builder", _BUILDERS)
+def test_no_placeholder_leaks_into_a_body_tuned_per_partition(builder: BaseHybridSearchBuilder) -> None:
+    body = builder.api_search_body(_tuned_per_partition_corpus())
+    inner = body[body.index("BEGIN") :]
+
+    assert "{" not in inner.replace("'{}'::jsonb", "")
+
+
+def test_the_cap_function_of_a_search_tuned_per_partition_answers_one_partitions_cap() -> None:
+    body = hits_per_document_body(_tuned_per_partition_corpus(), function_name="api.search_hits_per_document")
+
+    assert body.startswith("CREATE FUNCTION api.search_hits_per_document(tenant text DEFAULT current_setting('app.collection', true)) RETURNS int\n")
+    assert "coalesce((SELECT t.tuning FROM kb.search_tuning t WHERE t.tenant IS NULL), '{}'::jsonb)" in body
+    assert (
+        "SELECT CASE WHEN p.tuning ? 'max_hits_per_document' "
+        "THEN least(greatest(coalesce((p.tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), 50) "
+        "ELSE least(greatest(coalesce((settings.tuning ->> 'max_hits_per_document')::numeric::int, 0), 0), 50) END"
+    ) in body
+    assert "LEFT JOIN kb.search_tuning p ON p.tenant = $1" in body
+
+
+def test_a_tuning_per_partition_needs_a_relation_a_cap_and_a_plain_column_name() -> None:
+    with pytest.raises(ValueError, match="relation"):
+        SearchTuning(max_hits_per_document=1, partition_col="tenant")
+    with pytest.raises(ValueError, match="max_hits_per_document"):
+        SearchTuning(relation="kb.search_tuning", partition_col="tenant")
+    with pytest.raises(ValueError, match="identifier"):
+        SearchTuning(relation="kb.search_tuning", max_hits_per_document=1, partition_col="tenant id")
+
+
+def test_a_tuning_per_partition_needs_a_partitioned_schema_with_a_collection_facet() -> None:
+    per_partition = SearchTuning(relation="kb.search_tuning", max_hits_per_document=1, partition_col="tenant")
+    with pytest.raises(ValueError, match="partition_result_col"):
+        replace(_corpus(), tuning=per_partition)
+    with pytest.raises(ValueError, match="collection_facet"):
+        replace(_partitioned_corpus(), tuning=per_partition)
