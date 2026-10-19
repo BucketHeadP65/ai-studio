@@ -573,8 +573,7 @@ const SpendUsageSchema = z.object({
 });
 
 // A run's own priced cost: the total, and the same reading folded per step, keyed by step name.
-// A step the run never priced (nothing ran it, or it ran before spend tracking existed) carries
-// no key here at all.
+// A step the run never priced (nothing ran it) carries no key here at all.
 export const SpendViewSchema = z.object({
   cost_usd: z.string(),
   // Responses no source could name a figure for. Above zero, `cost_usd` is a floor rather than the

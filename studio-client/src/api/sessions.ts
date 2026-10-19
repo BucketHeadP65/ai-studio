@@ -434,9 +434,8 @@ function toolReturnsByCallId(messages: TranscriptMessage[]): Map<string, unknown
   return returns;
 }
 
-// When each `tool-return` part landed, keyed by the call it answers -- an older transcript row
-// recorded before the fork's usage tap carries no such timestamp, so a call it answers is
-// simply absent here rather than mapped to an empty string.
+// When each `tool-return` part landed, keyed by the call it answers. A part that carries no
+// timestamp leaves its call absent here rather than mapped to an empty string.
 function toolReturnTimestampsByCallId(messages: TranscriptMessage[]): Map<string, string> {
   const timestamps = new Map<string, string>();
   for (const message of messages) {
@@ -473,9 +472,9 @@ function responseToolCallIds(payload: MessagePayload): string[] {
   return ids;
 }
 
-// One response row's own `data-step` part, built from its stored usage and timestamp -- `null`
-// when the row carries neither, so no figure is fabricated. `returns` rides only for a call this turn's own request
-// row already answered.
+// One response row's own `data-step` part, built from its stored usage and timestamp, `null`
+// when the row carries neither, so no figure is fabricated. `returns` rides only for a call this
+// turn's own request row already answered.
 function responseDataStepPart(
   payload: MessagePayload,
   toolReturnTimestamps: Map<string, string>,

@@ -9,8 +9,8 @@ import { render } from "@/test-support/render";
 import { ScheduleForm } from "./schedule-form";
 
 // The create-only route onto a schedule: a workflow (fixed or picked), its declared parameters,
-// a cadence with a live preview, and the gate/auto-approve knobs — every request its mount can
-// fire is mocked here (MSW errors on anything unhandled).
+// a cadence with a live preview, and the gate mode options. Every request its mount can fire is
+// mocked here (MSW errors on anything unhandled).
 
 const BASE = "http://studio.test";
 

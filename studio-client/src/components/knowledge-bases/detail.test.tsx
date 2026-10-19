@@ -175,7 +175,7 @@ describe("KnowledgeBaseDetailView", () => {
     expect(screen.getByRole("textbox", { name: "Source URL" })).toBeInTheDocument();
   });
 
-  it("hides the source queue section for a legacy youtube-connector knowledge base", () => {
+  it("hides the source queue section for a knowledge base declaring only the youtube connector", () => {
     render(
       <KnowledgeBaseDetailView
         detail={detail({ sources_connectors: ["youtube"] })}
