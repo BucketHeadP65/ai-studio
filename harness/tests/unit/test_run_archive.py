@@ -681,18 +681,15 @@ def test_a_run_title_survives_the_reload_a_listing_read_does(tmp_path: Path) -> 
     assert [item.run_title for item in archive.list_for("wf.report", limit=10)] == ["Which cache do we use?"]
 
 
-def test_a_record_written_before_runs_had_titles_reads_as_untitled(tmp_path: Path) -> None:
-    """An older record carries no title at all, and reads as none rather than refusing to parse."""
-    written = json.loads(_record(run_id="legacy").model_dump_json())
+def test_a_record_with_no_run_title_key_does_not_read(tmp_path: Path) -> None:
+    """Every record carries its title, empty for a run nobody named, so a record without the key is not one."""
+    written = json.loads(_record(run_id="untitled").model_dump_json())
     del written["run_title"]
     folder = tmp_path / "wf.report"
     folder.mkdir(parents=True)
-    (folder / "legacy.json").write_text(json.dumps(written), encoding="utf-8")
+    (folder / "untitled.json").write_text(json.dumps(written), encoding="utf-8")
 
-    record = FileRunArchive(tmp_path, retention_days=KEPT_DAYS).get("legacy")
-
-    assert record is not None
-    assert record.run_title == "", "nothing invents a name for a run that was never given one"
+    assert FileRunArchive(tmp_path, retention_days=KEPT_DAYS).get("untitled") is None
 
 
 def test_put_stages_the_record_under_a_hidden_temp_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

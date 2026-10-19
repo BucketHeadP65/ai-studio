@@ -83,6 +83,7 @@ def _seed(state: Path, *, run_id: str = RUN, values: dict[str, object] | None = 
     now = datetime.now(UTC).isoformat()
     _archive_of(state).put(
         RunArchiveRecord(
+            run_title="",
             run_id=run_id,
             workflow_id="wf.report",
             outcome="completed",
@@ -353,6 +354,7 @@ async def test_a_reference_naming_one_turn_resolves_to_that_turns_own_recorded_v
     now = datetime.now(UTC).isoformat()
     _archive_of(tmp_path).put(
         RunArchiveRecord(
+            run_title="",
             run_id=RUN,
             workflow_id="wf.reports",
             outcome="completed",

@@ -324,6 +324,7 @@ async def test_a_card_reports_its_newest_run(controller: BrowsingController, tmp
     records = records_under(tmp_path)
     now = datetime.now(UTC)
     older = RunArchiveRecord(
+        run_title="",
         run_id="run-older",
         workflow_id="wf.a",
         outcome="completed",
@@ -338,6 +339,7 @@ async def test_a_card_reports_its_newest_run(controller: BrowsingController, tmp
         events=[],
     )
     newer = RunArchiveRecord(
+        run_title="",
         run_id="run-newer",
         workflow_id="wf.a",
         outcome="failed",

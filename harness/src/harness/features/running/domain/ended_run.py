@@ -51,7 +51,7 @@ class RunArchiveRecord(BaseModel):
 
     run_id: str
     workflow_id: str
-    run_title: str = ""
+    run_title: str
     """What whoever started this run called it. Empty for a run nobody named. Never borrowed from the
     session the run ran in."""
     outcome: Literal["completed", "failed", "stopped"]

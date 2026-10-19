@@ -80,6 +80,7 @@ def _seed(state: Path, *, run_id: str = RUN, values: dict[str, object] | None = 
     now = datetime.now(UTC).isoformat()
     _archive_of(state).put(
         RunArchiveRecord(
+            run_title="",
             run_id=run_id,
             workflow_id="wf.report",
             outcome="completed",

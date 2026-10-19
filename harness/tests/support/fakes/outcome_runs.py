@@ -75,6 +75,7 @@ def an_archived_run(
     if declares_result:
         spec["result"] = {"summary": "the page the run wrote", "primary_work": "write"}
     return RunArchiveRecord(
+        run_title="",
         run_id=run_id,
         workflow_id=workflow_id,
         outcome=outcome,

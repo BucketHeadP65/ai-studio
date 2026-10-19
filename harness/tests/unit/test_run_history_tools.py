@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 def _record(run_id: str, started_at: str, values: dict[str, object], *, result: Outcome | None = None) -> RunArchiveRecord:
     return RunArchiveRecord(
+        run_title="",
         result=result if result is not None else Outcome(status="unknown", summary="no result declared"),
         run_id=run_id,
         workflow_id="wf.research-digest.v7",
