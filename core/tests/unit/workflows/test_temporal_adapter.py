@@ -16,7 +16,7 @@ from uuid import UUID
 
 import pytest
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, TypeAdapter
 from temporalio import workflow
 from temporalio.exceptions import ApplicationError, TemporalError
 from temporalio.testing import ActivityEnvironment
@@ -54,7 +54,6 @@ from core.ai.workflows.contracts import (
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.temporal import (
     _DEFAULT_ACTIVITY_CONFIG,
-    CONTINUATION_PATCH,
     CONTINUING_STEP_CONVERSATION,
     EXHAUSTED_GATE,
     PERFORM_INLINE_STEP,
@@ -65,7 +64,6 @@ from core.ai.workflows.infrastructure.temporal import (
     IdentityOnTheWire,
     InlineStepCall,
     InlineStepOutcome,
-    RunEvidence,
     ScheduledWork,
     TurnOnTheWire,
     _binding,
@@ -764,37 +762,6 @@ def test_an_inline_step_call_carries_an_address_and_never_a_transcript() -> None
     assert len(ref.model_dump_json().encode()) <= CONTINUATION_REF_BYTES
 
 
-def test_a_call_recorded_before_continuations_existed_still_decodes() -> None:
-    """An old history replays through this payload: the field it never carried reads as absent."""
-    legacy = {
-        "spec": BROUGHT.model_dump(mode="json"),
-        "step": "summarise_sales",
-        "arguments": {"sales": {"quarter": "Q2", "total": 1000}},
-        "identity": None,
-    }
-
-    call = InlineStepCall.model_validate(legacy)
-
-    assert call.continuation is None
-    assert call.step == "summarise_sales"
-
-
-def test_a_turn_recorded_before_skills_crossed_the_boundary_reads_as_holding_none() -> None:
-    """Every payload written before a sequence carried skills still decodes, and claims no skill it never had."""
-    legacy = {
-        "node_id": "digest_each",
-        "item_key": "3",
-        "turn": {"work": "summarise_sales", "index": 1, "turns": ("digest", "summarise_sales"), "each": "item", "tools": ("search",)},
-        "tier": "helper",
-    }
-
-    wire = IdentityOnTheWire.model_validate(legacy)
-
-    assert wire.turn is not None
-    assert wire.turn.skills == (), "a turn that never carried skills holds none, rather than failing to decode"
-    assert wire.turn.tools == ("search",)
-
-
 def test_a_sequences_skills_cross_the_activity_boundary_and_come_back_whole(registry: StepRegistry) -> None:
     """The union a workflow computed is what the activity mounts, so the two processes ask one surface."""
     extended, problems = _briefing_host(registry, []).including(BROUGHT)
@@ -854,102 +821,41 @@ def test_a_sequences_skills_never_reach_the_identity_a_line_is_addressed_by() ->
     ), "the identities a stored checkpoint is found under, unchanged"
 
 
-def test_a_result_recorded_before_continuations_existed_is_the_steps_own_output(registry: StepRegistry) -> None:
-    """What a pre-change history actually holds where this worker now expects an outcome.
-
-    `PERFORM_INLINE_STEP` used to answer with the step's own output and nothing round it. That
-    payload does not decode as a `InlineStepOutcome` at all, which is why the decode sits behind
-    `CONTINUATION_PATCH`: replaying such a history takes the old branch and reads the old shape.
-    """
-    legacy = {"text": "read"}
-    impl = _briefing_host(registry, []).including(BROUGHT)[0].get("summarise_sales")
-    assert impl is not None
-
-    rebuilt = TypeAdapter(impl.output_type).validate_python(legacy)
-
-    assert isinstance(rebuilt, BaseModel)
-    assert rebuilt.model_dump() == legacy, "the recorded payload is the step's own output, decoded by its own type"
-    with pytest.raises(ValidationError):
-        InlineStepOutcome.model_validate(legacy)
-    assert CONTINUATION_PATCH == "workflow-continuation-refs", "the patch id is a wire constant, so a deploy cannot rename it"
-
-
-def test_a_call_that_continues_no_line_never_consults_the_patch() -> None:
-    """A one-shot step is answered as it always has been, without reaching workflow-only machinery.
-
-    `workflow.patched` may only be called inside a workflow, so a `False` here that came from the
-    short circuit rather than from the patch is exactly the contract: nothing but a turn of a line
-    changed shape.
-    """
+def test_a_call_that_continues_no_line_is_answered_with_the_steps_own_output() -> None:
+    """A one-shot step continues no step conversation, so its answer is never an `InlineStepOutcome`."""
     assert _executor().continues(ScheduledWork(activity="draft_report", args=[])) is False
 
 
-# --- literal fixtures: what an old record written before these fields existed actually holds ----
+# --- literal fixtures -----------------------------------------------------------------------------
 #
-# Every string below is typed out by hand, never produced by dumping today's models -- a
-# serializer regression that started including a field these fixtures predate must fail loudly
-# here, not pass because the fixture silently grew the field along with the code.
+# Every string below is typed out by hand, never produced by dumping today's models, so a
+# serializer change that starts writing a field by default fails loudly here.
 
-_LEGACY_WORKFLOW_JSON = (
+_UNDECLARED_WORKFLOW_JSON = (
     '{"name":"quarterly-close","version":1,'
     '"description":"Collect the quarter\'s sales and have a person approve the total before the quarter counts as closed.",'
     '"nodes":[{"kind":"run","id":"collect_sales","work":"collect_sales"},'
     '{"kind":"gate","id":"approve_report","reviews":{"node":"collect_sales"},"rejected_to":"collect_sales"}],'
     '"output":{"node":"approve_report"}}'
 )
-"""A workflow exactly as it would have been saved before `result` (declared work) and `max_attempts`
-(bounded gate reaches) existed: neither key appears anywhere in this text."""
+"""A workflow that declares no `result` and leaves its gate's `max_attempts` unset: neither key appears
+anywhere in this text."""
 
-_LEGACY_WORKFLOW_HASH = "9ee0acd066126b4153869c77763a8604afc29ae7902f171d9510cc3572701908"
-"""`spec_identity` of `_LEGACY_WORKFLOW_JSON`, computed once and pinned so a hashing change fails
-loudly here rather than silently re-keying every evidence record filed under the old identity."""
+_UNDECLARED_WORKFLOW_HASH = "9ee0acd066126b4153869c77763a8604afc29ae7902f171d9510cc3572701908"
+"""`spec_identity` of `_UNDECLARED_WORKFLOW_JSON`, computed once and pinned so a hashing change fails
+loudly here rather than silently re-keying every evidence record filed under this identity."""
 
 
-def test_a_workflow_saved_before_result_and_max_attempts_parses_and_keeps_its_identity() -> None:
-    spec = Workflow.model_validate_json(_LEGACY_WORKFLOW_JSON)
+def test_a_workflow_that_declares_no_result_parses_and_keeps_its_identity() -> None:
+    spec = Workflow.model_validate_json(_UNDECLARED_WORKFLOW_JSON)
     gate = next(node for node in spec.nodes if node.kind == "gate")
 
     assert spec.result is None, "a workflow that never declared its work cannot say what its result is"
-    assert gate.max_attempts == 3, "the ceiling every gate always had, before a workflow could name it"
-    assert spec_identity(spec) == _LEGACY_WORKFLOW_HASH, "the pinned literal -- a moved hash orphans this workflow's evidence"
+    assert gate.max_attempts == 3, "the ceiling a gate takes when the workflow names none"
+    assert spec_identity(spec) == _UNDECLARED_WORKFLOW_HASH, "the pinned literal -- a moved hash orphans this workflow's evidence"
 
     outcome = observed_outcome(spec.result, status="completed", facts=(), primary=None, decisions=(), reviews={})
     assert outcome.status == "unknown", "no declared work is honestly unknown, never inferred success"
-
-
-_LEGACY_CALL_JSON = (
-    '{"spec":' + _LEGACY_WORKFLOW_JSON + ","
-    '"step":"collect_sales","arguments":{},'
-    '"identity":{"node_id":"collect_sales","item_key":null,'
-    '"turn":{"work":"collect_sales","index":0,"turns":["collect_sales"],"each":"item","tools":[]},'
-    '"tier":null}}'
-)
-"""A `InlineStepCall` as it would have crossed the activity boundary before `continuation`
-existed and before a turn carried `skills` -- neither key appears in this text either."""
-
-
-def test_an_inline_step_call_saved_before_continuation_and_skills_parses_honestly() -> None:
-    call = InlineStepCall.model_validate_json(_LEGACY_CALL_JSON)
-
-    assert call.continuation is None, "a call that never carried a checkpoint ref reads as continuing no line"
-    assert call.identity is not None
-    assert call.identity.turn is not None
-    assert call.identity.turn.skills == (), "a turn recorded before skills existed claims none, never an inferred union"
-    assert call.spec.result is None, "the spec it carries is the same pre-result workflow, still parseable whole"
-
-
-_LEGACY_DURABLE_EVIDENCE_JSON = '{"gates_approved":["approve_report"],"produced":{"collect_sales":"object"}}'
-"""What a finished durable run's evidence held before gate-decision facts and retry feedback
-existed: only the two fields a run always reported."""
-
-
-def test_durable_run_evidence_saved_before_gate_decisions_and_retry_feedback_parses() -> None:
-    legacy = RunEvidence.model_validate_json(_LEGACY_DURABLE_EVIDENCE_JSON)
-
-    assert legacy.gate_decisions == [], "no decision provenance was ever recorded for this run -- absent, not fabricated"
-    assert legacy.retry_feedback == {}
-    assert legacy.gates_rejected == {}
-    assert legacy.gates_auto_approved == []
 
 
 def test_a_refused_continuation_fails_the_run_rather_than_retrying_forever() -> None:

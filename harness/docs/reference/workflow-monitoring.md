@@ -328,20 +328,10 @@ digest, the output and its digest, the completion time) and `continuation_heads`
 revision in the same transaction, then re-run or reset the workflow the same way. Deleting and
 re-running is the ordinary choice. There is no console verb for either yet.
 
-**A history recorded before this change still decodes.** A turn's activity result changed shape
-here: it carries the committed ref beside the output, where a pre-change history holds the bare
-output. The decode sits behind Temporal's own `workflow.patched("workflow-continuation-refs")`, so
-replaying a history that predates this reads the shape that history actually holds and an in-flight
-durable multi-turn run survives the upgrade. A brought-step call recorded before continuations
-existed carries no ref and reads as carrying none.
-
-`workflow.patched` covers replay: one execution's own history decides the shape it reads, wherever
-and whenever that history is replayed. It does not cover a mixed worker fleet: a worker whose
-deployed code has not moved still answers `PERFORM_INLINE_STEP` with the bare output, never the
-committed ref, so a brand-new turn scheduled against it while another worker on the same task queue
-already answers with the new shape is ordinary Temporal deploy skew, not something the patch
-protects against. Roll every worker on a task queue together, or drain it, before the code expecting
-the new shape starts scheduling turns against it.
+**A turn's activity result carries its committed ref.** A turn of a step conversation answers with
+an `InlineStepOutcome`, the committed ref beside the output, and a call that continues no step
+conversation answers with the step's own output. Roll every worker on a task queue together, or
+drain it, before changing either shape, since a worker on other code answers in its own shape.
 
 What is **not** defended, here or anywhere else in this runtime, is changing which activity a node
 is scheduled on while runs of it are in flight: renaming a step, or flipping its `replay_safe`

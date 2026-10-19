@@ -93,13 +93,6 @@ REFUSED_CONTINUATION = "ContinuationRefused"
 
 It must not change while a run is in flight."""
 
-CONTINUATION_PATCH = "workflow-continuation-refs"
-"""The patch id guarding how a turn's activity result is decoded.
-
-A history in the older shape holds the step's own output where this worker now expects an
-`InlineStepOutcome`. Replaying such a history answers False here and reads the older shape, so a
-durable run in flight survives the deploy. It must not change while a run is in flight."""
-
 WORKFLOW_NAMESPACE: Final[UUID] = UUID("89cf71dc-4d4e-520f-96c5-01cb2f57df20")
 """The namespace every durable step conversation's id is derived in.
 
@@ -222,11 +215,9 @@ class GateVerdict(BaseModel):
     gate_id: str
     approved: bool
     feedback: str = ""
-    """What was wrong with what was reviewed. Read on a refusal, ignored on an approval.
-    Defaulted, so a signal in the older shape without it still parses."""
+    """What was wrong with what was reviewed. Read on a refusal, ignored on an approval."""
     requested_repair: str = ""
-    """What to change. Empty leaves `feedback` as the whole instruction. Defaulted, so a signal in
-    the older shape without it still parses."""
+    """What to change. Empty leaves `feedback` as the whole instruction."""
 
 
 class WaitingGate(BaseModel):
@@ -273,20 +264,16 @@ class RunEvidence(BaseModel):
 
     gates_approved: list[str]
     gates_rejected: dict[str, int] = Field(default_factory=dict)
-    """Refusals heard before this run ended, by gate id. Defaulted, so a query answered by a worker
-    on the older shape still parses."""
+    """Refusals heard before this run ended, by gate id."""
     gates_auto_approved: list[str] = Field(default_factory=list)
     """Gates this run passed automatically, with nobody asked. They are never in `gates_approved`,
-    so an automatic pass never counts as a person's approval. Defaulted, so a query answered by a
-    worker on the older shape still parses."""
+    so an automatic pass never counts as a person's approval."""
     produced: dict[str, str]
     gate_decisions: list[GateDecisionFact] = Field(default_factory=list)
     """Every decision every gate received, in order, each naming its reviewer and the generation
-    of the value it was about. Defaulted, so a query answered by a worker on the older shape still
-    parses."""
+    of the value it was about."""
     retry_feedback: dict[str, list[RetryFeedback]] = Field(default_factory=dict)
-    """The rejections each node owes a repair for, by node id, each with the refused value.
-    Defaulted, so a query answered by a worker on the older shape still parses."""
+    """The rejections each node owes a repair for, by node id, each with the refused value."""
 
 
 class RunRequest(BaseModel):
@@ -294,13 +281,11 @@ class RunRequest(BaseModel):
 
     spec: Workflow
     params: WorkflowArguments
-    """The arguments this run was started with, as the JSON each parameter declares. A history in
-    the older shape, where every argument was text, still decodes and still reads as that text."""
+    """The arguments this run was started with, as the JSON each parameter declares."""
     workflow_id: str
     """Which saved workflow this run is of, so its history names it."""
     run_title: str = ""
-    """What this run itself is called, in the words of whoever started it. Defaulted, so a history
-    in the older shape without it still decodes, as a run nobody named."""
+    """What this run itself is called, in the words of whoever started it. Empty for a run nobody named."""
     auto_approve_gates: bool = False
     """Whether a person gate passes automatically rather than waiting for a signal. Travels with
     the request, so a history says what this run was allowed to decide on its own."""
@@ -319,8 +304,7 @@ class TurnOnTheWire(BaseModel):
     each: str
     tools: tuple[str, ...]
     skills: tuple[str, ...] = ()
-    """Every skill the turn sequence holds. Defaulted, so a call in the older shape without it still
-    decodes, as holding none."""
+    """Every skill the turn sequence holds, empty when it holds none."""
 
 
 class IdentityOnTheWire(BaseModel):
@@ -353,8 +337,7 @@ class InlineStepCall(BaseModel):
     continuation: ContinuationRef | None = None
     """Where the step conversation this call is a turn of stands, or None on its first turn and on a
     call that continues none. It holds an address and a digest, never a transcript: the messages stay
-    in the record, and the activity reads exactly the step this names. Defaulted, so a call in the
-    older shape without it still decodes."""
+    in the record, and the activity reads exactly the step this names."""
 
 
 class InlineStepOutcome(BaseModel):
@@ -597,9 +580,7 @@ class ActivityExecutor:
     def continues(self, scheduled: ScheduledWork) -> bool:
         """Whether this call's answer is an `InlineStepOutcome` rather than the step's own output.
 
-        A call that is no turn of a step conversation never answers with one. A call that is one sits
-        behind `CONTINUATION_PATCH`, so replaying a history in the older shape answers False and reads
-        what that history holds.
+        A call that is no turn of a step conversation never answers with one. A call that is one always does.
 
         Args:
             scheduled: The scheduled call.
@@ -607,7 +588,7 @@ class ActivityExecutor:
         Returns:
             True when the answer is an `InlineStepOutcome`.
         """
-        return scheduled.conversation is not None and workflow.patched(CONTINUATION_PATCH)
+        return scheduled.conversation is not None
 
 
 def _exhausted_gate(exc: RetryExhaustedError) -> ApplicationError:

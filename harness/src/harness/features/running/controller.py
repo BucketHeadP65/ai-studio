@@ -455,7 +455,7 @@ def _live_envelope(session: Runtime, spend: SpendLogQueries) -> dict[str, object
 
 
 def _envelope(record: RunArchiveRecord, spend: SpendLogQueries) -> dict[str, object]:
-    """One archived run without its heavy fields, as a listing reads it, a missing checked outcome read as unknown."""
+    """One archived run without its heavy fields, as a listing reads it."""
     return {
         **record.model_dump(mode="json", exclude={"spec", "values", "events", "conversations", "reviewed"}),
         "result": record.result.model_dump(mode="json"),
