@@ -262,6 +262,7 @@ class TestSearchRankingMetrics:
             update={
                 "folded_units": (
                     FoldedUnit(id="page.unread#s1", hit_level="section"),
+                    FoldedUnit(id="page.cut#s1", hit_level="section", snippet="\u2026"),
                     FoldedUnit(id="page.gold#s1", hit_level="section", snippet="The sentence that decides the claim."),
                 )
             }

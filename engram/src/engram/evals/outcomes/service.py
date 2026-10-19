@@ -538,8 +538,13 @@ def _hit_ref(hit: SearchHit) -> str:
 
 
 def _ranked_refs(result: SearchResult) -> list[str]:
-    """Each hit's bare id in rank order, each followed by its folded units that carry a snippet, best first."""
-    return [ref for hit in result.hits for ref in (_hit_ref(hit), *(unit.id for unit in hit.folded_units if unit.snippet and unit.snippet.strip()))]
+    """Each hit's bare id in rank order, each followed by its folded units whose snippet holds text, best first."""
+    return [ref for hit in result.hits for ref in (_hit_ref(hit), *(unit.id for unit in hit.folded_units if _holds_text(unit.snippet)))]
+
+
+def _holds_text(snippet: str | None) -> bool:
+    """Whether a snippet holds more than whitespace and the ellipsis that ends a cut snippet."""
+    return snippet is not None and bool(snippet.replace("\u2026", "").strip())
 
 
 async def _search_call_ranking(
@@ -567,7 +572,7 @@ async def search_ranking_metrics(
 ) -> SearchRankingMetrics:
     """Score each `search` call's own ordered hits, parsed from its delivered-evidence payload.
 
-    Each hit's folded units that carry a snippet rank right after it, best first, since the model received their text.
+    Each hit's folded units whose snippet holds text rank right after it, best first.
 
     Args:
         tool_calls: The trial's own tool calls, in any order (each call's own `ordinal` is preserved

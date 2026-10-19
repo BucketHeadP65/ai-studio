@@ -146,7 +146,7 @@ Under `--code-mode` seen recall reads the `run_code` output the model reads, nev
 own tool returns directly. The candidates are every unit that any tool call of any program in the
 case returned so far, as code mode records them on each call's return (`metadata["tool_returns"]`)
 and read by the same rules as a direct call, so a search in one call that a later call prints
-counts. A unit's text is a hit's snippet, a folded unit's snippet, a fetched unit's body, a leveled fetch's content, a
+counts. A text holding only whitespace and the ellipsis of a cut snippet is no text. A unit's text is a hit's snippet, a folded unit's snippet, a fetched unit's body, a leveled fetch's content, a
 child's summary, or a SQL row's `text`, `quote`, `snippet` or `body` (`api.claims` serves a claim's
 text and quote as `text` and `quote`). A candidate counts when an output carries the first 60 characters of its text, or all of it
 when shorter. Whitespace is collapsed on both sides, and the escapes a printed Python value or a
@@ -902,9 +902,11 @@ land. `ranked_metrics` (`RankedMetrics`: `recall`, `precision`, `reciprocal_rank
 
 A search hit's folded units carry an id, a level, a ref and a short snippet of the text each matched. A folded unit
 with a snippet is content the model received, so each `search` call's ranking counts it right after its hit, best
-first, and seen recall counts it as a unit the trial saw. A folded unit whose snippet is missing or empty carries no
-content and counts in neither. The surfaced layer reads a call's delivered sources, which list a hit's own unit and
-never its folded units.
+first, the order the agent reads them in, and seen recall counts it as a unit the trial saw. Each such folded unit moves
+every later hit of the call one rank down. A folded unit whose snippet is missing, empty or only the ellipsis of a cut
+snippet carries no content and counts in neither. In code mode a folded unit with a snippet is a candidate like a hit,
+so it counts when an output carries its text or prints its id, ref or page id as a word. The surfaced layer reads a
+call's delivered sources, which list a hit's own unit and never its folded units.
 
 Granularity (`"page"` collapses a reference to everything before its first `#` anchor delimiter,
 `"unit"` scores it exact) is a named argument on every layer function, applied identically to `got`

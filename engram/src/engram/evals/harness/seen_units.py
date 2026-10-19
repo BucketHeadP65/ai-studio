@@ -4,7 +4,8 @@ A search names each hit and each folded unit that carries a snippet, a fetch the
 unit and every child it lists, and a graph answer each node. A SQL row names the units in its `id`, `page_id`,
 `section_id`, `claim_id` and `source_id` columns, never a relation end such as `src_id`. A unit's text is a hit's
 snippet, a folded unit's snippet, a fetched body, a leveled fetch's content, a child's summary or a SQL row's `text`,
-`quote`, `snippet` or `body`, and a claim counts only with its text. In code mode
+`quote`, `snippet` or `body`, and a claim counts only with its text. A text holding only whitespace and the ellipsis
+that ends a cut snippet is no text. In code mode
 a unit any program tool call of the case returned counts when a `run_code` output carries the first 60 characters of its
 text, or, once every returned text the output carries is cut out, its id, ref or page id as a word. Any other result
 names no unit, and a tool return of any shape is read without raising.
@@ -47,6 +48,9 @@ _PROGRAM_RETURNS = "tool_returns"
 
 # The kinds of ref that name a listing rather than a unit.
 _LISTING_KINDS = frozenset({"collection", "group"})
+
+# The mark a cut snippet ends with. A snippet that holds nothing else carries no text.
+_ELLIPSIS = "\u2026"
 
 # How many leading characters of a unit's text, whitespace collapsed, an output must carry for the unit to count.
 _TEXT_KEY_CHARS = 60
@@ -221,7 +225,7 @@ def _carried(output: ToolReturnContent, received: Sequence[_Received], texts: Se
     """The received units a `run_code` output carries: by their text, then by an id, ref or page id outside every returned text."""
     text = _collapsed(" ".join(_ESCAPE.sub(_unescaped, string) for string in _strings(output)))
     by_text = {unit.unit for unit in received if (key := _text_key(unit.text)) and key in text}
-    cut = sorted({whole for whole in map(_collapsed, texts) if whole and whole[:_TEXT_KEY_CHARS] in text}, key=len, reverse=True)
+    cut = sorted({whole for whole in map(_collapsed, texts) if _has_text(whole) and whole[:_TEXT_KEY_CHARS] in text}, key=len, reverse=True)
     words = frozenset(_words(_without(text, cut), collection))
     carried = by_text | {unit.unit for unit in received if unit.unit in words or unit.page in words}
     yield from (unit.unit for unit in received if unit.unit in carried)
@@ -257,7 +261,7 @@ def _collapsed(text: str) -> str:
 
 def _text_key(text: str | None) -> str:
     """The leading characters of a unit's text an output must carry, empty when the unit came with no text."""
-    return _collapsed(text)[:_TEXT_KEY_CHARS] if text is not None else ""
+    return _collapsed(text)[:_TEXT_KEY_CHARS] if text is not None and _has_text(text) else ""
 
 
 def _without(text: str, texts: Sequence[str]) -> str:
@@ -283,8 +287,8 @@ def _words(text: str, collection: str) -> Iterator[str]:
 
 
 def _has_text(value: ToolReturnContent) -> bool:
-    """Whether a field holds text with more than whitespace in it."""
-    return isinstance(value, str) and bool(value.strip())
+    """Whether a field holds text with more than whitespace and the ellipsis that ends a cut snippet in it."""
+    return isinstance(value, str) and bool(value.replace(_ELLIPSIS, "").strip())
 
 
 def _unit_of_ref(ref: str, collection: str) -> str | None:

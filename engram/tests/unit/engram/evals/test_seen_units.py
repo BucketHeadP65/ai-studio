@@ -82,6 +82,37 @@ def test_a_search_names_each_folded_unit_that_carries_a_snippet():
     assert seen == ("note.alpha", "note.alpha#s1", "note.alpha#c1")
 
 
+def test_a_snippet_that_is_only_an_ellipsis_carries_no_text():
+    hit = SearchHit(
+        id="note.alpha#c1",
+        hit_level="claim",
+        page_id="note.alpha",
+        snippet="\u2026",
+        score=1.0,
+        folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet=" \u2026 "),),
+    )
+
+    seen = seen_units(_returned(("search", SearchResult(hits=(hit,), next_steps=_NEXT))), collection="notes")
+
+    assert seen == ()
+
+
+def test_in_code_mode_an_ellipsis_alone_never_matches_a_printed_snippet():
+    cut = "The second day of the vote count in the northern\u2026"
+    hit = SearchHit(
+        id="note.alpha",
+        hit_level="card",
+        snippet=cut,
+        score=1.0,
+        folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet="\u2026"),),
+    )
+    search = SearchResult(hits=(hit,), next_steps=_NEXT)
+
+    seen = seen_units(_run_code({"output": f"{cut}\n"}, ("search", search)), collection="notes")
+
+    assert seen == ("note.alpha",)
+
+
 def test_in_code_mode_a_printed_folded_snippet_counts_for_its_unit():
     snippet = "The vote count moved to the end of the month, after the second recount."
     hit = SearchHit(id="note.alpha", hit_level="card", score=1.0, folded_units=(FoldedUnit(id="note.alpha#s1", hit_level="section", snippet=snippet),))
