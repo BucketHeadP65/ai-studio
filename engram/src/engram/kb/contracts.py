@@ -51,12 +51,10 @@ from engram.kb.domain.schema import (
 from engram.kb.domain.verify import quotes_in_mirror
 from engram.kb.domain.vocabulary import facet_choices_drift, parse_vocabulary, schema_vocabulary_drift
 from engram.kb.exceptions import KnowledgeBaseSchemaMissingError, NoteGrammarError
-from engram.kb.infrastructure.indexed_schema import load_indexed_schema
 from engram.kb.infrastructure.note_sidecars import load_sheet, notes_home, save_sheet
 from engram.kb.infrastructure.policy_page import DEFAULT_GUIDANCE, read_policy, render_policy, write_policy
 from engram.kb.infrastructure.retrieval_policy_files import ACTIVE_POLICY_PATH, apply_retrieval_policy
 from engram.kb.infrastructure.schema_file import load_knowledge_base_schema
-from engram.kb.internal_contracts import IndexedSchemaQueries
 from engram.kb.service import ApplyRetrievalPolicyHandler
 
 __all__ = [
@@ -74,7 +72,6 @@ __all__ = [
     "DerivationEntry",
     "FacetSpec",
     "FrontmatterFieldSpec",
-    "IndexedSchemaQueries",
     "KnowledgeBaseNote",
     "KnowledgeBaseSchema",
     "KnowledgeBaseSchemaMissingError",
@@ -103,7 +100,6 @@ __all__ = [
     "apply_retrieval_policy",
     "claims_not_read_back",
     "facet_choices_drift",
-    "load_indexed_schema",
     "load_knowledge_base_schema",
     "load_sheet",
     "notes_home",

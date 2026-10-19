@@ -2137,3 +2137,41 @@ class TestGateModeAndRefreshResultsMigration:
         assert rows["queued"] is None
         assert rows["other"] == "left as written"
 
+
+    async def test_the_indexed_schema_function_is_dropped_and_the_downgrade_restores_it(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0070")
+        definition_before = await _function_definition(target_url, _INDEXED_SCHEMA)
+        comment_before = await _function_comment(target_url, schema="api", name="indexed_schema")
+        column_comment_before = await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT)
+        assert definition_before is not None
+        assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
+
+        run_upgrade(target_url, "0071")
+
+        assert not await _function_exists(target_url, _INDEXED_SCHEMA)
+        assert "indexed_schema" not in str(await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT))
+
+        run_downgrade(target_url, "0070")
+
+        assert await _function_definition(target_url, _INDEXED_SCHEMA) == definition_before
+        assert await _function_comment(target_url, schema="api", name="indexed_schema") == comment_before
+        assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
+        assert await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT) == column_comment_before
+
+
+_INDEXED_SCHEMA = "api.indexed_schema(text)"
+
+_INDEXED_SCHEMA_COLUMN_COMMENT = (
+    "SELECT col_description('kb.index_fingerprint'::regclass, attnum) FROM pg_attribute"
+    " WHERE attrelid = 'kb.index_fingerprint'::regclass AND attname = 'spec'"
+)
+
+
+async def _function_definition(url: str, signature: str) -> str | None:
+    """The full `CREATE FUNCTION` text of exactly this signature, or None when the database carries none."""
+    connection = await asyncpg.connect(_asyncpg_dsn(url))
+    try:
+        return await connection.fetchval("SELECT pg_get_functiondef(to_regprocedure($1))", signature)
+    finally:
+        await connection.close()
