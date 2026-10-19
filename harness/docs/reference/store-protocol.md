@@ -127,15 +127,13 @@ page per name to one page per version. History filed under an address is lost on
 and lost silently, because the empty lookup that results is indistinguishable from "never ran".
 `workflow_id` is still recorded as provenance: it says where the run was launched from.
 
-`spec_hash` defaults to `""`, and that default is load-bearing in the same way `WorkflowFingerprint.steps`
-is (see I5): records written before content addressing exist and must still parse. `""` means
-*this record does not know what it exercised*, unknown, not "matches nothing". Asking an evidence log or
-`trust_level` for `""` raises: `require_spec_identity` refuses it, because answering would return
-every unknown record as though the question had been settled.
+`spec_hash` is required and never empty: every run, approval and grade names the content address it
+is about, and a record without one does not validate. Asking an evidence log or `trust_level` for `""`
+raises: `require_spec_identity` refuses it, because no record could ever answer it.
 
 The evidence log is a separate port, `EvidenceLog`, with one shipped implementation
-(`FileEvidenceLog` in `adapters/evidence_log.py`, one JSONL file, append-only, a damaged
-line skipped rather than fatal). **A library is not required to be the evidence log**, and neither
+(`FileEvidenceLog` in `core.ai.workflows.infrastructure.evidence_log`, one JSONL file, append-only, a damaged
+line skipped with a warning naming the file, the line number and the reason, rather than fatal). **A library is not required to be the evidence log**, and neither
 shipped library is one. It answers two questions:
 
 | Verb | Keyed on | Answers |
@@ -493,8 +491,7 @@ evidence about this one. Because `version` is a field of the spec, a version bum
 hash: version scoping falls out of content addressing rather than needing a filter beside it.
 Two workflows that differ anywhere differ here.
 
-`trust_level(events, version=n)` remains, and it is the only question a record written before
-content addressing can still answer. It filters to events that recorded `workflow_version == n`
+`trust_level(events, version=n)` asks the weaker version-only question. It filters to events that recorded `workflow_version == n`
 and excludes an event that recorded no version. The two filters compose. Without either, an
 adapted child re-saved at its parent's address inherits the parent's runs and reads
 `machine-confirmed` having never executed anything. This is the same ruling staleness makes:
@@ -747,9 +744,8 @@ the way it is. `RunEvidence.spec_hash` exists precisely because an id cannot say
 cannot be relied on to stay put: under a name-scoped id an adapted child re-saved at the same
 address would inherit its parent's runs, and under any re-keying the parent's own runs would
 become unfindable. So a run records the content address of what it exercised, `trust_level` and
-`history_for` key on that, and an event that recorded none counts for nothing.
-`RunEvidence.workflow_version` answers the weaker version-only question for records that predate
-the hash.
+`history_for` key on that. A line in the log that names no content address is no record at all: the
+reader skips it with a warning. `RunEvidence.workflow_version` answers the weaker version-only question.
 
 Invariant I4 constrains such a library in the other direction: whatever its id scheme, the
 parent a child's lineage names must still be fetchable. A name-scoped library therefore needs

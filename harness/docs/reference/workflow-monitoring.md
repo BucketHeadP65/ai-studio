@@ -208,8 +208,6 @@ A parameter whose schema cannot be resolved at all -- a hand-edited library page
 
 The archive keeps what the run was given as the JSON it was given: `RunArchiveRecord.params`,
 `RunEvidence.params`, the on-disk run log's `params`, and the durable `RunRequest.params` all carry it.
-A record, a log or a history written when every argument was text still parses, and still reads as that
-text.
 
 ## Step chat, a running step's own conversation, streamed and steered
 
@@ -374,9 +372,10 @@ timeout and runner. At boot the process's own session's run log is checked first
 registered project's sessions folder (`restore_waiting_runs`). A run log relaunches by itself only when its session kind is
 "runner" (the Run button in the library) or its runner starts with `app:schedule:` (a schedule). A run relaunching by itself
 keeps its logged gate mode, timeout and runner, and its logged session kind. Any other run is paused by the restart. That
-means any run in a chat or follow-me session, including the process's own session, and any run log written before the
-session kind was recorded unless its runner is a schedule's. Nothing runs, the session keeps the run, and its card shows it
-paused with its start time, gate mode, finished steps and spend. The person resumes or stops it.
+means any run in a chat or follow-me session, including the process's own session. Nothing runs, the session keeps the
+run, and its card shows it paused with its start time, gate mode, finished steps and spend. The person resumes or stops
+it. A run log missing a key every run log carries is unreadable: boot logs a warning naming its path, leaves the file in
+place, and neither relaunches nor pauses anything from it.
 
 Resuming a run paused by the restart uses the logged workflow unless the person sends an edited graph, which is validated,
 and keeps the logged gate mode, gate timeout and runner. Stopping it ends it from its run log with its evidence and archive
@@ -408,8 +407,8 @@ records the decision, emits no rewind, and fails the run with `RetryExhaustedErr
 -- reviewed value included -- so the ending can say what was asked for and never got done. On the durable engine that
 arrives as a non-retryable `ApplicationError` of type `RetryExhaustedError` whose detail is that same rejection.
 
-A gate that names no ceiling serializes without the field, so a workflow saved before the ceiling existed and one
-saved now are the same document and key to the same content address.
+A gate that names no ceiling serializes without the field, so a gate with no ceiling adds nothing to the document or
+to its content address.
 
 Which decider a gate actually reaches (a person waiting at `/api/decide`, this run's own orchestrator, or nobody)
 depends on the run's `gate_mode` and on whether the gate itself is a custom `orchestrator-gate` rather than a
@@ -479,9 +478,8 @@ the `generation` the counts belong to, one `OutcomeCheck` per required gate, and
 values earned. A run that completes having skipped everything is `failed`, not `completed`-and-fine. A run whose gate
 spent its last reach is `failed` and its check carries the refusal whole: who refused, over which generation and
 digest, the feedback and the repair that was asked for. A run that did not complete, whose current generation is still
-missing a disposition, whose facts contradict each other, or whose workflow declares no result at all is `unknown`,
-and so is a run that predates this field. `unknown` is a projection, never a rewrite: the record on disk keeps
-whatever it was written with.
+missing a disposition, whose facts contradict each other, or whose workflow declares no result at all is `unknown`.
+Every run's evidence and archive record carries its result, so `unknown` is always a classification the run ended with.
 
 `succeeded` is checked producer success and nothing more: every piece of the declared primary work
 settled and every required gate's decision covers the exact bytes the run ended holding. It is not a
@@ -499,7 +497,7 @@ machine confirmation. Every other completed run counts in `unconfirmed_runs`. A 
 therefore stays `unverified` however often it runs. Approval is untouched and still independent.
 
 **`recent_runs`** (the chat read) says both halves per line, `ran <outcome>, checked outcome <status> (n/m succeeded,
-…)`, and says plainly when a run predates the field. **`run_values`** answers what the run recorded and is not a check
+…)`. **`run_values`** answers what the run recorded and is not a check
 of any kind: a full list of values there is no evidence at all about whether the work was any good.
 
 ## A measured pilot trial: what it spends, and what its run is graded as
@@ -601,7 +599,7 @@ outcome: the refused check carries the `feedback` it gave and the `requested_rep
 and the run's summary names the repair. A gate that refused and was then satisfied carries the
 acceptance instead, because that is the decision the run ended on.
 
-A missing legacy result stays unknown and is never filled in. A completed run whose result is
+A completed run whose result is
 `partial`, `failed` or `unknown` cannot pass task outcome however much of the work landed. A skip is
 never work done. Owner acceptance is not among these four: it is a separate append-only event, and a
 graded outcome carries none of it.
@@ -1070,7 +1068,7 @@ acceptance unknown.
 
 A saved workflow carries two optional records beside its spec, and they answer different questions. Neither is part of
 the workflow. Both are written only when somebody wrote them, and an absent one is stored absent, so a workflow saved
-without either holds exactly the keys a workflow saved before either existed holds.
+without either holds no key for them.
 
 **The presentation** (`core.ai.workflows.contracts.WorkflowPresentation`) is the author's words about the workflow, for the
 surfaces a person meets it on: what it is for, what a run produces, what the person does during one, what to reach for
