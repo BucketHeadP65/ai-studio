@@ -383,15 +383,40 @@ async def announce_identity(container: Resolver, active: ActiveKnowledgeBase, *,
     return identity
 
 
-def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
-    """Run `coro` on a fresh event loop, turning any error but `typer.Exit` into an exit prefixed `on_error` that names a failed service."""
+def run_naming_connection_failures[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
+    """Run `coro` on a fresh event loop, turning a failed connection into one line and an exit with code 1.
+
+    The line is `on_error`, then the service the connection reached and the error's own text. Any other error is raised
+    as it is.
+
+    Args:
+        coro: The command's work.
+        on_error: What the line opens with, such as `index failed`.
+        database: The redacted URL of the database the command opens, or None when it opens none.
+
+    Returns:
+        What `coro` returns.
+
+    Raises:
+        typer.Exit: With code 1, after the line is printed, when a connection to a service failed.
+    """
     try:
         return asyncio.run(coro)
+    except Exception as exc:
+        named = connection_failure_message(exc, database=database)
+        if named is None:
+            raise
+        _fail(f"{on_error}: {named}")
+
+
+def _run_command[T](coro: Coroutine[object, object, T], *, on_error: str, database: str | None) -> T:
+    """Run `coro` like `run_naming_connection_failures`, turning any other error but `typer.Exit` into an exit prefixed `on_error`."""
+    try:
+        return run_naming_connection_failures(coro, on_error=on_error, database=database)
     except typer.Exit:
         raise
     except Exception as exc:  # noqa: BLE001 (top-level CLI guard: any failure becomes a clean _fail exit)
-        named = connection_failure_message(exc, database=database)
-        _fail(f"{on_error}: {named if named is not None else exc}")
+        _fail(f"{on_error}: {exc}")
 
 
 class KnowledgeBaseMissingError(ValueError):

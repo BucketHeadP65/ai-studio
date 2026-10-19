@@ -563,6 +563,14 @@ evals score failed: embedding endpoint example.openai.azure.com: Connection erro
 evals run failed: database localhost:5434/knowledge_bases: [Errno 61] Connect call failed ('127.0.0.1', 5434)
 ```
 
+`studio index`, `studio ingest` and `studio sync` print the same line for a failed connection (`index failed: ...`,
+`ingest failed: ...`, `sync failed: ...`) and exit 1 with no traceback, so the last line of `studio index`, the one the
+plugin's session-start hook shows, names the service. Any other error those three commands meet still raises as before.
+
+```
+index failed: embedding endpoint example.openai.azure.com: Connection error.
+```
+
 The text comes from `core.connection_failures.connection_failure_message`, the same rule an evaluation run uses for
 a failed case. Any other failure keeps its own text unchanged.
 

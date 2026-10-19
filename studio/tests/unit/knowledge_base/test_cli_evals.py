@@ -31,7 +31,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx2
 import pytest
 import typer
 
@@ -73,8 +72,6 @@ from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.specs import research_spec
-from openai import APIConnectionError
-from pydantic_ai.exceptions import ModelAPIError
 from pydantic_evals.reporting import EvaluationReport
 from typer.testing import CliRunner
 from wireup import AsyncContainer
@@ -102,6 +99,7 @@ from studio.knowledge_base.settings import (
     fetch_application_settings,
 )
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, EvaluationSqlTools, ReaderSqlGateway
+from tests.support.connection_errors import endpoint_connection_error
 from tests.support.http_app import write_settings_json
 
 if TYPE_CHECKING:
@@ -1788,13 +1786,6 @@ class _FailingHandler:
         raise self.error
 
 
-def _endpoint_connection_error(path: str) -> ModelAPIError:
-    """What pydantic-ai raises when a connection to the OpenAI endpoint at `path` never opened."""
-    error = ModelAPIError("deployment-a", "Connection error.")
-    error.__cause__ = APIConnectionError(request=httpx2.Request("POST", f"https://example.openai.azure.com/openai/v1/{path}"))
-    return error
-
-
 class TestScoreCli:
     def test_score_help_lists_the_flags(self):
         result = runner.invoke(app, ["evals", "score", "--help"])
@@ -1845,8 +1836,8 @@ class TestScoreCli:
     @pytest.mark.parametrize(
         ("error", "service"),
         [
-            (_endpoint_connection_error("embeddings"), "embedding endpoint example.openai.azure.com"),
-            (_endpoint_connection_error("responses"), "model endpoint example.openai.azure.com"),
+            (endpoint_connection_error("embeddings"), "embedding endpoint example.openai.azure.com"),
+            (endpoint_connection_error("responses"), "model endpoint example.openai.azure.com"),
         ],
         ids=["embedding endpoint", "model endpoint"],
     )

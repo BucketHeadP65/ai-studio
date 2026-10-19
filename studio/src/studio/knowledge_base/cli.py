@@ -107,6 +107,7 @@ from studio.knowledge_base.cli_support import (
     resolve_knowledge_base_alias,
     resolve_knowledge_base_root,
     resolve_partition,
+    run_naming_connection_failures,
     settings_knowledge_base_path,
     unreachable_line,
     vault_option,
@@ -978,7 +979,9 @@ def index_cmd(
         collection=partition, embed=embed, full=full, dry_run=dry_run, summaries=summaries, collection_named=collection is not None
     )
     try:
-        identity, report = asyncio.run(_index_after_identity(container, settings, command, collection=partition))
+        identity, report = run_naming_connection_failures(
+            _index_after_identity(container, settings, command, collection=partition), on_error="index failed", database=settings.database
+        )
     except CollectionIsForeignError as exc:
         typer.echo(
             f"collection {exc.collection} was indexed from {exc.stored_root}, this knowledge base is at {exc.knowledge_base_root}. "
@@ -1064,8 +1067,10 @@ def ingest_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    result = asyncio.run(
-        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema)
+    result = run_naming_connection_failures(
+        _ingest_after_identity(container, settings, collection=collection, payload_path=payload, embed=embed, schema=schema),
+        on_error="ingest failed",
+        database=settings.database,
     )
     typer.echo(
         f"ingested {result.page_id} into {result.collection}: "
@@ -1336,8 +1341,10 @@ def sync_cmd(
     configure_logging(settings.application.logging)
     container = _build_container(ctx, settings)
     schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    scan, report = asyncio.run(
-        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection)
+    scan, report = run_naming_connection_failures(
+        _sync_after_identity(container, settings, SyncMirrors(dry_run=dry_run, limit=limit), collection=schema.retrieval.collection),
+        on_error="sync failed",
+        database=settings.database,
     )
     if scan is not None:
         _print_scan_report(scan)
