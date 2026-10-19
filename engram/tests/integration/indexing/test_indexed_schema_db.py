@@ -128,7 +128,7 @@ class TestIncrementalCompileFillsInTheSpecColumn:
     Two real indexes against the same on-disk knowledge_base: the first is a full rebuild (no prior
     fingerprint), the second — nothing on disk changed — takes the incremental path
     (`run_incremental`, `IndexFingerprints.touch`, not `set`). `spec` is NULLed between the two
-    to stand in for a row that predates 0043 (or was NULL for any other reason): if `touch` did not
+    to stand in for a row a page write created: if `touch` did not
     also re-stamp `spec`, the column would stay NULL forever on a collection that never runs a full
     rebuild again.
     """

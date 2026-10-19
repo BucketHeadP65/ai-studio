@@ -368,8 +368,8 @@ class IndexFingerprintORM(KbBase):
     A mismatch on `indexer_version`, `spec_hash`, `vocabulary_hash` or `embed_model` forces a full rebuild.
     `switches` carries the retrieval switches decided by an index or by a page write (`RetrievalSwitches`), served to readers
     only through `api.retrieval_switches`. This table itself is ungranted. `spec` carries the validated
-    `KnowledgeBaseSchema` the index ran with, as JSON, served through `api.indexed_schema`. It is null
-    until the collection is indexed again.
+    `KnowledgeBaseSchema` the index ran with, as JSON, served through `api.indexed_schema`. It is null on a
+    row a page write created, until the collection is indexed.
     """
 
     __tablename__ = "index_fingerprint"

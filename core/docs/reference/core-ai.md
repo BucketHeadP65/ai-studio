@@ -245,8 +245,8 @@ refused presentation leaves no file and no page.
 
 Reads are deliberately the other way round. A stored presentation that no longer parses reads as
 absent, the same rule `fetch_fingerprint` and `fetch_lineage` already follow: a hand-edited file
-or page must not take down the listing that would have shown it. A card written before
-presentations existed parses as `None` and re-saves byte for byte.
+or page must not take down the listing that would have shown it. A card saved without a presentation
+parses as `None` and re-saves byte for byte.
 
 ### The intent: what the person asked for
 
