@@ -285,8 +285,7 @@ class SearchSchema:
             ranks its nearest rows by exact distance, the fusion weighs each leg, a lone exact title goes first,
             each group keeps at most `rows_per_group` hits and, when the tuning sets `max_hits_per_document`, each
             document keeps at most that many and folds the rest under its best hit. Unset, the search renders
-            its fixed constants, unchanged from before tuning existed. Every surface name must then be a plain
-            identifier, since it names a weight.
+            its fixed constants. Every surface name must then be a plain identifier, since it names a weight.
     """
 
     surfaces: tuple[SearchSurface, ...]

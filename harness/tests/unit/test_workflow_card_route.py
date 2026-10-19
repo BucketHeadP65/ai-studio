@@ -112,7 +112,7 @@ class FakeCardStore:
 
 
 class CardlessStore(FakeCardStore):
-    """The same library, minus `fetch_card` -- a backend that predates the capability."""
+    """The same library, minus `fetch_card`, a capability the library port leaves optional."""
 
     fetch_card = None  # type: ignore[assignment]
 
@@ -187,7 +187,7 @@ async def test_the_get_door_carries_the_workflows_total_spend(quarterly_report: 
     assert Decimal(payload["spend"]["cost_usd"]) > Decimal(0)
 
 
-async def test_a_store_that_predates_the_card_falls_back_to_the_spec_s_own_words(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+async def test_a_store_without_cards_falls_back_to_the_spec_s_own_words(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     controller = _install(CardlessStore({"wf.report": quarterly_report}), registry, tmp_path)
 
     payload = await _get(controller, "wf.report")

@@ -59,8 +59,8 @@ class RunRecord(BaseModel):
         workflow_id: The reuse path's matched workflow, or `None` on the baseline path.
         hit_rank: The reuse path's rank of the matched workflow in its search results, or `None`.
         drift: The reuse path's list of adaptations the matched workflow needed, or `None`.
-        at: When the run was recorded, so sweeps can be ordered. `None` on records written
-            before the field existed.
+        at: When the run was recorded, so sweeps can be ordered. `None` on the proof records
+            committed under `proof/out/` without one, whose time cannot be recovered.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
