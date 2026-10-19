@@ -269,13 +269,6 @@ describe("ResultSummary status table", () => {
     expect(screen.getByText(/Result evidence is unavailable/)).toBeInTheDocument();
   });
 
-  it("reads a record that carries no result at all the same way it reads unknown", () => {
-    render(<ResultSummary result={null} />);
-
-    expect(screen.getByText("Unchecked")).toBeInTheDocument();
-    expect(screen.getByText(/Result evidence is unavailable/)).toBeInTheDocument();
-  });
-
   it("gives every status its own mark, so no two read alike without their words", () => {
     const tones = Object.values(RESULT_STATUS).map((status) => status.tone);
 

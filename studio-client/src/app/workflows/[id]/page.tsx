@@ -500,7 +500,7 @@ export function WorkflowView({ id }: WorkflowViewProps): ReactElement {
       value: activeValues?.[field.path] ?? "not recorded",
     }),
   );
-  const artifacts = statEnvelope?.result?.artifacts ?? [];
+  const artifacts = statEnvelope?.result.artifacts ?? [];
   const actions = detail.data?.presentation?.actions ?? [];
   // What people have made of this run, read off its own record. Undefined while no archived
   // record is in view, which is a different thing from a record carrying no review.
