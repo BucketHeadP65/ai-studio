@@ -748,10 +748,10 @@ even when another case in the same cycle failed. Recorded custody is a good-fait
 cryptographic proof of identity, the audit verifies internal consistency, never who actually held
 the keyboard.
 
-`DatasetStamp` (`generation/domain/datasets.py`) carries two defaulted governance fields so every sidecar
-written before this layer still loads: `held_out_case_ids` (empty by default) names the version's
-independently-withheld cases, and `independent_holdout_verified` (`None` by default) records the
-last audit's verdict for them.
+`DatasetStamp` (`generation/domain/datasets.py`) carries two governance fields: `held_out_case_ids`
+(empty for a version with no held-out claim) names the version's independently-withheld cases, and
+`independent_holdout_verified` (`None` for a version never audited) records the last audit's verdict
+for them.
 
 ## Delivered evidence and the guarded trial toolset
 

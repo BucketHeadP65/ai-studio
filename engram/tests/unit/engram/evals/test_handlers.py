@@ -1451,22 +1451,6 @@ class TestTuneRetrievalHandler:
         assert all(verdict.verdict == "fresh" for verdict in artifact.verdicts)
         assert "Structural integrity" in Path(report.markdown).read_text(encoding="utf-8")
 
-    def test_report_without_the_staleness_field_deserializes_as_none(self):
-        # An old serialized report predates the additive field, it must still load (None default).
-        report = TuningReport.model_validate(
-            {
-                "out": "w.yaml",
-                "n_rounds": 1,
-                "accepted_rounds": 1,
-                "stop_reason": "max_rounds",
-                "baseline_recall": 0.4,
-                "winner_recall": 0.6,
-            }
-        )
-
-        assert report.dataset_staleness is None
-
-
 class TestApplyRuntimeGuardrails:
     """`--apply-runtime` applies iff all four guardrails pass; every refusal is a reported outcome.
 
@@ -2105,27 +2089,6 @@ class TestVerifyRecommendationStaleness:
         report = await handler.handle(VerifyRecommendation(recommendation=str(recommendation_path)))
 
         assert report.dataset_staleness is None
-
-    def test_report_without_the_staleness_field_deserializes_as_none(self):
-        # An old serialized verify report predates the additive field, it must still load (None default).
-        report = VerifyReport.model_validate(
-            {
-                "recommendation": "a.yaml",
-                "out": "a.verify.md",
-                "dataset": "d.yaml",
-                "collection": "research",
-                "n_retained": 2,
-                "n_dropped": 0,
-                "predictions_held": 1,
-                "predictions_failed": 0,
-                "predictions_unmeasurable": 0,
-                "targeted_mean_delta": 0.0,
-                "untargeted_mean_delta": 0.0,
-            }
-        )
-
-        assert report.dataset_staleness is None
-
 
 # -- FreezeDatasetHandler ------------------------------------------------------
 #

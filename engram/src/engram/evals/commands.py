@@ -429,11 +429,11 @@ class FreshnessCheckedReport(BaseModel):
         out: The freshness report YAML path written.
         markdown: The markdown summary path written beside it.
         top_stale_pages: The pages that invalidated the most cases, as (page id, count), ranked by
-            descending count then ascending page id and capped to the top N shown. Empty by default,
-            so an older saved report without the field still loads.
+            descending count then ascending page id and capped to the top N shown. Empty when no case
+            went stale.
         duration_seconds: How long the check took, measured by the injected clock.
         n_premise_checked: How many structural premises the check recomputed. Premises are reported
-            and never change a verdict. The zero default lets an older saved report load.
+            and never change a verdict.
         n_premise_broken: How many of those premises are broken.
     """
 
@@ -647,8 +647,7 @@ class TuningReport(BaseModel):
             the hold-out is disabled.
         duration_seconds: The run's wall-clock duration, measured by the injected clock.
         dataset_staleness: The stale fraction of the run's dataset against the knowledge base, reported
-            and never blocking the run. `None` when no freshness check was wired, so an older saved
-            report without the field still loads.
+            and never blocking the run. `None` when no freshness check was wired.
         frozen_baseline_recall: The baseline's primary metric on the frozen split, or `None`
             when the run had no frozen split.
         frozen_winner_recall: The winner's primary metric on the frozen split, or `None`
@@ -985,8 +984,7 @@ class VerifyReport(BaseModel):
         run_id: The saved `evaluation_runs` row id for the verify run, or None when it was not saved.
         duration_seconds: The run's wall-clock duration, measured by the injected clock.
         dataset_staleness: The stale fraction of the re-run dataset against the knowledge base, reported
-            and never blocking the verify. `None` when no freshness check was wired, so an older saved
-            report without the field still loads.
+            and never blocking the verify. `None` when no freshness check was wired.
     """
 
     model_config = ConfigDict(frozen=True)
