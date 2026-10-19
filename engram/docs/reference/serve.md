@@ -242,9 +242,7 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   problem and the setting to fix (engram ADR-0046). `infrastructure.database.reader_secret` (env
   `APP_INFRASTRUCTURE__DATABASE__READER_SECRET`) is the secret every private reader password is
   derived from. The indexer and the reader must read the same value. `StatusHandler`
-  uses a second admin-URL gateway for the ungranted `kb.*` counts. Runtime retrieval
-  defaults live in `wiki/.dashboard-prefs.json` (gitignored), never `.env`
-  (`studio/src/studio/knowledge_base/http/prefs.py`).
+  uses a second admin-URL gateway for the ungranted `kb.*` counts.
 - **Dialect:** the BM25 backend is selected by `retrieval.dialect` in
   `application_settings.json` (env override `APP_RETRIEVAL__DIALECT`, default
   `pg_textsearch` (the extension the local Postgres ships), with `pg_search` (ParadeDB) opt-in, ADR-0017). It changes only the lexical
@@ -519,8 +517,8 @@ studio serve-http --port 8100
   returns canned `SqlResult` / `SchemaDescription` with no DB.
 - Factories: polyfactory model factories under `tests/support/factories/`.
 - Unit tests: `tests/unit/serve/` (`test_http.py` drives the `/api` contract over an httpx
-  `ASGITransport` with a fake-wired container. `test_queries.py`, `test_mcp_server.py`,
-  `test_jobs.py`, `test_prefs.py`) plus `tests/unit/test_cli_serve.py`.
+  `ASGITransport` with a fake-wired container. `test_queries.py`, `test_mcp_server.py`) plus
+  `tests/unit/test_cli_serve.py`.
 - Integration tier (testcontainers, gated on Docker: the default bed runs `pg_textsearch` and
   Apache AGE, `KNOWLEDGE_BASE_TEST_DIALECT=pg_search` runs ParadeDB and the `cte` walk):
   `tests/integration/test_search.py`, `test_describe_schema.py`, `test_graph.py`,
