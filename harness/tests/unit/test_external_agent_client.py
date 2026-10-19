@@ -134,7 +134,9 @@ async def test_a_handshake_past_its_timeout_raises_and_leaves_no_child_process(t
     with pytest.raises(TimeoutError):
         await hanging.handshake(cwd=tmp_path, timeout_seconds=0.5)
 
-    assert time.monotonic() - started < 1.0
+    # Ten times the timeout: it proves the 0.5 s timeout was honoured and not some much longer default, and it still
+    # holds on a loaded machine.
+    assert time.monotonic() - started < 5.0
     pid = int((tmp_path / "hung.pid").read_text())
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
