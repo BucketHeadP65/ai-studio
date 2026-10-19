@@ -113,8 +113,7 @@ def note_validate_cmd(
     anchors and vocabulary. Links to other notes are not checked here. One notice gives their count instead.
     Warnings and that notice are printed and never fail the command.
     """
-    knowledge_base_override = knowledge_base
-    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base_override)
+    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -126,7 +125,7 @@ def note_validate_cmd(
         _fail(f"parse error: {exc}")
 
     report = validate_note(
-        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base_override)
+        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base)
     )
     _print_validation_report(f"validate {note_path.name}", report)
     if report.n_errors > 0:
@@ -174,8 +173,7 @@ def note_build_cmd(
         _fail(f"refusing to overwrite {out_path} (pass --force to replace it)")
 
     # Everything up to the write can fail, and a failure leaves no file behind.
-    knowledge_base_override = knowledge_base
-    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(knowledge_base_override)
+    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -183,7 +181,7 @@ def note_build_cmd(
     try:
         data = json.loads(Path(payload).read_text(encoding="utf-8"))
         rendered, note, report = _render_and_validate(
-            data, out_path.name, vocabulary, schema, _path_root(knowledge_base_path, schema), knowledge_base_path_origin(knowledge_base_override)
+            data, out_path.name, vocabulary, schema, _path_root(knowledge_base_path, schema), knowledge_base_path_origin(knowledge_base)
         )
     except (OSError, ValueError) as exc:
         _fail(f"invalid payload: {exc}")
@@ -247,8 +245,7 @@ def note_build_batch_cmd(
     that fails writes nothing and is reported. Exits 1 when any entry failed. Nothing is indexed, so run
     `studio index` once afterwards.
     """
-    knowledge_base_override = knowledge_base
-    knowledge_base_path, _ = _resolve_knowledge_base_for_authoring(knowledge_base_override)
+    knowledge_base_path, _ = _resolve_knowledge_base_for_authoring(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -262,7 +259,7 @@ def note_build_batch_cmd(
 
     # Validate every entry before writing any.
     path_root = _path_root(knowledge_base_path, schema)
-    path_root_source = knowledge_base_path_origin(knowledge_base_override)
+    path_root_source = knowledge_base_path_origin(knowledge_base)
     ready: list[tuple[Path, str]] = []
     failures: list[tuple[str, str]] = []
     for index, entry in enumerate(entries):
@@ -327,8 +324,7 @@ def note_normalize_cmd(
     `--knowledge-base`, or from the knowledge base the working directory sits in.
     """
     note_path = Path(path)
-    knowledge_base_override = knowledge_base
-    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base_override)
+    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -353,7 +349,7 @@ def note_normalize_cmd(
         _fail(f"normalized note does not parse: {exc}")
 
     report = validate_note(
-        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base_override)
+        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base)
     )
     if report.n_errors > 0:
         _print_validation_report(f"normalize {note_path.name}", report)

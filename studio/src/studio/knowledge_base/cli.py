@@ -965,11 +965,10 @@ def index_cmd(
     this run or not, though the rows still load. Refuses before writing anything when the database is
     behind the code's migration head, naming both revisions and the fix.
     """
-    knowledge_base_arg = knowledge_base
-    settings = _resolve_settings(knowledge_base_arg, cwd=Path.cwd())
+    settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     configure_logging(settings.application.logging)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
-    container = _build_container(ctx, settings, knowledge_base_origin=KnowledgeBasePathOrigin(source=knowledge_base_path_origin(knowledge_base_arg)))
+    container = _build_container(ctx, settings, knowledge_base_origin=KnowledgeBasePathOrigin(source=knowledge_base_path_origin(knowledge_base)))
     command = IndexKnowledgeBase(
         collection=partition, embed=embed, full=full, dry_run=dry_run, summaries=summaries, collection_named=collection is not None
     )

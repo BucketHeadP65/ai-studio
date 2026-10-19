@@ -274,6 +274,9 @@ def refresh_history(jobs: Sequence[Job], *, limit: int = 20) -> tuple[RefreshRun
 
     Returns:
         The runs, at most `limit` of them.
+
+    Raises:
+        ValidationError: A `done` job's result is not the document a clean pass writes.
     """
     return refresh_runs([fact for job in jobs for fact in refresh_facts(job)], limit=limit)
 
