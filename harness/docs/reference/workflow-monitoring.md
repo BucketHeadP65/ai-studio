@@ -591,10 +591,10 @@ them is inferred from another, and none of them invents a success:
 
 | Dimension | Read from | pass | fail | unknown |
 |---|---|---|---|---|
-| `structural_validity` | `record.outcome` and the result's counts | completed, counts add up | counts disagree, or the execution failed or stopped | no `result` at all |
+| `structural_validity` | `record.outcome` and the result's counts | completed, counts add up | counts disagree, or the execution failed or stopped | never, since every archived run carries its result |
 | `workflow_design` | the `WorkflowIntent` beside the workflow and the `WorkflowResultSpec` it declares | the request is stated, all four expected answers are written, a result is declared | the intent still owes an answer, or the workflow declares no result | no intent was recorded |
 | `evidence_support` | the required `OutcomeCheck`s | every required gate accepted the value the run ended holding | a required gate refused | a required check could not be put. `not_applicable` when the result requires no acceptance |
-| `task_success` | `result.status` and the case's own criterion | `succeeded`, or `noop` where the case permits no work | `partial`, `failed`, or a `noop` the case does not permit | no `result`, or `status == "unknown"` |
+| `task_success` | `result.status` and the case's own criterion | `succeeded`, or `noop` where the case permits no work | `partial`, `failed`, or a `noop` the case does not permit | `status == "unknown"` |
 
 A required gate that spent its last reach is the one place a reviewer's own words reach the checked
 outcome: the refused check carries the `feedback` it gave and the `requested_repair` it asked for,

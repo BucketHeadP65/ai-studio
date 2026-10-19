@@ -311,11 +311,11 @@ class WorkflowAutomationTaskRunner:
             raise EvaluationError(msg, usage=recorded_usage(self.spend, trial.run_id))
         result = record.result
         return WorkflowAutomationExecution(
-            output=result.summary if result is not None else "",
+            output=result.summary,
             usage=recorded_usage(self.spend, trial.run_id),
             diagnostics=(
                 DiagnosticObservation(code="execution_outcome", detail=record.outcome),
-                DiagnosticObservation(code="checked_outcome", detail=result.status if result is not None else "absent"),
+                DiagnosticObservation(code="checked_outcome", detail=result.status),
             ),
             run_id=trial.run_id,
             trial_id=trial.trial_id,
