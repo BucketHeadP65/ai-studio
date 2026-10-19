@@ -129,7 +129,7 @@ class TaskExecution(EvaluationModel):
 
     output: str
     usage: ResourceUsage = ResourceUsage()
-    diagnostics: tuple[DiagnosticObservation, ...] = ()
+    diagnostics: tuple[DiagnosticObservation, ...]
     trace: ExecutionTrace | None = None
 
 

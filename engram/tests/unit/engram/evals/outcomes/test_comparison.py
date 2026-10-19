@@ -393,7 +393,7 @@ async def _trials(
                     repetition=repetition,
                     variant=variant,
                     identity=identity,
-                    execution=TaskExecution(output="the shared method is spectral clustering", usage=ResourceUsage(requests=1), trace=trace),
+                    execution=TaskExecution(output="the shared method is spectral clustering", usage=ResourceUsage(requests=1), diagnostics=(), trace=trace),
                     grade=TaskGrade(success=succeeded, reason="graded against the case criterion"),
                 )
             )

@@ -930,6 +930,7 @@ class BlindTrialRunner:
             trial_id=trial_id,
             cited_source_ids=tuple(outcome.answer.cited_source_ids),
             usage=outcome.usage,
+            diagnostics=(),
             trace=self.traces[trial_id],
         )
 

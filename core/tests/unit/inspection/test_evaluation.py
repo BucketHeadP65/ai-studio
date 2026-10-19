@@ -26,13 +26,13 @@ from tests.support.fakes.inspection_evaluation import (
 
 
 def test_inspection_execution_keeps_symptom_count() -> None:
-    execution = InspectionTaskExecution(output="finding", symptom_count=2)
+    execution = InspectionTaskExecution(output="finding", symptom_count=2, diagnostics=())
     assert execution.symptom_count == 2
 
 
 def test_inspection_execution_refuses_a_negative_symptom_count() -> None:
     with pytest.raises(ValidationError, match="symptom_count"):
-        InspectionTaskExecution(output="finding", symptom_count=-1)
+        InspectionTaskExecution(output="finding", symptom_count=-1, diagnostics=())
 
 
 def diagnostic_case(case_id: str, expected: str = "issue") -> DiagnosticCase:
