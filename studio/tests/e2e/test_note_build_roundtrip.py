@@ -2,16 +2,16 @@ r"""End-to-end authoring round-trip: payload JSON → built note → indexed row
 
 The other side of the vertical slice from `test_index_and_search` (which seeds from
 pre-baked golden markdown): here the note is *authored through the CLI* from an extractor
-payload, then ingested. The whole path runs through the public `memory` commands:
+payload, then ingested. The whole path runs through the public `studio` commands:
 
 1. an authoring payload (modelled on the golden LightRAG benchmark claim, carrying a quote
    that appears verbatim in the golden mirror excerpt) →
 2. `studio note build --payload … --out <knowledge_base>/Wiki/Papers/built.md --verify-quotes` against a
    :class:`~engram.testing.knowledge_base_builder.KnowledgeBaseBuilder` knowledge base whose ``Sources/`` holds that mirror
    excerpt → the build verifies every quote against the mirror *before* writing, exits 0, and the
-   file exists;
-3. `memory note validate` over the built note passes (parse + registry vocabulary clean);
-4. `memory index` ingests that same knowledge base into the freshly-migrated ParadeDB (real PG
+   file exists.
+3. `studio note validate` over the built note passes (parse + registry vocabulary clean).
+4. `studio index` ingests that same knowledge base into the freshly-migrated ParadeDB (real PG
    Unit-of-Work, :class:`FakeEmbedding` the only fake) with **no validation errors**, and the built
    note's page row + its claim row land (their ids are present in `kb.pages` / `kb.claims`).
 
