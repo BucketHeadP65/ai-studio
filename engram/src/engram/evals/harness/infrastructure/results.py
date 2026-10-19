@@ -79,6 +79,8 @@ class ResultsHeader:
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
     """What the lookup of the cited pages' sources raised, or None when it succeeded or the run mapped no sources."""
+    source_scoring_version: int = 1
+    """The version of the source-level scoring rule the lines were scored under. 1 in a header that did not record it."""
 
 
 @dataclass(frozen=True)
@@ -402,6 +404,7 @@ def _header_json(header: ResultsHeader) -> dict[str, JsonValue]:
         "index_build": header.index_build,
         "started": header.started,
         "source_lookup_error": header.source_lookup_error,
+        "source_scoring_version": header.source_scoring_version,
     }
 
 

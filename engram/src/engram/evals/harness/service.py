@@ -626,11 +626,12 @@ def _results_header(config: EvaluationRunConfig, dataset: EvaluationDataset, sta
         index_build=stamp.index_build,
         started=stamp.started.isoformat(),
         source_lookup_error=source_lookup_error,
+        source_scoring_version=_source_scoring_version(),
     )
 
 
 def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
-    """Each field the paired comparison holds, and the index build, on which the file's header and this run differ, with both values."""
+    """Each field the paired comparison holds, the index build and the source scoring version on which the file's header and this run differ."""
     held: tuple[tuple[str, str | int | bool | None, str | int | bool | None], ...] = (
         ("strategy", written.strategy, run.strategy),
         ("sql", written.sql, run.sql),
@@ -644,8 +645,16 @@ def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
         ("dataset_sha256", written.dataset_sha256, run.dataset_sha256),
         ("collection", written.collection, run.collection),
         ("index_build", _build_or_unknown(written.index_build), _build_or_unknown(run.index_build)),
+        ("source_scoring_version", written.source_scoring_version, run.source_scoring_version),
     )
     return [f"{name} ({in_file} in the file, {now} now)" for name, in_file, now in held if in_file != now]
+
+
+def _source_scoring_version() -> int:
+    """The version of the source-level scoring rule this code scores lines under."""
+    from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION  # noqa: PLC0415 (import cycle: engram.evals.harness and engram.evals.scoring)
+
+    return SOURCE_SCORING_VERSION
 
 
 def _build_or_unknown(index_build: str | None) -> str:

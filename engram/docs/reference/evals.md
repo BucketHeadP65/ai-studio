@@ -105,7 +105,7 @@ text, and the `studio` CLI prints a command's own failure through it too.
 `--resume` continues that file after a run lost cases to transient failures. When the file exists
 and its header matches the run on every field the paired comparison holds (strategy, SQL switch,
 code mode, model, thinking level, instructions hash, tool-call budget, search pinning, search date
-range, dataset hash and knowledge base) and on the index build, the run keeps every case line that was not a transient failure, runs only the
+range, dataset hash and knowledge base), on the index build and on the source scoring version, the run keeps every case line that was not a transient failure, runs only the
 missing cases and the transient failures, and rewrites the file under the earlier header in
 dataset order, every kept line exactly as it was. A header that differs is refused before any case
 runs, and the message names each differing field with both values, such as
@@ -190,6 +190,16 @@ later hit of a source already ranked. So entity cards ranked above the gold sour
 MRR, rather than being skipped. `studio evals score` still counts the hits that named no source document and prints the
 count. `engram.evals.scoring.domain.ranked_sources` builds the ranks for both commands, and
 `engram.evals.outcomes.domain.evaluators.ranked_metrics` and `ndcg_at_k` read a `None` rank as one that matches nothing.
+
+The rule carries a version, `engram.evals.scoring.contracts.SOURCE_SCORING_VERSION` (2 for the rule
+above), and a results file's header records the version its lines were scored under as
+`source_scoring_version`. A header written before the key was recorded reads it as 1. `--resume`
+refuses a file scored under another version, naming `source_scoring_version (1 in the file, 2 now)`
+and saying to run without resuming, which replaces the file. `studio evals compare` refuses two runs
+that both carry source-level scores under different versions and names the run to run again with
+`--source-level`. Two runs where at most one side carries source-level scores compare across
+versions, since no source-level score is set beside another. Nothing converts an older file. The
+version is raised whenever a change alters a source-level score.
 
 After the table the CLI prints each run's mean source-level recall@4, recall@10, MRR and seen
 recall, overall and then per query type, the cases with no query type last. `studio evals compare`

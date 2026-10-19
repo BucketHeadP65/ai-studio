@@ -281,8 +281,8 @@ def evals_run_cmd(
         default=False,
         help="Continue the --results file: keep every case that did not fail transiently (a model connection error, a timeout, "
         "an HTTP 429 or 5xx, or a refused or closed database connection), run only the missing cases and those, and rewrite "
-        "the file under the earlier header. A file written with other settings or on another index build is refused before "
-        "any case runs. With no file there yet, every case runs.",
+        "the file under the earlier header. A file written with other settings, on another index build or under another "
+        "source scoring version is refused before any case runs. With no file there yet, every case runs.",
     ),
     knowledge_base: str | None = typer.Option(default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."),
 ) -> None:
@@ -307,8 +307,9 @@ def evals_run_cmd(
     file under the earlier header. It then prints how many cases it kept and ran and a summary over every case in the
     file, and the source-level lines cover every case too. It warns when the knowledge base was indexed again since the
     file was started, and says when the cases run now miss their source scores because the source lookup failed. A file
-    written with other settings, or on another index build, is refused before any case runs. A failed run, such as a
-    missing dataset, an unreachable model or database, or an unknown strategy, exits 1 with a message.
+    written with other settings, on another index build or under another source scoring version, is refused before any
+    case runs. A failed run, such as a missing dataset, an unreachable model or database, or an unknown strategy, exits
+    1 with a message.
     """
     if source_level and results is None:
         _fail("--source-level writes its scores to the results file, so pass --results PATH with it.")
@@ -881,8 +882,10 @@ def evals_compare_cmd(
     differ in the SQL switch or in code mode, not in both, and two runs under different strategies must share both and
     the candidate must be the baseline plus the graph leg. A results file written before code mode and the thinking
     level were recorded reads them as off and unset, one written before the search date range was recorded reads it
-    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. A
-    refusal exits 1 naming the case or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
+    as the opposite of its search pinning, and one written before the index build was recorded reads it as unknown. Two
+    runs that both carry source-level scores under different source scoring versions are refused, naming the run to run
+    again, and a results file written before that version was recorded reads it as 1. A refusal exits 1 naming the case
+    or the field, and nothing is written. A `--pair` that is not two paths separated by a comma, or an `--out` that does not end in .md, exits 2
     before any file is read.
     """
     pairs = [_compared_pair(value) for value in pair]

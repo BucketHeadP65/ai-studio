@@ -24,6 +24,13 @@ SCORE_KS: tuple[int, ...] = (1, 5, 10)
 NDCG_K = 10
 """The nDCG cutoff."""
 
+SOURCE_SCORING_VERSION = 2
+"""The version of the source-level scoring rule this module states, which a results file's header records.
+
+You must raise it whenever a change alters a source-level score. A header that does not record a version was scored
+under version 1, and a resumed run or a paired comparison refuses lines scored under another version.
+"""
+
 
 class SearchSetup(BaseModel):
     """The two search knobs a search setup sets: hybrid or keyword-only ranking, and one hit level or every level."""

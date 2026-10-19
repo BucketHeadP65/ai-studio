@@ -60,7 +60,7 @@ from engram.evals.generation.domain.datasets import RetirementRecord
 from engram.evals.generator_check.contracts import RANK_DECIMALS, generator_check
 from engram.evals.handlers import GenerateEvalDatasetHandler, RollbackPolicyHandler
 from engram.evals.harness.contracts import ExperimentAxes, ExperimentVariant, expand_variants, run_experiment
-from engram.evals.scoring.contracts import HitSources
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION, HitSources
 from engram.evals.shared.domain import Archetype, ExpectedQa, QaCaseMeta, QaInput
 from engram.evals.tuning.policy import DEFAULT_INSTRUCTIONS, baseline_policy, load_policy, save_policy
 from engram.evals.tuning.strategy import DEFAULT_STRATEGY
@@ -1658,8 +1658,10 @@ class TestImportJudgmentsCli:
         assert "evals import-judgments failed" in result.stdout
 
 
-def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "test-model") -> None:
-    header = {
+def _write_results_file(
+    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int | None = None, scored: bool = False
+) -> None:
+    header: dict[str, object] = {
         "strategy": "search-hybrid",
         "sql": False,
         "model": model,
@@ -1673,6 +1675,8 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
         "started": "2026-10-13T09:00:00+00:00",
         "source_lookup_error": None,
     }
+    if source_scoring_version is not None:
+        header["source_scoring_version"] = source_scoring_version
     lines = [
         {
             "case": f"c{index}",
@@ -1683,10 +1687,10 @@ def _write_results_file(path: Path, *, strict: tuple[bool, ...], model: str = "t
             "error": None,
             "answer": "yes",
             "cited": [],
-            "sources": None,
-            "recall@4": None,
-            "recall@10": None,
-            "mrr": None,
+            "sources": ["s1"] if scored else None,
+            "recall@4": 1.0 if scored else None,
+            "recall@10": 1.0 if scored else None,
+            "mrr": 1.0 if scored else None,
             "other_collection": False,
         }
         for index, correct in enumerate(strict)
@@ -1736,6 +1740,20 @@ class TestCompareCli:
         assert result.exit_code == 1
         assert "evals compare failed" in result.stdout
         assert "differ in model" in result.stdout
+
+    def test_runs_scored_under_different_source_scoring_versions_are_refused_saying_which_to_run_again(self, tmp_path: Path):
+        older, newer = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
+        _write_results_file(older, strict=(True, False), scored=True)
+        _write_results_file(newer, strict=(True, True), scored=True, source_scoring_version=SOURCE_SCORING_VERSION)
+        out = tmp_path / "compare.md"
+
+        result = runner.invoke(app, ["evals", "compare", "--pair", f"{older},{newer}", "--out", str(out)])
+
+        assert result.exit_code == 1
+        message = " ".join(result.stdout.split())
+        assert f"differ in source_scoring_version (1 and {SOURCE_SCORING_VERSION})" in message
+        assert f"Run {older} again with --source-level to score it under version {SOURCE_SCORING_VERSION}" in message
+        assert not out.exists()
         assert not out.exists()
 
     @pytest.mark.parametrize("value", ["a.jsonl", "a.jsonl,b.jsonl,c.jsonl", "a.jsonl,", ",b.jsonl"])

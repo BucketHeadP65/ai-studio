@@ -37,6 +37,7 @@ from engram.evals.paired_comparison.contracts import (
     source_level_retrieval_per_query_type,
     write_paired_comparison,
 )
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION
 from engram.evals.tuning.contracts import RetrievalStrategy
 
 if TYPE_CHECKING:
@@ -62,6 +63,7 @@ class ResultsHeaderFactory(ModelFactory[ResultsHeader]):
     index_build = "7+500-1000 test-embedding"
     started = "2026-10-13T09:00:00+00:00"
     source_lookup_error = None
+    source_scoring_version = SOURCE_SCORING_VERSION
 
 
 def _line(
@@ -155,6 +157,29 @@ def test_a_pair_that_differs_in_a_held_field_is_refused_naming_it(field: str, ca
 
     with pytest.raises(RunsNotComparableError, match=rf"differ in {field}\b"):
         paired_comparisons([(_run("a.jsonl", *lines), _run("b.jsonl", *lines, header=candidate_header))])
+
+
+def test_runs_scored_at_source_level_under_different_scoring_versions_are_refused_naming_the_run_to_repeat():
+    scored = (_line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0)),)
+    older = ResultsHeaderFactory.build(source_scoring_version=SOURCE_SCORING_VERSION - 1)
+
+    with pytest.raises(RunsNotComparableError) as refused:
+        paired_comparisons([(_run("a.jsonl", *scored, header=older), _run("b.jsonl", *scored))])
+
+    message = str(refused.value)
+    assert f"differ in source_scoring_version ({SOURCE_SCORING_VERSION - 1} and {SOURCE_SCORING_VERSION})" in message
+    assert f"Run a.jsonl again with --source-level to score it under version {SOURCE_SCORING_VERSION}" in message
+
+
+def test_runs_without_source_level_scores_on_both_sides_compare_across_scoring_versions():
+    scored = (_line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0)),)
+    unscored = (_line("c1", strict=True),)
+    older = ResultsHeaderFactory.build(source_scoring_version=SOURCE_SCORING_VERSION - 1)
+
+    comparison = _only_pair(_run("a.jsonl", *unscored, header=older), _run("b.jsonl", *scored))
+
+    assert comparison.overall.cases == 1
+    assert comparison.overall.baseline_retrieval is None
 
 
 def test_a_held_field_is_named_before_a_case_in_one_run_only():
@@ -572,6 +597,18 @@ def test_the_reader_reads_the_sources_and_the_retrieval_scores(tmp_path: Path):
     assert (second.sources, second.recall_at_4, second.recall_at_10, second.mrr) == (None, None, None, None)
 
 
+def test_the_reader_reads_the_source_scoring_version_and_a_header_without_it_as_version_one(tmp_path: Path):
+    path = tmp_path / "a.jsonl"
+    write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
+    written = read_results(path).header.source_scoring_version
+    rows = path.read_text(encoding="utf-8").splitlines()
+    header = json.loads(rows[0])
+    del header["header"]["source_scoring_version"]
+    path.write_text("\n".join([json.dumps(header), *rows[1:]]) + "\n", encoding="utf-8")
+
+    assert (written, read_results(path).header.source_scoring_version) == (SOURCE_SCORING_VERSION, 1)
+
+
 def test_the_reader_reads_a_citation_that_holds_no_source(tmp_path: Path):
     path = tmp_path / "a.jsonl"
     scored = dataclasses.replace(_written_line("c1", strict=True), sources=(None, "s1", None), recall_at_4=1.0, recall_at_10=1.0, mrr=0.5)
@@ -598,6 +635,7 @@ _WRITTEN_HEADER = WrittenHeader(
     index_build="7+500-1000 test-embedding",
     started="2026-10-13T09:00:00+00:00",
     source_lookup_error=None,
+    source_scoring_version=SOURCE_SCORING_VERSION,
 )
 
 

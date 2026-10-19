@@ -79,6 +79,7 @@ from engram.evals.harness.service import (
     trial_id_for,
 )
 from engram.evals.outcomes.contracts import GuardedTracingToolset
+from engram.evals.scoring.contracts import SOURCE_SCORING_VERSION
 from engram.evals.shared.domain import ExpectedQa, QaCaseMeta, QaInput
 from engram.kb.contracts import KnowledgeBaseSchema
 from engram.retrieval.capability import SqlKnowledgeBase
@@ -2041,6 +2042,7 @@ class TestResultsFile(_ResetsLogfire):
             "knowledge_base_fingerprint": "spec-hash:research",
             "index_build": "7+500-1000 test-embedding",
             "source_lookup_error": None,
+            "source_scoring_version": SOURCE_SCORING_VERSION,
         }
         assert datetime.fromisoformat(str(started)).tzinfo is not None
         assert set(lines) == set(_CASE_NAMES)
@@ -2357,6 +2359,34 @@ class TestResume(_ResetsLogfire):
 
         assert "index_build (unknown in the file, 7+500-1000 test-embedding now)" in str(refused.value)
         assert asked.asked == []
+
+    async def test_the_header_records_the_source_scoring_version(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_named_dataset(*_RESUMED_CASES))
+
+        header, _lines = _read_results(results)
+        assert header["source_scoring_version"] == SOURCE_SCORING_VERSION
+
+    async def test_a_results_file_scored_under_another_source_scoring_version_is_refused_saying_to_run_again(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        dataset = _named_dataset(*_RESUMED_CASES)
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
+        _drop_header_key(results, "source_scoring_version")
+        written = results.read_text(encoding="utf-8")
+        asked = _AskedModel()
+
+        with pytest.raises(ResultsFileNotResumableError) as refused:
+            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
+
+        message = str(refused.value)
+        assert f"source_scoring_version (1 in the file, {SOURCE_SCORING_VERSION} now)" in message
+        assert "run without resuming to replace this one" in message
+        assert asked.asked == []
+        assert results.read_text(encoding="utf-8") == written
 
     async def test_an_older_pinned_results_file_is_refused_naming_search_date_range(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"
