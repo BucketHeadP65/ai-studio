@@ -12,11 +12,14 @@ restart a service that exits, and are restarted on demand when code lands.
 
 `stack.sh install` renders the four plists into `~/Library/LaunchAgents/com.engram.<service>.plist`
 with this checkout's absolute paths and bootstraps them. Logs land in `~/Library/Logs/engram/<service>.log`.
+A log past 50 MB (`LOG_ROTATE_BYTES`) is gzipped to `<service>.log.1.gz`, replacing the previous one, and emptied in
+place on every start and restart, or on demand with `stack.sh rotate`.
 
 ```bash
 scripts/stack/stack.sh status                      # launchd state + a port probe per service
 scripts/stack/stack.sh restart harness studio-api  # after backend code lands
 scripts/stack/stack.sh logs harness                # tail one service's log
+scripts/stack/stack.sh rotate all                  # gzip and empty every log past the size limit
 scripts/stack/stack.sh stop|start all
 scripts/stack/stack.sh uninstall
 ```

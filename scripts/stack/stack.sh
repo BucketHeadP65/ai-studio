@@ -6,6 +6,7 @@
 #   stack.sh start|stop|restart [service ...|all]
 #   stack.sh status [service ...|all]
 #   stack.sh logs [service ...|all]
+#   stack.sh rotate [service ...|all]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,6 +22,20 @@ label_for() { echo "com.engram.$1"; }
 plist_for() { echo "$AGENTS_DIR/$(label_for "$1").plist"; }
 script_for() { echo "$SCRIPT_DIR/$1.sh"; }
 log_for() { echo "$LOG_DIR/$1.log"; }
+# A log past this many bytes is gzipped to <log>.1.gz (replacing the previous one) and emptied in place.
+LOG_ROTATE_BYTES="${LOG_ROTATE_BYTES:-52428800}"
+
+# Gzip a service's log to <log>.1.gz and empty it in place when it has grown past LOG_ROTATE_BYTES. Emptying in place
+# keeps a running service writing to the same file, since launchd opens it for append.
+rotate_log() {
+    local log size
+    log="$(log_for "$1")"
+    [[ -f "$log" ]] || return 0
+    size="$(stat -f %z "$log")"
+    (( size > LOG_ROTATE_BYTES )) || return 0
+    gzip -c "$log" > "$log.1.gz.tmp" && mv "$log.1.gz.tmp" "$log.1.gz" && : > "$log"
+    echo "rotated $1 log ($size bytes) to $log.1.gz"
+}
 port_for() {
     case "$1" in
     db) echo 5434 ;;
@@ -238,6 +253,7 @@ cmd_uninstall() {
 
 cmd_start() {
     for service in $(resolve_services "$@"); do
+        rotate_log "$service"
         if ! is_loaded "$service"; then
             launchctl bootstrap "$DOMAIN" "$(plist_for "$service")"
         fi
@@ -267,6 +283,7 @@ cmd_restart() {
             launchctl bootout "$DOMAIN/$(label_for "$service")" 2>/dev/null || true
         fi
         sweep_service "$service"
+        rotate_log "$service"
         # Bootstrap alone starts the job (RunAtLoad); `kickstart -k` here would kill that
         # first incarnation and orphan whatever it had already spawned. Plain kickstart only
         # covers a job that did not start on its own.
@@ -315,6 +332,12 @@ cmd_logs() {
     tail -n 40 -f "${files[@]}"
 }
 
+cmd_rotate() {
+    for service in $(resolve_services "$@"); do
+        rotate_log "$service"
+    done
+}
+
 main() {
     local action="${1:-}"
     [[ $# -gt 0 ]] && shift
@@ -326,8 +349,9 @@ main() {
     restart) cmd_restart "$@" ;;
     status) cmd_status "$@" ;;
     logs) cmd_logs "$@" ;;
+    rotate) cmd_rotate "$@" ;;
     *)
-        echo "usage: $(basename "$0") install|uninstall|start|stop|restart|status|logs [service ...|all]" >&2
+        echo "usage: $(basename "$0") install|uninstall|start|stop|restart|status|logs|rotate [service ...|all]" >&2
         echo "services: ${ALL_SERVICES[*]}" >&2
         exit 1
         ;;
