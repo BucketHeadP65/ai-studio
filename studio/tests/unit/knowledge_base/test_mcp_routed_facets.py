@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from engram.retrieval.domain import SqlResult
 from engram.testing.fakes.gateway import FakeSqlGateway, RecordedQuery
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 
 from studio.knowledge_base.cli import _build_mcp_server
 from studio.knowledge_base.settings import KnowledgeBaseSettings
@@ -51,19 +51,18 @@ async def test_the_served_search_filters_each_knowledge_base_by_the_facet_keys_i
     container = _McpServerContainer(knowledge_base=KnowledgeBaseSettings(path=served), gateway=gateway)
 
     server = await _build_mcp_server(container, settings_path=settings_path)
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
         own = await client.call_tool("search", {"query": "brine", "facets": {"shade": ["teal", "amber"]}})
         other = await client.call_tool("search", {"query": "brine", "collection": "beta", "facets": {"weight": ["heavy"]}})
         refused = await client.call_tool("search", {"query": "brine", "facets": {"weight": ["heavy"]}})
 
     [tool] = [published for published in listing.tools if published.name == "search"]
-    assert "facets" in tool.inputSchema["properties"]
+    assert "facets" in tool.input_schema["properties"]
     assert "'alpha' (`shade`, `texture`), 'beta' (`weight`)" in (tool.description or "")
-    assert own.isError is False, _text(own)
-    assert other.isError is False, _text(other)
-    assert refused.isError is True
+    assert own.is_error is False, _text(own)
+    assert other.is_error is False, _text(other)
+    assert refused.is_error is True
     assert "Not a facet key the 'alpha' knowledge base declares: 'weight'. The declared keys are `shade`, `texture`." in _text(refused)
     searched = [
         (json.loads(str(call.params["facets"])), call.params["collection"]) for call in gateway.rows_calls if "facets" in call.params
@@ -81,8 +80,7 @@ async def test_the_served_search_states_the_cap_on_hits_per_document_the_databas
     container = _McpServerContainer(knowledge_base=KnowledgeBaseSettings(path=served), gateway=gateway)
 
     server = await _build_mcp_server(container, settings_path=settings_path)
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
 
     [tool] = [published for published in listing.tools if published.name == "search"]
@@ -112,8 +110,7 @@ async def test_each_knowledge_base_reads_its_own_cap_and_bases_that_disagree_sta
     container = _McpServerContainer(knowledge_base=KnowledgeBaseSettings(path=served), gateway=gateway)
 
     server = await _build_mcp_server(container, settings_path=settings_path)
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
 
     [tool] = [published for published in listing.tools if published.name == "search"]

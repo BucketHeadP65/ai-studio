@@ -19,7 +19,7 @@ from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.specs import research_spec
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from pydantic_ai.models import override_allow_model_requests
 
 from studio.knowledge_base.cli import _build_mcp_server, _read_surface, _run_search
@@ -140,13 +140,12 @@ async def test_the_mcp_server_serves_a_reranked_search(tmp_path: Path) -> None:
     )
     server = await _build_mcp_server(container, settings_path=tmp_path / "no-registry.json")
 
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         result = await client.call_tool("search", {"query": "greek letters"})
 
-    assert result.isError is False
+    assert result.is_error is False
     assert len(model.requests) == len(_HITS)
-    assert json.dumps(result.structuredContent).index("third") < json.dumps(result.structuredContent).index("first")
+    assert json.dumps(result.structured_content).index("third") < json.dumps(result.structured_content).index("first")
 
 
 async def test_the_code_mode_sandbox_searches_through_the_reranking(tmp_path: Path) -> None:
@@ -160,13 +159,12 @@ async def test_the_code_mode_sandbox_searches_through_the_reranking(tmp_path: Pa
     )
     server = await _build_mcp_server(container, settings_path=tmp_path / "no-registry.json")
 
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         result = await client.call_tool("run_code", {"code": "result = await search(query='greek letters')\nresult\n"})
 
-    assert result.isError is False
+    assert result.is_error is False
     assert len(model.requests) == len(_HITS)
-    text = json.dumps(result.structuredContent)
+    text = json.dumps(result.structured_content)
     assert text.index("third") < text.index("first")
 
 

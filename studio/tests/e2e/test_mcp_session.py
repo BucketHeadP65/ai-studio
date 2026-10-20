@@ -3,7 +3,7 @@ r"""End-to-end MCP session against a real, indexed ParadeDB — Docker-gated.
 The whole read path through the MCP surface: a mini `knowledge_base_builder` knowledge base →
 ``memory index`` (the public CLI over the **real container graph**, only the
 :class:`BatchEmbedder` overridden to :class:`FakeEmbedding` — the established e2e seeding shape) →
-a :class:`~mcp.server.fastmcp.FastMCP` built by :func:`create_mcp_server` over the
+a :class:`~mcp.server.mcpserver.MCPServer` built by :func:`create_mcp_server` over the
 production read-only :class:`~engram.retrieval.infrastructure.gateway.ReaderSqlGateway` (the
 `kb_reader` role; the `reader_url` fixture) → an **in-process** MCP client
 session (the SDK's `create_connected_server_and_client_session` memory transport —
@@ -42,7 +42,7 @@ from engram.retrieval.infrastructure.mcp_server import create_mcp_server
 from engram.retrieval.queries import DescribeSchemaHandler
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.knowledge_base_builder import KnowledgeBaseBuilder
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine
 from typer.testing import CliRunner
@@ -54,7 +54,7 @@ from studio.knowledge_base.settings import ApplicationSettings, DatabaseSettings
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from mcp.types import CallToolResult
     from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -143,8 +143,8 @@ def _text(result: CallToolResult) -> str:
     return block.text
 
 
-async def _open_session(reader_url: str) -> tuple[FastMCP, AsyncEngine]:
-    """A FastMCP server bound to the reader engine, plus the engine to dispose afterwards.
+async def _open_session(reader_url: str) -> tuple[MCPServer, AsyncEngine]:
+    """A MCP server bound to the reader engine, plus the engine to dispose afterwards.
 
     The caller opens the in-memory client session over the returned server (an async
     context manager) and disposes the engine once the session closes.
@@ -160,8 +160,7 @@ class TestMcpSession:
     async def test_lists_exactly_the_two_tools_with_search_descriptions(self, reader: str):
         server, engine = await _open_session(reader)
         try:
-            async with connect_in_memory(server) as client:
-                await client.initialize()
+            async with Client(server) as client:
                 listing = await client.list_tools()
         finally:
             await engine.dispose()
@@ -174,13 +173,12 @@ class TestMcpSession:
     async def test_describe_schema_renders_the_api_surface(self, reader: str):
         server, engine = await _open_session(reader)
         try:
-            async with connect_in_memory(server) as client:
-                await client.initialize()
+            async with Client(server) as client:
                 result = await client.call_tool("describe_schema", {})
         finally:
             await engine.dispose()
 
-        assert result.isError is False
+        assert result.is_error is False
         text = _text(result)
         assert "api.cards" in text
         assert "api.search" in text
@@ -188,42 +186,39 @@ class TestMcpSession:
     async def test_run_sql_reads_api_about(self, reader: str):
         server, engine = await _open_session(reader)
         try:
-            async with connect_in_memory(server) as client:
-                await client.initialize()
+            async with Client(server) as client:
                 result = await client.call_tool("run_sql", {"sql": "SELECT * FROM api.about"})
         finally:
             await engine.dispose()
 
-        assert result.isError is False
+        assert result.is_error is False
         # api.about is a single orientation row — the rendered text is non-empty content.
         assert _text(result).strip()
 
     async def test_write_sql_returns_the_actionable_read_only_error(self, reader: str):
         server, engine = await _open_session(reader)
         try:
-            async with connect_in_memory(server) as client:
-                await client.initialize()
+            async with Client(server) as client:
                 result = await client.call_tool("run_sql", {"sql": "INSERT INTO kb.pages (id, type) VALUES ('x', 'paper')"})
         finally:
             await engine.dispose()
 
         # The write never runs, and the tool returns a readable message, not a crash.
         text = _text(result)
-        assert result.isError
+        assert result.is_error
         assert "read-only" in text
         assert "log_session" not in text
 
     async def test_row_limit_is_honoured(self, reader: str):
         server, engine = await _open_session(reader)
         try:
-            async with connect_in_memory(server) as client:
-                await client.initialize()
+            async with Client(server) as client:
                 # api.cards has at least the one indexed paper page; cap the read at one row.
                 result = await client.call_tool("run_sql", {"sql": "SELECT id FROM api.cards", "row_limit": 1})
         finally:
             await engine.dispose()
 
-        assert result.isError is False
+        assert result.is_error is False
         # The cap held to one row: the `{"rows": [...], "note": ...}` envelope carries exactly one
         # structured row with the single selected column, and — because the indexed knowledge base has
         # more than one card — the contract's truncation note.

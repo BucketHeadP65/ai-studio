@@ -33,18 +33,18 @@ dependencies = [
     # available to resolve, whichever names a schema declares. `testing` (fakes/factories) rides
     # the test dependency group instead, alongside `engram[testing]` below.
     "engram-connectors[conversion,source-queue,x,youtube,zotero]",
-    "fastapi>=0.141.1",
+    "fastapi>=0.143.2",
     # The app's own HTTP client. It reads one first-party endpoint at a configured, trusted base
     # URL: the harness's artifact resolver, which a retained note's origin is fetched from.
     "httpx>=0.28.1",
     # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
-    "pydantic-ai>=2.20.0",
+    "pydantic-ai>=2.57.0",
     "pydantic>=2.13.4",
-    "pydantic-settings>=2.13.1",
+    "pydantic-settings>=2.16.0",
     "sqlalchemy[asyncio]>=2.0.49",
-    "typer>=0.20.0",
-    "uvicorn>=0.52.0",
-    "wireup>=2.9.0",
+    "typer>=0.27.3",
+    "uvicorn>=0.54.0",
+    "wireup>=2.12.1",
 ]
 
 [tool.uv.sources]
@@ -61,7 +61,7 @@ dev = [
     # Pinned to the same minor as every other project in the monorepo so ``select = ["ALL"]``
     # resolves to the same rule set everywhere.
     "ruff (>=0.17.1,<0.18.0)",
-    "types-pyyaml>=6.0.12.20260724",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 test = [
     # The library's test toolkit (fakes, factories, knowledge base builders, the containerized-DB

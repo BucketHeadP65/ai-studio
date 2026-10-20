@@ -43,7 +43,7 @@ from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.fakes.recommendation import FakeKnowledgeBaseGateway
 from engram.testing.specs import research_spec
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from typer.testing import CliRunner
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from engram.evals.shared.domain import QaDifficulty, Seed
     from engram.evals.tuning.internal_contracts import PolicyEvaluator
     from engram.retrieval.domain import SqlResult
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from mcp.types import Tool
 
 runner = CliRunner()
@@ -327,18 +327,16 @@ def _container(tmp_path: Path, retrieval: RetrievalSettings | None = None) -> _M
     )
 
 
-async def _tool_names(server: FastMCP) -> frozenset[str]:
+async def _tool_names(server: MCPServer) -> frozenset[str]:
     """The names of the tools the built server registered (over the SDK's in-memory session)."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
     return frozenset(tool.name for tool in listing.tools)
 
 
-async def _served_search(server: FastMCP) -> Tool:
+async def _served_search(server: MCPServer) -> Tool:
     """The `search` tool the built server published, as a connected MCP client sees it."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
     [search] = [tool for tool in listing.tools if tool.name == "search"]
     return search
@@ -354,14 +352,14 @@ class TestBuildMcpServerSearchCap:
     async def test_the_default_leaves_k_in_the_agents_hands(self, tmp_path: Path):
         server = await _build_mcp_server(_container(tmp_path), authoring=False)
 
-        assert (await _served_search(server)).inputSchema["properties"]["k"]["default"] == 12
+        assert (await _served_search(server)).input_schema["properties"]["k"]["default"] == 12
 
     async def test_a_pinned_cap_takes_k_out_of_the_served_tool(self, tmp_path: Path):
         container = _container(tmp_path, RetrievalSettings(agent_tunes_k=False, k_default=4))
 
         server = await _build_mcp_server(container, authoring=False)
 
-        properties = (await _served_search(server)).inputSchema["properties"]
+        properties = (await _served_search(server)).input_schema["properties"]
         assert "query" in properties
         assert "k" not in properties
 
@@ -378,7 +376,7 @@ class TestBuildMcpServerSearchCap:
 
         server = await _build_mcp_server(container, authoring=False)
 
-        assert (await _served_search(server)).inputSchema["properties"]["k"]["default"] == 12
+        assert (await _served_search(server)).input_schema["properties"]["k"]["default"] == 12
 
 
 class TestBuildMcpServerAuthoring:
@@ -510,8 +508,7 @@ class TestBuildMcpServerActivePolicy:
 
         server = await _build_mcp_server(container)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
         assert by_name["search"].startswith("TUNED SEARCH")

@@ -152,7 +152,7 @@ if TYPE_CHECKING:
     from engram.evals.tuning.contracts import RetrievalProfile
     from engram.identity import KnowledgeBaseIdentity
     from engram.indexing.contracts import ValidationIssue
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from sqlalchemy import Row
 
     from studio.knowledge_base.settings import ApplicationSettings, KnowledgeBaseEntry, RecommendationSettings
@@ -480,7 +480,7 @@ async def _build_mcp_server(
     doc_authoring: bool = False,
     settings_path: Path = _DEFAULT_SETTINGS_PATH,
     logging_settings: LoggingSettings | None = None,
-) -> FastMCP:
+) -> MCPServer:
     """Resolve everything the MCP server needs on this loop and build it, for the caller to run over stdio."""
     configure_logging(logging_settings)
     reader_gateway = await container.get(ReaderSqlGateway)
@@ -615,7 +615,7 @@ async def _build_mcp_server(
 
 async def _mcp_server_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, *, collection: str, authoring: bool, doc_authoring: bool = False
-) -> FastMCP:
+) -> MCPServer:
     """Announce the identity, then build the MCP server on the same loop, even when the database is unreachable."""
     announce_knowledge_base(settings_knowledge_base_path(settings), err=True)
     identity = await announce_db(container, settings, collection=collection, err=True)
