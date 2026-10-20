@@ -27,6 +27,9 @@ const config: NextConfig = {
   // blocked by default — the page then renders server HTML but never hydrates
   // (no handlers, dead inputs). Both spellings of loopback are this machine.
   allowedDevOrigins: ["127.0.0.1"],
+  // Without this, `next dev` started by a coding agent writes a Next.js block into AGENTS.md, which is a
+  // symlink to the committed CLAUDE.md, so every dev server start would dirty the checkout.
+  agentRules: false,
   // client-core ships raw TypeScript (no build step, ADR-0004); Next must
   // transpile it like first-party source.
   //
