@@ -28,20 +28,20 @@ readme = "README.md"
 # sqlite, Azure Document Intelligence, trafilatura, pypandoc) live in the `connectors` project.
 # `httpx` stays: it backs `evals/rca`, which is not connector-specific.
 dependencies = [
-    "alembic>=1.14.0",
-    "anyio>=4.11.0",
-    "asyncpg>=0.31.0",
-    "aiohttp>=3.11",
+    "alembic>=1.20.0",
+    "anyio>=4.15.1",
+    "asyncpg>=0.32.0",
+    "aiohttp>=3.14.5",
     "core",
     "httpx>=0.28.1",
-    "logfire>=4.39.0",
+    "logfire>=5.2.0",
     "markdown-it-py>=3.0.0",
-    "mcp>=1.29.0",
+    "mcp>=2.3.0",
     "openai>=1.60.0",
-    "pgvector>=0.3.6",
+    "pgvector>=0.5.1",
     "pydantic>=2.13.4",
-    "pydantic-ai>=2.20.0",
-    "pydantic-ai-harness[code-mode]>=0.56.0",
+    "pydantic-ai>=2.57.0",
+    "pydantic-ai-harness[code-mode]>=0.57.0",
     "pydantic-evals>=2.0.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.0.49",
@@ -131,14 +131,14 @@ preview = false
 # The MCP server factory wires the same injected-deps composition (gateway + handlers + optional
 # embed / graph / search / fetch handlers) — its arity is the DI surface.
 # TC002 on `core.ai.disclosure.contracts.DisclosureEnvelope`: it annotates the `disclose` tool's RETURN, and
-# FastMCP evaluates a tool function's annotations at registration to publish its `outputSchema` —
-# same rationale as `JsonValue` in retrieval/sql_tools.py. `GraphResult` (the sibling `graph_expand`
+# MCPServer evaluates a tool function's annotations at registration to publish its `outputSchema`,
+# the same rationale as `JsonValue` in retrieval/sql_tools.py. `GraphResult` (the sibling `graph_expand`
 # return) needs no entry only because it shares its `from engram.retrieval.domain import ...` statement with
 # `GraphExpand`/`GraphPaths` (genuine constructor calls), which ruff already keeps at module scope.
 "src/engram/retrieval/infrastructure/mcp_server.py" = ["PLR0913", "TC002"]
 # TC002 on `pydantic.JsonValue`: it annotates the `run_sql` tool's RETURN, and both consumers of
 # these factories evaluate a tool function's annotations at registration to publish its schema —
-# FastMCP for the MCP `outputSchema`, pydantic-ai for the FunctionToolset tool definition. Under a
+# MCPServer for the MCP `outputSchema`, pydantic-ai for the FunctionToolset tool definition. Under a
 # type-checking block the name is absent at that moment and registration dies on a NameError, so
 # this is a genuine runtime-evaluated annotation, not an import that merely looks like one. It is
 # not expressible via `runtime-evaluated-base-classes` (no class is involved), hence the file rule.
@@ -146,7 +146,7 @@ preview = false
 # register_mcp_tools takes the server and handlers plus one parameter per tuning knob
 # (only / search_hybrid / descriptions / collection / k_source) — the tool-registration surface, and
 # the same rationale core.ai applies to its own retrieval toolset registrar.
-# FBT001/FBT002: pydantic-ai and FastMCP both derive a tool's JSON schema from its function
+# FBT001/FBT002: pydantic-ai and MCPServer both derive a tool's JSON schema from its function
 # signature, so the capped `search`'s `bm25_only` flag is the tool's arg surface rather than a smell
 # — the same rule, for the same closures, core.ai applies to `src/core/ai/retrieval/toolset.py`.
 "src/engram/retrieval/tools.py" = ["PLR0913", "FBT001", "FBT002"]

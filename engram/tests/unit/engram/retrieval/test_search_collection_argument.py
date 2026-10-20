@@ -11,8 +11,8 @@ from dataclasses import dataclass
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import FunctionToolset
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
@@ -79,13 +79,12 @@ async def _published(toolset: FunctionToolset[object] | RetrievalKnowledgeBase[N
     return definition.description or "", frozenset(definition.parameters_json_schema["properties"])
 
 
-async def _published_mcp(server: FastMCP) -> tuple[str, frozenset[str]]:
+async def _published_mcp(server: MCPServer) -> tuple[str, frozenset[str]]:
     """The `search` description and parameter names an MCP server lists."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
     search = next(tool for tool in listing.tools if tool.name == "search")
-    return search.description or "", frozenset(search.inputSchema["properties"])
+    return search.description or "", frozenset(search.input_schema["properties"])
 
 
 def _routed_toolset() -> FunctionToolset[object]:
@@ -117,7 +116,7 @@ async def test_an_in_process_search_names_collection_only_when_it_takes_it(surfa
 
 
 async def test_the_single_source_mcp_search_names_collection_only_when_it_takes_it():
-    server = FastMCP("search-surface")
+    server = MCPServer("search-surface")
     register_mcp_tools(server, _handlers(_HOME), collection=_HOME)
 
     description, parameters = await _published_mcp(server)
@@ -126,7 +125,7 @@ async def test_the_single_source_mcp_search_names_collection_only_when_it_takes_
 
 
 async def test_the_routed_mcp_search_names_collection_only_when_it_takes_it():
-    server = FastMCP("search-surface")
+    server = MCPServer("search-surface")
     register_routed_mcp_tools(server, (_surface(_HOME), _surface(_OTHER)), default_knowledge_base=_HOME)
 
     description, parameters = await _published_mcp(server)

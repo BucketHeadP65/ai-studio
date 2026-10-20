@@ -50,7 +50,7 @@ refused, and the schemas, guidance pages and workflows of the knowledge bases th
 runs live in the top-level `templates/` package
 ([root ADR-0018](../../docs/adr/0018-corpus-bundles-and-provider-packages.md)). It then serves hybrid
 retrieval (BM25 + vector + graph) read-only over a CLI, a local FastAPI Studio
-API, and a FastMCP stdio server. It owns the whole knowledge-base pipeline: the optional
+API, and an MCP stdio server. It owns the whole knowledge-base pipeline: the optional
 Zotero-to-knowledge-base mirror reconcile, the indexer, the `wikinote` note grammar, a CQRS
 bus, and a retrieval-tuning loop.
 
@@ -77,7 +77,7 @@ home. This master does not restate a contract or a rationale that lives in
 another layer.
 
 ## 2. Container & component overview (C4 L2)
-> **TL;DR:** `engram/src/` holds exactly one package, the `engram` library. The application over it is `studio.knowledge_base`, a separate project whose three entry points (the Typer CLI, the FastAPI Studio API on :8100, the FastMCP stdio server) drive engram. Write-side intents (index, sync, export) flow through a CQRS bus to slice handlers, while the read path (search/fetch/graph) bypasses the bus and goes straight through query handlers + a read-only SQL gateway to Postgres. Azure OpenAI supplies embeddings.
+> **TL;DR:** `engram/src/` holds exactly one package, the `engram` library. The application over it is `studio.knowledge_base`, a separate project whose three entry points (the Typer CLI, the FastAPI Studio API on :8100, the MCP stdio server) drive engram. Write-side intents (index, sync, export) flow through a CQRS bus to slice handlers, while the read path (search/fetch/graph) bypasses the bus and goes straight through query handlers + a read-only SQL gateway to Postgres. Azure OpenAI supplies embeddings.
 <!-- load-when: containers, components, C4 L2, entry points, CQRS bus, data flow, overview, how it fits together, package layout, engram library vs studio application, library, application -->
 
 `engram/src/` holds **exactly one package**: `engram`, the library (`kb`, `db`, `config`, `indexing`, `retrieval`, `evals`,
@@ -88,7 +88,7 @@ reaches the library through its public surface like any other consumer, and cons
 
 engram's runtime is **three entry points over one composition root**, all owned by `studio.knowledge_base`. The Typer CLI
 (`studio/src/studio/knowledge_base/cli.py`, mounting `cli_evals`, `cli_note`, `cli_init`) owns the top-level `studio` commands. The
-FastAPI app (`studio/src/studio/knowledge_base/http/api.py`) serves the Studio over loopback :8100. The FastMCP stdio server it builds
+FastAPI app (`studio/src/studio/knowledge_base/http/api.py`) serves the Studio over loopback :8100. The MCP stdio server it builds
 from the library's `engram/src/engram/retrieval/infrastructure/mcp_server.py` exposes the retrieval surface to MCP clients. All three are wired
 from the single wireup composition root (`studio/src/studio/knowledge_base/container.py`).
 
@@ -111,7 +111,7 @@ C4Container
     System_Boundary(engram, "studio.knowledge_base (application) over the engram library") {
         Container(cli, "Typer CLI", "studio/src/studio/knowledge_base/cli.py (+ cli_evals/cli_note/cli_init)", "index, status, search, fetch, sync, export okf, serve-http, mcp, evals/note/init groups")
         Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Knowledge base registry, graph, refresh jobs and events, studio-client backend")
-        Container(mcp, "FastMCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
+        Container(mcp, "MCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
 
         Container(container, "Composition root", "studio/src/studio/knowledge_base/container.py, wireup", "Wires every slice, owns cross-slice routing")
         Container(bus, "CQRS bus", "core.cqrs.bus", "Command to one handler, events to the outbox, a worker delivers")
@@ -1043,7 +1043,7 @@ Source: `src/engram/indexing/domain/models.py`, `src/engram/indexing/domain/mani
 The **Retrieval** context is the single `engram/retrieval` slice, and it is the
 only read path. Its core is the **shared retrieval toolset**
 (`engram/retrieval/tools.py`): `search`, `fetch`, `graph_expand`, and `find_paths`,
-defined once and registered into both the FastMCP server and the evals agent's
+defined once and registered into both the MCP server and the evals agent's
 `FunctionToolset` ([ADR-0011](../adr/0011-single-source-retrieval-toolset.md)).
 Lexical retrieval goes through a **dialect seam**, a `SearchDialect` strategy
 registry emitting backend-specific BM25 SQL so one codebase serves both the
@@ -1072,7 +1072,7 @@ contract lives in [serve.md](../reference/serve.md).
 `engram/retrieval` is the whole Retrieval context: a **read-only** hybrid-retrieval
 surface (`search` / `fetch` / `graph_expand` / `find_paths`, plus
 `describe_schema` / `run_sql` / `submit_feedback`) exposed identically over the
-Typer CLI and the Studio API (both `studio.knowledge_base`) and the FastMCP stdio
+Typer CLI and the Studio API (both `studio.knowledge_base`) and the MCP stdio
 server it builds itself. The read path
 **bypasses the CQRS bus**: the shared toolset (`tools.py`) calls query handlers
 (`queries.py`) directly, each holding a `SqlGateway` port, and every read hits only
@@ -1103,7 +1103,7 @@ C4Component
     ContainerDb_Ext(pg, "Postgres, api schema only", "api.search / fetch / cards / edges / graph_expand / graph_paths / graph_reach", "kb_reader role: read-only, 10s statement_timeout, 5s lock_timeout")
 
     Component_Boundary(serve, "engram/retrieval, the library surface") {
-        Component(mcp, "FastMCP stdio server", "mcp_server.py, create_mcp_server", "register_mcp_tools + run_sql/describe_schema/run_code/submit_feedback")
+        Component(mcp, "MCP stdio server", "mcp_server.py, create_mcp_server", "register_mcp_tools + run_sql/describe_schema/run_code/submit_feedback")
         Component(tools, "shared toolset", "tools.py", "build_retrieval_toolset / register_mcp_tools over a RetrievalHandlers set (ADR-0011)")
         Component(queries, "query handlers", "queries.py", "Search/Fetch/LookupValue/DescribeSchema/Graph/GraphExpand/GraphPaths/Status, one per read message")
         Component(reader_gw, "ReaderSqlGateway", "gateway.py + studio/src/studio/knowledge_base/wiring/contracts.py", "Capped reads + api introspection over the reader engine (NullPool), one REPEATABLE READ snapshot per tool call, a private collection through its own role")

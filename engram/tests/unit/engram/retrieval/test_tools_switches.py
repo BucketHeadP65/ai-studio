@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.retrieval.strategy import EVAL_STRATEGY_NAMES, resolve_strategy
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 
 from engram.indexing.contracts import RetrievalSwitches
 from engram.retrieval.tools import FETCH, FIND_PATHS, GRAPH_EXPAND, SEARCH, build_retrieval_toolset, register_mcp_tools
@@ -126,39 +126,36 @@ class TestSwitchesGateTheGraphTools:
 
 
 class TestMcpSurfaceSwitches:
-    """The FastMCP registration path (`register_mcp_tools`) follows the same two rules."""
+    """The MCP registration path (`register_mcp_tools`) follows the same two rules."""
 
     async def test_the_served_search_offers_no_bm25_arg_when_the_switch_is_off(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), switches=RetrievalSwitches(embeddings=False), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         [search] = [tool for tool in listing.tools if tool.name == "search"]
-        assert "bm25_only" not in search.inputSchema["properties"]
+        assert "bm25_only" not in search.input_schema["properties"]
 
     async def test_the_served_search_keeps_bm25_when_the_switch_is_on(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), switches=RetrievalSwitches(embeddings=True), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         [search] = [tool for tool in listing.tools if tool.name == "search"]
-        assert "bm25_only" in search.inputSchema["properties"]
+        assert "bm25_only" in search.input_schema["properties"]
 
     async def test_the_graph_tools_are_withheld_when_off(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), switches=RetrievalSwitches(graph=False), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         assert {tool.name for tool in listing.tools} == {"search", "fetch"}
 
     async def test_the_graph_tools_are_withheld_when_off_even_when_only_names_them(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(
             server,
             _handlers(),
@@ -167,26 +164,23 @@ class TestMcpSurfaceSwitches:
             collection=_COLLECTION,
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         assert {tool.name for tool in listing.tools} == {"search", "fetch"}
 
     async def test_the_graph_tools_are_served_when_on(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), switches=RetrievalSwitches(graph=True), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         assert {tool.name for tool in listing.tools} == {"search", "fetch", "graph_expand", "find_paths"}
 
     async def test_a_fixed_mode_server_keeps_all_four_tools(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         assert {tool.name for tool in listing.tools} == {"search", "fetch", "graph_expand", "find_paths"}
 

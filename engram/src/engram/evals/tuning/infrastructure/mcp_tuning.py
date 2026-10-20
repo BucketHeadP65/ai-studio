@@ -24,7 +24,7 @@ from engram.evals.tuning.policy import RetrievalPolicy, baseline_policy, save_po
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     from engram.evals.commands import PolicyEvaluatorFactory
 
@@ -84,7 +84,7 @@ _SUBMIT_TUNING_DESCRIPTION = (
 
 
 def register_tuning_tools(
-    server: FastMCP, *, evaluator_factory: PolicyEvaluatorFactory, datasets_dir: Path, policies_dir: Path
+    server: MCPServer, *, evaluator_factory: PolicyEvaluatorFactory, datasets_dir: Path, policies_dir: Path
 ) -> None:
     """Register the three opt-in MCP tuning tools, closing over the injected deps.
 
@@ -92,7 +92,7 @@ def register_tuning_tools(
     out-of-set policy) into an actionable error object rather than tearing down the session.
 
     Args:
-        server: The FastMCP server to register the three tuning tools on.
+        server: The MCP server to register the three tuning tools on.
         evaluator_factory: Builds a `PolicyEvaluator` bound to the per-call `model` choice. The built
             evaluator scores a policy against a dataset into a report.
         datasets_dir: The directory the named datasets are resolved under (one YAML per name).

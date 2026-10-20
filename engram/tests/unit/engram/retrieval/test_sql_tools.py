@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.retrieval.contracts import TOOL_MAX_RETRIES, SqlResult
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic_ai import ModelRetry
 from sqlalchemy.exc import OperationalError
 

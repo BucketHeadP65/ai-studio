@@ -15,7 +15,7 @@ refused, and the schemas, guidance pages and workflows of the knowledge bases th
 runs live in the top-level `templates/` package
 ([root ADR-0018](../../../docs/adr/0018-corpus-bundles-and-provider-packages.md)). It then serves hybrid
 retrieval (BM25 + vector + graph) read-only over a CLI, a local FastAPI Studio
-API, and a FastMCP stdio server. It owns the whole knowledge-base pipeline: the optional
+API, and an MCP stdio server. It owns the whole knowledge-base pipeline: the optional
 Zotero-to-knowledge-base mirror reconcile, the indexer, the `wikinote` note grammar, a CQRS
 bus, and a retrieval-tuning loop.
 

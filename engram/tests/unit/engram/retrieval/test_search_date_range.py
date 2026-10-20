@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic import ValidationError
 from pydantic_ai import FunctionToolset
 
@@ -98,19 +98,18 @@ class TestToolset:
 class TestMcpServer:
     async def test_the_served_range_carries_its_shape_and_reaches_the_handler(self):
         search = FakeSearchHandler(result=_search_rows())
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(search=search), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             answered = await client.call_tool("search", {"query": "brine", "since": "2026-09-14"})
             refused = await client.call_tool("search", {"query": "brine", "since": "2026-13"})
 
         [tool] = [published for published in listing.tools if published.name == "search"]
-        assert {"since", "until"} <= set(tool.inputSchema["properties"])
-        assert answered.isError is False
-        assert refused.isError is True
+        assert {"since", "until"} <= set(tool.input_schema["properties"])
+        assert answered.is_error is False
+        assert refused.is_error is True
         assert "names no real year, month or day" in _text(refused)
         assert [message.since for message in search.calls] == [date(2026, 9, 14)]
 

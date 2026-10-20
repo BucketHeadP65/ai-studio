@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import ModelRetry
 
 from engram.retrieval.domain import SearchResult, SqlResult
@@ -177,25 +177,24 @@ class TestNoHits:
 class TestMcpServer:
     async def test_the_served_search_takes_facets_and_refuses_an_undeclared_key(self):
         search = FakeSearchHandler(result=_search_rows())
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(search=search), collection=_COLLECTION, facet_keys=_KEYS)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             answered = await client.call_tool("search", {"query": "brine", "facets": {"texture": ["matte"]}})
             refused = await client.call_tool("search", {"query": "brine", "facets": {"weight": ["heavy"]}})
 
         [tool] = [published for published in listing.tools if published.name == "search"]
-        assert "facets" in tool.inputSchema["properties"]
+        assert "facets" in tool.input_schema["properties"]
         assert "`shade`, `texture`" in (tool.description or "")
-        assert answered.isError is False
-        assert refused.isError is True
+        assert answered.is_error is False
+        assert refused.is_error is True
         assert "`shade`, `texture`" in _text(refused)
         assert [message.facets for message in search.calls] == [{"texture": ["matte"]}]
 
 
-def _server(gateway: FakeSqlGateway, *, only: frozenset[str] | None = None, facet_keys: tuple[str, ...] = ()) -> FastMCP:
+def _server(gateway: FakeSqlGateway, *, only: frozenset[str] | None = None, facet_keys: tuple[str, ...] = ()) -> MCPServer:
     """A server over the whole single-base retrieval surface, every handler reading through `gateway`."""
     return create_mcp_server(
         gateway,
@@ -215,14 +214,13 @@ class TestCreateMcpServer:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _server(gateway, facet_keys=_KEYS)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             answered = await client.call_tool("search", {"query": "brine", "facets": {"shade": ["teal"]}})
 
         [tool] = [published for published in listing.tools if published.name == "search"]
         assert "`shade`, `texture`" in (tool.description or "")
-        assert answered.isError is False
+        assert answered.is_error is False
         assert json.loads(str(gateway.rows_calls[-1].params["facets"])) == {"shade": ["teal"]}
 
     async def test_the_sandboxed_search_takes_the_declared_keys_too(self):
@@ -230,9 +228,8 @@ class TestCreateMcpServer:
         server = _server(gateway, only=frozenset({"search", "fetch", "graph_expand", "find_paths", "run_code"}), facet_keys=_KEYS)
 
         code = "result = await search(query='brine', facets={'texture': ['matte']})\nresult['status']\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert json.loads(str(gateway.rows_calls[-1].params["facets"])) == {"texture": ["matte"]}

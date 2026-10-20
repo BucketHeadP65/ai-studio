@@ -1,7 +1,7 @@
 """The host-owned row cap on the shared retrieval tools: `k` hidden from the agent, resolved live.
 
 `RetrievalKnowledgeBase` is one door onto the cap; these are the other two — the pydantic-ai
-`FunctionToolset` an eval agent binds, and the FastMCP surface `studio mcp` serves. One contract on
+`FunctionToolset` an eval agent binds, and the MCP surface `studio mcp` serves. One contract on
 both: with a `k_source` the registered `search` takes no `k`, every call reads the cap afresh, and
 the description drops every sentence that taught the argument. Without one the tools are exactly
 what they were, `k` and its default included.
@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 
 from engram.retrieval.domain import SearchResult
 from engram.retrieval.tools import TOOL_MAX_RETRIES, build_retrieval_toolset, register_mcp_tools
@@ -42,10 +42,9 @@ def _params(toolset: RetrievalToolset) -> dict[str, inspect.Parameter]:
     return dict(inspect.signature(toolset.tools["search"].function).parameters)
 
 
-async def _served_search(server: FastMCP) -> Tool:
+async def _served_search(server: MCPServer) -> Tool:
     """The published `search` tool, as an MCP client listing the server's surface sees it."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
     [tool] = [published for published in listing.tools if published.name == "search"]
     return tool
@@ -157,38 +156,37 @@ class TestToolsetUnderAHostCap:
 
 class TestMcpSurfaceUnderAHostCap:
     async def test_the_served_search_takes_no_k(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), k_source=lambda: 3, collection=_COLLECTION)
 
-        properties = (await _served_search(server)).inputSchema["properties"]
+        properties = (await _served_search(server)).input_schema["properties"]
         assert "query" in properties
         assert "k" not in properties
 
     async def test_each_call_resolves_the_cap_afresh_and_returns_the_hits(self):
         search = FakeSearchHandler(result=_search_rows())
         cap = {"k": 6}
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(search=search), k_source=lambda: cap["k"], collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             first = await client.call_tool("search", {"query": "graph rag"})
             cap["k"] = 1
             await client.call_tool("search", {"query": "graph rag"})
 
-        assert first.isError is False
+        assert first.is_error is False
         payload = json.loads(_text(first))
         assert [hit["id"] for hit in payload["hits"]] == ["paper.lightrag-2025#s2", "paper.graphrag-2024"]
         assert [message.k for message in search.calls] == [6, 1]
 
     async def test_a_forced_leg_leaves_the_query_collection_date_range_and_facets_as_the_only_arguments(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), search_hybrid=True, k_source=lambda: 4, collection=_COLLECTION)
 
-        assert set((await _served_search(server)).inputSchema["properties"]) == {"query", "collection", "since", "until", "facets"}
+        assert set((await _served_search(server)).input_schema["properties"]) == {"query", "collection", "since", "until", "facets"}
 
     async def test_the_served_description_never_mentions_k(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), k_source=lambda: 3, collection=_COLLECTION)
 
         description = (await _served_search(server)).description or ""
@@ -196,11 +194,10 @@ class TestMcpSurfaceUnderAHostCap:
         assert "caps the hits" not in description
 
     async def test_the_other_three_tools_are_still_served(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), k_source=lambda: 3, collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         assert {"search", "fetch", "graph_expand", "find_paths"} <= {tool.name for tool in listing.tools}
 
@@ -214,10 +211,10 @@ class TestWithoutAHostCap:
         assert _params(toolset)["k"].default == 12
 
     async def test_the_served_search_keeps_the_agent_argued_k(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), collection=_COLLECTION)
 
-        assert (await _served_search(server)).inputSchema["properties"]["k"]["default"] == 12
+        assert (await _served_search(server)).input_schema["properties"]["k"]["default"] == 12
 
     async def test_the_description_still_teaches_k(self):
         toolset = build_retrieval_toolset(_handlers(), collection=_COLLECTION)

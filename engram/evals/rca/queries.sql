@@ -25,9 +25,9 @@
 --     so recall@5 is `(attributes->'scores'->'recall@5'->>'value')::float`
 --     (pydantic_evals.dataset writes this attribute via `case_span.set_attribute('scores', ...)`).
 --
--- Every query carries its own time predicate (`start_timestamp >= now() - interval '7 days'`)
--- because the RCA path runs them single-arg via `query_json_rows(sql)` and Logfire
--- deprecates a query with no time window. Each query was validated to execute
+-- Every query carries its own time predicate (`start_timestamp >= now() - interval '7 days'`),
+-- the same seven days the RCA path passes to the Query API as `min_timestamp` (`RCA_WINDOW`).
+-- Each query was validated to execute
 -- against the live `engram` Logfire project (it is empty today, so they return 0
 -- rows — but they parse and run without error).
 

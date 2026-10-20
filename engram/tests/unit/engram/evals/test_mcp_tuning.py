@@ -13,7 +13,7 @@ default surface stays read-only:
   artifact under the policies directory, returning `{saved}` as JSON.
 
 The tests pin the contract DI-friendly and transport-free, mirroring `test_mcp_authoring.py`: build
-an in-memory `FastMCP`, register the tuning tools against a fake `PolicyEvaluatorFactory` (a
+an in-memory `MCPServer`, register the tuning tools against a fake `PolicyEvaluatorFactory` (a
 callable returning a fake `PolicyEvaluator` with a canned report built from the same `_Report` /
 `_Case` stand-ins as `test_tuning.py` / `test_diagnosis.py`), and drive the tools through the
 SDK's in-memory client to server session. The path-traversal guard and inbound-policy validation are
@@ -28,8 +28,8 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 
 from engram.evals.generation.contracts import AuthoredCase, EvaluationDataset, build_dataset, save_dataset
 from engram.evals.shared.domain import Archetype, ExpectedQa, QaCaseMeta, QaInput, RetrievalAnswer
@@ -151,9 +151,9 @@ def _dataset(tmp_path: Path, name: str = "golden") -> Path:
     return datasets_dir / f"{name}.yaml"
 
 
-def _server(tmp_path: Path, factory: _FakeEvaluatorFactory | None = None) -> FastMCP:
+def _server(tmp_path: Path, factory: _FakeEvaluatorFactory | None = None) -> MCPServer:
     """An in-memory server with only the three tuning tools registered over `tmp_path` dirs."""
-    server = FastMCP(name="tuning-test")
+    server = MCPServer(name="tuning-test")
     register_tuning_tools(
         server, evaluator_factory=factory or _factory(), datasets_dir=tmp_path / "datasets", policies_dir=tmp_path / "tuning"
     )
@@ -189,8 +189,7 @@ class TestRegistration:
     async def test_registers_the_three_tuning_tools(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -199,8 +198,7 @@ class TestRegistration:
     async def test_descriptions_orient_the_diagnose_evaluate_submit_loop(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -221,11 +219,10 @@ class TestDiagnose:
         factory = _factory(_report(recall=0.4))
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE, {"dataset": "golden"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         # The Diagnosis shape: overall averages, per-bucket metrics, worst cases, and a cost summary.
         assert payload["overall"]["recall@5"] == 0.4
@@ -242,8 +239,7 @@ class TestDiagnose:
         factory = _factory()
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(DIAGNOSE, {"dataset": "golden", "model": "gpt-4o"})
 
         assert factory.models == ["gpt-4o"]
@@ -253,8 +249,7 @@ class TestDiagnose:
         factory = _factory()
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(DIAGNOSE, {"dataset": "golden"})
 
         assert factory.models == ["test-model"]
@@ -263,11 +258,10 @@ class TestDiagnose:
         factory = _factory()
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE, {"dataset": "../evil"})
 
-        assert result.isError is False  # a bad name is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad name is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert factory.evaluator.evaluate_calls == []  # the guard fired before any evaluation
@@ -275,8 +269,7 @@ class TestDiagnose:
     async def test_path_separator_dataset_is_rejected(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE, {"dataset": "nested/evil"})
 
         payload = json.loads(_text(result))
@@ -292,13 +285,12 @@ class TestEvaluatePolicy:
         factory = _factory(_report(recall=0.7))
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(
                 EVALUATE_POLICY, {"policy_json": _valid_policy_json(strategy="search-keyword"), "dataset": "golden"}
             )
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["metrics"]["recall@5"] == 0.7  # the per-run aggregate
         assert payload["diagnosis"]["overall"]["recall@5"] == 0.7  # the structured signal
@@ -315,11 +307,10 @@ class TestEvaluatePolicy:
         # RetrievalPolicy validator rejects it at the boundary.
         invalid = _invalid_strategy_policy_json()
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(EVALUATE_POLICY, {"policy_json": invalid, "dataset": "golden"})
 
-        assert result.isError is False  # a bad policy is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad policy is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert factory.evaluator.evaluate_calls == []  # the invalid policy never reached the evaluator
@@ -328,11 +319,10 @@ class TestEvaluatePolicy:
         _dataset(tmp_path)
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(EVALUATE_POLICY, {"policy_json": "{not valid json", "dataset": "golden"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
 
@@ -340,8 +330,7 @@ class TestEvaluatePolicy:
         factory = _factory()
         server = _server(tmp_path, factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(EVALUATE_POLICY, {"policy_json": _valid_policy_json(), "dataset": "../evil"})
 
         payload = json.loads(_text(result))
@@ -357,11 +346,10 @@ class TestSubmitTuning:
         server = _server(tmp_path)
         policy_json = _valid_policy_json(strategy="search-hybrid", instructions="Cite carefully.")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_TUNING, {"policy_json": policy_json, "name": "winner"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         written = tmp_path / "tuning" / "winner.yaml"
         assert payload["saved"] == str(written)
@@ -375,8 +363,7 @@ class TestSubmitTuning:
         server = _server(tmp_path)
         invalid = _invalid_strategy_policy_json()
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_TUNING, {"policy_json": invalid, "name": "winner"})
 
         payload = json.loads(_text(result))
@@ -387,11 +374,10 @@ class TestSubmitTuning:
         server = _server(tmp_path)
         policy_json = _valid_policy_json()
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_TUNING, {"policy_json": policy_json, "name": "../evil"})
 
-        assert result.isError is False  # a bad name is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad name is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not (tmp_path / "evil.yaml").exists()  # nothing escaped policies_dir
@@ -399,8 +385,7 @@ class TestSubmitTuning:
     async def test_path_separator_name_is_rejected(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_TUNING, {"policy_json": _valid_policy_json(), "name": "nested/evil"})
 
         payload = json.loads(_text(result))

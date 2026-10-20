@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, cast
 from core.ai.embedding import query_model_of
 from core.ai.retrieval.contracts import RefusedStatementError, VectorQueryRewrite, single_statement
 from core.observability import get_logger
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import JsonValue
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_core import to_jsonable_python

@@ -279,7 +279,7 @@ class SqlKnowledgeBase(ToolsetCapability[AgentDepsT]):
             One MCP `Tool` per registered tool, with its name, description and input schema.
         """
         return [
-            mcp_types.Tool(name=tool.name, description=tool.description, inputSchema=dict(tool.tool_def.parameters_json_schema))
+            mcp_types.Tool(name=tool.name, description=tool.description, input_schema=dict(tool.tool_def.parameters_json_schema))
             for tool in self._toolset.tools.values()
         ]
 
@@ -1056,7 +1056,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         """
         graph_shown = await self._graph_earned() if self._graph_capable else False
         return [
-            mcp_types.Tool(name=tool.name, description=tool.description, inputSchema=dict(tool.tool_def.parameters_json_schema))
+            mcp_types.Tool(name=tool.name, description=tool.description, input_schema=dict(tool.tool_def.parameters_json_schema))
             for tool in self._toolset.tools.values()
             if tool.name not in _GRAPH_TOOL_NAMES or graph_shown
         ]

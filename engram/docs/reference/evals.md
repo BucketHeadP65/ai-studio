@@ -697,7 +697,7 @@ self-attribution is scored, never trusted.
 
 The tuned policy's `instructions` join the runtime surface alongside strategy and tool descriptions:
 `evals run` without `--instructions` defaults to the knowledge base's active policy (stamping
-`instructions: active-policy` on the run's `variant`, with a stderr note on the CLI), and the FastMCP
+`instructions: active-policy` on the run's `variant`, with a stderr note on the CLI), and the MCP
 server carries the active policy's instructions as its server-level `instructions`, so evaluation runs score,
 and the serve surface exposes, the same tuned agent.
 

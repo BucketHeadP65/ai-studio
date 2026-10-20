@@ -31,7 +31,7 @@ from engram.kb.contracts import load_knowledge_base_schema
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     from engram.config import RecommendationSettings
     from engram.evals.commands import KnowledgeBaseGatewayFactory, PolicyEvaluatorFactory
@@ -113,7 +113,7 @@ class _RecommendationToolDeps:
 
 
 def register_recommendation_tools(  # noqa: PLR0913 (each arg is a distinct injected dep, bundling them would obscure the call contract)
-    server: FastMCP,
+    server: MCPServer,
     *,
     gateway_factory: KnowledgeBaseGatewayFactory,
     evaluator_factory: PolicyEvaluatorFactory,
@@ -128,7 +128,7 @@ def register_recommendation_tools(  # noqa: PLR0913 (each arg is a distinct inje
     refuses) with an error object, never an exception. It reads no container and no environment.
 
     Args:
-        server: The FastMCP server to register the three recommendation tools on.
+        server: The MCP server to register the three recommendation tools on.
         gateway_factory: Opens a fresh recommendation knowledge base gateway, one owner session, for each call.
         evaluator_factory: Builds a `PolicyEvaluator` for the `model` a call names. `diagnose_structure` scores
             the baseline run with it.

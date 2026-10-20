@@ -127,23 +127,23 @@ class TestTheHostCapReachesTheReader:
         async with embedded_retrieval(READER_DSN, spec=research_spec(), k_source=lambda: 7) as reader:
             [search] = [tool for tool in await reader.list_tools() if tool.name == "search"]
 
-        assert "query" in search.inputSchema["properties"]
-        assert "k" not in search.inputSchema["properties"]
+        assert "query" in search.input_schema["properties"]
+        assert "k" not in search.input_schema["properties"]
 
     async def test_one_knowledge_base_without_a_cap_keeps_the_agent_argued_k(self):
         async with embedded_retrieval(READER_DSN, spec=research_spec()) as reader:
             [search] = [tool for tool in await reader.list_tools() if tool.name == "search"]
 
-        assert search.inputSchema["properties"]["k"]["default"] == 12
+        assert search.input_schema["properties"]["k"]["default"] == 12
 
     async def test_several_knowledge_bases_under_a_cap_publish_no_k(self):
-        properties = (await _library_search(2, lambda: 7)).inputSchema["properties"]
+        properties = (await _library_search(2, lambda: 7)).input_schema["properties"]
 
         assert "knowledge_base" in properties
         assert "k" not in properties
 
     async def test_several_knowledge_bases_without_a_cap_keep_the_agent_argued_k(self):
-        properties = (await _library_search(2, None)).inputSchema["properties"]
+        properties = (await _library_search(2, None)).input_schema["properties"]
 
         assert properties["k"]["default"] == 12
         assert "knowledge_base" in properties

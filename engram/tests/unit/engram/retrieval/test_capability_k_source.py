@@ -59,7 +59,7 @@ async def _search(knowledge_base: RetrievalKnowledgeBase[None]) -> mcp_types.Too
 
 class TestOneSurfaceUnderAHostCap:
     async def test_search_offers_the_query_and_no_k(self):
-        properties = (await _search(_one(k_source=lambda: 3))).inputSchema["properties"]
+        properties = (await _search(_one(k_source=lambda: 3))).input_schema["properties"]
         assert "query" in properties
         assert "k" not in properties
 
@@ -82,7 +82,7 @@ class TestOneSurfaceUnderAHostCap:
 
 class TestSeveralSurfacesUnderAHostCap:
     async def test_search_keeps_knowledge_base_and_drops_k(self):
-        properties = (await _search(_several(k_source=lambda: 3))).inputSchema["properties"]
+        properties = (await _search(_several(k_source=lambda: 3))).input_schema["properties"]
         assert "knowledge_base" in properties
         assert "k" not in properties
 
@@ -111,11 +111,11 @@ class TestSeveralSurfacesUnderAHostCap:
 
 class TestWithoutAHostCap:
     async def test_one_surface_keeps_the_agent_argued_k(self):
-        properties = (await _search(_one())).inputSchema["properties"]
+        properties = (await _search(_one())).input_schema["properties"]
         assert properties["k"]["default"] == 12
 
     async def test_several_surfaces_keep_the_agent_argued_k(self):
-        properties = (await _search(_several())).inputSchema["properties"]
+        properties = (await _search(_several())).input_schema["properties"]
         assert properties["k"]["default"] == 12
         assert "knowledge_base" in properties
 
