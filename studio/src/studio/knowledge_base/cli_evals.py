@@ -279,10 +279,11 @@ def evals_run_cmd(
     ),
     resume: bool = typer.Option(
         default=False,
-        help="Continue the --results file: keep every case that did not fail transiently (a model connection error, a timeout, "
-        "an HTTP 429 or 5xx, a refused or closed database connection, or a statement timeout), run only the missing cases and "
-        "those, and rewrite the file under the earlier header. A file written with other settings, on another index build or "
-        "under another source scoring version is refused before any case runs. With no file there yet, every case runs.",
+        help="Continue the --results file: keep every case that did not fail transiently (a connection error or request timeout "
+        "from a model or embedding endpoint, an HTTP 429 or 5xx from one, a refused or closed database connection, or a "
+        "statement or lock timeout), run only the missing cases and those, and rewrite the file under the earlier header. A file "
+        "written with other settings, on another index build or under another source scoring version is refused before any "
+        "case runs. With no file there yet, every case runs.",
     ),
     knowledge_base: str | None = typer.Option(default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."),
 ) -> None:
@@ -1232,10 +1233,11 @@ def evals_score_cmd(
     judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. Each hit holds one rank, so a hit with no
     source document, or a repeat of a document ranked above it, holds its rank and matches nothing. It writes the per-case scores as YAML with
     a markdown summary, both named after the dataset and the setup, and prints the means. The hybrid setup's report
-    leaves the setup out of its file names. A case whose search fails transiently, on a statement timeout or a failed
-    connection, runs again after a wait that doubles each time, a bounded number of times, and the report counts the
-    retries. A failure, such as an unknown setup, a missing dataset, an unreachable database or a case that still fails
-    after its last retry, exits 1 with a message.
+    leaves the setup out of its file names. A case whose search or source lookup fails transiently (a connection error or
+    request timeout from the embedding endpoint, an HTTP 429 or 5xx from it, a refused or closed database connection, or a
+    statement or lock timeout) runs again after a wait that doubles each time, a bounded number of times, and the report
+    counts the retries. A failure, such as an unknown setup, a missing dataset, an unreachable database or a case that
+    still fails after its last retry, exits 1 with a message.
     """
     try:
         search_setup(setup)
@@ -1277,14 +1279,14 @@ async def _run_check_generator(
 _CHECK_GENERATOR_HELP = (
     "Run the generator check and write a score report per setup for each dataset and the check report. Changes nothing else."
     "\n\n"
-    "Scores the human-judged and the generated dataset under every search setup, the way `evals score` does, and writes each "
-    f"score report. It ranks the setups by nDCG@10 rounded to {RANK_DECIMALS} decimals within each dataset, setups that print "
-    "the same nDCG@10 sharing a rank, and compares the two rankings by Kendall's tau-b and by how many setup pairs both "
-    "datasets order the same way. The check passes only when both datasets rank the setups in the same order. It writes the "
-    "check as YAML with a markdown summary beside the score reports, named after the generated dataset, and prints each "
-    "setup's scores and ranks, tau-b and the verdict. A failed check still exits 0. A failure, such as a missing dataset, two "
-    "datasets that would write a score report of the same name, a dataset that gives every setup the same nDCG@10 or an "
-    "unreachable database, exits 1 with a message."
+    "Scores the human-judged and the generated dataset under every search setup, the way `evals score` does, retries "
+    f"included, and writes each score report. It ranks the setups by nDCG@10 rounded to {RANK_DECIMALS} decimals within "
+    "each dataset, setups that print the same nDCG@10 sharing a rank, and compares the two rankings by Kendall's tau-b and "
+    "by how many setup pairs both datasets order the same way. The check passes only when both datasets rank the setups in "
+    "the same order. It writes the check as YAML with a markdown summary beside the score reports, named after the "
+    "generated dataset, and prints each setup's scores and ranks, tau-b and the verdict. A failed check still exits 0. A "
+    "failure, such as a missing dataset, two datasets that would write a score report of the same name, a dataset that "
+    "gives every setup the same nDCG@10 or an unreachable database, exits 1 with a message."
 )
 
 
