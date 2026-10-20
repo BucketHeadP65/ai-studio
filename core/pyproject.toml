@@ -37,7 +37,7 @@ dependencies = [
     "pydantic-ai[retries]>=2.57.0",
     "pydantic-ai-harness>=0.57.0",
     "pyyaml>=6.0.3",
-    "sqlalchemy[asyncio]>=2.0.49",
+    "sqlalchemy[asyncio]>=2.1.4",
     # `core.ai.retrieval.statement` reads a model's SQL by its tokens before it reaches the database.
     "sqlparse>=0.6.0",
     # `core.markdown.heading_slug` transliterates a heading to ASCII.
