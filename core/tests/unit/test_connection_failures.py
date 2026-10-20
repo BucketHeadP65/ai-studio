@@ -16,6 +16,7 @@ from asyncpg.exceptions import (
     CrashShutdownError,
     PostgresError,
     PostgresSyntaxError,
+    QueryCanceledError,
     SyntaxOrAccessError,
 )
 from openai import AsyncOpenAI
@@ -27,7 +28,12 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import DBAPIError
 
-from core.connection_failures import DATABASE_CONNECTION_ERRORS, connection_failure_message, is_database_connection_failure
+from core.connection_failures import (
+    DATABASE_CONNECTION_ERRORS,
+    connection_failure_message,
+    is_database_connection_failure,
+    is_statement_timeout,
+)
 
 DATABASE = "localhost:5434/knowledge_bases"
 
@@ -185,3 +191,35 @@ def test_a_refused_failed_or_closed_connection_is_a_database_connection_failure(
 )
 def test_an_error_the_statement_or_the_disk_causes_is_not_a_database_connection_failure(error: Exception) -> None:
     assert is_database_connection_failure(error) is False
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        QueryCanceledError("canceling statement due to statement timeout"),
+        _from_statement(QueryCanceledError("canceling statement due to statement timeout")),
+    ],
+    ids=["alone", "wrapped by SQLAlchemy"],
+)
+def test_a_statement_the_database_cancelled_is_a_statement_timeout(error: Exception) -> None:
+    assert is_statement_timeout(error) is True
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _from_statement(PostgresSyntaxError('syntax error at or near "SELEC"')),
+        _from_statement(ConnectionDoesNotExistError("connection was closed in the middle of operation")),
+        TimeoutError("Request timed out."),
+    ],
+    ids=["statement error", "closed under a statement", "other timeout"],
+)
+def test_any_other_error_is_not_a_statement_timeout(error: Exception) -> None:
+    assert is_statement_timeout(error) is False
+
+
+def test_a_statement_timeout_is_not_a_database_connection_failure() -> None:
+    error = _from_statement(QueryCanceledError("canceling statement due to statement timeout"))
+
+    assert is_database_connection_failure(error) is False
+    assert connection_failure_message(error, database=DATABASE) is None

@@ -3,7 +3,8 @@
 A database connection failure is a connection to the database that was refused, could not be opened or closed under a
 statement, or a database shutting down or starting up. It is matched by the error's type, raised alone or wrapped by
 SQLAlchemy, and by asyncio's text for a connection attempt that failed. An error the statement itself causes, such as a
-syntax error, an undefined column, a refused permission or a statement timeout, is not one.
+syntax error, an undefined column, a refused permission or a statement timeout, is not one. A statement timeout is told
+apart on its own.
 
 A service connection failure's message names the service before the error's own text, so a person can tell which one
 failed. An embedding endpoint is an OpenAI-compatible endpoint whose request path ends in `/embeddings`, and any other
@@ -25,6 +26,7 @@ from asyncpg.exceptions import (
     ConnectionFailureError,
     ConnectionRejectionError,
     CrashShutdownError,
+    QueryCanceledError,
 )
 from openai import APIConnectionError
 from sqlalchemy.exc import DBAPIError
@@ -77,6 +79,21 @@ def is_database_connection_failure(error: BaseException) -> bool:
     if type(error) in _CONNECT_ATTEMPT_ERRORS:
         return _CONNECT_ATTEMPT_FAILURE.fullmatch(str(error)) is not None
     return isinstance(error, DATABASE_CONNECTION_ERRORS)
+
+
+def is_statement_timeout(error: BaseException) -> bool:
+    """Whether `error` reports a statement the database cancelled, as it cancels one past its statement timeout.
+
+    Args:
+        error: What was raised.
+
+    Returns:
+        True for asyncpg's `QueryCanceledError`, alone or wrapped by SQLAlchemy. The database raises it for a statement
+        past its statement timeout and for a statement a cancel request stopped.
+    """
+    if isinstance(error, DBAPIError):
+        return any(isinstance(cause, QueryCanceledError) for cause in _causes(error))
+    return isinstance(error, QueryCanceledError)
 
 
 def connection_failure_message(error: BaseException, *, database: str | None) -> str | None:
