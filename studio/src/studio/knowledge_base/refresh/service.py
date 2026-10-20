@@ -74,10 +74,12 @@ async def _run_librarian(container: Container, sources_dir: Path, before: frozen
 
 
 def _sync_summary(report: SyncReport) -> str:
-    """The sync part of a refresh's detail: the counters, then the too-old and errored counts when there are any."""
+    """The sync part of a refresh's detail: the counters, then the too-old, already-mirrored and errored counts when there are any."""
     summary = f"synced {report.created} created/{report.updated} updated/{report.archived} archived"
     if report.too_old:
         summary += f"/{len(report.too_old)} too old"
+    if report.already_mirrored:
+        summary += f"/{len(report.already_mirrored)} already mirrored"
     return summary + (f"/{len(report.errors)} errored, " if report.errors else ", ")
 
 

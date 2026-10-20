@@ -212,6 +212,18 @@ class TestSync:
         assert "OLD00001" in result.stdout
         assert store.written == []
 
+    def test_an_item_another_mirror_holds_is_listed_with_that_mirror_and_not_written(self, tmp_path: Path):
+        held = MirrorFileFactory.build(source_key="LIBRARY1", provider="other-library", url="https://arxiv.org/abs/2401.00001")
+        store = FakeMirrorStore(index={"LIBRARY1": held})
+        item = _item(tmp_path, key="ITEM0001").model_copy(update={"url": "https://arxiv.org/abs/2401.00001", "year": None})
+
+        result = runner.invoke(app, ["sync"], obj=_factory([item], store))
+
+        assert result.exit_code == 0
+        assert result.exception is None
+        assert "Not admitted, already mirrored (1): ITEM0001 as LIBRARY1" in result.stdout
+        assert store.written == []
+
 
 class TestDryRun:
     def test_writes_nothing_and_never_converts(self, tmp_path: Path):
