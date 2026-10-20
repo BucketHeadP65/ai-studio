@@ -100,16 +100,16 @@ def register_tuning_tools(
     """
 
     async def diagnose_tool(dataset: str, model: str = _DEFAULT_MODEL) -> str:
-        dataset_path = _resolve_named(dataset, datasets_dir)
-        if dataset_path is None:
-            return _name_error(dataset)
+        dataset_path = _dataset_path(dataset, datasets_dir)
+        if isinstance(dataset_path, str):
+            return dataset_path
         report = await evaluator_factory(model).evaluate(baseline_policy(), dataset=load_dataset(dataset_path))
         return diagnose(report).model_dump_json()
 
     async def evaluate_policy_tool(policy_json: str, dataset: str, model: str = _DEFAULT_MODEL) -> str:
-        dataset_path = _resolve_named(dataset, datasets_dir)
-        if dataset_path is None:
-            return _name_error(dataset)
+        dataset_path = _dataset_path(dataset, datasets_dir)
+        if isinstance(dataset_path, str):
+            return dataset_path
         policy = _parse_policy(policy_json)
         if policy is None:
             return _policy_error()
@@ -147,6 +147,16 @@ def _parse_policy(policy_json: str) -> RetrievalPolicy | None:
     except ValidationError as exc:
         _logger.info("tuning tool rejected an invalid policy: {validation_errors} validation error(s)", validation_errors=exc.error_count())
         return None
+
+
+def _dataset_path(name: str, datasets_dir: Path) -> Path | str:
+    """The dataset file `name` names, or the JSON error answering a name that is unsafe or has no file."""
+    path = _resolve_named(name, datasets_dir)
+    if path is None:
+        return _name_error(name)
+    if not path.is_file():
+        return json.dumps({"error": f"no dataset named {name!r}: name a dataset that exists"})
+    return path
 
 
 def _name_error(name: str) -> str:

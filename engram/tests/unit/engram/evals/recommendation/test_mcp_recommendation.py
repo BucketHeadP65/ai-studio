@@ -348,6 +348,15 @@ class TestRegistration:
 
 
 class TestDiagnoseStructure:
+    async def test_a_dataset_with_no_file_is_answered_by_name(self, tmp_path: Path):
+        server = _server(tmp_path)
+
+        async with Client(server) as client:
+            result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "missing"})
+
+        assert result.is_error is False
+        assert json.loads(_text(result)) == {"error": "no dataset named 'missing': name a dataset that exists"}
+
     async def test_returns_a_valid_structural_diagnosis_over_fakes(self, tmp_path: Path):
         _dataset(tmp_path)
         gateway = _FakeGateway(

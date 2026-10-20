@@ -266,6 +266,17 @@ class TestDiagnose:
         assert "error" in payload
         assert factory.evaluator.evaluate_calls == []  # the guard fired before any evaluation
 
+    async def test_a_dataset_with_no_file_is_answered_by_name(self, tmp_path: Path):
+        factory = _factory()
+        server = _server(tmp_path, factory)
+
+        async with Client(server) as client:
+            result = await client.call_tool(DIAGNOSE, {"dataset": "missing"})
+
+        assert result.is_error is False
+        assert json.loads(_text(result)) == {"error": "no dataset named 'missing': name a dataset that exists"}
+        assert factory.evaluator.evaluate_calls == []
+
     async def test_path_separator_dataset_is_rejected(self, tmp_path: Path):
         server = _server(tmp_path)
 

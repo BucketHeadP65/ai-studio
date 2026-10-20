@@ -176,6 +176,8 @@ async def _run_diagnose_structure(deps: _RecommendationToolDeps, *, dataset: str
     dataset_path = _resolve_named(dataset, deps.datasets_dir)
     if dataset_path is None:
         return _name_error(dataset)
+    if not dataset_path.is_file():
+        return json.dumps({"error": f"no dataset named {dataset!r}: name a dataset that exists"})
     resolved = _resolve_policy(policy_json)
     if resolved is None:
         return _policy_error()
