@@ -54,7 +54,7 @@ def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def _deleted_count(result: Result[tuple[object, ...]]) -> int:
+def _deleted_count(result: Result[*tuple[object, ...]]) -> int:
     """The number of rows a `DELETE` removed, or 0 for a result with no `rowcount`."""
     return result.rowcount if isinstance(result, CursorResult) else 0
 
