@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from engram.indexing.domain.models import ValidationIssue, ValidationReport, cited_mirror_key, frontmatter_value
+from engram.indexing.domain.models import ValidationIssue, ValidationReport, cited_mirror_key
 from engram.indexing.domain.resolver import resolve
 from engram.kb.contracts import KnowledgeBaseSchema, facet_choices_drift, quotes_in_mirror, resolve_schema, schema_vocabulary_drift
 
@@ -346,8 +346,8 @@ def _path_root_provenance(spec: KnowledgeBaseSchema, path_root_source: str | Non
 def _check_source_ref(
     frontmatter: BaseFrontmatter, page_id: str, spec: KnowledgeBaseSchema, knowledge_base_source_keys: frozenset[str]
 ) -> list[ValidationIssue]:
-    """A page's own cited source with no mirror is a warning, not a failed page."""
-    key = frontmatter_value(frontmatter, spec.sources.key_field)
+    """A page's own cited source (its key field, else its digest link field) with no mirror is a warning, not a failed page."""
+    key = cited_mirror_key(frontmatter, key_field=spec.sources.key_field, digest_link_field=spec.sources.digest_link_field)
     if not key or key in knowledge_base_source_keys:
         return []
     message = f"cites source {key!r} but the knowledge base has no mirror for it, restore the mirror or remove the reference (or the page)"

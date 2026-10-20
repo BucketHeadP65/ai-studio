@@ -910,10 +910,10 @@ class TestDanglingSourceRef:
 
 
 class TestTheSourceKeyFieldComesFromTheSpec:
-    """Every source read in this stage goes through `spec.sources.key_field`, never a fixed field name.
+    """Every source read in this stage goes through `spec.sources.key_field`, else `spec.sources.digest_link_field`, never a fixed name.
 
     A knowledge base declaring a key field of its own gets quote verification and `dangling-source-ref` on
-    that field's value, and a knowledge base declaring none cites nothing at all.
+    that field's value, and a knowledge base declaring neither cites nothing at all.
     """
 
     def test_the_declared_field_drives_the_dangling_source_ref_warning(self, vocabulary: VocabularyIndex):
@@ -925,6 +925,25 @@ class TestTheSourceKeyFieldComesFromTheSpec:
         issue = next(i for i in report.warnings if i.rule == "dangling-source-ref")
         assert issue.page_id == "doc.handbook"
         assert "'Sources/handbook.md'" in issue.message
+
+    def test_a_page_naming_a_missing_mirror_only_through_the_digest_link_field_is_warned(self, vocabulary: VocabularyIndex):
+        note = _document(derived_from="Sources/handbook.md")
+        resolved = resolve((note,))
+
+        report = validate(resolved.notes, vocabulary, resolve_result=resolved, knowledge_base_source_keys=frozenset(), spec=_PATH_KEYED_SPEC)
+
+        issue = next(i for i in report.warnings if i.rule == "dangling-source-ref")
+        assert "'Sources/handbook.md'" in issue.message
+
+    def test_the_key_field_names_the_cited_source_before_the_digest_link_field(self, vocabulary: VocabularyIndex):
+        note = _document(source_path="Sources/handbook.md", derived_from="Sources/missing.md")
+        resolved = resolve((note,))
+
+        report = validate(
+            resolved.notes, vocabulary, resolve_result=resolved, knowledge_base_source_keys=frozenset({"Sources/handbook.md"}), spec=_PATH_KEYED_SPEC
+        )
+
+        assert "dangling-source-ref" not in _rules(report)
 
     def test_a_mirror_under_the_declared_field_passes(self, vocabulary: VocabularyIndex):
         note = _document(source_path="Sources/handbook.md")
