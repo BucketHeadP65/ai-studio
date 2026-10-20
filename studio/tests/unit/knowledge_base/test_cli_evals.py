@@ -1857,6 +1857,14 @@ class TestScoreCli:
         database = redact_db(fetch_application_settings().infrastructure.database.url)
         assert result.stdout.splitlines()[-1] == f"evals score failed: database {database}: [Errno 61] Connect call failed ('10.0.0.5', 5434)"
 
+    def test_it_prints_the_retries_after_a_transient_failure(self, tmp_path: Path):
+        report = self._report(tmp_path, unmappable_gold=0, cases_without_gold=0).model_copy(update={"retries": 3})
+
+        result = self._invoke(tmp_path, RecordingCommandHandler(result=report))
+
+        assert result.exit_code == 0, result.stdout
+        assert "  retries after a transient failure: 3\n" in result.stdout
+
     def test_it_prints_no_gold_lines_when_every_gold_id_named_a_source(self, tmp_path: Path):
         result = self._scored(tmp_path, unmappable_gold=0, cases_without_gold=0)
 
@@ -1880,6 +1888,7 @@ class TestScoreCli:
             unmapped_hits=0,
             unmappable_gold=unmappable_gold,
             cases_without_gold=cases_without_gold,
+            retries=0,
             out=str(tmp_path / "scores" / "set.score.yaml"),
             markdown=str(tmp_path / "scores" / "set.score.md"),
         )

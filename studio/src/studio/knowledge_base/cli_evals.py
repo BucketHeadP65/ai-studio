@@ -280,9 +280,9 @@ def evals_run_cmd(
     resume: bool = typer.Option(
         default=False,
         help="Continue the --results file: keep every case that did not fail transiently (a model connection error, a timeout, "
-        "an HTTP 429 or 5xx, or a refused or closed database connection), run only the missing cases and those, and rewrite "
-        "the file under the earlier header. A file written with other settings, on another index build or under another "
-        "source scoring version is refused before any case runs. With no file there yet, every case runs.",
+        "an HTTP 429 or 5xx, a refused or closed database connection, or a statement timeout), run only the missing cases and "
+        "those, and rewrite the file under the earlier header. A file written with other settings, on another index build or "
+        "under another source scoring version is refused before any case runs. With no file there yet, every case runs.",
     ),
     knowledge_base: str | None = typer.Option(default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."),
 ) -> None:
@@ -1232,8 +1232,10 @@ def evals_score_cmd(
     judgments, and recall@1, recall@5, recall@10 and MRR from the gold ids. Each hit holds one rank, so a hit with no
     source document, or a repeat of a document ranked above it, holds its rank and matches nothing. It writes the per-case scores as YAML with
     a markdown summary, both named after the dataset and the setup, and prints the means. The hybrid setup's report
-    leaves the setup out of its file names. A failure, such as an unknown setup, a missing dataset or an unreachable
-    database, exits 1 with a message.
+    leaves the setup out of its file names. A case whose search fails transiently, on a statement timeout or a failed
+    connection, runs again after a wait that doubles each time, a bounded number of times, and the report counts the
+    retries. A failure, such as an unknown setup, a missing dataset, an unreachable database or a case that still fails
+    after its last retry, exits 1 with a message.
     """
     try:
         search_setup(setup)
@@ -1249,6 +1251,7 @@ def evals_score_cmd(
     for name, value in report.means.items():
         typer.echo(f"  {name}: {value:.4f}")
     typer.echo(f"  hits with no source document: {report.unmapped_hits}")
+    typer.echo(f"  retries after a transient failure: {report.retries}")
     if report.unmappable_gold or report.cases_without_gold:
         typer.echo(f"  gold ids that name a page with no source document: {report.unmappable_gold}")
         typer.echo(f"  cases left out because no gold id names a source document: {report.cases_without_gold}")
