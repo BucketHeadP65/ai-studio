@@ -81,7 +81,7 @@ class FakeSurface:
     instructions, so a test can assert the columns reached the agent."""
 
     async def list_tools(self) -> list[mcp_types.Tool]:
-        return [mcp_types.Tool(name=name, inputSchema={}) for name in self.names]
+        return [mcp_types.Tool(name=name, input_schema={}) for name in self.names]
 
     def filtered(self, filter_func: Callable[[RunContext[Any], ToolDefinition], bool | Awaitable[bool]]) -> FilteredToolset[Any]:
         return self.inner.filtered(filter_func)
