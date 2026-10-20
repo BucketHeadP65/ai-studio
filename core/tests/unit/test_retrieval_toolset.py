@@ -301,6 +301,18 @@ class TestRegisterMcpTools:
         assert result.structured_content["paths"] == [path.model_dump(mode="json")]
         assert result.structured_content["window"] == ResultWindow(returned_items=1).model_dump(mode="json")
 
+    async def test_a_fetch_of_an_unknown_id_answers_its_refusal_to_the_client(self):
+        server = MCPServer(name="t")
+        register_mcp_tools(server, _handlers(fetch=FakeFetch(result=SqlResult())), descriptions=_DESCRIPTIONS)
+
+        async with Client(server) as client:
+            result = await client.call_tool(FETCH, {"unit_id": "page.missing"})
+
+        block = result.content[0]
+        assert result.is_error
+        assert block.type == "text"
+        assert "No unit found with id 'page.missing'" in block.text
+
 
 class TestTheRetryBudget:
     """The pydantic-ai toolset caps each tool at `TOOL_MAX_RETRIES`, and the MCP server registers the same tools with no cap."""
