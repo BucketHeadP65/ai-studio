@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 def _record(run_id: str, started_at: str, values: dict[str, object], *, result: Outcome | None = None) -> RunArchiveRecord:
     return RunArchiveRecord(
-        result=result,
+        run_title="",
+        result=result if result is not None else Outcome(status="unknown", summary="no result declared"),
         run_id=run_id,
         workflow_id="wf.research-digest.v7",
         outcome="completed",
@@ -50,13 +51,13 @@ async def test_recent_runs_lists_newest_first_with_how_it_ran_and_what_it_checke
     ) in said
 
 
-async def test_a_run_that_never_reported_a_checked_outcome_says_so_rather_than_reading_as_a_success(tmp_path: Path) -> None:
+async def test_a_run_whose_outcome_is_unknown_says_so_rather_than_reading_as_a_success(tmp_path: Path) -> None:
     archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
     archive.put(_record("run-old", "2026-08-26T09:00:00Z", {"references": [1, 2, 3]}))
 
     said = await recent_runs(archive, limit=10)
 
-    assert "ran completed, checked outcome unknown (this run predates outcome reporting)" in said
+    assert "ran completed, checked outcome unknown ended" in said
 
 
 async def test_the_recorded_output_and_the_checked_outcome_are_two_separate_answers(tmp_path: Path) -> None:

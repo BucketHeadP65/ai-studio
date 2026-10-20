@@ -28,25 +28,23 @@ never content: message text stays in the transcript, evidence and activations li
 run is not here either: the run's own log answers that (`features/running/infrastructure/run_events.py`, one file per run under
 `.state/runs/<run_id>/events.jsonl`, with the events defined in `core.ai.workflows`), and the session log keeps only the
 launch. The session log is the timeline that interleaves what is left, and the authority for exactly one thing, the
-conversation lifecycle. `turn_started`
-and `conversation_forgotten` carry an optional `session_id`, and `turn_settled`/`turn_failed` an optional `started_seq`
-naming the `turn_started` record each closes. `None` on a line written before a turn stamped its own session.
-`turn_settled` also carries `pending`, the tool names a turn stopped for, empty when the turn answered outright.
-`session_spans` and `live_session` prefer a stamp and fall back to a positional walk of session boundaries for an
-unstamped line. `open_turns` carries no session identity at all and closes an unstamped turn off a plain LIFO stack
-instead. Either way an old session log still decodes and folds exactly as it always did. See [sessions.md](sessions.md)
-for the pool that stamps them and the API built over the result.
+conversation lifecycle. Every `turn_started` carries the `session_id` it opened under and its `prompt_excerpt` (`null`
+for an empty prompt). Every `turn_settled` and `turn_failed` carries the `started_seq` of the `turn_started` record it
+closes, so a turn whose start the disk refused writes no end either. Every `session_started` carries its `session_kind`.
+`conversation_forgotten` names the session forgotten, or `null` for a Forget pressed while the conversation held no
+session id, which closes the session the newest `session_started` opened. `turn_settled` also carries `pending`, the tool
+names a turn stopped for, empty when the turn answered outright. A line missing a field its event requires does not
+decode. See [sessions.md](sessions.md) for the pool that stamps them and the API built over the result.
 
-The codec and the projections are pure: `decode` answers `None` for a torn tail or a kind this reader does not know (one lost
-line never costs a boot). `open_turns`, `last_forgotten_at` and `session_spans` are the questions the runtime asks.
+The codec and the projections are pure: `decode` answers `None` for a torn tail, a kind this reader does not know or a line
+missing a required field, and `read_line` says which (one lost line never costs a boot). The log's reader logs one warning
+for each line it skips, naming the file, the line number and the reason. `open_turns`, `last_forgotten_at` and `session_spans` are the questions the runtime asks.
 Each project workspace carries its own session-log file under `<root>/.aifactory/state/`. The harness checkout keeps this
 page's `.state/session-log.jsonl` as its own, separate home.
 
 ## The boot sweep (`harness.adapters.session_log.boot_sweep`)
 
-Runs in the lifespan before resume: a `forgotten-at` marker left by an older process migrates once into a boundary event
-carrying its own historical timestamp (then the marker is deleted, and the session log is the authority from there on), and
-every turn a crash left open is closed as explicitly `turn_abandoned`. Resume then honours `last_forgotten_at` as its
+Runs in the lifespan before resume: every turn a crash left open is closed as explicitly `turn_abandoned`. Resume then honours `last_forgotten_at` as its
 watermark, and the `Boot` event records what it resumed.
 
 ## Process boundary
@@ -61,22 +59,8 @@ failure warns and never breaks the turn it was narrating.
 harness sessions list           # conversation spans: when, how it ended, turns held
 harness sessions tail --n 20    # the newest events, seq and stamp first
 harness sessions search TERM    # case-insensitive scan over the session log and this checkout's state home
-harness sessions import         # copy the pre-record transcripts into the record, once
 ```
 
 `search` is a scan, not an index. One owner's volume does not need one, and the knowledge base stays the semantic layer
 above. Cite events by `seq` in postmortems. The ACP plugin's turns are not yet logged (pydantic-ai-harness's ACP session owns that
 loop), while its message content still lands in the transcript like every other run.
-
-`import` prints one line per directory:
-
-```
-<directory>: runs=N events=N snapshots=N effects=N skipped=N resumed=N unnamed=N reconciled=N malformed=N
-```
-
-or `<directory>: nothing there` when the path is not a directory. `skipped` counts runs the record already holds a
-snapshot for, left untouched. `resumed` counts runs the record holds with no snapshot yet, because an earlier pass
-stopped partway, finished by this one. `unnamed` counts runs carrying no conversation id, which the record cannot
-hold. `reconciled` counts runs whose snapshot named their own conversation under a different spelling, corrected to
-the run's own. `malformed` counts runs whose conversation id does not parse, or whose snapshot names a different
-one, left behind untouched.

@@ -127,8 +127,7 @@ _SETTINGS_JSON: dict[str, object] = {
 def _knowledge_base_root(tmp_path: Path) -> Path:
     """A research knowledge base on disk, the shape `KnowledgeBaseSettings` accepts."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True)
     (knowledge_base_root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return knowledge_base_root
 

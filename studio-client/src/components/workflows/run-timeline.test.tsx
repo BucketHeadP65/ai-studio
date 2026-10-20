@@ -130,17 +130,17 @@ describe("buildLanes", () => {
     expect(buildLanes(events, nodes)[0]).toMatchObject({ turnWorks: [] });
   });
 
-  it("keeps today's stray-lane fallback for a __then id whose base names no chained map", () => {
+  it("draws a lane of its own for an event id no node names", () => {
     const events = [
-      stepEvent({ seq: 1, node: "orphan__then", at: 0, finished: false }),
-      stepEvent({ seq: 2, node: "orphan__then", at: 2, finished: true }),
+      stepEvent({ seq: 1, node: "orphan", at: 0, finished: false }),
+      stepEvent({ seq: 2, node: "orphan", at: 2, finished: true }),
     ];
     // "orphan" is not in the graph at all, and "digests" here chains nothing.
     const plainDigests = graphNode({ key: "digests", id: "digests", kind: "map" });
 
     const lanes = buildLanes(events, [plainDigests]);
 
-    const stray = lanes.find((lane) => lane.node === "orphan__then");
+    const stray = lanes.find((lane) => lane.node === "orphan");
     expect(stray).toMatchObject({ kind: "run", queued: false, turnWorks: [] });
     expect(stray?.spans).toHaveLength(1);
   });
@@ -200,12 +200,8 @@ describe("buildLanes", () => {
       expect(lanes[0]?.turnWorks).toEqual(["digest_source", "relate", "extract_references"]);
     });
 
-    it("still folds the archived __then convention onto a turns-carrying map, for a run recorded before turns shipped", () => {
+    it("folds only the ids the map's own turns name, so any other id beside it draws its own lane", () => {
       const events = [
-        // A historical run's own recorded events, frozen at the convention the harness followed
-        // when it actually ran -- the base per-item work under the map's own plain id, its one
-        // chained leg under `__then`. The freshly rendered graph now describes the same chain as
-        // three all-dotted `turns`, ids this historical run's own events never used.
         stepEvent({ seq: 1, node: "sources", at: 0, finished: false }),
         stepEvent({ seq: 2, node: "sources", at: 2, finished: true }),
         stepEvent({ seq: 3, node: "sources__then", at: 2, finished: false }),
@@ -214,10 +210,7 @@ describe("buildLanes", () => {
 
       const lanes = buildLanes(events, [THREE_TURNS]);
 
-      expect(lanes).toHaveLength(1);
-      expect(lanes[0]?.node).toBe("sources");
-      expect(lanes[0]?.spans).toHaveLength(2);
-      expect(lanes[0]?.turnWorks).toEqual(["digest_source", "relate", "extract_references"]);
+      expect(lanes.map((lane) => lane.node)).toEqual(["sources", "sources__then"]);
     });
 
     it("shows the map's own lane with turnWorks set even before any turn event arrives", () => {
@@ -668,22 +661,22 @@ describe("RunTimeline", () => {
   });
 });
 
-describe("RunTimeline, the archived __then convention", () => {
-  it("keeps today's stray-lane fallback for a __then id whose base does not chain", () => {
+describe("RunTimeline, an event id no node names", () => {
+  it("draws its own lane", () => {
     const onSelectNode = vi.fn();
     const plainNodes = [graphNode({ key: "digests", id: "digests", kind: "map" })];
     render(
       <RunTimeline
         events={[
-          stepEvent({ seq: 1, node: "orphan__then", at: 0, finished: false }),
-          stepEvent({ seq: 2, node: "orphan__then", at: 2, finished: true }),
+          stepEvent({ seq: 1, node: "orphan", at: 0, finished: false }),
+          stepEvent({ seq: 2, node: "orphan", at: 2, finished: true }),
         ]}
         nodes={plainNodes}
         onSelectNode={onSelectNode}
       />,
     );
 
-    expect(screen.getByText("orphan__then")).toBeInTheDocument();
+    expect(screen.getByText("orphan")).toBeInTheDocument();
   });
 });
 

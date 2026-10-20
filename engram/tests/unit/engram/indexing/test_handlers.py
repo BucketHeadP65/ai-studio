@@ -133,8 +133,8 @@ Nobody cites this one; it exists only to trip the missing-provider check.
 def _build_knowledge_base(tmp_path: Path) -> Path:
     """A mini knowledge base with one paper, one entity, one matching mirror, vocabularies + meta stubs."""
     builder = KnowledgeBaseBuilder(tmp_path)
-    builder.add_unit_document("Papers", "lightrag-2025", _PAPER)
-    builder.add_unit_document("Entities", "lightrag", _ENTITY)
+    builder.add_unit_document("Wiki/Papers", "lightrag-2025", _PAPER)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
     builder.add_source_mirror("lightrag-2025", _MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -152,7 +152,7 @@ def _handler(
     """Build the handler over a real filesystem reader + fakes; the clock is a deterministic stub."""
     ticks = iter([0.0, 1.5, 3.0, 4.5, 6.0])
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base_root),
+        FilesystemKnowledgeBaseReader(knowledge_base_root, note_folders=(spec or research_spec()).note_folders),
         embedder or FakeEmbedding(),
         lambda: uow,
         validation_report_sink or FakeValidationReportSink(),
@@ -302,8 +302,8 @@ class TestForeignCollectionGuard:
         """`pages.created` is what a later pass reads as "written": a bare or quoted ISO date both land."""
         knowledge_base = tmp_path / "knowledge_base"
         builder = KnowledgeBaseBuilder(knowledge_base)
-        builder.add_unit_document("Papers", "lightrag-2025", _PAPER.replace("type: paper\n", "type: paper\ncreated: '2026-08-26'\n", 1))
-        builder.add_unit_document("Entities", "lightrag", _ENTITY)
+        builder.add_unit_document("Wiki/Papers", "lightrag-2025", _PAPER.replace("type: paper\n", "type: paper\ncreated: '2026-08-26'\n", 1))
+        builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
         builder.add_source_mirror("lightrag-2025", _MIRROR)
         builder.add_vocabulary()
         builder.add_meta_stubs()
@@ -352,8 +352,8 @@ class TestDuplicateId:
         # Postgres that is a CardinalityViolationError): the collision becomes a duplicate-id
         # validation error and only the first note loads.
         builder = KnowledgeBaseBuilder(tmp_path)
-        builder.add_unit_document("Papers", "lightrag-2025", _PAPER)
-        builder.add_unit_document("Papers", "lightrag-copy", _PAPER)  # same frontmatter id
+        builder.add_unit_document("Wiki/Papers", "lightrag-2025", _PAPER)
+        builder.add_unit_document("Wiki/Papers", "lightrag-copy", _PAPER)  # same frontmatter id
         builder.add_source_mirror("lightrag-2025", _MIRROR)
         builder.add_vocabulary()
         builder.add_meta_stubs()
@@ -734,7 +734,7 @@ class TestParseFaultTolerance:
         knowledge_base = _build_knowledge_base(tmp_path)
         # A note whose claim omits the required loc:: — the parser raises; the handler flags + skips it.
         KnowledgeBaseBuilder(knowledge_base).add_unit_document(
-            "Papers",
+            "Wiki/Papers",
             "broken",
             "---\nid: paper.broken\ntype: paper\ntitle: Broken\nstatus: draft\n"
             "zotero_key: K\nyear: 2025\npaper_type: method\nsource_hash: h\n---\n\n"
@@ -753,7 +753,7 @@ class TestParseFaultTolerance:
         knowledge_base = _build_knowledge_base(tmp_path)
         # A paper with an unregistered claim type → a validation ERROR, but the row must still load.
         KnowledgeBaseBuilder(knowledge_base).add_unit_document(
-            "Papers",
+            "Wiki/Papers",
             "flagged",
             "---\nid: paper.flagged\ntype: paper\ntitle: Flagged\nstatus: draft\n"
             "zotero_key: K2\nyear: 2025\npaper_type: method\nsource_hash: h\n---\n\n"
@@ -869,10 +869,10 @@ class TestFullCompileStatePopulation:
         entries = [row for batch in uow.manifest.manifest_upserts for row in batch]
         by_path = {str(entry["path"]): entry for entry in entries}
         # One note entry per memory note + one source entry per mirror.
-        assert "Units/Papers/lightrag-2025.md" in by_path
-        assert "Units/Entities/lightrag.md" in by_path
+        assert "Wiki/Papers/lightrag-2025.md" in by_path
+        assert "Wiki/Entities/lightrag.md" in by_path
         assert "Sources/lightrag-2025.md" in by_path
-        paper = by_path["Units/Papers/lightrag-2025.md"]
+        paper = by_path["Wiki/Papers/lightrag-2025.md"]
         assert paper["kind"] == "note"
         assert paper["page_id"] == "paper.lightrag-2025"
         assert paper["source_key"] is None
@@ -892,7 +892,7 @@ class TestFullCompileStatePopulation:
 
         knowledge_base = _build_knowledge_base(tmp_path)
         uow = FakeKnowledgeBaseUnitOfWork()
-        stale = "Wiki/Papers/lightrag-2025.md"
+        stale = "Archive/lightrag-2025.md"
         uow.manifest.stored = {
             stale: ManifestEntry(
                 path=stale, kind=FileType.NOTE, content_hash="old", identity_hash="old", page_id="paper.lightrag-2025", source_key=None
@@ -903,7 +903,7 @@ class TestFullCompileStatePopulation:
         await handler.handle(IndexKnowledgeBase(collection="research", full=True))
 
         assert uow.manifest.deleted_paths == [{stale}]
-        assert "Units/Papers/lightrag-2025.md" in {str(row["path"]) for batch in uow.manifest.manifest_upserts for row in batch}
+        assert "Wiki/Papers/lightrag-2025.md" in {str(row["path"]) for batch in uow.manifest.manifest_upserts for row in batch}
 
     async def test_full_rebuild_writes_one_contract_row_per_spec_page_type(self, tmp_path: Path):
         knowledge_base = _build_knowledge_base(tmp_path)
@@ -970,7 +970,7 @@ class TestFullCompileStatePopulation:
         knowledge_base = _build_knowledge_base(tmp_path)
         # A paper with an unregistered claim type → one validation ERROR that must be persisted.
         KnowledgeBaseBuilder(knowledge_base).add_unit_document(
-            "Papers",
+            "Wiki/Papers",
             "flagged",
             "---\nid: paper.flagged\ntype: paper\ntitle: Flagged\nstatus: draft\n"
             "zotero_key: K2\nyear: 2025\npaper_type: method\nsource_hash: h\n---\n\n"
@@ -1187,7 +1187,7 @@ class TestFullVsIncrementalBranch:
         clean = _clean_pages_from_full_run(uow)
         handler.set_clean_page_view(lambda: clean)  # production reads this from kb.pages
         # Edit one note's body only (its identity keys are unchanged) → the incremental path.
-        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Wiki/Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
 
         report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
 
@@ -1201,7 +1201,7 @@ class TestFullVsIncrementalBranch:
         _seed_stored_state_from_full_run(uow)
         clean = _clean_pages_from_full_run(uow)
         handler.set_clean_page_view(lambda: clean)
-        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Wiki/Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
 
         report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
 
@@ -1254,8 +1254,8 @@ class TestDanglingRelationsStayOutOfTheGraph:
         """The mini knowledge base, with one unresolvable `builds_on` added to the paper's frontmatter."""
         dangling = _PAPER.replace("proposes:", 'builds_on: ["[[nothing-here]]"]\nproposes:')
         builder = KnowledgeBaseBuilder(tmp_path)
-        builder.add_unit_document("Papers", "lightrag-2025", dangling)
-        builder.add_unit_document("Entities", "lightrag", _ENTITY)
+        builder.add_unit_document("Wiki/Papers", "lightrag-2025", dangling)
+        builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
         builder.add_source_mirror("lightrag-2025", _MIRROR)
         builder.add_vocabulary()
         builder.add_meta_stubs()
@@ -1293,7 +1293,7 @@ class TestDuration:
         # A clock that ticks 10.0 then 12.5 → a 2.5s measured duration.
         ticks = iter([10.0, 12.5])
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(knowledge_base),
+            FilesystemKnowledgeBaseReader(knowledge_base, note_folders=research_spec().note_folders),
             FakeEmbedding(),
             lambda: uow,
             FakeValidationReportSink(),

@@ -42,7 +42,6 @@ only shrink. The tiers, inward first:
 - `composition.py`, the one module that knows every slice: `harness_session`, `build_environment`.
 - `container.py`, the composition map: the sections, the adapters' leaves and every slice's
   registrations, in one `create_container(settings)`.
-- `migrations/`: one-time rewrites of this deployment's own state, reaching no further than `adapters/`.
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database
@@ -113,7 +112,6 @@ uv run harness serve                                   # the app on 127.0.0.1:87
 uv run harness --help                                  # the owner's review-and-activate CLI
 uv run harness sessions list                           # the session log: spans, tail, search
 uv run harness sessions rebuild                        # reproject every workspace into aifactory_sessions
-uv run harness sessions import                         # copy the pre-record transcripts into the record, once
 uv run harness inspect --since 24                       # issue InspectRun by hand, every watch over the last N hours
 uv run harness evals inspection --repetitions 2          # compare inspector evidence access on versioned evaluation cases
 uv run uvicorn harness.main:create_app --factory --port 8770   # the same app, uvicorn spelled out

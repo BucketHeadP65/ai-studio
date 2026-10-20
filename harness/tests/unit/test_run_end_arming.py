@@ -32,12 +32,15 @@ SUMMARIZE = "wf.summarize-notes.v1"
 T0 = datetime(2026, 10, 6, 12, 0, tzinfo=UTC)
 
 
-def _ended(workflow_id: str, status: OutcomeStatus | None, base: str = "notes") -> RunEvidence:
+def _ended(workflow_id: str, status: OutcomeStatus, base: str = "notes") -> RunEvidence:
     return RunEvidence(
         workflow_id=workflow_id,
+        spec_hash="abc",
         outcome="completed",
-        result=None if status is None else Outcome(status=status, summary="what the run did"),
+        result=Outcome(status=status, summary="what the run did"),
         params={"base": base},
+        gates_auto=(),
+        gates_orchestrated=(),
     )
 
 
@@ -87,7 +90,7 @@ async def test_an_approval_is_written_and_tells_nobody(tmp_path: Path) -> None:
     observer = RecordingObserver()
     log = ObservedEvidenceLog(tmp_path / "evidence.jsonl", observer)
 
-    await log.append(Approval(workflow_id=GATHER, by="owner"))
+    await log.append(Approval(workflow_id=GATHER, spec_hash="abc", by="owner"))
 
     assert observer.seen == []
 
@@ -110,8 +113,8 @@ async def test_a_run_that_succeeded_arms_the_schedule_waiting_for_its_workflow_o
     assert stored.next_run_at == T0
 
 
-@pytest.mark.parametrize(("status", "arms"), [("succeeded", True), ("partial", True), ("noop", False), ("failed", False), ("unknown", False), (None, False)])
-async def test_only_a_run_that_did_its_work_arms(status: OutcomeStatus | None, arms: bool) -> None:
+@pytest.mark.parametrize(("status", "arms"), [("succeeded", True), ("partial", True), ("noop", False), ("failed", False), ("unknown", False)])
+async def test_only_a_run_that_did_its_work_arms(status: OutcomeStatus, arms: bool) -> None:
     schedules = FakeSchedules()
     waiting = Schedule(workflow_id=SUMMARIZE, arguments={"base": "notes"}, cadence="after gather-notes")
     await schedules.insert(waiting)

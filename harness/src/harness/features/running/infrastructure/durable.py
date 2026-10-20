@@ -28,6 +28,7 @@ from core.ai.workflows.contracts import (
     RunRequest,
     StepConversationContinuation,
     connect,
+    spec_identity,
 )
 from core.observability import get_logger, span
 from pydantic_ai_harness.step_persistence import StepPersistence, StepStore
@@ -192,7 +193,7 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
     spec: Workflow,
     workflow_id: str,
     params: WorkflowArguments,
-    auto_approve_gates: bool = False,
+    gate_mode: Literal["wait", "auto"] = "wait",
     runner: str = "app:harness+temporal",
     run_title: str = "",
 ) -> None:
@@ -210,8 +211,8 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
         spec: The workflow to run.
         workflow_id: The workflow's id, also the Temporal workflow id.
         params: The arguments the run starts with.
-        auto_approve_gates: Whether every gate passes with nobody asked. It travels in the request,
-            so it is a fact of the run's own history rather than of this process.
+        gate_mode: What a person gate does. `"wait"` holds it for a person, `"auto"` passes it with nobody
+            asked. It travels in the request, so it is a fact of the run's own history rather than of this process.
         runner: The launcher the spend log names, so a schedule's own runs are attributable to it.
         run_title: What this run is called in front of a person. It travels in the request, so the
             server's own history carries it.
@@ -219,9 +220,7 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
     client = await _client(run)
     handle = await client.start_workflow(
         DurableWorkflowRun.run,
-        RunRequest(
-            spec=spec, params=dict(params), workflow_id=workflow_id, run_title=run_title, auto_approve_gates=auto_approve_gates
-        ),
+        RunRequest(spec=spec, params=dict(params), workflow_id=workflow_id, run_title=run_title, gate_mode=gate_mode),
         id=workflow_id,
         task_queue=run.temporal_task_queue,
     )
@@ -245,8 +244,7 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
     session.active.progress.reset()
     session.active.pending = None
     session.active.decision = None
-    session.active.gate_mode = "auto" if auto_approve_gates else "wait"
-    session.active.auto_approve = auto_approve_gates
+    session.active.gate_mode = gate_mode
     session.active.task = asyncio.create_task(
         _follow(session, handle, run=RunCollaborators(records=records, topics=topics, run_settings=run), spec=spec, params=params)
     )
@@ -365,11 +363,13 @@ async def _record_evidence(
     await records.evidence.append(
         RunEvidence(
             workflow_id=session.active.workflow_id,
+            spec_hash=spec_identity(ran.spec),
             workflow_version=ran.spec.version,
             outcome=ran.outcome,
             result=Outcome(status="unknown", summary=_NOT_CHECKED),
             gates_approved=gates_approved,
             gates_auto=gates_auto,
+            gates_orchestrated=(),
             gates_rejected=gates_rejected,
             params=dict(ran.params),
             produced=produced,

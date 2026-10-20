@@ -259,7 +259,7 @@ class TestFixedMode:
 
 def _handler(knowledge_base_root: Path, *, uow: FakeKnowledgeBaseUnitOfWork, spec: KnowledgeBaseSchema) -> IndexKnowledgeBaseHandler:
     """Build the real handler over an on-disk knowledge base + fakes (the real `SwitchStage` is built inside)."""
-    return IndexKnowledgeBaseHandler(FilesystemKnowledgeBaseReader(knowledge_base_root), FakeEmbedding(), lambda: uow, FakeValidationReportSink(), spec=spec)
+    return IndexKnowledgeBaseHandler(FilesystemKnowledgeBaseReader(knowledge_base_root, note_folders=spec.note_folders), FakeEmbedding(), lambda: uow, FakeValidationReportSink(), spec=spec)
 
 
 def _tiny_knowledge_base(tmp_path: Path) -> Path:
@@ -365,7 +365,7 @@ class TestHandlerWiring:
 
     async def test_incremental_path_also_runs_the_stage_and_can_change_the_persisted_switches(self, tmp_path: Path):
         builder = KnowledgeBaseBuilder(tmp_path)
-        builder.add_unit_document("Entities", "lightrag", _ENTITY)
+        builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
         builder.build_minimal()
         uow = FakeKnowledgeBaseUnitOfWork()
         uow.signals.signals = _TINY_SIGNALS

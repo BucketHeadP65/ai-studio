@@ -442,8 +442,8 @@ def test_a_check_is_a_closed_frozen_record() -> None:
     assert check.required is True
 
 
-def test_a_legacy_outcome_needs_only_its_status_and_summary() -> None:
-    outcome = Outcome(status="unknown", summary="This run predates outcome reporting.")
+def test_an_outcome_needs_only_its_status_and_summary() -> None:
+    outcome = Outcome(status="unknown", summary="Nothing was checked.")
 
     assert (outcome.attempted, outcome.succeeded, outcome.skipped, outcome.failed, outcome.retry_attempts) == (0, 0, 0, 0, 0)
     assert outcome.checks == ()

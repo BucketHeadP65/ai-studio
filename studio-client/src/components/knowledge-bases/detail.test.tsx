@@ -51,7 +51,6 @@ function detail(overrides: Partial<KnowledgeBaseDetail> = {}): KnowledgeBaseDeta
     pages: 3,
     page_types: ["talk"],
     last_indexed: "2026-08-20T09:00:00+00:00",
-    sources_connector: "intake",
     sources_connectors: ["intake"],
     watch_list: [],
     validation: [],
@@ -145,7 +144,7 @@ describe("KnowledgeBaseDetailView", () => {
   it("hides the source queue section for a knowledge base without the intake connector", () => {
     render(
       <KnowledgeBaseDetailView
-        detail={detail({ sources_connector: null, sources_connectors: [] })}
+        detail={detail({ sources_connectors: [] })}
         onAddUrl={vi.fn()}
         adding={false}
         addError={null}
@@ -162,7 +161,7 @@ describe("KnowledgeBaseDetailView", () => {
   it("shows the source queue section for a knowledge base declaring the intake connector", () => {
     render(
       <KnowledgeBaseDetailView
-        detail={detail({ sources_connector: "intake", sources_connectors: ["intake"] })}
+        detail={detail({ sources_connectors: ["intake"] })}
         onAddUrl={vi.fn()}
         adding={false}
         addError={null}
@@ -176,10 +175,10 @@ describe("KnowledgeBaseDetailView", () => {
     expect(screen.getByRole("textbox", { name: "Source URL" })).toBeInTheDocument();
   });
 
-  it("hides the source queue section for a legacy youtube-connector knowledge base", () => {
+  it("hides the source queue section for a knowledge base declaring only the youtube connector", () => {
     render(
       <KnowledgeBaseDetailView
-        detail={detail({ sources_connector: "youtube", sources_connectors: ["youtube"] })}
+        detail={detail({ sources_connectors: ["youtube"] })}
         onAddUrl={vi.fn()}
         adding={false}
         addError={null}
@@ -197,7 +196,7 @@ describe("KnowledgeBaseDetailView", () => {
   it("hides the source queue section for a knowledge base declaring an unrelated connector", () => {
     render(
       <KnowledgeBaseDetailView
-        detail={detail({ sources_connector: "zotero", sources_connectors: ["zotero"] })}
+        detail={detail({ sources_connectors: ["zotero"] })}
         onAddUrl={vi.fn()}
         adding={false}
         addError={null}

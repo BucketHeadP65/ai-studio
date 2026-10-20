@@ -75,7 +75,7 @@ class TuningObjective(BaseModel):
     A numeric knob outside its bounds fails at construction.
 
     Attributes:
-        primary_metric: The accuracy metric to maximize, a key naming its intended layer: the legacy
+        primary_metric: The accuracy metric to maximize, a key naming its intended layer: the
             unprefixed citation keys (`recall@{k}`, `precision@{k}`, `mrr`) or a layer-namespaced key
             (`citation_` / `surfaced_` / `ranking_` `recall@{k}` / `precision@{k}` / `mrr`), validated
             against `engram.evals.shared.metrics.is_known_metric_key` at construction.
@@ -125,11 +125,11 @@ class TuningObjective(BaseModel):
             The objective itself, unchanged.
 
         Raises:
-            ValueError: `primary_metric` matches neither a legacy citation key nor a layer-namespaced
+            ValueError: `primary_metric` matches neither an unprefixed citation key nor a layer-namespaced
                 key.
         """
         if not is_known_metric_key(self.primary_metric):
-            msg = f"primary_metric {self.primary_metric!r} names no known metric key (legacy or layer-namespaced recall@k / precision@k / mrr)"
+            msg = f"primary_metric {self.primary_metric!r} names no known metric key (unprefixed or layer-namespaced recall@k / precision@k / mrr)"
             raise ValueError(msg)
         return self
 

@@ -78,6 +78,7 @@ def _seed(
         workflow_id=workflow_id,
         run_title=run_title,
         outcome=outcome,
+        result=Outcome(status="unknown", summary="no result declared"),
         started_at=now,
         ended_at=ended_at or now,
         runner="app:harness",
@@ -281,35 +282,6 @@ async def test_a_listing_row_carries_the_runs_checked_outcome(registry: StepRegi
         assert row["outcome"] == "completed", "how the execution ended"
         assert row["result"]["status"] == "partial", "and what the work adds up to, said apart"
         assert (row["result"]["attempted"], row["result"]["succeeded"], row["result"]["skipped"]) == (3, 2, 1)
-
-
-async def test_a_run_archived_before_checked_outcomes_projects_as_unknown_and_is_not_rewritten(
-    registry: StepRegistry, tmp_path: Path
-) -> None:
-    _seed(tmp_path, run_id="run-old")
-
-    async with _client_over(a_pool(registry), tmp_path) as client:
-        (row,) = (await client.get("/api/runs/recent")).json()["runs"]
-        whole = (await client.get("/api/runs/history/run-old")).json()
-
-        assert row["result"] == {
-            "status": "unknown",
-            "summary": "This run predates outcome reporting.",
-            "attempted": 0,
-            "succeeded": 0,
-            "skipped": 0,
-            "failed": 0,
-            "retry_attempts": 0,
-            "primary_input": None,
-            "generation": None,
-            "checks": [],
-            "artifacts": [],
-        }
-        assert whole["result"]["status"] == "unknown"
-
-    on_disk = _archive_of(tmp_path).get("run-old")
-    assert on_disk is not None
-    assert on_disk.result is None, "the projection says unknown; the record itself is left exactly as it was written"
 
 
 async def test_a_live_run_reads_as_not_checked_yet_rather_than_as_missing(registry: StepRegistry, tmp_path: Path) -> None:

@@ -104,13 +104,11 @@ from studio.knowledge_base.cli_support import (
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
     read_feedback,
-    resolve_knowledge_base_alias,
     resolve_knowledge_base_root,
     resolve_partition,
     run_naming_connection_failures,
     settings_knowledge_base_path,
     unreachable_line,
-    vault_option,
 )
 from studio.knowledge_base.cli_vocab import vocab_app
 from studio.knowledge_base.cli_watch_list import watch_list_app
@@ -427,7 +425,7 @@ def _read_surface(
     """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
     collection = schema.retrieval.collection
     gateway = reader_gateway.for_collection(collection)
-    reader = FilesystemKnowledgeBaseReader(root)
+    reader = FilesystemKnowledgeBaseReader(root, note_folders=schema.note_folders, note_files=schema.note_files)
 
     async def stamp() -> KnowledgeBaseStamp:
         return await read_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)
@@ -944,7 +942,6 @@ def index_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
     embed: bool = typer.Option(default=True, help="Run the embedding stage. Pass --no-embed to skip it for a fast dev/CI loop."),
     full: bool = typer.Option(default=False, help="Force a whole knowledge base rebuild. The default re-indexes only the changed (dirty) set."),
     dry_run: bool = typer.Option(default=False, help="Preview the dirty set and write nothing (no upserts/embed/graph). Always exits 0."),
@@ -968,11 +965,10 @@ def index_cmd(
     this run or not, though the rows still load. Refuses before writing anything when the database is
     behind the code's migration head, naming both revisions and the fix.
     """
-    knowledge_base_arg = resolve_knowledge_base_alias(knowledge_base, vault)
-    settings = _resolve_settings(knowledge_base_arg, cwd=Path.cwd())
+    settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     configure_logging(settings.application.logging)
     partition = resolve_partition(collection, load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings)))
-    container = _build_container(ctx, settings, knowledge_base_origin=KnowledgeBasePathOrigin(source=knowledge_base_path_origin(knowledge_base_arg)))
+    container = _build_container(ctx, settings, knowledge_base_origin=KnowledgeBasePathOrigin(source=knowledge_base_path_origin(knowledge_base)))
     command = IndexKnowledgeBase(
         collection=partition, embed=embed, full=full, dry_run=dry_run, summaries=summaries, collection_named=collection is not None
     )
@@ -1484,13 +1480,9 @@ def serve_http_cmd(
     process's environment so it reads the same settings, and restarted with backoff when it exits.
     `--no-worker` leaves it out for a deployment that runs the worker itself. The API queues jobs
     either way and never runs one in its own process.
-
-    On boot, any registered knowledge base still written in the old words is rewritten, and what
-    changed is logged. A failure there is logged and skipped, and the API still serves.
     """
     settings = fetch_application_settings()
     configure_logging(settings.logging)
-    _migrate_knowledge_base_words()
     import uvicorn  # noqa: PLC0415 (lazy: fastapi/uvicorn load only when serving, not on every CLI call)
 
     from engram.evals.harness.contracts import configure_logfire  # noqa: PLC0415 (same: keep logfire off the hot CLI path)
@@ -1501,22 +1493,6 @@ def serve_http_cmd(
     app_instance = create_app(settings, worker=_worker_child() if worker else None)
     server = uvicorn.Server(uvicorn.Config(app_instance, host=host, port=port, log_level="info"))
     server.run()
-
-
-def _migrate_knowledge_base_words() -> None:
-    """Rewrite any registered knowledge base still written in the old words, logging and continuing on failure."""
-    from studio.migrations.contracts import BOOT_MIGRATIONS  # noqa: PLC0415 (lazy: the migrations load only when serving, not on every CLI call)
-
-    for name, needed, run in BOOT_MIGRATIONS:
-        try:
-            if not needed():
-                continue
-            report = run()
-        except Exception:  # a migration is a repair, and a repair must not stop the app
-            _logger.exception("the {migration} vocabulary migration could not run, serving with the state as it stands", migration=name)
-            continue
-        for line in report.lines():
-            _logger.info("{migration} migration: {line}", migration=name, line=line)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -122,7 +122,7 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
     (tmp_path / "_meta" / "vocabulary").mkdir(parents=True, exist_ok=True)
     (tmp_path / "_meta" / "vocabulary" / "facets.md").write_text(_FACETS, encoding="utf-8")
     builder.add_source_mirror("seven", _MIRROR)
-    builder.add_unit_document("Papers", "seven", _paper(datetime.now(tz=UTC).date()))
+    builder.add_unit_document("Wiki/Papers", "seven", _paper(datetime.now(tz=UTC).date()))
     return tmp_path
 
 
@@ -132,7 +132,7 @@ async def _compile(knowledge_base: Path, db_url: str) -> None:
     engine = create_async_engine(db_url, poolclass=NullPool)
     await orm.register_pgvector(engine)
     try:
-        reader = FilesystemKnowledgeBaseReader(knowledge_base, "Sources", spec.note_folders, note_files=spec.note_files)
+        reader = FilesystemKnowledgeBaseReader(knowledge_base, "Sources", note_folders=spec.note_folders, note_files=spec.note_files)
         handler = IndexKnowledgeBaseHandler(
             reader, FakeEmbedding(), lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine), FakeValidationReportSink(), spec=spec
         )

@@ -70,19 +70,19 @@ class _Fixture:
 
     def __init__(self, tmp_path: Path) -> None:
         session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-        session_log.record(SessionStarted(session_id=SESSION_A))
-        session_log.record(TurnStarted(entry="spa", chars=5))  # turn 1: settles with run-1
-        session_log.record(TurnSettled(run_id="run-1"))
-        session_log.record(TurnStarted(entry="spa", chars=7))  # turn 2: fails
-        session_log.record(TurnFailed(error="boom"))
-        abandoned = recorded(session_log, TurnStarted(entry="spa", chars=9))  # turn 3: abandoned
+        session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+        session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))  # turn 1: settles with run-1
+        session_log.record(TurnSettled(run_id="run-1", started_seq=2))
+        session_log.record(TurnStarted(entry="spa", chars=7, prompt_excerpt=None, session_id=SESSION_A))  # turn 2: fails
+        session_log.record(TurnFailed(error="boom", prompt_excerpt=None, started_seq=4))
+        abandoned = recorded(session_log, TurnStarted(entry="spa", chars=9, prompt_excerpt=None, session_id=SESSION_A))  # turn 3: abandoned
         session_log.record(TurnAbandoned(started_seq=abandoned.seq))
-        session_log.record(TurnStarted(entry="spa", chars=11))  # turn 4: settles with run-2 (cumulative)
-        session_log.record(TurnSettled(run_id="run-2"))
+        session_log.record(TurnStarted(entry="spa", chars=11, prompt_excerpt=None, session_id=SESSION_A))  # turn 4: settles with run-2 (cumulative)
+        session_log.record(TurnSettled(run_id="run-2", started_seq=8))
         session_log.record(SessionRenamed(session_id=SESSION_A, title="Renamed Session Title"))
-        session_log.record(SessionStarted(session_id=SESSION_B))
-        session_log.record(TurnStarted(entry="acp", chars=3))  # session B's one turn
-        session_log.record(TurnSettled(run_id="run-b"))
+        session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
+        session_log.record(TurnStarted(entry="acp", chars=3, prompt_excerpt=None, session_id=SESSION_B))  # session B's one turn
+        session_log.record(TurnSettled(run_id="run-b", started_seq=12))
         session_log.record(SessionDeleted(session_id=SESSION_B))
         self.events: tuple[Recorded, ...] = session_log.events()
 
@@ -198,9 +198,9 @@ async def test_session_renamed_seeds_the_title(tmp_path: Path, projection_pool: 
 
 async def test_session_archived_latest_wins(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=4))
-    session_log.record(TurnSettled(run_id="run-archived"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=4, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-archived", started_seq=2))
     session_log.record(SessionArchived(session_id=SESSION_A, archived=True))
     session_log.record(SessionArchived(session_id=SESSION_A, archived=False))
     events = session_log.events()
@@ -258,9 +258,9 @@ async def test_refresh_live_upserts_only_the_live_session(tmp_path: Path, projec
     await projection_pool.execute("TRUNCATE projects, sessions, turns, messages, flags")
 
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=4))
-    session_log.record(TurnSettled(run_id="run-live"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=4, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-live", started_seq=2))
     events = session_log.events()
 
     store = InMemoryStepStore()
@@ -283,10 +283,10 @@ async def test_refresh_live_upserts_the_named_session_not_the_timelines_newest(
     await projection_pool.execute("TRUNCATE projects, sessions, turns, messages, flags")
 
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started = recorded(session_log, TurnStarted(entry="spa", chars=4, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started = recorded(session_log, TurnStarted(entry="spa", chars=4, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-a", started_seq=started.seq))
-    session_log.record(SessionStarted(session_id=SESSION_B))  # a newer session opened before A settled
+    session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))  # a newer session opened before A settled
     events = session_log.events()
 
     store = InMemoryStepStore()
@@ -317,8 +317,8 @@ async def test_refresh_live_after_a_forget_replaces_the_sessions_turns_and_messa
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
     store = InMemoryStepStore()
 
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-1", started_seq=started_1.seq))
     await store.save_snapshot(
         ContinuableSnapshot(
@@ -332,7 +332,7 @@ async def test_refresh_live_after_a_forget_replaces_the_sessions_turns_and_messa
     )
     await refresh_live(projection_pool, session_log.events(), store, project_root=tmp_path, only_session_id=SESSION_A)
 
-    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-2", started_seq=started_2.seq))
     await store.save_snapshot(
         ContinuableSnapshot(
@@ -353,7 +353,7 @@ async def test_refresh_live_after_a_forget_replaces_the_sessions_turns_and_messa
     session_log.record(ConversationForgotten(session_id=SESSION_A))
     await refresh_live(projection_pool, session_log.events(), store, project_root=tmp_path, only_session_id=SESSION_A)
 
-    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-after", started_seq=started_3.seq))
     await store.save_snapshot(
         ContinuableSnapshot(
@@ -406,10 +406,10 @@ async def test_interleaved_turns_attribute_to_the_session_that_started_them(
     """
     pool = projection_pool
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(SessionStarted(session_id=SESSION_B))
-    started_a = recorded(session_log, TurnStarted(entry="spa", chars=12, session_id=SESSION_A))
-    started_b = recorded(session_log, TurnStarted(entry="acp", chars=13, session_id=SESSION_B))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
+    started_a = recorded(session_log, TurnStarted(entry="spa", chars=12, session_id=SESSION_A, prompt_excerpt=None))
+    started_b = recorded(session_log, TurnStarted(entry="acp", chars=13, session_id=SESSION_B, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-a", started_seq=started_a.seq))
     session_log.record(TurnSettled(run_id="run-b", started_seq=started_b.seq))
     events = session_log.events()
@@ -501,9 +501,9 @@ class _BrokenStore:
 
 async def test_refresh_live_never_raises_on_a_broken_store(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=4))
-    session_log.record(TurnSettled(run_id="run-broken"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=4, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-broken", started_seq=2))
     events = session_log.events()
 
     await refresh_live(projection_pool, events, _BrokenStore(), project_root=tmp_path)  # must not raise
@@ -524,9 +524,9 @@ async def test_delete_session_rows_removes_rows_and_returns_run_ids(tmp_path: Pa
 
 async def test_friction_flagged_folds_into_a_flag_row(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=4))
-    session_log.record(TurnSettled(run_id="run-flagged"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=4, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-flagged", started_seq=2))
     flagged = recorded(
         session_log,
         FrictionFlagged(
@@ -557,9 +557,9 @@ async def test_live_flag_with_a_stamped_subject_lands_on_it_not_a_later_session(
 ) -> None:
     """A live flag now self-identifies its subject; a newer session opened after it must not steal it."""
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=4, session_id=SESSION_A))
-    session_log.record(SessionStarted(session_id=SESSION_B))  # a newer session opens while A's turn is still open
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=4, session_id=SESSION_A, prompt_excerpt=None))
+    session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))  # a newer session opens while A's turn is still open
     session_log.record(
         FrictionFlagged(
             target_kind="tool",
@@ -632,14 +632,14 @@ def test_sync_rebuild_matches_direct_rebuild_counts(tmp_path: Path, monkeypatch:
     project_root.mkdir()
 
     checkout_journal = SessionLog(checkout_root / ".state" / "session-log.jsonl", clock=_clock, topics=None)
-    checkout_journal.record(SessionStarted(session_id=SESSION_A))
-    checkout_journal.record(TurnStarted(entry="spa", chars=4, session_id=SESSION_A))
-    checkout_journal.record(TurnSettled(run_id="run-checkout", started_seq=None))
+    checkout_journal.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    checkout_journal.record(TurnStarted(entry="spa", chars=4, session_id=SESSION_A, prompt_excerpt=None))
+    checkout_journal.record(TurnSettled(run_id="run-checkout", started_seq=2))
 
     workspace = open_workspace(project_root)
-    workspace.session_log.record(SessionStarted(session_id=SESSION_B))
-    workspace.session_log.record(TurnStarted(entry="spa", chars=6, session_id=SESSION_B))
-    workspace.session_log.record(TurnSettled(run_id="run-project", started_seq=None))
+    workspace.session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
+    workspace.session_log.record(TurnStarted(entry="spa", chars=6, session_id=SESSION_B, prompt_excerpt=None))
+    workspace.session_log.record(TurnSettled(run_id="run-project", started_seq=2))
 
     project_registry.install(ProjectsLog(checkout_root / ".state" / "projects-log.jsonl"))
     project_registry.register(project_root, project_id=service.project_id_of(project_root))

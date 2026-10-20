@@ -170,7 +170,7 @@ class _Factory:
     """A `ctx.obj` container factory whose `MessageBus` runs a real-PG, fake-embed index handler."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader,
             FakeEmbedding(),  # the only seam — real reader + real PG UoW + real dashboard writer
@@ -268,7 +268,7 @@ class TestDryRun:
         # paper's `[[lightrag]]` still resolves (via the title key) — but the old stem disappears and a
         # new one appears, so the paper (the inbound linker) must re-resolve: removed = {old path},
         # added = {new path}, inbound-closure = {the paper}.
-        entities = knowledge_base / "Units" / "Entities"
+        entities = knowledge_base / "Wiki" / "Entities"
         renamed_text = (entities / "lightrag.md").read_text(encoding="utf-8")
         (entities / "lightrag.md").unlink()
         (entities / "lightrag-technique.md").write_text(renamed_text, encoding="utf-8")
@@ -281,9 +281,9 @@ class TestDryRun:
         # (a) the preview lists the renamed file's old/new paths under removed/added and the inbound
         # closure (the paper) under inbound-closure, each under the right partition header.
         partitions = _parse_partitions(result.stdout)
-        assert "Units/Entities/lightrag.md" in partitions["removed"]
-        assert "Units/Entities/lightrag-technique.md" in partitions["added"]
-        assert "Units/Papers/lightrag-2025.md" in partitions["inbound-closure"]
+        assert "Wiki/Entities/lightrag.md" in partitions["removed"]
+        assert "Wiki/Entities/lightrag-technique.md" in partitions["added"]
+        assert "Wiki/Papers/lightrag-2025.md" in partitions["inbound-closure"]
         # the re-embed / edges / graph-refresh signals are present (the dirty sources' edges rebuild →
         # the AGE graph is re-projected on a real run).
         stdout = result.stdout.lower()

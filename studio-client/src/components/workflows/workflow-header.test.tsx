@@ -5,7 +5,7 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import { studioApi } from "@/api/studio";
-import { type WorkflowDetail, WorkflowDetailSchema } from "@/api/studio-types";
+import type { WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/test-support/msw/server";
 import { render } from "@/test-support/render";
 
@@ -143,6 +143,7 @@ describe("WorkflowHeader", () => {
       http.patch(`${BASE}/api/workflow/wf.lit-check.v5/card`, async ({ request }) => {
         patched = await request.json();
         return HttpResponse.json({
+          archived_at: null,
           ok: true,
           id: "wf.lit-check.v5",
           title: "Check the literature first",
@@ -258,12 +259,6 @@ describe("WorkflowHeader", () => {
     expect(await screen.findByRole("button", { name: "Archive" })).toBeInTheDocument();
     expect(screen.queryByText("archived")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
-  });
-
-  it("still parses a detail payload missing archived_at, treating it as live", () => {
-    const { archived_at: _archivedAt, ...legacyDetail } = detailFixture();
-
-    expect(WorkflowDetailSchema.parse(legacyDetail).archived_at).toBeNull();
   });
 
   it("archives from the header, posting to the archive route and showing the archived badge", async () => {

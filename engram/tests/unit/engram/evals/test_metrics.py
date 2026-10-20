@@ -5,7 +5,7 @@ present, else the smallest numeric cutoff, with non-numeric suffixes sorting las
 sort key that ordering rides on. The diagnosis reader, the recommendation gate, and the over-expansion detector
 all resolve their headline recall/precision the same way, so these pin the one shared behavior.
 `is_known_metric_key` pins the closed vocabulary a tuning policy's `primary_metric` is validated
-against: the legacy citation keys and every layer's namespaced keys.
+against: the unprefixed citation keys and every layer's namespaced keys.
 """
 
 from __future__ import annotations

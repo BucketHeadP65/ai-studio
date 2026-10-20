@@ -1,9 +1,9 @@
-"""Library files and outcomes produced before today's contracts existed, read back by today's code.
+"""Library files nobody described and outcomes nothing could check, read back by the library and the classifier.
 
 Every fixture here is hand-typed rather than dumped from a current model, so a field that starts
 being written by default fails loudly here instead of the fixture quietly growing it. What each one
-asserts is the honest fallback: a file the models no longer recognise reads as carrying nothing,
-never as a listing that will not load and never as words this library composed.
+asserts is the honest reading: a file whose words the models do not recognise reads as carrying
+nothing, never as a listing that will not load and never as words this library composed.
 """
 
 from __future__ import annotations
@@ -70,8 +70,8 @@ status: draft
 
 Use this at the end of a fiscal quarter.
 """
-"""One workflow file exactly as it was written before a presentation or an intent could be kept:
-the card's three fields, the spec, and nothing else."""
+"""One workflow file nobody described: the card's three fields, the spec, and no presentation or
+intent."""
 
 _UNSUPPORTED_ACTION_FILE = f"""---
 title: Quarterly close
@@ -127,10 +127,10 @@ def _library(root: Path, *, file: str) -> FolderLibrary:
     return FolderLibrary(root)
 
 
-# --- a card written before presentations existed ------------------------------------------------
+# --- a card nobody described ---------------------------------------------------------------------
 
 
-async def test_a_file_written_before_presentations_reads_as_carrying_none(tmp_path: Path) -> None:
+async def test_a_file_with_no_presentation_reads_as_carrying_none(tmp_path: Path) -> None:
     """Absent is absent. Nothing composes four sentences out of the spec's own prose."""
     library = _library(tmp_path / "library", file=_NO_PRESENTATION_FILE)
 
@@ -142,8 +142,8 @@ async def test_a_file_written_before_presentations_reads_as_carrying_none(tmp_pa
     assert card.title == "Quarterly close"
 
 
-async def test_a_file_written_before_presentations_still_lists_and_still_runs(tmp_path: Path) -> None:
-    """The listing a chooser reads and the spec a launch needs both load from the same old file."""
+async def test_a_file_with_no_presentation_lists_and_runs(tmp_path: Path) -> None:
+    """The listing a chooser reads and the spec a launch needs both load from the same file."""
     library = _library(tmp_path / "library", file=_NO_PRESENTATION_FILE)
 
     catalog = await library.catalog()
@@ -193,7 +193,7 @@ async def test_the_same_file_with_an_action_this_app_does_implement_reads_its_wo
 
 
 async def test_a_file_offering_an_unsupported_action_still_lists(tmp_path: Path) -> None:
-    """A hand-edited file that no longer parses must not take down the listing that would have shown it."""
+    """A hand-edited file whose words do not parse must not take down the listing that would have shown it."""
     library = _library(tmp_path / "library", file=_UNSUPPORTED_ACTION_FILE)
 
     catalog = await library.catalog()
@@ -203,7 +203,7 @@ async def test_a_file_offering_an_unsupported_action_still_lists(tmp_path: Path)
 
 
 def test_the_same_action_is_refused_on_the_way_in() -> None:
-    """Reads forgive an old file. Writes do not, so nothing new can land carrying one."""
+    """Reads forgive such a file. Writes do not, so nothing new can land carrying one."""
     offered = {
         "actions": [
             {"kind": "publish_to_web", "id": "publish", "label": "Publish it", "artifact_id": "report", "endpoint": "https://x"}
@@ -261,7 +261,7 @@ def _outcome_of(
 
 
 def test_a_workflow_that_declared_no_result_can_only_be_unknown() -> None:
-    """A run of a workflow from before results were declarable is unknown, and stays unknown."""
+    """A run of a workflow that declares no result is unknown, and stays unknown."""
     outcome = _outcome_of(None)
 
     assert outcome.status == "unknown"

@@ -125,8 +125,7 @@ export const RESULT_STATUS: Record<ResultStatus, { tone: PillTone; word: string 
 
 const UNCHECKED = "Result evidence is unavailable, so what this run did cannot be checked.";
 
-export function resultReading(result: Outcome | null | undefined): string {
-  if (!result) return UNCHECKED;
+export function resultReading(result: Outcome): string {
   const { attempted, succeeded, skipped, failed } = result;
   switch (result.status) {
     case "succeeded":
@@ -143,7 +142,7 @@ export function resultReading(result: Outcome | null | undefined): string {
 }
 
 export interface ResultSummaryProps {
-  result: Outcome | null | undefined;
+  result: Outcome;
   // Counters the workflow's author asked to show, read straight off what the run recorded. They sit
   // beside the status and never change it: a number a run wrote about itself settles nothing.
   recorded?: RecordedOutput[];
@@ -155,8 +154,8 @@ export function ResultSummary({
   recorded = [],
   compact = false,
 }: ResultSummaryProps): ReactElement {
-  const status = RESULT_STATUS[result?.status ?? "unknown"];
-  const summary = result?.summary ?? "";
+  const status = RESULT_STATUS[result.status];
+  const summary = result.summary;
   return (
     <div
       className={

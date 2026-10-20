@@ -108,6 +108,7 @@ def _inbox_spec() -> KnowledgeBaseSchema:
             PageTypeSpec(
                 page_type="talk",
                 id_prefix="talk.",
+                folder="Talks",
                 frontmatter_fields=(
                     FrontmatterFieldSpec(name="zotero_key", type="scalar", required=True),
                     FrontmatterFieldSpec(name="source_hash", type="scalar", required=True),
@@ -128,11 +129,10 @@ def _inbox_spec() -> KnowledgeBaseSchema:
 
 
 def _scaffold_inbox(knowledge_base: Path) -> None:
-    """Write the inbox spec directly, scaffold through the real CLI, then add the `Units/` tree index needs."""
+    """Write the inbox spec directly, then scaffold through the real CLI."""
     (knowledge_base / "knowledge-base-schema.json").write_text(_inbox_spec().model_dump_json(indent=2) + "\n", encoding="utf-8")
     result = runner.invoke(app, ["init", "scaffold", "--knowledge-base", str(knowledge_base)])
     assert result.exit_code == 0, result.output
-    (knowledge_base / "Units").mkdir(parents=True, exist_ok=True)
 
 
 def _add_to_ledger(knowledge_base: Path, url: str) -> None:
@@ -166,7 +166,7 @@ async def _index(engine: AsyncEngine, knowledge_base: Path, embedding: FakeEmbed
     omitted). Pass the knowledge base's own scaffolded `knowledge-base-schema.json` when authored notes use inbox-only kinds (`talk`).
     """
     handler = IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base), embedding, KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=spec
+        FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders), embedding, KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=spec
     )
     report = await handler.handle(IndexKnowledgeBase(collection="inbox"))
     assert report.validation.n_errors == 0, report.validation.errors
@@ -331,7 +331,8 @@ A talk on distributed consensus, contrasting Raft against Paxos.
 
 Raft is presented as the more approachable protocol for production systems.
 """
-        (knowledge_base / "Units" / f"talk.{_VIDEO_A}.md").write_text(talk_note, encoding="utf-8")
+        (knowledge_base / "Talks").mkdir(exist_ok=True)
+        (knowledge_base / "Talks" / f"talk.{_VIDEO_A}.md").write_text(talk_note, encoding="utf-8")
 
         # The scaffolded inbox spec (not the bundled research default `_index` otherwise falls back to) --
         # only it declares the `talk` kind the note above authors against.
@@ -342,7 +343,7 @@ Raft is presented as the more approachable protocol for production systems.
         # `Sources/` mirror parsed to a `MirrorDoc`, keyed by the mirror's own `source_key` -- looked up here
         # by the talk page's own citation field, proving the citation "finds" its mirror before the quote is
         # checked against it.
-        reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=inbox_spec.note_folders)
         mirror_docs = (MirrorDoc.from_text(raw.path, raw.text, "inbox") for raw in reader.source_mirrors())
         mirror_texts = {doc.source_key: doc.text for doc in mirror_docs}
         cited_text = mirror_texts.get(_KEY_A)

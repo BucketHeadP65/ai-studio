@@ -9,8 +9,7 @@ two messages up in the history it was sent. A UI that hides the history cannot b
 every symptom of it looks like a model defect.
 
 So the claim under test is one sentence: **`/api/conversation` shows exactly the dialogue the next
-turn will carry.** The interesting part is a text part written before replies were plain prose,
-which is a JSON envelope on disk -- shown raw, the panel would print a spec at the person.
+turn will carry.** A reply is prose, so the panel shows a text part exactly as the model wrote it.
 """
 
 from __future__ import annotations
@@ -31,11 +30,6 @@ def _asked(text: str) -> ModelRequest:
     return ModelRequest(parts=[UserPromptPart(content=text)])
 
 
-def _legacy_envelope(*, message: str, spec_yaml: str = "", title: str = "") -> str:
-    """The pre-prose reply's wire shape, exactly as a run recorded before this change would have written it."""
-    return json.dumps({"message": message, "spec_yaml": spec_yaml, "title": title, "summary": "", "applicability": ""})
-
-
 def test_the_dialogue_survives_the_round_trip() -> None:
     """Both sides, in order, labelled the way the panel labels them."""
     history = [
@@ -50,17 +44,6 @@ def test_the_dialogue_survives_the_round_trip() -> None:
     ]
 
 
-def test_an_old_transcripts_envelope_reads_back_as_its_message() -> None:
-    """A text part written before replies were plain prose is a JSON envelope on disk.
-
-    Shown as-is, the panel would print a JSON object with a whole YAML spec embedded in it --
-    which is what the person would have seen if this had been written by reading `TextPart.content`.
-    """
-    turns = _turns([_answered(_legacy_envelope(message="Here is a draft.", spec_yaml="name: dig\nversion: 1\n", title="Dig once"))])
-    assert turns == [{"who": "agent", "text": "Here is a draft."}]
-    assert "spec_yaml" not in json.dumps(turns), "the draft belongs on the graph, not in the chat log"
-
-
 def test_prose_that_is_not_json_is_shown_as_itself() -> None:
     """A mid-turn narration is a plain text part, and is not dropped."""
     assert _turns([ModelResponse(parts=[TextPart("Let me check the store first.")])]) == [
@@ -68,10 +51,13 @@ def test_prose_that_is_not_json_is_shown_as_itself() -> None:
     ]
 
 
-def test_a_json_object_that_is_not_the_old_envelope_is_shown_verbatim() -> None:
-    """The reply is prose now: a model that writes JSON is showing the owner what it wrote, not proposing a draft."""
-    literal = '{"message": "hi", "other": 42}'
-    assert _turns([_answered(literal)]) == [{"who": "agent", "text": literal}]
+def test_a_json_object_is_shown_verbatim() -> None:
+    """A model that writes JSON is showing the owner what it wrote, whatever keys the object carries."""
+    for literal in (
+        '{"message": "hi", "other": 42}',
+        json.dumps({"message": "Here is a draft.", "spec_yaml": "name: dig\nversion: 1\n", "title": "Dig once", "summary": "", "applicability": ""}),
+    ):
+        assert _turns([_answered(literal)]) == [{"who": "agent", "text": literal}]
 
 
 def test_tool_traffic_stays_out_of_the_panel() -> None:

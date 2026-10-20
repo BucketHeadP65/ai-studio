@@ -191,12 +191,11 @@ class SessionEvents(Protocol):
         ...
 
     def boot_sweep(self) -> None:
-        """Close on this timeline what an older process left open.
+        """Close on this timeline what an earlier process left open.
 
-        You must call it once, before the first request and before the session is resumed. First, a
-        `forgotten-at` marker an older process left becomes a `conversation_forgotten` entry stamped
-        with the marker's own time. Then every turn that started and never ended gets a
-        `turn_abandoned` entry. An implementation with nothing to sweep records nothing.
+        You must call it once, before the first request and before the session is resumed. Every turn
+        that started and never ended gets a `turn_abandoned` entry. An implementation with nothing to
+        sweep records nothing.
         """
         ...
 

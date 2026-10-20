@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Literal
 
 from core.cqrs.contracts import Command, Event
 from core.markdown import split_frontmatter
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, JsonValue
 
 from engram.kb.contracts import AuthoringPayload, BaseFrontmatter, ClaimBlock, KnowledgeBaseNote
 
@@ -157,12 +157,11 @@ class CitingPagesChanged(Event):
     A subscriber can enqueue the pages whose datasets may need generating again. `page_ids` is
     every page loaded this run whose type is a value of the schema's `sources.digest_types`, and the
     subscriber decides which need work.
-    `collection` is the knowledge base partition they were loaded into. A stored event written
-    with the old field name `paper_ids` still decodes.
+    `collection` is the knowledge base partition they were loaded into.
     """
 
     collection: str
-    page_ids: tuple[str, ...] = Field(validation_alias=AliasChoices("page_ids", "paper_ids"))
+    page_ids: tuple[str, ...]
 
 
 class EmbeddingsRefreshed(Event):

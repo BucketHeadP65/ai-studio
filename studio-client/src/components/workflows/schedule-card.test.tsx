@@ -31,7 +31,6 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
     enabled: true,
     gate_policy: "wait",
     gate_mode: "wait",
-    auto_approve_gates: false,
     capacity_key: null,
     capacity_limit: null,
     blackout: null,
@@ -45,6 +44,8 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
     paused_at: null,
     spend_today_usd: "0",
     spend_week_usd: "0",
+    spend_today_unpriced: 0,
+    spend_week_unpriced: 0,
     ...overrides,
   };
 }

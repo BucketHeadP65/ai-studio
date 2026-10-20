@@ -19,6 +19,7 @@ from core.ai.workflows.contracts import (
     FromParameter,
     GateDecision,
     MapNode,
+    Outcome,
     ParameterSpec,
     PersonGate,
     RunNode,
@@ -33,7 +34,6 @@ from core.ai.workflows.contracts import (
 )
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, UserPromptPart
 
-from harness.features.running.domain.ended_run import RunArchiveRecord
 from harness.features.running.service import archive_run
 from harness.session import ActiveRun, NoSessionLog, Runtime, SessionPool, bind_active
 from tests.conftest import ApproveAll
@@ -354,6 +354,7 @@ def test_the_archive_record_round_trips_a_runs_conversations(tmp_path: Path) -> 
         gates_approved=(),
         gates_rejected={},
         gates_auto=(),
+        result=Outcome(status="unknown", summary="no result declared"),
     )
 
     archived = records.archive.recent(10)
@@ -361,27 +362,6 @@ def test_the_archive_record_round_trips_a_runs_conversations(tmp_path: Path) -> 
     assert record is not None
     assert set(record.conversations) == {"weigh[]"}
     assert [entry["kind"] for entry in record.conversations["weigh[]"]] == ["request", "response"]
-
-
-def test_a_legacy_record_with_no_conversations_field_still_parses() -> None:
-    """A record archived before workers kept memory carries none -- it must still parse."""
-    legacy = {
-        "run_id": "run-legacy",
-        "workflow_id": "wf.report",
-        "outcome": "completed",
-        "started_at": "2026-01-01T00:00:00+00:00",
-        "ended_at": "2026-01-01T00:01:00+00:00",
-        "runner": "app:harness",
-        "session_id": "sess-1",
-        "params": {"quarter": "Q2"},
-        "spec": {"name": "quarterly-report"},
-        "values": {"reconcile": {"net": 400}},
-        "events": [],
-    }
-
-    record = RunArchiveRecord.model_validate(legacy)
-
-    assert record.conversations == {}
 
 
 # --- a rejection's own evidence reaches the rerun that owes the repair --------------------------

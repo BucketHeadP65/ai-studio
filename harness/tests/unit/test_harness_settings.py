@@ -84,13 +84,11 @@ class TestTheStateHome:
     def test_every_path_hangs_off_the_one_home(self, tmp_path: Path) -> None:
         paths = StateSettings(home=tmp_path)
 
-        assert paths.steps == tmp_path / "steps"
         assert paths.session_log == tmp_path / "session-log.jsonl"
         assert paths.evidence_log == tmp_path / "evidence.jsonl"
         assert paths.activation_log == tmp_path / "activations.jsonl"
         assert paths.external_agents == tmp_path / "external-agents.json"
         assert paths.draft == tmp_path / "draft.json"
-        assert paths.forgotten_marker == tmp_path / "forgotten-at"
         assert paths.archive == tmp_path / "runs" / "archive"
         assert paths.run_events("r1") == tmp_path / "runs" / "r1" / "events.jsonl"
 
@@ -115,13 +113,11 @@ class TestTheStateHome:
         paths = StateSettings(home=home)
 
         for path in (
-            paths.steps,
             paths.session_log,
             paths.evidence_log,
             paths.activation_log,
             paths.external_agents,
             paths.draft,
-            paths.forgotten_marker,
             paths.archive,
             paths.spend,
             paths.sessions,

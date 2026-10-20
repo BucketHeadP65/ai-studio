@@ -339,7 +339,7 @@ class BaseHybridSearchBuilder(abc.ABC):
     relation-qualified.
 
     A partitioned schema keys every hit by its partition and its id, and returns the partition right
-    after `id`. An unpartitioned schema renders exactly as it did before partitions existed.
+    after `id`. An unpartitioned schema keys every hit by its id alone and returns no partition column.
     """
 
     def api_search_body(self, schema: SearchSchema, *, function_name: str = "api.search") -> str:

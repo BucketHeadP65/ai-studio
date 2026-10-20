@@ -50,7 +50,7 @@ A paper about teleportation retrieval.
 def _build_knowledge_base(tmp_path: Path) -> Path:
     """A knowledge base with one paper carrying an unregistered `tasks` value, vocabularies + meta stubs."""
     builder = KnowledgeBaseBuilder(tmp_path)
-    builder.add_unit_document("Papers", "x", _PAPER)
+    builder.add_unit_document("Wiki/Papers", "x", _PAPER)
     builder.add_vocabulary()
     builder.add_meta_stubs()
     builder.add_knowledge_base_schema()
@@ -60,7 +60,7 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
 def _handler(knowledge_base_root: Path) -> IndexKnowledgeBaseHandler:
     """A fresh handler over a real filesystem reader + fakes, its own empty UoW (forces a full rebuild)."""
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base_root), FakeEmbedding(), FakeKnowledgeBaseUnitOfWork, FakeValidationReportSink(), spec=load_knowledge_base_schema(knowledge_base_root)
+        FilesystemKnowledgeBaseReader(knowledge_base_root, note_folders=load_knowledge_base_schema(knowledge_base_root).note_folders), FakeEmbedding(), FakeKnowledgeBaseUnitOfWork, FakeValidationReportSink(), spec=load_knowledge_base_schema(knowledge_base_root)
     )
 
 

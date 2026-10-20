@@ -262,7 +262,7 @@ def _run_workflow_tool(run: RunCollaborators) -> Callable[..., Awaitable[str]]:
     """The `run_workflow` tool, closed over what a run this capability starts reaches."""
 
     async def run_workflow_tool(
-        ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, auto_approve_gates: bool = False
+        ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, gate_mode: GateMode = "wait"
     ) -> str:
         """Start a saved workflow, or the current draft, running in the background. The graph runs it, you do not.
 
@@ -280,10 +280,11 @@ def _run_workflow_tool(run: RunCollaborators) -> Callable[..., Awaitable[str]]:
             arguments: The workflow's parameters, one per declared parameter, each as the JSON
                 value that parameter's own type asks for: a list where it declares a list, a
                 number where it declares a number, true or false where it declares a boolean.
-            auto_approve_gates: Put every gate this run reaches on the record without asking anyone,
-                on the person's explicit instruction only. Never counted as human approval.
+            gate_mode: What a person gate does. `wait` holds it for the person, `orchestrate` hands it to
+                this run's own orchestrator, and `auto` passes it with nobody asked, on the person's
+                explicit instruction only. An automatic pass is never counted as a person's approval.
         """
-        return await run_workflow(ctx, workflow_id, arguments, run=run, auto_approve_gates=auto_approve_gates)
+        return await run_workflow(ctx, workflow_id, arguments, run=run, gate_mode=gate_mode)
 
     return run_workflow_tool
 
@@ -374,7 +375,6 @@ class WorkflowProcess(AbstractCapability[Runtime]):
             arguments: WorkflowArguments | None = None,
             gate_policy: str = "wait",
             gate_mode: GateMode = "wait",
-            auto_approve_gates: bool = False,
             capacity_key: str | None = None,
             capacity_limit: int | None = None,
             blackout: str | None = None,
@@ -390,11 +390,11 @@ class WorkflowProcess(AbstractCapability[Runtime]):
                 ctx,
                 workflow_id,
                 cadence,
+                run_engine=self.run.run_engine,
                 arguments=arguments,
                 names=self.knowledge_bases,
                 gate_policy=gate_policy,
                 gate_mode=gate_mode,
-                auto_approve_gates=auto_approve_gates,
                 capacity_key=capacity_key,
                 capacity_limit=capacity_limit,
                 blackout=blackout,
@@ -411,7 +411,6 @@ class WorkflowProcess(AbstractCapability[Runtime]):
             enabled: bool | None = None,
             gate_policy: str | None = None,
             gate_mode: GateMode | None = None,
-            auto_approve_gates: bool | None = None,
             capacity_key: str | None = None,
             capacity_limit: int | None = None,
             blackout: str | None = None,
@@ -422,6 +421,7 @@ class WorkflowProcess(AbstractCapability[Runtime]):
                 scheduler,
                 ctx,
                 schedule_id,
+                run_engine=self.run.run_engine,
                 workflow_id=workflow_id,
                 cadence=cadence,
                 arguments=arguments,
@@ -429,7 +429,6 @@ class WorkflowProcess(AbstractCapability[Runtime]):
                 enabled=enabled,
                 gate_policy=gate_policy,
                 gate_mode=gate_mode,
-                auto_approve_gates=auto_approve_gates,
                 capacity_key=capacity_key,
                 capacity_limit=capacity_limit,
                 blackout=blackout,

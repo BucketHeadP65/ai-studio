@@ -223,11 +223,11 @@ def _mirror(source_key: str, source_hash: str, body: str) -> str:
 def _build_knowledge_base(root: Path) -> Path:
     """Lay down the four papers, their mirrors, registries, and meta stubs."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "graph-cost", _PAPER_GRAPH)
-    builder.add_unit_document("Papers", "vector-cache", _PAPER_CACHE)
-    builder.add_unit_document("Papers", "speech-unrelated", _PAPER_SPEECH)
-    builder.add_unit_document("Papers", "graph-cost-v0", _PAPER_GRAPH_OLD)
-    builder.add_unit_document("Papers", "fluxidrome", _PAPER_LONG)
+    builder.add_unit_document("Wiki/Papers", "graph-cost", _PAPER_GRAPH)
+    builder.add_unit_document("Wiki/Papers", "vector-cache", _PAPER_CACHE)
+    builder.add_unit_document("Wiki/Papers", "speech-unrelated", _PAPER_SPEECH)
+    builder.add_unit_document("Wiki/Papers", "graph-cost-v0", _PAPER_GRAPH_OLD)
+    builder.add_unit_document("Wiki/Papers", "fluxidrome", _PAPER_LONG)
     builder.add_source_mirror("graph-cost", _mirror("GRAPHKEY1", "g001", "Graph index construction token cost."))
     builder.add_source_mirror("vector-cache", _mirror("CACHEKEY1", "c001", "Vector caching of hot passages."))
     builder.add_source_mirror("speech-unrelated", _mirror("SPEECHKEY1", "s001", "Acoustic phoneme recognition."))
@@ -243,7 +243,7 @@ class _Factory:
     """A `ctx.obj` factory whose bus runs a real-PG, fake-embed index handler (e2e shape)."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader, FakeEmbedding(), KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=load_knowledge_base_schema(knowledge_base)
         )

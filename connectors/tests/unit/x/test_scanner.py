@@ -95,9 +95,9 @@ def _scanner(factory: AgentFactory, *, cache_dir: Path, max_posts: int = 50) -> 
 
 
 def _resources(root: Path, *, connectors: tuple[str, ...] = (_FAKE_CONNECTOR,), key: str = "xai-secret") -> SourceResources:
-    """Resources for a knowledge base root that carries no `knowledge-base-schema.json` at all, so a build reading one could not get past it."""
-    for required in ("Units", "_meta"):
-        (root / required).mkdir(parents=True, exist_ok=True)
+    """Resources for a knowledge base root whose `knowledge-base-schema.json` no reader could load, so a build reading it could not get past it."""
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return SourceResources(knowledge_base=KnowledgeBaseSettings(path=root), connectors=connectors, settings={"xai": {"api_key": key}} if key else {})
 
 

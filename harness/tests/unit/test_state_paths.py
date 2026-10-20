@@ -68,7 +68,7 @@ class TestASessionWritesUnderNobodysCheckout:
         session = a_runtime()
 
         waiting = session_state.run_log_path(session)
-        RunLog.begin(path=waiting, run_id="a-run", workflow_id="wf.somewhere", spec=quarterly_report, params={"quarter": "Q2"}).started("fetch_sales")
+        RunLog.begin(path=waiting, run_id="a-run", workflow_id="wf.somewhere", spec=quarterly_report, params={"quarter": "Q2"}, started_at="2026-08-22T12:00:00+00:00").started("fetch_sales")
 
         assert waiting.exists(), "the run log was written somewhere"
         assert CHECKOUT / ".state" not in waiting.parents, f"{waiting} is inside this checkout's own state home"

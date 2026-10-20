@@ -67,6 +67,7 @@ if TYPE_CHECKING:
 
     from core.ai.workflows.contracts import Node
 
+    from harness.domain.contracts import GateMode
     from harness.features.running.domain.ended_run import RunArchiveRecord
     from harness.features.running.internal_contracts import RunArchiveQueries
     from harness.settings import RunSettings
@@ -97,7 +98,7 @@ class Requested:
 
 
 async def run_workflow(
-    ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, run: RunCollaborators, auto_approve_gates: bool = False
+    ctx: RunContext[Runtime], workflow_id: str, arguments: WorkflowArguments, *, run: RunCollaborators, gate_mode: GateMode = "wait"
 ) -> str:
     """Start a saved workflow, or the current draft, running in the background. The graph runs it, you do not.
 
@@ -117,8 +118,9 @@ async def run_workflow(
             that parameter's own type asks for: a list where it declares a list, a number where it
             declares a number, true or false where it declares a boolean.
         run: Where this run's records land, where it announces, and the sessions it can reach.
-        auto_approve_gates: Put every gate this run reaches on the record without asking anyone,
-            on the person's explicit instruction only. Never counted as human approval.
+        gate_mode: What a person gate does. `wait` holds it for the person, `orchestrate` hands it to
+            this run's own orchestrator, and `auto` passes it with nobody asked, on the person's
+            explicit instruction only. An automatic pass is never counted as a person's approval.
 
     Returns:
         The sentence saying the run started, with its run id, its steps and its gates.
@@ -167,7 +169,7 @@ async def run_workflow(
         msg = f"{source} will not take those values: {exc}"
         raise ModelRetry(msg) from exc
     requested = Requested(source=source, spec=spec, arguments=admitted)
-    return await _execute(session, run=run, requested=requested, auto_approve_gates=auto_approve_gates)
+    return await _execute(session, run=run, requested=requested, gate_mode=gate_mode)
 
 
 async def message_worker(ctx: RunContext[Runtime], node_id: str, message: str) -> str:
@@ -232,7 +234,7 @@ def _live_step_name(session: Runtime, node_id: str) -> str | None:
 
 
 async def _execute(  # noqa: PLR0915 (one reset line per session field the run panel reads, not a second job)
-    session: Runtime, *, run: RunCollaborators, requested: Requested, auto_approve_gates: bool = False
+    session: Runtime, *, run: RunCollaborators, requested: Requested, gate_mode: GateMode = "wait"
 ) -> str:
     """Start the checked spec in `session`, setting the same session fields a button launch does."""
     # The session's asker, when its plugin has one: over ACP the gate arrives as an editor
@@ -257,7 +259,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
         workflow_id=requested.source,
         spec=requested.spec,
         params=dict(requested.arguments),
-        gate_mode="auto" if auto_approve_gates else "wait",
+        gate_mode=gate_mode,
         gate_timeout=approval.timeout_seconds,
         runner="app:chat",
         session_kind=session_type_of(session.session_kind),
@@ -285,8 +287,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
     session.active.progress.reset()
     session.active.values = run_log.state.values
     session.active.started_at = started_at.isoformat()
-    session.active.gate_mode = "auto" if auto_approve_gates else "wait"
-    session.active.auto_approve = auto_approve_gates
+    session.active.gate_mode = gate_mode
     session.active.gate_timeout = approval.timeout_seconds
     session.active.auto_gates = approval.auto_gates
     session.active.orchestrated_gates = approval.orchestrated_gates
@@ -515,9 +516,7 @@ async def recent_runs(archive: RunArchiveQueries, limit: int = 10) -> str:
 
 
 def _checked(record: RunArchiveRecord) -> str:
-    """One run's checked outcome in a phrase, saying plainly when nothing was checked."""
-    if record.result is None:
-        return "unknown (this run predates outcome reporting)"
+    """One run's checked outcome in a phrase."""
     result = record.result
     if result.attempted == 0:
         return result.status

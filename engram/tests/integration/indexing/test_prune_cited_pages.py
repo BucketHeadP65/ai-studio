@@ -67,8 +67,8 @@ def _spec() -> KnowledgeBaseSchema:
     return KnowledgeBaseSchema(
         slug=_COLLECTION,
         page_types=(
-            PageTypeSpec(page_type="note", id_prefix="note.", canonical_sections=findings, claims_enabled=True),
-            PageTypeSpec(page_type="topic", id_prefix="topic.", canonical_sections=findings),
+            PageTypeSpec(page_type="note", id_prefix="note.", folder="Wiki/Notes", canonical_sections=findings, claims_enabled=True),
+            PageTypeSpec(page_type="topic", id_prefix="topic.", folder="Wiki/Topics", canonical_sections=findings),
         ),
         claim_types=(VocabEntry(value="observation", definition="Something observed"),),
         claims=ClaimGrammarSpec(section="findings", multilink_fields=("applies_to",)),
@@ -84,8 +84,8 @@ def _knowledge_base(root: Path, spec: KnowledgeBaseSchema, *, notes: tuple[str, 
         if relative.startswith("_meta/vocabulary/"):
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             (root / relative).write_text(body, encoding="utf-8")
-    files = {f"topic.{stem}": builder.add_unit_document("topic", stem, _topic(stem)) for stem in ("alpha", "beta")}
-    files.update({f"note.{stem}": builder.add_unit_document("note", stem, _note(stem)) for stem in notes})
+    files = {f"topic.{stem}": builder.add_unit_document("Wiki/Topics", stem, _topic(stem)) for stem in ("alpha", "beta")}
+    files.update({f"note.{stem}": builder.add_unit_document("Wiki/Notes", stem, _note(stem)) for stem in notes})
     return files
 
 
@@ -95,7 +95,7 @@ async def _index(knowledge_base: Path, migrated: str, spec: KnowledgeBaseSchema,
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(knowledge_base),
+            FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders),
             FakeEmbedding(),
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
             FakeValidationReportSink(),

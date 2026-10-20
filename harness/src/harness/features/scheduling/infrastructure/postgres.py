@@ -35,7 +35,6 @@ def _schedule_from_row(row: asyncpg.Record) -> Schedule:
         enabled=row["enabled"],
         gate_policy=row["gate_policy"],
         gate_mode=row["gate_mode"],
-        auto_approve_gates=row["auto_approve_gates"],
         capacity_key=row["capacity_key"],
         capacity_limit=row["capacity_limit"],
         blackout=row["blackout"],
@@ -49,7 +48,7 @@ def _schedule_from_row(row: asyncpg.Record) -> Schedule:
     )
 
 
-_COLUMNS = """id, workflow_id, arguments, cadence, enabled, gate_policy, gate_mode, auto_approve_gates,
+_COLUMNS = """id, workflow_id, arguments, cadence, enabled, gate_policy, gate_mode,
                capacity_key, capacity_limit, blackout, catch_up,
                session_id, created_at, last_run_at, last_outcome, next_run_at, paused_at"""
 
@@ -78,7 +77,7 @@ class PostgresSchedules:
             f"""
             INSERT INTO public.schedules
               ({_COLUMNS})
-            VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
             """,
             schedule.id,
             schedule.workflow_id,
@@ -87,7 +86,6 @@ class PostgresSchedules:
             schedule.enabled,
             schedule.gate_policy,
             schedule.gate_mode,
-            schedule.auto_approve_gates,
             schedule.capacity_key,
             schedule.capacity_limit,
             schedule.blackout,
@@ -140,13 +138,12 @@ class PostgresSchedules:
               enabled            = COALESCE($5, enabled),
               gate_policy        = COALESCE($6, gate_policy),
               gate_mode          = COALESCE($7, gate_mode),
-              auto_approve_gates = COALESCE($8, auto_approve_gates),
-              capacity_key       = COALESCE($9, capacity_key),
-              capacity_limit     = COALESCE($10, capacity_limit),
-              blackout           = COALESCE($11, blackout),
-              catch_up           = COALESCE($12, catch_up),
-              next_run_at        = CASE WHEN $15 THEN NULL ELSE COALESCE($14, next_run_at) END,
-              paused_at          = CASE WHEN $5 IS NULL THEN paused_at ELSE $13::timestamptz END
+              capacity_key       = COALESCE($8, capacity_key),
+              capacity_limit     = COALESCE($9, capacity_limit),
+              blackout           = COALESCE($10, blackout),
+              catch_up           = COALESCE($11, catch_up),
+              next_run_at        = CASE WHEN $14 THEN NULL ELSE COALESCE($13, next_run_at) END,
+              paused_at          = CASE WHEN $5 IS NULL THEN paused_at ELSE $12::timestamptz END
             WHERE id = $1
             """,
             schedule_id,
@@ -156,7 +153,6 @@ class PostgresSchedules:
             changes.enabled,
             changes.gate_policy,
             changes.gate_mode,
-            changes.auto_approve_gates,
             changes.capacity_key,
             changes.capacity_limit,
             changes.blackout,

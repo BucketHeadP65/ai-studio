@@ -48,8 +48,6 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import QueryableAttribute
 
-    from engram.kb.contracts import KnowledgeBaseSchema
-
 
 def _utc_now() -> datetime:
     """The current time in UTC."""
@@ -1472,7 +1470,7 @@ class IndexFingerprints:
         A new row inserts `switches` at its all-off default.
 
         Args:
-            row: The fingerprint columns, `spec` and a stamped `indexed_at`.
+            row: The fingerprint columns and a stamped `indexed_at`.
 
         Returns:
             The upsert statement.
@@ -1517,11 +1515,8 @@ class IndexFingerprints:
         vocabulary_hash: str,
         embed_model: str,
         knowledge_base_root: str,
-        spec: KnowledgeBaseSchema,
     ) -> None:
         """Upsert the fingerprint row of `collection`, stamped with the clock's time.
-
-        `spec` is stored as JSON, so a deployment with no checkout on disk can read its schema back.
 
         Args:
             collection: The collection indexed.
@@ -1530,7 +1525,6 @@ class IndexFingerprints:
             vocabulary_hash: The hash of the vocabulary.
             embed_model: The embedding model name.
             knowledge_base_root: The knowledge base folder indexed.
-            spec: The schema the index ran with.
         """
         row: Row = {
             "collection": collection,
@@ -1540,14 +1534,13 @@ class IndexFingerprints:
             "embed_model": embed_model,
             "indexed_at": self._now(),
             "knowledge_base_root": knowledge_base_root,
-            "spec": spec.model_dump(mode="json"),
         }
         await self._db.execute(self.upsert_statement(row))
         await self._db.flush()
 
     @staticmethod
-    def touch_statement(collection: str, *, indexed_at: datetime, knowledge_base_root: str, spec: KnowledgeBaseSchema) -> Update:
-        """`UPDATE kb.index_fingerprint SET indexed_at = …, spec = … [, knowledge_base_root = …] WHERE collection = …`.
+    def touch_statement(collection: str, *, indexed_at: datetime, knowledge_base_root: str) -> Update:
+        """`UPDATE kb.index_fingerprint SET indexed_at = … [, knowledge_base_root = …] WHERE collection = …`.
 
         It only updates and never creates a row.
 
@@ -1555,25 +1548,23 @@ class IndexFingerprints:
             collection: The collection indexed.
             indexed_at: The time to stamp.
             knowledge_base_root: The knowledge base folder indexed. Empty keeps the stored root.
-            spec: The schema the index ran with.
 
         Returns:
             The update statement.
         """
-        values: dict[str, object] = {"indexed_at": indexed_at, "spec": spec.model_dump(mode="json")}
+        values: dict[str, object] = {"indexed_at": indexed_at}
         if knowledge_base_root:
             values["knowledge_base_root"] = knowledge_base_root
         return update(IndexFingerprintORM).where(IndexFingerprintORM.__table__.c.collection == collection).values(values)
 
-    async def touch(self, collection: str, *, knowledge_base_root: str, spec: KnowledgeBaseSchema) -> None:
-        """Stamp `indexed_at`, `spec` and, when known, `knowledge_base_root` after an incremental index wrote rows.
+    async def touch(self, collection: str, *, knowledge_base_root: str) -> None:
+        """Stamp `indexed_at` and, when known, `knowledge_base_root` after an incremental index wrote rows.
 
         Args:
             collection: The collection indexed.
             knowledge_base_root: The knowledge base folder indexed. Empty keeps the stored root.
-            spec: The schema the index ran with.
         """
-        await self._db.execute(self.touch_statement(collection, indexed_at=self._now(), knowledge_base_root=knowledge_base_root, spec=spec))
+        await self._db.execute(self.touch_statement(collection, indexed_at=self._now(), knowledge_base_root=knowledge_base_root))
         await self._db.flush()
 
     @staticmethod

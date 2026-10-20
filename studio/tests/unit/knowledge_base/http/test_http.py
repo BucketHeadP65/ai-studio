@@ -33,7 +33,7 @@ from httpx import ASGITransport, AsyncClient
 from studio.knowledge_base.http.api import create_app
 from studio.knowledge_base.http.api_models import error_response
 from studio.knowledge_base.http.exceptions import KnowledgeBaseRefusal, unknown_knowledge_base_error
-from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob
+from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob, RefreshResult
 from studio.knowledge_base.settings import ApplicationSettings
 from tests.support.fakes.topics import FakeListener, FakeNotifier
 from tests.support.http_app import AppWiring, raw_stream, stop_stream, wiring, write_settings_json
@@ -48,8 +48,8 @@ if TYPE_CHECKING:
 
 def _knowledge_base(tmp_path: Path) -> Path:
     """A minimal knowledge base tree satisfying `KnowledgeBaseSettings.path` validation."""
-    for sub in ("Units", "_meta"):
-        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "_meta").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return tmp_path
 
 
@@ -903,8 +903,8 @@ class TestKnowledgeBaseDetail:
         body = response.json()
         assert (body["registered"], body["indexed"], body["pages"]) == (True, True, 3)
         assert body["description"] == "vids"
-        assert body["sources_connector"] == "intake"
         assert body["sources_connectors"] == ["intake"]
+        assert "sources_connector" not in body
         assert [issue["rule"] for issue in body["validation"]] == ["dangling-link"]
         assert [row["key"] for row in body["source_queue"]] == ["yt-dQw4w9WgXcQ"]
         assert body["source_queue"][0]["status"] == "requested"
@@ -919,7 +919,7 @@ class TestKnowledgeBaseDetail:
         assert identity["root"] == str(knowledge_base_path)
         assert identity["collection"] == "tube"
 
-    async def test_a_registered_knowledge_base_with_no_knowledge_base_schema_carries_no_identity_and_logs_the_studio_init_fix(
+    async def test_a_registered_knowledge_base_whose_schema_will_not_load_carries_no_identity_and_logs_why(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         bare = _knowledge_base(tmp_path / "bare")
@@ -927,31 +927,13 @@ class TestKnowledgeBaseDetail:
         _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
         settings = _settings_at(settings_path)
 
-        with caplog.at_level("INFO", logger="studio.knowledge_base.http.service"):
+        with caplog.at_level("WARNING", logger="studio.knowledge_base.http.service"):
             async with _client(settings, wiring(), settings_path=settings_path) as client:
                 response = await client.get("/api/knowledge-bases/bare")
 
         assert response.status_code == 200
         assert response.json()["identity"] is None
-        assert "studio init --template" in caplog.text  # the actionable message, no longer silently swallowed
-
-    async def test_a_registered_knowledge_base_with_no_knowledge_base_schema_reads_its_identity_off_the_indexed_spec(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-        container = wiring()
-        container.gateway.routed = {
-            "api.indexed_schema": SqlResult(rows=({"spec": _minimal_spec_payload("bare")},), columns=("spec",))
-        }
-
-        async with _client(settings, container, settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare")
-
-        assert response.status_code == 200
-        identity = response.json()["identity"]
-        assert identity is not None
-        assert identity["collection"] == "bare"
+        assert "could not be read" in caplog.text
 
     async def test_a_indexed_only_name_carries_no_identity(self, tmp_path: Path):
         settings, settings_path = _knowledge_bases_app_settings(tmp_path)
@@ -1020,7 +1002,7 @@ class TestKnowledgeBaseDetail:
         assert response.status_code == 200
         body = response.json()
         assert (body["registered"], body["indexed"], body["pages"]) == (False, True, 7)
-        assert (body["sources_connector"], body["source_queue"]) == (None, [])
+        assert (body["sources_connectors"], body["source_queue"]) == ([], [])
 
     async def test_an_unknown_name_is_a_404(self, tmp_path: Path):
         settings, settings_path = _knowledge_bases_app_settings(tmp_path)
@@ -1197,37 +1179,6 @@ class TestKnowledgeBaseDecisions:
         assert response.status_code == 404
         assert response.json()["error"] == "unknown_knowledge_base"
 
-    async def test_decisions_on_a_registered_knowledge_base_with_no_knowledge_base_schema_names_the_studio_init_fix(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-
-        async with _client(settings, wiring(), settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare/decisions")
-
-        assert response.status_code == 404
-        body = response.json()
-        assert body["error"] == "spec_not_found"
-        assert "studio init --template" in body["detail"]
-        assert "knowledge-base-schema.json" in body["detail"]
-
-    async def test_decisions_on_a_registered_knowledge_base_with_no_knowledge_base_schema_falls_back_to_the_indexed_spec(self, tmp_path: Path) -> None:
-        bare = _knowledge_base(tmp_path / "bare")
-        settings_path = tmp_path / "application_settings.json"
-        _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
-        settings = _settings_at(settings_path)
-        container = wiring()
-        container.gateway.routed = {
-            "api.indexed_schema": SqlResult(rows=({"spec": _minimal_spec_payload("bare")},), columns=("spec",))
-        }
-
-        async with _client(settings, container, settings_path=settings_path) as client:
-            response = await client.get("/api/knowledge-bases/bare/decisions")
-
-        assert response.status_code == 200
-        assert response.json() == {"rows": [], "skipped": [], "outcomes_by_page_type": {}}
-
     async def test_decisions_on_a_registered_knowledge_base_with_a_broken_spec_keeps_the_generic_message(self, tmp_path: Path) -> None:
         broken = _knowledge_base(tmp_path / "broken")
         (broken / "knowledge-base-schema.json").write_text("not json", encoding="utf-8")
@@ -1289,7 +1240,7 @@ class TestKnowledgeBaseDecisions:
         assert missing.status_code == 404
         assert missing.json()["error"] == "unknown_page"
 
-    async def test_the_patch_route_on_a_registered_knowledge_base_with_no_knowledge_base_schema_names_the_studio_init_fix(self, tmp_path: Path) -> None:
+    async def test_the_patch_route_on_a_registered_knowledge_base_whose_schema_will_not_load_refuses(self, tmp_path: Path) -> None:
         bare = _knowledge_base(tmp_path / "bare")
         settings_path = tmp_path / "application_settings.json"
         _write_settings_json(settings_path, knowledge_bases={"bare": {"path": str(bare), "description": ""}})
@@ -1301,7 +1252,6 @@ class TestKnowledgeBaseDecisions:
         assert response.status_code == 404
         body = response.json()
         assert body["error"] == "spec_not_found"
-        assert "studio init --template" in body["detail"]
 
     async def test_an_invalid_status_is_a_409_invalid_decision(self, app_client: AsyncClient, knowledge_base_path: Path) -> None:
         (knowledge_base_path / "Wiki" / "Flags").mkdir(parents=True)
@@ -1474,13 +1424,13 @@ def _register_plain_knowledge_base(tmp_path: Path, name: str) -> tuple[Applicati
     return _settings_at(settings_path), knowledge_base_path, settings_path
 
 
-async def _finished_run(jobs: MemoryJobs, name: str, *, result: str) -> None:
+async def _finished_run(jobs: MemoryJobs, name: str, *, detail: str) -> None:
     """Put one completed `kb.refresh` job on the ledger, as the worker would have left it."""
     answer = await jobs.enqueue(REFRESH_KIND, name, RefreshJob(knowledge_base=name, trigger="schedule"), policy=JobPolicy())
     claimed = await jobs.claim([REFRESH_KIND], worker="test")
     assert claimed is not None
     assert claimed.id == answer.job_id
-    await jobs.complete(answer.job_id, result=result)
+    await jobs.complete(answer.job_id, result=RefreshResult(detail=detail).model_dump_json())
 
 
 class TestIngestRun:
@@ -1585,8 +1535,8 @@ class TestKnowledgeBaseRefreshRuns:
     async def test_lists_finished_runs_newest_first(self, tmp_path: Path):
         settings, _knowledge_base_path, settings_path = _register_plain_knowledge_base(tmp_path, "demo")
         jobs = MemoryJobs()
-        await _finished_run(jobs, "demo", result="first")
-        await _finished_run(jobs, "demo", result="second")
+        await _finished_run(jobs, "demo", detail="first")
+        await _finished_run(jobs, "demo", detail="second")
 
         async with _client(settings, wiring(), settings_path=settings_path, jobs=jobs) as client:
             response = await client.get("/api/knowledge-bases/demo/refresh-runs")
@@ -1629,7 +1579,7 @@ class TestKnowledgeBaseRefreshRuns:
         container = wiring()
         container.gateway.routed = {"kb.pages": SqlResult(rows=(), columns=()), "validation_store": SqlResult(rows=(), columns=())}
         jobs = MemoryJobs()
-        await _finished_run(jobs, "demo", result="indexed 3 pages, 3 embedded")
+        await _finished_run(jobs, "demo", detail="indexed 3 pages, 3 embedded")
 
         async with _client(settings, container, settings_path=settings_path, jobs=jobs) as client:
             response = await client.get("/api/knowledge-bases/demo")

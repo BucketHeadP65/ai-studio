@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from engram.evals.paired_comparison.domain import ResultsFile, ResultsHeader, ResultsLine, paired_comparison_markdown
 from engram.evals.paired_comparison.exceptions import ResultsFileUnreadableError
+from engram.evals.shared.contracts import case_line_refusal, header_refusal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,7 +30,8 @@ def read_results(path: Path) -> ResultsFile:
     """Read the results file of an evaluation run: its header line, then one line per case.
 
     Lines end at a newline alone, so a line separator inside an answer stays in its line. Blank lines are skipped, and
-    the keys a paired comparison does not read are ignored.
+    the keys a paired comparison does not read are ignored. A header or a case line missing a field the writer writes is
+    refused as predating the current format.
 
     Args:
         path: The results file.
@@ -38,8 +40,8 @@ def read_results(path: Path) -> ResultsFile:
         The file's header and its case lines, in file order.
 
     Raises:
-        ResultsFileUnreadableError: When the file cannot be read or is empty, or when a line does not parse or repeats a case. The
-            message names the line.
+        ResultsFileUnreadableError: When the file cannot be read, is empty or predates the current format, or when a line does
+            not parse or repeats a case. The message names the line.
     """
     try:
         rows = path.read_text(encoding="utf-8").split("\n")
@@ -54,16 +56,14 @@ def read_results(path: Path) -> ResultsFile:
     try:
         header = _HeaderLine.model_validate_json(header_row).header
     except ValidationError as error:
-        msg = f"line {header_number} of {path} is not a results header: {error}"
-        raise ResultsFileUnreadableError(msg) from error
+        raise ResultsFileUnreadableError(header_refusal(path, header_number, error)) from error
     lines: list[ResultsLine] = []
     seen: set[str] = set()
     for number, row in case_rows:
         try:
             line = ResultsLine.model_validate_json(row)
         except ValidationError as error:
-            msg = f"line {number} of {path} is not a case line: {error}"
-            raise ResultsFileUnreadableError(msg) from error
+            raise ResultsFileUnreadableError(case_line_refusal(path, number, error)) from error
         if line.case in seen:
             msg = f"line {number} of {path} repeats the case {line.case}"
             raise ResultsFileUnreadableError(msg)

@@ -31,7 +31,7 @@ A run behaves identically whichever plugin reached it. History and the archive a
 history is keyed by workflow and run id, not by which session happened to start it.
 
 ```
-POST   /api/run                {"workflow_id", "arguments", "run_title"?, "gate_mode"?, "auto_approve_gates"?}
+POST   /api/run                {"workflow_id", "arguments", "run_title"?, "gate_mode"?}
                                                                                        -> {"ok": true, "running": id} | 409 | 404 | 400
 POST   /api/run/automode        {"on": bool}                                        -> {"ok": true, "auto_approve": bool} | 409
 POST   /api/run/pause                                                                -> {"ok": true, "paused": id} | 409
@@ -150,8 +150,8 @@ POST /api/sessions/{session_id}/adapt
 It answers with the child on that session's own screen, as a draft: the parent workflow is read and
 never written, the cited run's record is read and never written, nothing is saved into the library,
 and no run starts. The child's `Lineage.evidence` records the three facts separately -- the run it
-came from, what that run was **observed** to do (`RunArchiveRecord.result`, the checked outcome,
-which reads as unknown for a record archived before outcomes were checked), and the owner's own
+came from, what that run was **observed** to do (`RunArchiveRecord.result`, the checked outcome),
+and the owner's own
 reason in their own words. None of the three is graded by anything. Whatever `evidence` the
 caller sent is kept under those three rather than taken out by them, so citing a run never costs a
 reader the sentence the caller wrote.
@@ -208,8 +208,6 @@ A parameter whose schema cannot be resolved at all -- a hand-edited library page
 
 The archive keeps what the run was given as the JSON it was given: `RunArchiveRecord.params`,
 `RunEvidence.params`, the on-disk run log's `params`, and the durable `RunRequest.params` all carry it.
-A record, a log or a history written when every argument was text still parses, and still reads as that
-text.
 
 ## Step chat, a running step's own conversation, streamed and steered
 
@@ -328,20 +326,10 @@ digest, the output and its digest, the completion time) and `continuation_heads`
 revision in the same transaction, then re-run or reset the workflow the same way. Deleting and
 re-running is the ordinary choice. There is no console verb for either yet.
 
-**A history recorded before this change still decodes.** A turn's activity result changed shape
-here: it carries the committed ref beside the output, where a pre-change history holds the bare
-output. The decode sits behind Temporal's own `workflow.patched("workflow-continuation-refs")`, so
-replaying a history that predates this reads the shape that history actually holds and an in-flight
-durable multi-turn run survives the upgrade. A brought-step call recorded before continuations
-existed carries no ref and reads as carrying none.
-
-`workflow.patched` covers replay: one execution's own history decides the shape it reads, wherever
-and whenever that history is replayed. It does not cover a mixed worker fleet: a worker whose
-deployed code has not moved still answers `PERFORM_INLINE_STEP` with the bare output, never the
-committed ref, so a brand-new turn scheduled against it while another worker on the same task queue
-already answers with the new shape is ordinary Temporal deploy skew, not something the patch
-protects against. Roll every worker on a task queue together, or drain it, before the code expecting
-the new shape starts scheduling turns against it.
+**A turn's activity result carries its committed ref.** A turn of a step conversation answers with
+an `InlineStepOutcome`, the committed ref beside the output, and a call that continues no step
+conversation answers with the step's own output. Roll every worker on a task queue together, or
+drain it, before changing either shape, since a worker on other code answers in its own shape.
 
 What is **not** defended, here or anywhere else in this runtime, is changing which activity a node
 is scheduled on while runs of it are in flight: renaming a step, or flipping its `replay_safe`
@@ -384,9 +372,10 @@ timeout and runner. At boot the process's own session's run log is checked first
 registered project's sessions folder (`restore_waiting_runs`). A run log relaunches by itself only when its session kind is
 "runner" (the Run button in the library) or its runner starts with `app:schedule:` (a schedule). A run relaunching by itself
 keeps its logged gate mode, timeout and runner, and its logged session kind. Any other run is paused by the restart. That
-means any run in a chat or follow-me session, including the process's own session, and any run log written before the
-session kind was recorded unless its runner is a schedule's. Nothing runs, the session keeps the run, and its card shows it
-paused with its start time, gate mode, finished steps and spend. The person resumes or stops it.
+means any run in a chat or follow-me session, including the process's own session. Nothing runs, the session keeps the
+run, and its card shows it paused with its start time, gate mode, finished steps and spend. The person resumes or stops
+it. A run log missing a key every run log carries is unreadable: boot logs a warning naming its path, leaves the file in
+place, and neither relaunches nor pauses anything from it.
 
 Resuming a run paused by the restart uses the logged workflow unless the person sends an edited graph, which is validated,
 and keeps the logged gate mode, gate timeout and runner. Stopping it ends it from its run log with its evidence and archive
@@ -418,8 +407,8 @@ records the decision, emits no rewind, and fails the run with `RetryExhaustedErr
 -- reviewed value included -- so the ending can say what was asked for and never got done. On the durable engine that
 arrives as a non-retryable `ApplicationError` of type `RetryExhaustedError` whose detail is that same rejection.
 
-A gate that names no ceiling serializes without the field, so a workflow saved before the ceiling existed and one
-saved now are the same document and key to the same content address.
+A gate that names no ceiling serializes without the field, so a gate with no ceiling adds nothing to the document or
+to its content address.
 
 Which decider a gate actually reaches (a person waiting at `/api/decide`, this run's own orchestrator, or nobody)
 depends on the run's `gate_mode` and on whether the gate itself is a custom `orchestrator-gate` rather than a
@@ -489,9 +478,8 @@ the `generation` the counts belong to, one `OutcomeCheck` per required gate, and
 values earned. A run that completes having skipped everything is `failed`, not `completed`-and-fine. A run whose gate
 spent its last reach is `failed` and its check carries the refusal whole: who refused, over which generation and
 digest, the feedback and the repair that was asked for. A run that did not complete, whose current generation is still
-missing a disposition, whose facts contradict each other, or whose workflow declares no result at all is `unknown`,
-and so is a run that predates this field. `unknown` is a projection, never a rewrite: the record on disk keeps
-whatever it was written with.
+missing a disposition, whose facts contradict each other, or whose workflow declares no result at all is `unknown`.
+Every run's evidence and archive record carries its result, so `unknown` is always a classification the run ended with.
 
 `succeeded` is checked producer success and nothing more: every piece of the declared primary work
 settled and every required gate's decision covers the exact bytes the run ended holding. It is not a
@@ -509,7 +497,7 @@ machine confirmation. Every other completed run counts in `unconfirmed_runs`. A 
 therefore stays `unverified` however often it runs. Approval is untouched and still independent.
 
 **`recent_runs`** (the chat read) says both halves per line, `ran <outcome>, checked outcome <status> (n/m succeeded,
-…)`, and says plainly when a run predates the field. **`run_values`** answers what the run recorded and is not a check
+…)`. **`run_values`** answers what the run recorded and is not a check
 of any kind: a full list of values there is no evidence at all about whether the work was any good.
 
 ## A measured pilot trial: what it spends, and what its run is graded as
@@ -601,17 +589,17 @@ them is inferred from another, and none of them invents a success:
 
 | Dimension | Read from | pass | fail | unknown |
 |---|---|---|---|---|
-| `structural_validity` | `record.outcome` and the result's counts | completed, counts add up | counts disagree, or the execution failed or stopped | no `result` at all |
+| `structural_validity` | `record.outcome` and the result's counts | completed, counts add up | counts disagree, or the execution failed or stopped | never, since every archived run carries its result |
 | `workflow_design` | the `WorkflowIntent` beside the workflow and the `WorkflowResultSpec` it declares | the request is stated, all four expected answers are written, a result is declared | the intent still owes an answer, or the workflow declares no result | no intent was recorded |
 | `evidence_support` | the required `OutcomeCheck`s | every required gate accepted the value the run ended holding | a required gate refused | a required check could not be put. `not_applicable` when the result requires no acceptance |
-| `task_success` | `result.status` and the case's own criterion | `succeeded`, or `noop` where the case permits no work | `partial`, `failed`, or a `noop` the case does not permit | no `result`, or `status == "unknown"` |
+| `task_success` | `result.status` and the case's own criterion | `succeeded`, or `noop` where the case permits no work | `partial`, `failed`, or a `noop` the case does not permit | `status == "unknown"` |
 
 A required gate that spent its last reach is the one place a reviewer's own words reach the checked
 outcome: the refused check carries the `feedback` it gave and the `requested_repair` it asked for,
 and the run's summary names the repair. A gate that refused and was then satisfied carries the
 acceptance instead, because that is the decision the run ended on.
 
-A missing legacy result stays unknown and is never filled in. A completed run whose result is
+A completed run whose result is
 `partial`, `failed` or `unknown` cannot pass task outcome however much of the work landed. A skip is
 never work done. Owner acceptance is not among these four: it is a separate append-only event, and a
 graded outcome carries none of it.
@@ -1080,7 +1068,7 @@ acceptance unknown.
 
 A saved workflow carries two optional records beside its spec, and they answer different questions. Neither is part of
 the workflow. Both are written only when somebody wrote them, and an absent one is stored absent, so a workflow saved
-without either holds exactly the keys a workflow saved before either existed holds.
+without either holds no key for them.
 
 **The presentation** (`core.ai.workflows.contracts.WorkflowPresentation`) is the author's words about the workflow, for the
 surfaces a person meets it on: what it is for, what a run produces, what the person does during one, what to reach for
@@ -1185,11 +1173,10 @@ A run's own gates decide under one of three modes, `GateMode = "wait" | "orchest
 (`harness/domain/gates.py`, see [ADR 0008](../adr/0008-orchestrator-gates-and-run-gate-modes.md)): `"wait"` (default)
 steps a `PersonGate` waiting for a person exactly as before. `"auto"` is automode, passing every gate the run reaches
 with nobody asked. `"orchestrate"` hands a `PersonGate` to this run's own orchestrator instead of leaving it waiting.
-Set at launch (`RunRequest.gate_mode` on `POST /api/run` or `run_workflow`, a schedule's own `gate_mode`) or flipped
-mid-run via `POST /api/run/automode {"on": bool}` (which sets `gate_mode` to `"auto"` or `"wait"` alongside the legacy
-`auto_approve` flag, so the two read as one fact rather than two that could disagree). `auto_approve_gates: true` is
-the legacy spelling of `gate_mode: "auto"` and is still honoured everywhere. Sending it alongside an explicit
-`gate_mode: "orchestrate"` on the same request is refused in words as two different gate behaviors at once. A
+Set at launch (`RunRequest.gate_mode` on `POST /api/run`, the `gate_mode` argument of the agent's own `run_workflow`
+tool, a schedule's own `gate_mode`) or flipped mid-run via `POST /api/run/automode {"on": bool}` (which sets
+`gate_mode` to `"auto"` or `"wait"`, and answers with the `auto_approve` it now reads, derived from `gate_mode`). A
+durable run carries its mode in core's Temporal `RunRequest.gate_mode`, `"wait"` or `"auto"` only. A
 workflow may also author an `orchestrator-gate` node in the graph itself, naming its own review brief for this run's
 orchestrator to decide against. That gate is answered the same way under every one of the three modes. A run's
 `gate_mode` only changes what happens to a `PersonGate`, the one kind that would otherwise wait on a person.
@@ -1214,10 +1201,9 @@ were actually seen by a person, which passed themselves, and which this run's ow
 
 ```
 GET    /api/schedules                                                     -> {"schedules": [ScheduleOut, ...]}
-POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?, "auto_approve_gates"?}
+POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?}
                                                                             -> {"schedule": ScheduleOut} (201) | 404 | 400
-PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?,
-                                   "auto_approve_gates"?}
+PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?}
                                                                             -> {"schedule": ScheduleOut} | 404 | 400
 DELETE /api/schedules/{id}                                                 -> {"ok": true} | 404
 POST   /api/schedules/{id}/run-now                                        -> {"ok": true, "outcome": str} | 404
@@ -1235,14 +1221,15 @@ event id is recorded in `coordination.event_deliveries` of the workflow library'
 library cannot read answers 503, records nothing, and the studio delivers again.
 
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
-`gate_mode`, `auto_approve_gates`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
+`gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
 `live`: where its runner session's run stands right now (`"running" | "paused" | "waiting"`, or `null` when nothing is
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
 workflow the row names (the library's `current`), resolved on every read and every fire. The row keeps the id it was
-written with. `gate_mode` and `auto_approve_gates` are
-kept in agreement at rest (alembic `0030` adds the column beside the pre-existing flag). A patch sending either one
-derives and writes both, the same `effective_gate_mode` the run plugins resolve through.
+written with. `gate_mode` is the one stored gate switch (alembic `0072` folded the earlier flag into it). On a
+deployment that runs on Temporal, a `POST` or `PATCH` that sets `gate_mode` to `"orchestrate"` answers 400 with words
+saying the durable engine has no orchestrated gate. A fire of a schedule already stored that way launches nothing and
+stamps `refused: ` and the words that save would get as its outcome, keeping its cadence.
 
 `spend_today_usd` and `spend_week_usd` are `schedule_spend`'s own two figures (`features/running/spend.py`), computed
 fresh the same way as `live` rather than stored. Each counts only a fire whose spend record names this schedule's own

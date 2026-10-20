@@ -16,16 +16,14 @@ vi.mock("next/navigation", () => ({
 
 // Imported after the mock so the components see the mocked module.
 import { ArtifactActions } from "./artifact-actions";
-import { RESULT_STATUS, ResultSummary, resultReading } from "./outcome-strip";
+import { RESULT_STATUS, resultReading } from "./outcome-strip";
 import { WorkflowAbout } from "./workflow-about";
 
-// Payloads a backend served before today's contracts existed, hand-typed rather than built from a
-// current fixture, so a field that starts being sent by default fails here instead of the fixture
-// quietly growing it. Each case is parsed at the boundary the app actually parses at, then put in
-// front of the component that reads it: what is asserted is the honest fallback, never a shape
-// invented to fill the gap.
+// Payloads hand-typed rather than built from a current fixture, so a field that starts being sent
+// by default fails here instead of the fixture quietly growing it. Each case is parsed at the
+// boundary the app actually parses at, then put in front of the component that reads it.
 
-const LEGACY_CARD = {
+const UNDESCRIBED_CARD = {
   id: "wf.quarterly-close.v1",
   title: "Quarterly close",
   summary: "Reconcile the quarter and draft the report.",
@@ -39,17 +37,23 @@ const LEGACY_CARD = {
     structural_mean: null,
     structural_last: null,
   },
+  needs: [],
   missing: [],
+  brings: [],
   version: 1,
+  archived_at: null,
+  shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+  runs: { last: null },
 };
 
-const LEGACY_DETAIL = {
-  ...LEGACY_CARD,
+const UNDESCRIBED_DETAIL = {
+  ...UNDESCRIBED_CARD,
   ok: true as const,
   name: "quarterly-close",
   description: "Collect the quarter's sales and costs, reconcile them, and draft a report.",
   applicability: "Use this at the end of a fiscal quarter.",
   graph: { name: "quarterly-close", version: 1, nodes: [], edges: [] },
+  issues: [],
   fits: true,
   spec_yaml: "name: quarterly-close\n",
   staleness: [],
@@ -60,28 +64,38 @@ const LEGACY_DETAIL = {
   prediction_record: null,
 };
 
-const LEGACY_RUN = {
-  run_id: "run-legacy",
+const UNNAMED_RUN = {
+  run_id: "run-unnamed",
   workflow_id: "wf.quarterly-close.v1",
+  run_title: "",
   outcome: "completed" as const,
+  failure: "",
   started_at: "2026-01-05T09:00:00+00:00",
+  ended_at: "2026-01-05T09:04:00+00:00",
   runner: "app:harness",
-  session_id: "sess-legacy",
+  session_id: "sess-shared",
+  params: {},
+  gates_approved: [],
+  gates_rejected: {},
+  gates_auto: [],
+  gates_orchestrated: [],
+  pinned: false,
+  spend: null,
+  result: { status: "unknown" as const },
 };
 
 const SESSION_TITLE = "Tuesday morning, catching up on the quarter";
 
-describe("a library card served before presentations existed", () => {
-  it("parses, and carries no author's words rather than blank ones", () => {
-    const card = LibraryEntrySchema.parse(LEGACY_CARD);
+describe("a library card nobody described", () => {
+  it("parses with the card's own words and no run behind it", () => {
+    const card = LibraryEntrySchema.parse(UNDESCRIBED_CARD);
 
     expect(card.title).toBe("Quarterly close");
-    expect(card.archived_at).toBeNull();
-    expect(card.shape).toEqual({ steps: 0, person_gates: 0, agent_gates: 0 });
+    expect(card.runs.last).toBeNull();
   });
 
   it("renders its own page with none of the four questions answered on its behalf", () => {
-    const detail = WorkflowDetailSchema.parse(LEGACY_DETAIL);
+    const detail = WorkflowDetailSchema.parse(UNDESCRIBED_DETAIL);
     render(<WorkflowAbout detail={detail} />);
 
     expect(detail.presentation).toBeUndefined();
@@ -96,38 +110,20 @@ describe("a library card served before presentations existed", () => {
   });
 
   it("still shows what the spec itself says, which is the card's own words", () => {
-    render(<WorkflowAbout detail={WorkflowDetailSchema.parse(LEGACY_DETAIL)} />);
+    render(<WorkflowAbout detail={WorkflowDetailSchema.parse(UNDESCRIBED_DETAIL)} />);
 
     expect(screen.getByRole("heading", { level: 1, name: "Quarterly close" })).toBeInTheDocument();
     expect(screen.getByText("Reconcile the quarter and draft the report.")).toBeInTheDocument();
   });
 });
 
-describe("a run archived before runs were named or checked", () => {
-  it("parses as unnamed and unchecked", () => {
-    const run = RunEnvelopeSchema.parse(LEGACY_RUN);
+describe("a run nobody named", () => {
+  it("carries no name of the session it ran in, however that session was titled", () => {
+    const run = RunEnvelopeSchema.parse(UNNAMED_RUN);
 
     expect(run.run_title).toBe("");
-    expect(run.result).toBeUndefined();
-    expect(run.gates_orchestrated).toEqual([]);
-    expect(run.params).toEqual({});
-  });
-
-  it("reads as unchecked on screen, and says why rather than showing a verdict", () => {
-    const run = RunEnvelopeSchema.parse(LEGACY_RUN);
-    render(<ResultSummary result={run.result} />);
-
-    expect(screen.getByText("Unchecked")).toBeInTheDocument();
-    expect(
-      screen.getByText("Result evidence is unavailable, so what this run did cannot be checked."),
-    ).toBeInTheDocument();
-  });
-
-  it("carries no name of the session it ran in, however that session was titled", () => {
-    const run = RunEnvelopeSchema.parse({ ...LEGACY_RUN, session_id: "sess-legacy" });
-
     expect(JSON.stringify(run)).not.toContain(SESSION_TITLE);
-    expect(run.session_id).toBe("sess-legacy");
+    expect(run.session_id).toBe("sess-shared");
   });
 });
 
@@ -170,7 +166,7 @@ describe("an artifact action this deployment cannot carry out", () => {
   const REF = {
     id: "report",
     label: "The report",
-    run_id: "run-legacy",
+    run_id: "run-unnamed",
     node_id: "render",
     turn: null,
     value_digest: "a".repeat(64),
@@ -178,7 +174,7 @@ describe("an artifact action this deployment cannot carry out", () => {
   };
 
   it("says so and does nothing, rather than reaching for a route of its own", () => {
-    render(<ArtifactActions runId="run-legacy" actions={[ACTION]} artifacts={[REF]} />);
+    render(<ArtifactActions runId="run-unnamed" actions={[ACTION]} artifacts={[REF]} />);
 
     expect(screen.getByRole("button", { name: "Keep it as a note" })).toBeDisabled();
     expect(screen.getByText("This action is not available here yet.")).toBeInTheDocument();
@@ -203,7 +199,7 @@ describe("an artifact action this deployment cannot carry out", () => {
   it("keeps the same action when the host has installed its function", () => {
     render(
       <ArtifactActions
-        runId="run-legacy"
+        runId="run-unnamed"
         actions={[ACTION]}
         artifacts={[REF]}
         handlers={{ saveNote: () => undefined }}

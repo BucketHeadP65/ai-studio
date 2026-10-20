@@ -2136,9 +2136,16 @@ class _AskedModel:
 
 
 def _drop_header_key(path: Path, key: str) -> None:
-    """Rewrite the results file at `path` with `key` left out of its header, as a file written before the key was recorded."""
+    """Rewrite the results file at `path` with `key` left out of its header."""
     header, *rows = (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
     del header["header"][key]
+    path.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
+
+
+def _set_header_key(path: Path, key: str, value: object) -> None:
+    """Rewrite the results file at `path` with `key` set to `value` in its header."""
+    header, *rows = (json.loads(line) for line in path.read_text(encoding="utf-8").splitlines())
+    header["header"][key] = value
     path.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
 
 
@@ -2344,20 +2351,23 @@ class TestResume(_ResetsLogfire):
         assert asked.asked == []
         assert results.read_text(encoding="utf-8") == written
 
-    async def test_a_results_file_whose_header_did_not_record_the_index_build_is_refused_as_unknown(self, tmp_path: Path):
+    @pytest.mark.parametrize("key", ["index_build", "search_date_range", "code_mode", "thinking", "source_scoring_version"])
+    async def test_a_results_file_whose_header_lacks_a_field_is_refused_as_predating_the_current_format(self, tmp_path: Path, key: str):
         results = tmp_path / "results.jsonl"
         dataset = _named_dataset(*_RESUMED_CASES)
         config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
         failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
         await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
-        _drop_header_key(results, "index_build")
+        _drop_header_key(results, key)
+        written = results.read_text(encoding="utf-8")
         asked = _AskedModel()
 
-        with pytest.raises(ResultsFileNotResumableError) as refused:
+        with pytest.raises(ResultsFileNotResumableError, match=rf"predates the current results format: its header has no {key}\b") as refused:
             await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
 
-        assert "index_build (unknown in the file, 7+500-1000 test-embedding now)" in str(refused.value)
+        assert str(refused.value).endswith("Name another results file, or run without resuming to replace this one.")
         assert asked.asked == []
+        assert results.read_text(encoding="utf-8") == written
 
     async def test_the_header_records_the_source_scoring_version(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"
@@ -2374,7 +2384,7 @@ class TestResume(_ResetsLogfire):
         config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
         failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
         await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
-        _drop_header_key(results, "source_scoring_version")
+        _set_header_key(results, "source_scoring_version", 1)
         written = results.read_text(encoding="utf-8")
         asked = _AskedModel()
 
@@ -2387,37 +2397,6 @@ class TestResume(_ResetsLogfire):
         assert asked.asked == []
         assert results.read_text(encoding="utf-8") == written
 
-    async def test_an_older_pinned_results_file_is_refused_naming_search_date_range(self, tmp_path: Path):
-        results = tmp_path / "results.jsonl"
-        dataset = _named_dataset(*_RESUMED_CASES)
-        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", pinned_search=True, results_path=results)
-        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
-        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
-        _drop_header_key(results, "search_date_range")
-        written = results.read_text(encoding="utf-8")
-        asked = _AskedModel()
-
-        with pytest.raises(ResultsFileNotResumableError) as refused:
-            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
-
-        assert "search_date_range (False in the file, True now)" in str(refused.value)
-        assert asked.asked == []
-        assert results.read_text(encoding="utf-8") == written
-
-    async def test_an_older_unpinned_results_file_resumes(self, tmp_path: Path):
-        results = tmp_path / "results.jsonl"
-        dataset = _named_dataset(*_RESUMED_CASES)
-        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
-        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
-        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
-        _drop_header_key(results, "search_date_range")
-        asked = _AskedModel()
-
-        await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
-
-        assert asked.asked == ["question case-b"]
-        assert [row["case"] for row in _case_rows(results)] == ["case-a", "case-b", "case-c"]
-
     async def test_a_results_file_of_another_dataset_is_refused(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"
         config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
@@ -2426,27 +2405,22 @@ class TestResume(_ResetsLogfire):
         with pytest.raises(ResultsFileNotResumableError, match="dataset_sha256"):
             await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=_golden_dataset())
 
-    async def test_an_older_results_file_without_the_transient_key_resumes_from_each_error_text(self, tmp_path: Path):
+    async def test_a_results_file_whose_lines_lack_the_transient_key_is_refused_as_predating_the_current_format(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"
         dataset = _named_dataset(*_RESUMED_CASES)
         config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
-        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error."), "question case-c": ModelHTTPError(400, "deployment-a")}
+        failures = {"question case-b": ModelAPIError("deployment-a", "Connection error.")}
         await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset, model=_failing(failures))
         header, *rows = (json.loads(line) for line in results.read_text(encoding="utf-8").splitlines())
-        for key in ("code_mode", "thinking"):
-            del header["header"][key]
         for row in rows:
             del row["transient"]
         results.write_text("".join(f"{json.dumps(row)}\n" for row in [header, *rows]), encoding="utf-8")
         asked = _AskedModel()
 
-        await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
+        with pytest.raises(ResultsFileNotResumableError, match=r"line 2 of .* predates the current results format: it has no transient\."):
+            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=asked.model())
 
-        _header, lines = _read_results(results)
-        assert asked.asked == ["question case-b"]
-        assert (lines["case-b"]["failed"], lines["case-b"]["transient"]) == (False, False)
-        assert (lines["case-c"]["failed"], lines["case-c"]["transient"]) == (True, False)
-        assert all("transient" in row for row in _case_rows(results))
+        assert asked.asked == []
 
     async def test_a_resumed_run_with_no_results_file_runs_every_case(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"
@@ -2521,6 +2495,21 @@ class TestResume(_ResetsLogfire):
 
         with pytest.raises(ResultsFileNotResumableError, match="line 1 of"):
             await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=_golden_dataset())
+
+    @pytest.mark.parametrize(("shape", "names"), [("empty", "is empty"), ("repeated", "repeats the case"), ("no header", "is not a results header")])
+    async def test_a_refused_resume_ends_its_reason_before_naming_the_way_out(self, tmp_path: Path, shape: str, names: str):
+        results = tmp_path / "results.jsonl"
+        dataset = _named_dataset(*_RESUMED_CASES)
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        await run_traced_eval_on_dataset(FakeContainer(), config=config, dataset=dataset)
+        header, first_case, *_rest = results.read_text(encoding="utf-8").splitlines()
+        rows = {"empty": [], "repeated": [header, first_case, first_case], "no header": [first_case]}[shape]
+        results.write_text("".join(f"{row}\n" for row in rows), encoding="utf-8")
+
+        with pytest.raises(ResultsFileNotResumableError, match=names) as refused:
+            await run_traced_eval_on_dataset(FakeContainer(), config=replace(config, resume=True), dataset=dataset, model=_AskedModel().model())
+
+        assert str(refused.value).endswith(". Name another results file, or run without resuming to replace this one.")
 
     def test_resuming_needs_a_results_file(self):
         with pytest.raises(ValueError, match="a resumed run continues a results file"):

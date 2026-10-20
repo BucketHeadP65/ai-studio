@@ -113,6 +113,7 @@ class ScriptedArm:
             run_id=f"{self.name}-{slot}",
             trial_id=f"{self.name}-{slot}",
             result=Outcome(status=self.checked, summary=f"{self.name} did everything {case.case_id} asked, and did it well"),
+            diagnostics=(),
         )
 
 
@@ -219,6 +220,7 @@ class RogueArm:
             usage=ResourceUsage(requests=self.requests),
             run_id=f"{self.name}-{slot}",
             trial_id=f"{self.name}-{slot}",
+            diagnostics=(),
         )
 
 

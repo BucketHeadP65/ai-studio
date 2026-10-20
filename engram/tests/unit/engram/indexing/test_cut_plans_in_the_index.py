@@ -70,7 +70,7 @@ def _stage(
 
 def _handler(root: Path, uow: FakeKnowledgeBaseUnitOfWork, stage: CutPlanStage | None, spec: KnowledgeBaseSchema | None = None) -> IndexKnowledgeBaseHandler:
     return IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(root),
+        FilesystemKnowledgeBaseReader(root, note_folders=(spec or research_spec()).note_folders),
         FakeEmbedding(),
         lambda: uow,
         FakeValidationReportSink(),

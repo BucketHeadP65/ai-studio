@@ -71,7 +71,7 @@ def _knowledge_base(root: Path, *, pages: int) -> KnowledgeBaseSchema:
     builder.add_knowledge_base_schema(spec)
     for index in range(pages):
         slug = "graph" if index == 0 else f"filler-{index}"
-        builder.add_unit_document("References", slug, _page(root.name, slug))
+        builder.add_unit_document("Units/References", slug, _page(root.name, slug))
     return spec
 
 
@@ -81,7 +81,7 @@ async def _index(root: Path, spec: KnowledgeBaseSchema, url: str) -> None:
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(root),
+            FilesystemKnowledgeBaseReader(root, note_folders=spec.note_folders),
             FakeEmbedding(),
             KnowledgeBaseUnitOfWorkFactory(engine),
             FileValidationReportSink(root),

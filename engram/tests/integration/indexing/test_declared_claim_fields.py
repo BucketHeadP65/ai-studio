@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 _COLLECTION = "statutes"
 
-_PAGE_PATH = "Units/provision/data-retention.md"
+_PAGE_PATH = "Wiki/Provisions/data-retention.md"
 
 _PAGE = """---
 id: provision.data-retention
@@ -96,7 +96,11 @@ def _spec() -> KnowledgeBaseSchema:
         slug=_COLLECTION,
         page_types=(
             PageTypeSpec(
-                page_type="provision", id_prefix="provision.", canonical_sections=(CanonicalSection(slug="findings"),), claims_enabled=True
+                page_type="provision",
+                id_prefix="provision.",
+                folder="Wiki/Provisions",
+                canonical_sections=(CanonicalSection(slug="findings"),),
+                claims_enabled=True,
             ),
         ),
         relations=(RelationDecl(slug="governs", domain="provision", range="provision", description="The provision governs the target"),),
@@ -122,8 +126,8 @@ def _knowledge_base(root: Path, spec: KnowledgeBaseSchema) -> Path:
             (root / relative).parent.mkdir(parents=True, exist_ok=True)
             (root / relative).write_text(body, encoding="utf-8")
     for stem, title in _TARGETS.items():
-        builder.add_unit_document("provision", stem, _target_page(stem, title))
-    builder.add_unit_document("provision", "data-retention", _PAGE)
+        builder.add_unit_document("Wiki/Provisions", stem, _target_page(stem, title))
+    builder.add_unit_document("Wiki/Provisions", "data-retention", _PAGE)
     return root
 
 
@@ -133,7 +137,7 @@ async def _index(knowledge_base: Path, migrated: str, spec: KnowledgeBaseSchema)
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(knowledge_base),
+            FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders),
             FakeEmbedding(),
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
             FakeValidationReportSink(),

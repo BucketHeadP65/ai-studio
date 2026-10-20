@@ -111,7 +111,7 @@ _MIRROR = "---\nsource_key: GENDEMO1\nprovider: example-library\nsource_hash: gd
 
 def _build_knowledge_base(root: Path) -> Path:
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "gen-demo", _PAPER)
+    builder.add_unit_document("Wiki/Papers", "gen-demo", _PAPER)
     builder.add_source_mirror("gen-demo", _MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -123,7 +123,7 @@ class _Factory:
     """A `ctx.obj` factory whose bus runs a real-PG, fake-embed index handler (e2e shape)."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader, FakeEmbedding(), KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=load_knowledge_base_schema(knowledge_base)
         )
@@ -438,7 +438,7 @@ _TOPUP_MIRROR = "---\nsource_key: TOPUP1\nprovider: example-library\nsource_hash
 
 def _build_topup_knowledge_base(root: Path) -> Path:
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "topup-demo", _TOPUP_PAPER)
+    builder.add_unit_document("Wiki/Papers", "topup-demo", _TOPUP_PAPER)
     builder.add_source_mirror("topup-demo", _TOPUP_MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()

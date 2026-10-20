@@ -17,6 +17,7 @@ import { SessionList } from "./session-list";
 const BASE = "http://studio.test";
 
 interface Session {
+  kind: "chat";
   id: string;
   project_id: string;
   title: string;
@@ -32,6 +33,7 @@ interface Session {
     cache_write_tokens: number;
   };
   cost_usd: string;
+  unpriced: number;
   context: null;
 }
 
@@ -40,6 +42,7 @@ function usage() {
 }
 
 const ALPHA: Session = {
+  kind: "chat",
   id: "s-alpha",
   project_id: "proj-engram",
   title: "Alpha",
@@ -50,10 +53,12 @@ const ALPHA: Session = {
   turn_count: 3,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
 const BETA: Session = {
+  kind: "chat",
   id: "s-beta",
   project_id: "proj-engram",
   title: "Beta",
@@ -64,10 +69,12 @@ const BETA: Session = {
   turn_count: 5,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
 const GAMMA: Session = {
+  kind: "chat",
   id: "s-gamma",
   project_id: "proj-harness",
   title: "Gamma",
@@ -78,10 +85,12 @@ const GAMMA: Session = {
   turn_count: 1,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
 const DELTA: Session = {
+  kind: "chat",
   id: "s-delta",
   project_id: "proj-harness",
   title: "Delta",
@@ -92,6 +101,7 @@ const DELTA: Session = {
   turn_count: 8,
   usage: usage(),
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 

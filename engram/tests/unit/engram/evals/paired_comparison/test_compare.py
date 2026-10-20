@@ -478,25 +478,17 @@ def test_a_pair_reports_both_seen_recall_means_and_their_paired_difference_overa
     assert "| beta | 0.500 | 0.500 | +0.000 |" in markdown
 
 
-def test_an_older_results_file_has_no_seen_recall_and_the_report_shows_it_missing_never_zero(tmp_path: Path):
+def test_a_results_file_whose_lines_lack_seen_recall_is_refused_as_predating_the_current_format(tmp_path: Path):
     path = tmp_path / "older.jsonl"
-    scored = dataclasses.replace(_written_line("c1", strict=True), sources=("s1",), recall_at_4=1.0, recall_at_10=1.0, mrr=1.0)
-    write_results(path, _WRITTEN_HEADER, [scored])
+    write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
     header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
     older_rows = [json.loads(row) for row in case_rows]
     for row in older_rows:
         del row["seen_recall"], row["seen_gold"]
     path.write_text("\n".join([header_row, *(json.dumps(row) for row in older_rows)]) + "\n", encoding="utf-8")
-    older = read_results(path)
-    candidate = _run("b.jsonl", _line("c1", strict=True, sources=("s1",), retrieval=(1.0, 1.0, 1.0), seen=0.75), header=older.header)
 
-    comparison = _only_pair(older, candidate)
-
-    assert older.lines[0].seen_recall is None
-    assert comparison.overall.baseline_retrieval is not None
-    assert comparison.overall.baseline_retrieval.seen_recall is None
-    assert comparison.overall.seen_recall_difference is None
-    assert "| all cases | missing | 0.750 | missing |" in paired_comparison_markdown([comparison])
+    with pytest.raises(ResultsFileUnreadableError, match=r"line 2 of .* predates the current results format: it has no seen_recall\."):
+        read_results(path)
 
 
 def test_a_side_whose_source_lookup_failed_has_no_source_level_retrieval():
@@ -583,6 +575,9 @@ def _written_line(case: str, *, strict: bool, query_type: str | None = "alpha", 
         recall_at_10=None,
         mrr=None,
         other_collection=False,
+        transient=False,
+        seen_recall=None,
+        seen_gold=None,
     )
 
 
@@ -597,16 +592,11 @@ def test_the_reader_reads_the_sources_and_the_retrieval_scores(tmp_path: Path):
     assert (second.sources, second.recall_at_4, second.recall_at_10, second.mrr) == (None, None, None, None)
 
 
-def test_the_reader_reads_the_source_scoring_version_and_a_header_without_it_as_version_one(tmp_path: Path):
+def test_the_reader_reads_the_source_scoring_version_the_header_records(tmp_path: Path):
     path = tmp_path / "a.jsonl"
     write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
-    written = read_results(path).header.source_scoring_version
-    rows = path.read_text(encoding="utf-8").splitlines()
-    header = json.loads(rows[0])
-    del header["header"]["source_scoring_version"]
-    path.write_text("\n".join([json.dumps(header), *rows[1:]]) + "\n", encoding="utf-8")
 
-    assert (written, read_results(path).header.source_scoring_version) == (SOURCE_SCORING_VERSION, 1)
+    assert read_results(path).header.source_scoring_version == SOURCE_SCORING_VERSION
 
 
 def test_the_reader_reads_a_citation_that_holds_no_source(tmp_path: Path):
@@ -628,6 +618,7 @@ _WRITTEN_HEADER = WrittenHeader(
     instructions_sha256="a" * 64,
     max_tool_calls=8,
     pinned_search=True,
+    search_date_range=True,
     dataset="sample",
     dataset_sha256="b" * 64,
     collection="notes",
@@ -652,69 +643,28 @@ def test_the_reader_reads_what_an_evaluation_run_writes(tmp_path: Path):
     assert results.lines == (_line("c1", strict=True, official=True), _line("c2", strict=False, query_type=None, failed=True))
 
 
-def test_a_header_written_before_code_mode_and_thinking_were_recorded_reads_them_as_off_and_unset(tmp_path: Path):
+@pytest.mark.parametrize("missing", ["code_mode", "thinking", "search_date_range", "index_build", "source_scoring_version"])
+def test_a_header_missing_a_field_the_writer_writes_is_refused_as_predating_the_current_format(tmp_path: Path, missing: str):
     path = tmp_path / "a.jsonl"
     write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
     header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
     older = json.loads(header_row)
-    del older["header"]["code_mode"], older["header"]["thinking"]
+    del older["header"][missing]
     path.write_text("\n".join([json.dumps(older), *case_rows]) + "\n", encoding="utf-8")
 
-    header = read_results(path).header
-
-    assert (header.code_mode, header.thinking) == (False, None)
-
-
-def _older_run(tmp_path: Path, name: str, *, pinned_search: bool) -> ResultsFile:
-    """A results file written before the header recorded whether `search` took a date range, read back."""
-    path = tmp_path / name
-    write_results(path, dataclasses.replace(_WRITTEN_HEADER, pinned_search=pinned_search), [_written_line("c1", strict=True)])
-    header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
-    older = json.loads(header_row)
-    del older["header"]["search_date_range"]
-    path.write_text("\n".join([json.dumps(older), *case_rows]) + "\n", encoding="utf-8")
-    return read_results(path)
+    with pytest.raises(ResultsFileUnreadableError, match=rf"predates the current results format: its header has no {missing}\b"):
+        read_results(path)
 
 
-def _new_run(tmp_path: Path, name: str, *, pinned_search: bool) -> ResultsFile:
-    """A results file a run writes now, whose `search` always took a date range, read back."""
-    path = tmp_path / name
-    write_results(path, dataclasses.replace(_WRITTEN_HEADER, pinned_search=pinned_search), [_written_line("c1", strict=False)])
-    return read_results(path)
-
-
-@pytest.mark.parametrize("pinned_search", [True, False])
-def test_a_header_that_did_not_record_the_date_range_reads_it_as_the_opposite_of_pinned_search(tmp_path: Path, pinned_search: bool):
-    assert _older_run(tmp_path, "a.jsonl", pinned_search=pinned_search).header.search_date_range is (not pinned_search)
-
-
-def test_an_older_pinned_run_and_a_pinned_run_now_are_refused_naming_search_date_range(tmp_path: Path):
-    older, newer = _older_run(tmp_path, "a.jsonl", pinned_search=True), _new_run(tmp_path, "b.jsonl", pinned_search=True)
-
-    with pytest.raises(RunsNotComparableError, match=r"differ in search_date_range \(False and True\)"):
-        paired_comparisons([(older, newer)])
-
-
-def test_an_older_unpinned_run_pairs_with_a_run_now(tmp_path: Path):
-    older, newer = _older_run(tmp_path, "a.jsonl", pinned_search=False), _new_run(tmp_path, "b.jsonl", pinned_search=False)
-
-    comparison = _only_pair(older, newer)
-
-    assert (comparison.overall.cases, comparison.overall.baseline_only) == (1, 1)
-
-
-def test_a_header_written_before_the_index_build_was_recorded_reads_it_as_unknown(tmp_path: Path):
+def test_a_header_key_the_reader_does_not_know_is_ignored(tmp_path: Path):
     path = tmp_path / "a.jsonl"
     write_results(path, _WRITTEN_HEADER, [_written_line("c1", strict=True)])
     header_row, *case_rows = path.read_text(encoding="utf-8").splitlines()
-    older = json.loads(header_row)
-    del older["header"]["index_build"]
-    path.write_text("\n".join([json.dumps(older), *case_rows]) + "\n", encoding="utf-8")
+    newer = json.loads(header_row)
+    newer["header"]["a_key_a_newer_writer_adds"] = 1
+    path.write_text("\n".join([json.dumps(newer), *case_rows]) + "\n", encoding="utf-8")
 
-    results = read_results(path)
-
-    assert results.header.index_build is None
-    assert "knowledge base hash:notes, index build unknown." in paired_comparison_markdown(paired_comparisons([(results, results)]))
+    assert read_results(path).header == ResultsHeaderFactory.build(sql=True, code_mode=True, thinking="xhigh")
 
 
 def test_two_runs_on_different_index_builds_are_compared_like_two_fingerprints_and_the_report_shows_both():

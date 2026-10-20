@@ -30,7 +30,7 @@ class TestFrictionLines:
         assert "shell" in lines[1]
 
     def test_other_events_are_ignored(self):
-        started = Recorded(seq=1, at=datetime(2026, 8, 27, 12, 1, tzinfo=UTC), event=SessionStarted(session_id="11111111-aaaa"))
+        started = Recorded(seq=1, at=datetime(2026, 8, 27, 12, 1, tzinfo=UTC), event=SessionStarted(session_id="11111111-aaaa", session_kind="chat"))
 
         assert friction_lines((started,)) == []
         assert len(friction_lines((started, _flag(2, target_kind="tool", target="shell", note="x", session=None)))) == 1

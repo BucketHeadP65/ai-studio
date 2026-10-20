@@ -23,6 +23,7 @@ from engram.evals.shared.domain import (
 )
 from engram.evals.shared.metrics import MRR_KEY, NDCG_PREFIX, PRECISION_PREFIX, RECALL_PREFIX, is_known_metric_key, primary_at_k_key
 from engram.evals.shared.read_models import EvaluationCaseResultRow, EvaluationRunSummary
+from engram.evals.shared.results_format import case_line_refusal, header_refusal
 
 if TYPE_CHECKING:
     from engram.evals.shared.serve_bridge import (
@@ -87,10 +88,12 @@ __all__ = [
     "Seed",
     "SqlKnowledgeBase",
     "build_retrieval_toolset",
+    "case_line_refusal",
     "derive_difficulty",
     "envelope_next_steps",
     "fetch_opens_map",
     "graph_next_steps",
+    "header_refusal",
     "is_known_metric_key",
     "parse_ref",
     "paths_next_steps",

@@ -42,10 +42,10 @@ from core.ai.retrieval.contracts import (
     SupportsGraphExpand,
     SupportsSearch,
     fetch_one,
+    fetch_unit,
     resolve_description,
 )
 from core.ai.retrieval.contracts import build_retrieval_toolset as _build_retrieval_toolset
-from core.ai.retrieval.contracts import fetch_unit as legacy_fetch
 from core.ai.retrieval.contracts import register_mcp_tools as _register_mcp_tools
 from mcp.server.fastmcp.exceptions import ToolError
 from pydantic import Field, create_model
@@ -1503,7 +1503,7 @@ def leveled_fetch(
     knowledge_base: str = "",
     tools: frozenset[str] = TOOL_NAMES,
 ) -> Callable[[str], Awaitable[FetchEnvelope | FetchUnit]]:
-    """The leveled `fetch` tool function: envelope-shaped reads with a legacy full-text fallback.
+    """The leveled `fetch` tool function: envelope-shaped reads with a flat full-text fallback.
 
     Refs from an earlier listing pass through. A bare id from a `search` hit reads as a section when
     it holds `#`, else as a page. No argument opens the knowledge base map. An id outside the leveled
@@ -1534,7 +1534,7 @@ def leveled_fetch(
 
     async def flat(unit_id: str) -> FetchUnit:
         """The flat full-text read for an id with no leveled surface, returned as a `FetchUnit`."""
-        unit = await legacy_fetch(handlers, unit_id)
+        unit = await fetch_unit(handlers, unit_id)
         if unit is None:
             raise ModelRetry(no_unit_refusal(unit_id, collection, named=named, reground=reground))
         qualified = unit.model_copy(update={"ref": qualify_ref(f"unit:{unit.id}", collection)})

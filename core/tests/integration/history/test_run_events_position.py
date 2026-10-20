@@ -151,18 +151,3 @@ class TestSchemaIdempotence:
 
         assert len(columns) == 1
         assert len(indexes) == 1
-
-    async def test_a_table_that_predates_the_column_gains_it_back(self, database, store, conversation_id):
-        run_id = "run-pos-" + conversation_id
-        async with database.acquire() as connection, connection.transaction():
-            await connection.execute("ALTER TABLE run_events DROP COLUMN id")
-
-        await create_record_schema(database)
-        await store.register_run(RunRecord(run_id=run_id, conversation_id=conversation_id, started_at=AT))
-        await store.append_event(StepEvent(run_id=run_id, kind="run_started", step_index=0, timestamp=AT))
-
-        async with database.acquire() as connection:
-            row = await connection.fetchrow("SELECT id FROM run_events WHERE run_id = $1", run_id)
-
-        assert row is not None
-        assert row["id"] is not None

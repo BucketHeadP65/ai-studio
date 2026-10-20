@@ -256,7 +256,7 @@ async def test_get_answers_one_article(tmp_path: Path) -> None:
 
 
 def test_build_caches_under_the_knowledge_base_meta_folder(tmp_path: Path) -> None:
-    (tmp_path / "Units").mkdir()
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     (tmp_path / "_meta").mkdir()
 
     connector = MultihopRagConnector.build(SourceResources(knowledge_base=KnowledgeBaseSettings(path=tmp_path)))

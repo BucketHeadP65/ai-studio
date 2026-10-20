@@ -296,11 +296,6 @@ class StateSettings(BaseModel):
     home: Path = CHECKOUT / ".state"
 
     @property
-    def steps(self) -> Path:
-        """Where a file-store transcript keeps its runs under this home: one directory per run, its snapshots inside."""
-        return self.home / "steps"
-
-    @property
     def session_log(self) -> Path:
         """The append-only timeline of what this process did."""
         return self.home / "session-log.jsonl"
@@ -324,11 +319,6 @@ class StateSettings(BaseModel):
     def draft(self) -> Path:
         """The proposal currently on screen, so a restart keeps the one that was checked."""
         return self.home / "draft.json"
-
-    @property
-    def forgotten_marker(self) -> Path:
-        """When the person last pressed Forget."""
-        return self.home / "forgotten-at"
 
     @property
     def archive(self) -> Path:

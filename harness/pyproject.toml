@@ -225,9 +225,6 @@ preview = false
 # N818: `TelemetryUnreachable` names the condition a caller checks for, not a failure class, and
 # every caller across the telemetry port and the report scopes that consume it spells it this way.
 "src/harness/adapters/logfire_query.py" = ["N818"]
-# N818: `MigrationConflict` names the condition the migration script checks for, not a failure
-# class -- one caller distinguishes a refusal from an ordinary migrated/already-turns outcome.
-"src/harness/features/authoring/turns_migration.py" = ["N818"]
 # S608: `sql_for` and `_narrowing` interpolate `subject` and `since_hours` only after `sql_for`
 # validates both against a fixed pattern and a fixed band. Every reachable interpolation is a
 # checked value, never a caller's raw string.
@@ -267,9 +264,6 @@ preview = false
 # inside the indexed graph is a failed row, never a retry -- the same no-retry rule as baseline.py.
 # T201: the sweep prints one line of CLI feedback per record, the same ruling as baseline.py.
 "proof/reuse.py" = ["PLR0913", "BLE001", "T201"]
-# INP001: a standalone operator script, not a package. T201: the migration prints one line of
-# feedback per store page -- the operator's own record of what it touched, run by hand.
-"scripts/migrate_map_turns.py" = ["INP001", "T201"]
 # PLR0913/PLR0917: `attribute_lead_handler` and `scan_run_handler` take the inspector's whole
 # composition surface -- the tier ladder's dependencies, the conversation port, and the transcript
 # and parameters ports the run is recorded through. Narrowing it would only move the same fields

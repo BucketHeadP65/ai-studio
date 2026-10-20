@@ -101,7 +101,7 @@ def _checkout_session_log() -> SessionLog:
     from harness.settings import HarnessSettings  # noqa: PLC0415 (same)
 
     state = HarnessSettings().state
-    return OpenLog(state.session_log, forgotten_marker=state.forgotten_marker, topics=None)
+    return OpenLog(state.session_log, topics=None)
 
 
 @sessions_app.command(name="list")
@@ -160,83 +160,6 @@ def rebuild_sessions() -> None:
                 "(SELECT count(*) FROM flags) AS flags"
             )
             typer.echo(f"sessions={counts['sessions']} turns={counts['turns']} flags={counts['flags']}")
-        finally:
-            await container.close()
-
-    asyncio.run(_run())
-
-
-async def import_sessions_report(directories: list[Path], *, container: AsyncContainer) -> list[str]:
-    """Copy every directory's file-store transcript into the container's own record, one report line each.
-
-    The record's schema is created first when it is missing. A directory that is not there is
-    reported and skipped, and never fails the whole pass.
-
-    Args:
-        directories: The folders a file-store transcript was written to.
-        container: The container whose record receives the runs.
-
-    Returns:
-        One line per directory, with its counts or `nothing there`.
-    """
-    from pydantic_ai_harness.step_persistence import FileStepStore  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
-
-    from harness.domain.contracts import SessionTranscript  # noqa: PLC0415 (same)
-    from harness.features.sessions.contracts import import_file_store  # noqa: PLC0415 (same)
-
-    await provision_record(container)
-    record = await container.get(SessionTranscript)
-    lines: list[str] = []
-    for directory in directories:
-        if not directory.is_dir():
-            lines.append(f"{directory}: nothing there")
-            continue
-        report = await import_file_store(FileStepStore(directory), into=record)
-        lines.append(
-            f"{directory}: runs={report.runs} events={report.events} snapshots={report.snapshots} "
-            f"effects={report.effects} skipped={report.skipped} resumed={report.resumed} unnamed={report.unnamed} "
-            f"reconciled={report.reconciled} malformed={report.malformed}"
-        )
-    return lines
-
-
-_IMPORT_PATHS_ARGUMENT = typer.Argument(
-    None, help="Directories a file-store transcript was written to. Defaults to this checkout's and every registered project's."
-)
-"""The `paths` argument of `sessions import`."""
-
-
-@sessions_app.command(name="import")
-def import_sessions(paths: list[str] | None = _IMPORT_PATHS_ARGUMENT) -> None:
-    """Copy the transcripts written before the record into it, once. Safe to run again.
-
-    Reads each directory as a file store and writes every run, event, snapshot and tool effect it
-    holds into the record. A run the record already holds a snapshot for is skipped by id. One it
-    holds with no snapshot yet is resumed, so running the verb again finishes an interrupted pass.
-    """
-    import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
-
-    from pathlib import Path  # noqa: PLC0415 (same)
-
-    from harness.container import create_container  # noqa: PLC0415 (same)
-    from harness.features.sessions.contracts import project_registry  # noqa: PLC0415 (same)
-    from harness.settings import CHECKOUT, HarnessSettings, aifactory_state  # noqa: PLC0415 (same)
-
-    settings = HarnessSettings()
-    if paths:
-        directories = [Path(path).resolve() for path in paths]
-    else:
-        project_registry.boot(CHECKOUT)
-        directories = [
-            settings.state.steps,
-            *(aifactory_state(Path(project.root_path)) / "steps" for project in project_registry.registered_projects()),
-        ]
-
-    async def _run() -> None:
-        container = create_container(settings)
-        try:
-            for line in await import_sessions_report(directories, container=container):
-                typer.echo(line)
         finally:
             await container.close()
 

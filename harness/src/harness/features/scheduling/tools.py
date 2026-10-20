@@ -6,7 +6,7 @@ Every tool goes through the scheduler, the same path the schedule routes use.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from pydantic_ai.exceptions import ModelRetry
@@ -75,11 +75,11 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
     workflow_id: str,
     cadence: str,
     *,
+    run_engine: Literal["in_process", "temporal"],
     arguments: WorkflowArguments | None = None,
     names: KnowledgeBaseNames | None = None,
     gate_policy: str = "wait",
     gate_mode: GateMode = "wait",
-    auto_approve_gates: bool = False,
     capacity_key: str | None = None,
     capacity_limit: int | None = None,
     blackout: str | None = None,
@@ -97,13 +97,12 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         cadence: `every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh` (once after each refresh
             of the knowledge base the arguments select that brought in new sources), or `after <workflow name>`
             (once after a run of that workflow over the same knowledge base ends succeeded or partial).
+        run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
         arguments: The workflow's parameters, one per declared parameter, each as the JSON value
             that parameter's own type asks for.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.
         gate_policy: `wait` to hold a gate for a person forever, or `fail_after:<seconds>`.
         gate_mode: `wait`, `orchestrate`, or `auto`. See `orchestrating-a-run`.
-        auto_approve_gates: The older switch `gate_mode` replaced. Sending both and disagreeing
-            is refused.
         capacity_key: A name shared with other schedules to cap how many of them run at once.
         capacity_limit: How many schedules sharing `capacity_key` may run at once.
         blackout: One or more `HH:MM-HH:MM` daily quiet hours, comma separated.
@@ -116,7 +115,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
     Raises:
         ModelRetry: `workflow_id` does not check out here, an argument is not what its parameter
             declares, `cadence`, `gate_policy`, or `blackout` is not one of its own shapes, or
-            `gate_mode` and `auto_approve_gates` disagree.
+            `gate_mode` is `orchestrate` on a deployment that runs on Temporal.
     """
     now = datetime.now(UTC)
     session = ctx.deps
@@ -129,13 +128,13 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
             cadence=cadence,
             gate_policy=gate_policy,
             gate_mode=gate_mode,
-            auto_approve_gates=auto_approve_gates,
             capacity_key=capacity_key,
             capacity_limit=capacity_limit,
             blackout=blackout,
             catch_up=catch_up,
             names=names,
             now=now,
+            run_engine=run_engine,
         )
     except WorkflowUnavailableError as exc:
         msg = f"cannot schedule {workflow_id}. {exc.reason}"
@@ -160,6 +159,7 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
     ctx: RunContext[Runtime],
     schedule_id: str,
     *,
+    run_engine: Literal["in_process", "temporal"],
     workflow_id: str | None = None,
     cadence: str | None = None,
     arguments: WorkflowArguments | None = None,
@@ -167,7 +167,6 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
     enabled: bool | None = None,
     gate_policy: str | None = None,
     gate_mode: GateMode | None = None,
-    auto_approve_gates: bool | None = None,
     capacity_key: str | None = None,
     capacity_limit: int | None = None,
     blackout: str | None = None,
@@ -182,6 +181,7 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         ctx: The run context, checked against this session's own registered workflows when
             `workflow_id` is given.
         schedule_id: The schedule's own id, as shown by `schedules`.
+        run_engine: The engine this deployment runs workflows on. Temporal refuses a change to gate mode `orchestrate`.
         workflow_id: Point the schedule at a different saved workflow.
         cadence: Change how it fires, in any form `schedule_workflow` takes.
         arguments: Replace the workflow's parameters, each as the JSON value that parameter's own
@@ -190,8 +190,6 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         enabled: Pause it (false) or resume it (true).
         gate_policy: `wait` or `fail_after:<seconds>`.
         gate_mode: `wait`, `orchestrate`, or `auto`. See `orchestrating-a-run`.
-        auto_approve_gates: The older switch `gate_mode` replaced. Sending both and disagreeing
-            is refused.
         capacity_key: Join or move it into a shared run limit.
         capacity_limit: Change how many schedules sharing `capacity_key` may run at once.
         blackout: Change its daily quiet hours.
@@ -203,7 +201,8 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
     Raises:
         ModelRetry: `schedule_id` names no schedule, `workflow_id` does not check out here, an
             argument is not what its parameter declares, `cadence`, `gate_policy`, or `blackout`
-            is not one of its own shapes, or `gate_mode` and `auto_approve_gates` disagree.
+            is not one of its own shapes, or `gate_mode` is `orchestrate` on a deployment that runs
+            on Temporal.
     """
     schedule_uuid = _parse_id(schedule_id)
     session = ctx.deps
@@ -214,14 +213,13 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         enabled=enabled,
         gate_policy=gate_policy,
         gate_mode=gate_mode,
-        auto_approve_gates=auto_approve_gates,
         capacity_key=capacity_key,
         capacity_limit=capacity_limit,
         blackout=blackout,
         catch_up=catch_up,
     )
     try:
-        updated = await scheduler.update_schedule(session.library, session.registry, schedule_uuid, changes, names=names)
+        updated = await scheduler.update_schedule(session.library, session.registry, schedule_uuid, changes, names=names, run_engine=run_engine)
     except ScheduleNotFoundError as exc:
         raise ModelRetry(UNKNOWN_SCHEDULE) from exc
     except WorkflowUnavailableError as exc:

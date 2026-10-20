@@ -103,30 +103,6 @@ export function buildSpans(events: StepEvent[]): Map<string, Span[]> {
   return spansByNode;
 }
 
-const THEN_SUFFIX = "__then";
-
-// The archived convention a map's own chained leaf reported its calls under, before turns
-// shipped. The graph itself is rebuilt fresh from the run's own spec on every read, so a
-// historical run's node reads with today's `turns` field regardless of when it ran -- but a
-// historical run's own recorded events are frozen at whatever convention the harness followed
-// when it actually ran, so this id stays a fold candidate for every map node, unconditionally,
-// rather than reading off any field that might no longer be on the wire at all.
-function legacyThenEventId(node: GraphNode): string | null {
-  return node.kind === "map" ? `${node.id}${THEN_SUFFIX}` : null;
-}
-
-// Every map node's own legacy event id, mapped back to the node whose lane it belongs on -- how a
-// pre-turns run's chained call folds into today's graphed lane instead of drawing a stray one of
-// its own.
-function legacyThenBaseByEventId(nodes: GraphNode[]): Map<string, GraphNode> {
-  const bases = new Map<string, GraphNode>();
-  for (const node of nodes) {
-    const eventId = legacyThenEventId(node);
-    if (eventId) bases.set(eventId, node);
-  }
-  return bases;
-}
-
 // Every turn whose own event id differs from the map's own -- the harness's own `node_id` on that
 // turn entry. A single-turn map's one turn shares the map's own id and needs no entry here; a
 // multi-turn map's every turn, including its first, carries its own dotted `"{id}.{work}"` id
@@ -147,13 +123,11 @@ function turnBaseByEventId(nodes: GraphNode[]): Map<string, GraphNode> {
 }
 
 export function buildLanes(events: StepEvent[], nodes: GraphNode[]): Lane[] {
-  const legacyBases = legacyThenBaseByEventId(nodes);
   const turnBases = turnBaseByEventId(nodes);
-  // An event reported under a chained leaf's own id reads, from here on, as an event of the map
-  // node it chains off -- an id naming no such node is left alone, and keeps today's stray-lane
-  // fallback.
+  // An event reported under a turn's own id reads as an event of the map node the turn belongs
+  // to -- an id naming no such turn is left alone, and draws a lane of its own.
   const folded = events.map((event) => {
-    const base = turnBases.get(event.node) ?? legacyBases.get(event.node);
+    const base = turnBases.get(event.node);
     return base ? { ...event, node: base.id } : event;
   });
 

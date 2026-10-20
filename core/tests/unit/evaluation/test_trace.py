@@ -72,12 +72,12 @@ class TestTraceShapes:
         assert trace.withheld_exposures == (exposed,)
 
     def test_an_untraced_execution_says_so_rather_than_claiming_an_empty_trace(self):
-        assert TaskExecution(output="answer").trace is None
+        assert TaskExecution(output="answer", diagnostics=()).trace is None
 
     def test_an_execution_carries_the_trial_trace_it_produced(self):
         trace = ExecutionTrace(tool_calls=(_call(0),), model_turns=(_turn(0),), run_duration_ms=42)
 
-        assert TaskExecution(output="answer", trace=trace).trace == trace
+        assert TaskExecution(output="answer", diagnostics=(), trace=trace).trace == trace
 
     def test_a_delivered_reference_rides_the_call_that_delivered_it(self):
         call = ToolCallTrace(

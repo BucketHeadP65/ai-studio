@@ -15,7 +15,7 @@ from pydantic_core import to_jsonable_python
 
 from core.ai.history.contracts import PoolDatabase, PostgresStepStore, create_record_schema
 from core.ai.history.conversation_record import ConversationRecord
-from tests.integration.conftest import DATABASE_URL, TEST_SCHEMA
+from tests.integration.conftest import TEST_SCHEMA
 from tests.unit.history.conftest import CLEARED, RESULT, snapshot, turn_messages
 
 AT = datetime(2026, 9, 4, 12, 0, tzinfo=UTC)
@@ -59,21 +59,9 @@ class TestRegistration:
         assert found.registration_id == "registration-1"
         assert [run.registration_id for run in listed] == ["registration-1"]
 
-    async def test_a_runs_table_that_predates_registrations_gains_the_column(self, database, store, conversation_id):
-        run_id = "run-before-" + conversation_id
-        async with database.acquire() as connection, connection.transaction():
-            await connection.execute("ALTER TABLE runs DROP COLUMN registration_id")
-
-        await create_record_schema(database)
-        await store.register_run(RunRecord(run_id=run_id, conversation_id=conversation_id, started_at=AT, registration_id="registration-2"))
-        found = await store.get_run(run_id=run_id)
-
-        assert found is not None
-        assert found.registration_id == "registration-2"
-
-    async def test_reapplying_the_schema_waits_on_no_reader_of_the_altered_tables(self, database):
+    async def test_reapplying_the_schema_waits_on_no_reader_of_its_tables(self, database, database_url):
         impatient = await asyncpg.create_pool(
-            DATABASE_URL, min_size=1, max_size=1, server_settings={"search_path": f"{TEST_SCHEMA},public", "lock_timeout": "500"}
+            database_url, min_size=1, max_size=1, server_settings={"search_path": f"{TEST_SCHEMA},public", "lock_timeout": "500"}
         )
         try:
             async with database.acquire() as reader, reader.transaction():

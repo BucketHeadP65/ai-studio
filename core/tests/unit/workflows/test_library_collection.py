@@ -967,7 +967,7 @@ async def test_redescribe_and_archiving_both_keep_the_presentation() -> None:
 
 
 async def test_a_page_written_without_a_presentation_reads_as_none() -> None:
-    """A page that predates presentations carries none, and nothing invents one for it."""
+    """A page saved without a presentation carries none, and nothing invents one for it."""
     library = LibraryCollection(FakeRows(rows=[_page_row(None)]), FakeIngest())
 
     card = await library.fetch_card("wf.audit-a-claim.v1")
@@ -1086,7 +1086,7 @@ async def test_redescribe_and_archiving_both_keep_the_intent() -> None:
 
 
 async def test_a_page_written_without_an_intent_reads_as_none_and_carries_no_key() -> None:
-    """A page that predates intents is written and read exactly as it always was."""
+    """A page saved without an intent is written and read with no intent key."""
     ingest = FakeIngest()
     library = LibraryCollection(FakeRows(rows=[_page_row(None)]), ingest)
 

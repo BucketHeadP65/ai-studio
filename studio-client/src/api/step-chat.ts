@@ -520,8 +520,7 @@ function responseToolCallIds(payload: MessagePayload): string[] {
 }
 
 // Mirrors `responseDataStepPart` in `sessions.ts`: one response row's own usage and timestamp,
-// `null` when the row carries neither (a row from before the fork's usage tap started stamping
-// them).
+// `null` when the row carries neither.
 function stepDataPart(payload: MessagePayload, toolReturnTimestamps: Map<string, string>): Part | null {
   if (payload.usage === undefined || typeof payload.timestamp !== "string") {
     return null;

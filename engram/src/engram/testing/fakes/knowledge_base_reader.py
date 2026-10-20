@@ -30,7 +30,7 @@ class FakeKnowledgeBaseReader:
         """Script the documents.
 
         Args:
-            units: `(path relative to the knowledge base, text)` pairs for the `Units/**/*.md` pages.
+            units: `(path relative to the knowledge base, text)` pairs for the pages in the declared note folders and files.
             sources: Pairs for the `Sources/` mirrors.
             vocabularies: Pairs for the `_meta/vocabulary/*.md` pages.
             meta: Each name mapped to the text of its `_meta/<name>.md` orientation page.
@@ -43,7 +43,7 @@ class FakeKnowledgeBaseReader:
         self.root = Path(root)
 
     def unit_documents(self) -> Iterator[RawDocument]:
-        """Iterate the scripted `Units/**/*.md` page documents.
+        """Iterate the scripted pages of the declared note folders and files.
 
         Returns:
             An iterator over the scripted documents, in order.

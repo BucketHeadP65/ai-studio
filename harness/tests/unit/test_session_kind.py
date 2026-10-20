@@ -21,7 +21,7 @@ def _mint(session_id: str, kind: str, tmp_path: Path) -> None:
 
 def test_the_span_fold_carries_the_kind_the_start_event_named(tmp_path: Path) -> None:
     _mint("s-master", "master", tmp_path)
-    started = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-master"))
+    started = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-master", prompt_excerpt=None))
     assert started is not None
     a_session_log(tmp_path).record(TurnSettled(run_id="run-1", started_seq=started.seq))
 
@@ -31,18 +31,18 @@ def test_the_span_fold_carries_the_kind_the_start_event_named(tmp_path: Path) ->
 
 
 def test_a_span_with_no_start_event_defaults_to_chat(tmp_path: Path) -> None:
-    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-legacy"))
-    span = next(span for span in session_spans(a_session_log(tmp_path).events()) if span.session_id == "s-legacy")
+    a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-unstarted", prompt_excerpt=None))
+    span = next(span for span in session_spans(a_session_log(tmp_path).events()) if span.session_id == "s-unstarted")
     assert span.session_kind == "chat"
 
 
 def test_hydration_facts_drop_runs_from_before_the_forget(tmp_path: Path) -> None:
     _mint("s-1", "master", tmp_path)
-    first = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-1"))
+    first = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-1", prompt_excerpt=None))
     assert first is not None
     a_session_log(tmp_path).record(TurnSettled(run_id="run-old", started_seq=first.seq))
     a_session_log(tmp_path).record(ConversationForgotten(session_id="s-1"))
-    second = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-1"))
+    second = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=2, session_id="s-1", prompt_excerpt=None))
     assert second is not None
     a_session_log(tmp_path).record(TurnSettled(run_id="run-new", started_seq=second.seq))
 

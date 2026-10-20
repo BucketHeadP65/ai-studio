@@ -75,10 +75,11 @@ def an_archived_run(
     if declares_result:
         spec["result"] = {"summary": "the page the run wrote", "primary_work": "write"}
     return RunArchiveRecord(
+        run_title="",
         run_id=run_id,
         workflow_id=workflow_id,
         outcome=outcome,
-        result=result,
+        result=result if result is not None else Outcome(status="unknown", summary="the run's own facts establish nothing"),
         started_at=_STARTED,
         ended_at=_ENDED,
         runner="app:harness",

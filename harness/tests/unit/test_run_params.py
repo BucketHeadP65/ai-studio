@@ -314,10 +314,10 @@ async def test_a_refusal_names_the_path_inside_the_value(tmp_path: Path) -> None
         assert "$[1]" in refused.json()["message"], "a person reading this has to know which item"
 
 
-async def test_a_legacy_caller_sending_every_value_as_text_still_launches(tmp_path: Path) -> None:
-    """The shape the chat tool and a stored schedule have always sent: strings, decoded once."""
+async def test_a_caller_sending_every_value_as_text_still_launches(tmp_path: Path) -> None:
+    """The shape a form sends: strings, decoded once."""
     seen: list[Received] = []
-    legacy = {
+    as_text = {
         "question": "Which cache?",
         _KNOWLEDGE_BASES: '["research", "repo-docs"]',
         "project_context": "payments",
@@ -328,7 +328,7 @@ async def test_a_legacy_caller_sending_every_value_as_text_still_launches(tmp_pa
         "budget": '{"amount": 1200.5, "currency": "EUR"}',
     }
     async for client, pool in _client(_registry(seen), tmp_path):
-        started = await client.post("/api/run", json={"workflow_id": "wf.brief", "arguments": legacy})
+        started = await client.post("/api/run", json={"workflow_id": "wf.brief", "arguments": as_text})
 
         assert started.status_code == 200, started.text
         await _finished(pool, started.json()["session_id"])

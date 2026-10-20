@@ -192,12 +192,16 @@ const ARTIFACTS: Record<string, unknown[]> = {
 
 const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
   {
+    archived_at: null,
+    shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+    runs: { last: null },
     id: "wf.lit-check.v5",
     title: "Literature check into a decision record",
     summary: "Search the knowledge base for prior art, rank the risks, write a dated record.",
     provisional: false,
     score: 3,
     trust: {
+      approved_by: [],
       level: "machine-confirmed",
       runs_with_evidence: 2,
       failed_runs: 0,
@@ -211,12 +215,16 @@ const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
     version: 5,
   },
   {
+    archived_at: null,
+    shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+    runs: { last: null },
     id: "wf.metric-sweep.v1",
     title: "Metric sweep",
     summary: "Walk the eval metrics and flag drift against the last blessed run.",
     provisional: false,
     score: 1,
     trust: {
+      approved_by: [],
       level: "unverified",
       runs_with_evidence: 0,
       failed_runs: 0,
@@ -269,6 +277,8 @@ const PROJECTS = [{ id: "proj-1", name: "Engram", root_path: "/Users/owner/engra
 // waiting/running/paused lanes, the archive (`/api/runs/recent`) for Recent.
 const FLEET_RUNS: Wire<typeof RunListSchema>["runs"] = [
   {
+    run_title: "",
+    started_at: "",
     session_id: "s3",
     workflow_id: "wf.lit-check.v5",
     state: "waiting",
@@ -284,6 +294,8 @@ const FLEET_RUNS: Wire<typeof RunListSchema>["runs"] = [
     },
   },
   {
+    run_title: "",
+    started_at: "",
     session_id: "s4",
     workflow_id: "wf.metric-sweep.v1",
     state: "running",
@@ -294,6 +306,8 @@ const FLEET_RUNS: Wire<typeof RunListSchema>["runs"] = [
     gate: null,
   },
   {
+    run_title: "",
+    started_at: "",
     session_id: "s5",
     workflow_id: "wf.lit-check.v5",
     state: "paused",
@@ -307,6 +321,10 @@ const FLEET_RUNS: Wire<typeof RunListSchema>["runs"] = [
 
 const RECENT_RUNS: Wire<typeof RunEnvelopeSchema>[] = [
   {
+    run_title: "",
+    gates_orchestrated: [],
+    spend: null,
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-20260820091200-a1b2",
     workflow_id: "wf.lit-check.v5",
     outcome: "completed",
@@ -322,6 +340,10 @@ const RECENT_RUNS: Wire<typeof RunEnvelopeSchema>[] = [
     pinned: true,
   },
   {
+    run_title: "",
+    gates_orchestrated: [],
+    spend: null,
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-20260819090300-c3d4",
     workflow_id: "wf.metric-sweep.v1",
     outcome: "failed",
@@ -351,6 +373,7 @@ const SESSIONS: Wire<typeof SessionListSchema>["sessions"] = [
     usage: usage(),
     kind: "chat",
     cost_usd: "0.0421",
+    unpriced: 0,
     context: null,
   },
   {
@@ -365,6 +388,7 @@ const SESSIONS: Wire<typeof SessionListSchema>["sessions"] = [
     usage: usage(),
     kind: "runner",
     cost_usd: "0.0083",
+    unpriced: 0,
     context: null,
   },
 ];
@@ -400,7 +424,6 @@ const KNOWLEDGE_BASES: Wire<typeof KnowledgeBaseListResultSchema> = {
 // plus the detail-only fields the page reads.
 const KNOWLEDGE_BASE_DETAIL: Wire<typeof KnowledgeBaseDetailSchema> = {
   ...KNOWLEDGE_BASES.knowledge_bases[0],
-  sources_connector: null,
   sources_connectors: [],
   watch_list: [],
   validation: [],
@@ -452,6 +475,8 @@ async function mockApi(page: Page) {
   await page.route("**/api/projects", (route) => json(route, { projects: PROJECTS }));
   await page.route("**/api/run/state**", (route) =>
     json(route, {
+      auto_approve: false,
+      gate_mode: "wait",
       running: false,
       workflow: null,
       result: null,

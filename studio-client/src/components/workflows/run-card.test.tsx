@@ -41,6 +41,7 @@ function runViewFixture(overrides: Partial<RunView> = {}): RunView {
 
 function runEnvelopeFixture(overrides: Partial<RunEnvelope> = {}): RunEnvelope {
   return {
+    result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
     run_id: "run-1",
     workflow_id: "wf.lit-check.v5",
     outcome: "completed",
@@ -718,24 +719,5 @@ describe("RunCard hierarchy", () => {
     // number the run wrote about itself.
     expect(screen.queryByText("Recorded output")).not.toBeInTheDocument();
     expect(screen.getByText("No work needed")).toBeInTheDocument();
-  });
-
-  it("says the result is unchecked for a record that carries none", () => {
-    render(
-      <ul>
-        <RunCard
-          card={{
-            kind: "recent",
-            run: runEnvelopeFixture({ result: null }),
-            name: "Which cache do we use?",
-            graph: GRAPH,
-            onTogglePin: vi.fn(),
-            pinning: false,
-          }}
-        />
-      </ul>,
-    );
-
-    expect(screen.getByText("Unchecked")).toBeInTheDocument();
   });
 });

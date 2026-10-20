@@ -1,7 +1,7 @@
 """The continuation ledger against a real Postgres: the bootstrap it ships with, and two turns racing for one line.
 
-The bootstrap claim is the additive one: a record provisioned before these tables existed gains
-exactly them, twice-applied, with every history row it already held still there. The concurrency
+The bootstrap claim is the idempotent one: applying the schema again to a record that holds history leaves
+exactly these tables, keys and index, with every history row it already held still there. The concurrency
 claim is the one a fake cannot make: two workers reaching for the same conversation at the same
 predecessor, through two connections, and exactly one of them running a model call.
 """
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from core.ai.history.contracts import ContinuationCommit
 
 AT = datetime(2026, 9, 14, 12, 0, tzinfo=UTC)
-DROP_CONTINUATION = "DROP TABLE IF EXISTS continuation_heads, continuation_attempts CASCADE"
 SELECT_TABLES = """
     SELECT table_name FROM information_schema.tables
     WHERE table_schema = $1 AND table_name IN ('continuation_attempts', 'continuation_heads')
@@ -120,13 +119,11 @@ async def _a_settled_turn(store: PostgresStepStore, attempt: ContinuationAttempt
 
 
 class TestBootstrap:
-    async def test_a_record_provisioned_before_these_tables_gains_exactly_them_and_keeps_its_history(
+    async def test_applying_the_schema_again_keeps_exactly_these_tables_and_the_history_already_held(
         self, database: PoolDatabase, store: PostgresStepStore, conversation_id: UUID
     ) -> None:
-        async with database.acquire() as connection, connection.transaction():
-            await connection.execute(DROP_CONTINUATION)
-        run_id = f"run-before-{conversation_id}"
-        await store.register_run(RunRecord(run_id=run_id, conversation_id=str(conversation_id), agent_name="older", started_at=AT))
+        run_id = f"run-held-{conversation_id}"
+        await store.register_run(RunRecord(run_id=run_id, conversation_id=str(conversation_id), agent_name="turn", started_at=AT))
         await store.save_snapshot(snapshot(run_id, 1, turn_messages(), conversation_id=str(conversation_id)))
 
         await create_record_schema(database)

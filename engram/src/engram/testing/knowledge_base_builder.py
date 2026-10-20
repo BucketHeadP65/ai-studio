@@ -1,10 +1,10 @@
 """Builds a mini fixture knowledge base on disk for index tests.
 
-A :class:`KnowledgeBaseBuilder` rooted at a ``tmp_path`` writes ``Units/<Type>/`` page notes,
+A :class:`KnowledgeBaseBuilder` rooted at a ``tmp_path`` writes page notes into the folders the schema declares,
 `Sources/` raw mirrors, `_meta/vocabulary/*.md` vocabularies copied from the golden
 mini-vocabularies, and the three `_meta/` orientation stubs (`schema`, `purpose`,
-`retrieval-policy`) the `api.about` content row is built from. The tree contains `Units/` and
-`_meta/`, so it satisfies `KnowledgeBaseSettings`.
+`retrieval-policy`) the `api.about` content row is built from. `KnowledgeBaseSettings` accepts the tree once
+`add_knowledge_base_schema` has written its schema file.
 
 `add_unit_document` accepts raw markdown text or an :class:`~engram.kb.contracts.AuthoringPayload`,
 which it renders with the shared note renderer.
@@ -45,21 +45,22 @@ class KnowledgeBaseBuilder:
     """Writes a minimal but well-formed knowledge base under `root` for index-slice tests."""
 
     def __init__(self, root: Path) -> None:
-        """Create `Units/`, `Sources/` and `_meta/` under `root`.
+        """Create `Sources/` and `_meta/` under `root`.
 
         Args:
             root: The knowledge base folder.
         """
         self.root = root
-        (root / "Units").mkdir(parents=True, exist_ok=True)
         (root / "Sources").mkdir(parents=True, exist_ok=True)
         (root / "_meta").mkdir(parents=True, exist_ok=True)
 
-    def add_unit_document(self, page_type: str, slug: str, content: str | AuthoringPayload) -> Path:
-        """Write a `Units/<Type>/<slug>.md` page from raw text or a rendered payload.
+    def add_unit_document(self, folder: str, slug: str, content: str | AuthoringPayload) -> Path:
+        """Write a `<folder>/<slug>.md` page from raw text or a rendered payload.
+
+        `folder` must be one the schema declares for the page's type, because the index reads no other folder.
 
         Args:
-            page_type: The page type folder under `Units/`.
+            folder: The page's folder relative to the knowledge base root, such as `Wiki/Papers`.
             slug: The file name without `.md`.
             content: The raw markdown, or a payload to render.
 
@@ -67,9 +68,9 @@ class KnowledgeBaseBuilder:
             The written file.
         """
         text = render(content) if isinstance(content, AuthoringPayload) else content
-        type_dir = self.root / "Units" / page_type
-        type_dir.mkdir(parents=True, exist_ok=True)
-        path = type_dir / f"{slug}.md"
+        folder_path = self.root / folder
+        folder_path.mkdir(parents=True, exist_ok=True)
+        path = folder_path / f"{slug}.md"
         path.write_text(text, encoding="utf-8")
         return path
 

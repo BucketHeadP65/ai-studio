@@ -8,9 +8,8 @@ import { Folded } from "./folded";
 
 // One row of the expanded trace, by entry kind: the label on the left, the content on the
 // right. `answered` reads the model's own raw call arguments, whichever of the inspector's
-// three answer shapes they are: an attribution (`symptom` + `blames`, or an older shape with
-// one blame's fields flattened to the top), a scan (`items`, one block per symptom it saw),
-// or a refusal to decide (`reason`).
+// three answer shapes they are: an attribution (`symptom` + `blames`), a scan (`items`, one
+// block per symptom it saw), or a refusal to decide (`reason`).
 
 interface RawBlame {
   rootCause: string;
@@ -32,19 +31,8 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
-// A blame list, from a `{blames: [...]}` field or, for the taxonomy's older call shape, one
-// blame's own fields flattened onto the record itself.
+// A blame list, from a `{blames: [...]}` field.
 function rawBlames(record: Record<string, unknown>): RawBlame[] {
-  if (typeof record.root_cause === "string") {
-    return [
-      {
-        rootCause: record.root_cause,
-        surfaceKind: stringField(record, "surface_kind"),
-        surfaceName: stringField(record, "surface_name"),
-        why: stringField(record, "why"),
-      },
-    ];
-  }
   if (!Array.isArray(record.blames)) return [];
   return record.blames.filter(isRecord).map((item) => ({
     rootCause: stringField(item, "root_cause"),

@@ -197,7 +197,19 @@ function endedRun(overrides: Partial<RunEnvelope> = {}): RunEnvelope {
     gates_orchestrated: [],
     pinned: false,
     spend: null,
-    result: null,
+    result: {
+      status: "unknown",
+      summary: "",
+      attempted: 0,
+      succeeded: 0,
+      skipped: 0,
+      failed: 0,
+      retry_attempts: 0,
+      primary_input: null,
+      generation: null,
+      checks: [],
+      artifacts: [],
+    },
     ...overrides,
   };
 }

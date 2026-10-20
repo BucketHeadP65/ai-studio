@@ -2092,3 +2092,135 @@ class TestCutPlansMigration:
         run_downgrade(target_url, "0068")
 
         assert not await _relation_exists(target_url, "kb.cut_plans")
+
+
+class TestGateModeAndRefreshResultsMigration:
+    """Revision 0072: a schedule's gate behaviour lives in `gate_mode` alone, and a refresh result stored as text becomes its pass document."""
+
+    def test_the_revision_sits_directly_on_0071(self) -> None:
+        module = _load_migration_module("0072")
+
+        assert module.revision == "0072"
+        assert module.down_revision == "0071"
+
+    async def test_the_switch_folds_into_gate_mode_and_the_downgrade_derives_it_back(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0071")
+        comment_query = "SELECT col_description('public.schedules'::regclass, attnum) FROM pg_attribute WHERE attrelid = 'public.schedules'::regclass AND attname = 'gate_mode'"
+        comment_before = await _rows(target_url, comment_query)
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.executemany(
+                "INSERT INTO public.schedules (id, workflow_id, cadence, gate_mode, auto_approve_gates)"
+                " VALUES (gen_random_uuid(), $1, 'every 1h', $2, $3)",
+                [("wf.switched", "wait", True), ("wf.auto", "auto", True), ("wf.waiting", "wait", False), ("wf.orchestrated", "orchestrate", False)],
+            )
+        finally:
+            await connection.close()
+
+        run_upgrade(target_url, "0072")
+
+        assert "auto_approve_gates" not in await _column_names(target_url, "public.schedules")
+        assert await _rows(target_url, "SELECT workflow_id, gate_mode FROM public.schedules ORDER BY workflow_id") == [
+            ("wf.auto", "auto"),
+            ("wf.orchestrated", "orchestrate"),
+            ("wf.switched", "auto"),
+            ("wf.waiting", "wait"),
+        ], "a row whose switch said auto runs auto, and every other row keeps its mode"
+        assert "auto_approve_gates" not in str(await _rows(target_url, comment_query))
+
+        run_downgrade(target_url, "0071")
+
+        assert await _rows(target_url, "SELECT workflow_id, gate_mode, auto_approve_gates FROM public.schedules ORDER BY workflow_id") == [
+            ("wf.auto", "auto", "True"),
+            ("wf.orchestrated", "orchestrate", "False"),
+            ("wf.switched", "auto", "True"),
+            ("wf.waiting", "wait", "False"),
+        ]
+        assert await _rows(target_url, comment_query) == comment_before
+
+    async def test_a_refresh_result_stored_as_text_becomes_the_pass_document(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0071")
+        document = '{"detail":"indexed 2 pages","counts":{"sources_created":2,"requested_by_entry":{},"created_by_connector":{}}}'
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.executemany(
+                "INSERT INTO coordination.jobs (kind, key, state, result) VALUES ($1, $2, $3, $4)",
+                [
+                    ("kb.refresh", "text", "done", "scanned 0 entries, synced 1 created, indexed 3 pages"),
+                    ("kb.refresh", "document", "done", document),
+                    ("kb.refresh", "queued", "queued", None),
+                    ("kb.ingest", "other", "done", "left as written"),
+                ],
+            )
+        finally:
+            await connection.close()
+
+        run_upgrade(target_url, "0072")
+
+        rows = {str(key): result for key, result in await _rows(target_url, "SELECT key, result FROM coordination.jobs ORDER BY key")}
+        assert json.loads(str(rows["text"])) == {
+            "detail": "scanned 0 entries, synced 1 created, indexed 3 pages",
+            "counts": {"sources_created": 0, "requested_by_entry": {}, "created_by_connector": {}},
+        }
+        assert rows["document"] == document
+        assert rows["queued"] is None
+        assert rows["other"] == "left as written"
+
+    async def test_the_indexed_schema_function_and_the_spec_column_are_dropped_and_the_downgrade_restores_both_empty(self, pg: str):
+        target_url = await new_test_database(pg)
+        run_upgrade(target_url, "0071")
+        definition_before = await _function_definition(target_url, _INDEXED_SCHEMA)
+        comment_before = await _function_comment(target_url, schema="api", name="indexed_schema")
+        column_comment_before = await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT)
+        column_before = await _rows(target_url, _SPEC_COLUMN)
+        assert definition_before is not None
+        assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
+        connection = await asyncpg.connect(_asyncpg_dsn(target_url))
+        try:
+            await connection.execute(
+                "INSERT INTO kb.index_fingerprint (collection, indexer_version, spec_hash, vocabulary_hash, embed_model, spec)"
+                " VALUES ('notes', '7', 'spec-hash', 'vocabulary-hash', 'test-embedding', '{\"slug\": \"notes\"}'::jsonb)"
+            )
+        finally:
+            await connection.close()
+
+        run_upgrade(target_url, "0072")
+
+        assert not await _function_exists(target_url, _INDEXED_SCHEMA)
+        assert "spec" not in await _column_names(target_url, "kb.index_fingerprint")
+        assert await _rows(target_url, "SELECT collection FROM kb.index_fingerprint") == [("notes",)], "the row stays, without the column"
+
+        run_downgrade(target_url, "0071")
+
+        assert await _function_definition(target_url, _INDEXED_SCHEMA) == definition_before
+        assert await _function_comment(target_url, schema="api", name="indexed_schema") == comment_before
+        assert await _reader_may_execute(target_url, _INDEXED_SCHEMA)
+        assert await _rows(target_url, _INDEXED_SCHEMA_COLUMN_COMMENT) == column_comment_before
+        assert await _rows(target_url, _SPEC_COLUMN) == column_before
+        assert await _rows(target_url, "SELECT collection, spec FROM kb.index_fingerprint") == [("notes", None)], (
+            "the schema a row held cannot be rebuilt here, so the column comes back empty until the next index"
+        )
+
+
+_INDEXED_SCHEMA = "api.indexed_schema(text)"
+
+_INDEXED_SCHEMA_COLUMN_COMMENT = (
+    "SELECT col_description('kb.index_fingerprint'::regclass, attnum) FROM pg_attribute"
+    " WHERE attrelid = 'kb.index_fingerprint'::regclass AND attname = 'spec'"
+)
+
+_SPEC_COLUMN = (
+    "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+    " WHERE table_schema = 'kb' AND table_name = 'index_fingerprint' AND column_name = 'spec'"
+)
+
+
+async def _function_definition(url: str, signature: str) -> str | None:
+    """The full `CREATE FUNCTION` text of exactly this signature, or None when the database carries none."""
+    connection = await asyncpg.connect(_asyncpg_dsn(url))
+    try:
+        return await connection.fetchval("SELECT pg_get_functiondef(to_regprocedure($1))", signature)
+    finally:
+        await connection.close()

@@ -43,15 +43,13 @@ export const SessionSummarySchema = z.object({
   answering: z.boolean(),
   turn_count: z.number(),
   usage: UsageTotalsSchema,
-  // Missing or unrecognized on an old session-log line projects as "chat" — the
-  // kind this field replaces nothing, so tolerance here is a feature, not a gap.
-  kind: z.enum(["chat", "runner", "master"]).catch("chat"),
+  kind: z.enum(["chat", "runner", "master"]),
   // A decimal string (never a float) -- the backend's own money type, parsed
   // here only to display, never to compute against.
   cost_usd: z.string(),
   // Responses in this session that no source could price. Above zero, `cost_usd` is a floor rather
   // than the cost, and the vitals say so rather than showing a figure that reads as the whole of it.
-  unpriced: z.number().default(0),
+  unpriced: z.number(),
   context: ContextVitalsSchema.nullable(),
 });
 export type SessionSummary = z.infer<typeof SessionSummarySchema>;
@@ -86,9 +84,9 @@ export const MessagePartSchema = z.looseObject({
     .union([z.string(), z.record(z.string(), z.unknown())])
     .nullable()
     .optional(),
-  // ISO timestamp of a tool-return part, present once the fork's usage tap started stamping
-  // returns; a call this browser's own turn holds is answered before it, and never carries one.
-  // A part read straight from the record carries it as null when nothing stamped it.
+  // ISO timestamp of a tool-return part. A call this browser's own turn holds is answered before
+  // it, and never carries one. A part read straight from the record carries it as null when
+  // nothing stamped it.
   timestamp: z.string().nullish(),
 });
 export type MessagePart = z.infer<typeof MessagePartSchema>;
@@ -96,8 +94,7 @@ export type MessagePart = z.infer<typeof MessagePartSchema>;
 export const MessagePayloadSchema = z.looseObject({
   kind: z.string(),
   parts: z.array(MessagePartSchema).default([]),
-  // A response row's own model usage and when it landed, present once the fork's usage tap
-  // started recording them; absent on a row from before that, or on a request row.
+  // A response row's own model usage and when it landed, absent on a request row.
   usage: UsageTotalsSchema.optional(),
   // A request read straight from the record carries it as null.
   timestamp: z.string().nullish(),
@@ -126,17 +123,17 @@ export const CreatedSessionSchema = z.object({ session: SessionSummarySchema });
 export const RunViewSchema = z.object({
   session_id: z.string(),
   workflow_id: z.string(),
-  // What this run is called, as its launch named it. Defaulted, so a backend that predates the
-  // field still parses; an unnamed run is named by its workflow's own card instead.
-  run_title: z.string().default(""),
+  // What this run is called, as its launch named it. An unnamed run is named by its workflow's own
+  // card instead.
+  run_title: z.string(),
   state: z.enum(["running", "paused", "waiting"]),
-  active: z.array(z.string()).default([]),
-  done: z.array(z.string()).default([]),
-  failed: z.array(z.string()).default([]),
+  active: z.array(z.string()),
+  done: z.array(z.string()),
+  failed: z.array(z.string()),
   waiting_at: z.string().nullable(),
   gate: PendingGateSchema.nullable(),
-  // ISO 8601 UTC, "" when unknown -- defaulted so a backend that predates this field still parses.
-  started_at: z.string().default(""),
+  // ISO 8601 UTC, "" when unknown.
+  started_at: z.string(),
   // This run's own priced cost so far, absent or null when no ledger exists for it yet.
   spend: SpendViewSchema.nullish(),
 });

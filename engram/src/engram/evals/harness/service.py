@@ -644,7 +644,7 @@ def _held_differences(written: ResultsHeader, run: ResultsHeader) -> list[str]:
         ("search_date_range", written.search_date_range, run.search_date_range),
         ("dataset_sha256", written.dataset_sha256, run.dataset_sha256),
         ("collection", written.collection, run.collection),
-        ("index_build", _build_or_unknown(written.index_build), _build_or_unknown(run.index_build)),
+        ("index_build", written.index_build, run.index_build),
         ("source_scoring_version", written.source_scoring_version, run.source_scoring_version),
     )
     return [f"{name} ({in_file} in the file, {now} now)" for name, in_file, now in held if in_file != now]
@@ -657,11 +657,6 @@ def _source_scoring_version() -> int:
     return SOURCE_SCORING_VERSION
 
 
-def _build_or_unknown(index_build: str | None) -> str:
-    """The index build as a refusal names it, `unknown` for a header that did not record one."""
-    return index_build if index_build is not None else "unknown"
-
-
 def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp: _RunStamp) -> _KeptResults | None:
     """The results file's header and the dataset cases' lines that did not fail transiently, or `None` when there is no file yet."""
     path = config.results_path
@@ -670,7 +665,8 @@ def _kept_results(config: EvaluationRunConfig, dataset: EvaluationDataset, stamp
     try:
         written, lines = read_results(path)
     except (OSError, ValueError) as error:
-        msg = f"the results file {path} cannot be resumed: {error}"
+        reason = str(error) if str(error).endswith(".") else f"{error}."
+        msg = f"the results file {path} cannot be resumed: {reason} Name another results file, or run without resuming to replace this one."
         raise ResultsFileNotResumableError(msg) from error
     differences = _held_differences(written, _results_header(config, dataset, stamp, source_lookup_error=None))
     if differences:
@@ -977,6 +973,7 @@ class BlindTrialRunner:
             trial_id=trial_id,
             cited_source_ids=tuple(outcome.answer.cited_source_ids),
             usage=outcome.usage,
+            diagnostics=(),
             trace=self.traces[trial_id],
         )
 

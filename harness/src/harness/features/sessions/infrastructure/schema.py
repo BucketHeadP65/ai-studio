@@ -37,9 +37,6 @@ SCHEMA: tuple[str, ...] = (
         session_kind text NOT NULL DEFAULT 'chat'
     )
     """,
-    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS session_kind text NOT NULL DEFAULT 'chat'",
-    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS cost numeric NOT NULL DEFAULT 0",
-    "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS unpriced bigint NOT NULL DEFAULT 0",
     "CREATE INDEX IF NOT EXISTS sessions_listing ON sessions (project_id, archived, last_activity_at DESC)",
     """
     CREATE TABLE IF NOT EXISTS turns (

@@ -2,16 +2,16 @@ r"""End-to-end authoring round-trip: payload JSON → built note → indexed row
 
 The other side of the vertical slice from `test_index_and_search` (which seeds from
 pre-baked golden markdown): here the note is *authored through the CLI* from an extractor
-payload, then ingested. The whole path runs through the public `memory` commands:
+payload, then ingested. The whole path runs through the public `studio` commands:
 
 1. an authoring payload (modelled on the golden LightRAG benchmark claim, carrying a quote
    that appears verbatim in the golden mirror excerpt) →
-2. `memory note build --payload … --out <knowledge_base>/Memory/Papers/built.md --verify-quotes` against a
+2. `studio note build --payload … --out <knowledge_base>/Wiki/Papers/built.md --verify-quotes` against a
    :class:`~engram.testing.knowledge_base_builder.KnowledgeBaseBuilder` knowledge base whose ``Sources/`` holds that mirror
    excerpt → the build verifies every quote against the mirror *before* writing, exits 0, and the
-   file exists;
-3. `memory note validate` over the built note passes (parse + registry vocabulary clean);
-4. `memory index` ingests that same knowledge base into the freshly-migrated ParadeDB (real PG
+   file exists.
+3. `studio note validate` over the built note passes (parse + registry vocabulary clean).
+4. `studio index` ingests that same knowledge base into the freshly-migrated ParadeDB (real PG
    Unit-of-Work, :class:`FakeEmbedding` the only fake) with **no validation errors**, and the built
    note's page row + its claim row land (their ids are present in `kb.pages` / `kb.claims`).
 
@@ -150,7 +150,7 @@ class _IndexFactory:
     """A `ctx.obj` factory whose bus runs a real-PG, fake-embed index handler (e2e shape)."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader, FakeEmbedding(), KnowledgeBaseUnitOfWorkFactory(engine), FileValidationReportSink(knowledge_base), spec=load_knowledge_base_schema(knowledge_base)
         )
@@ -186,17 +186,17 @@ class _IndexContainer:
 def _build_knowledge_base(root: Path) -> tuple[Path, KnowledgeBaseSettings]:
     """Lay down the knowledge base (entity + the golden mirror + registries + meta stubs); return root + settings.
 
-    The `Memory/Papers/` directory is created so `memory note build --out` (which writes
+    The `Wiki/Papers/` directory is created so `studio note build --out` (which writes
     atomically into an existing directory) can drop the authored paper note where the
     filesystem knowledge base reader will later index it.
     """
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Entities", "lightrag", _ENTITY)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
     builder.add_source_mirror("lightrag-mirror", _MIRROR_EXCERPT)
     builder.add_vocabulary()
     builder.add_meta_stubs()
     builder.add_knowledge_base_schema()
-    (root / "Units" / "Papers").mkdir(parents=True, exist_ok=True)
+    (root / "Wiki" / "Papers").mkdir(parents=True, exist_ok=True)
     return root, KnowledgeBaseSettings.model_validate({"path": str(root)})
 
 
@@ -234,7 +234,7 @@ class TestNoteBuildRoundtrip:
         knowledge_base_root, knowledge_base = _build_knowledge_base(tmp_path / "knowledge_base")
         payload_path = tmp_path / "payload.json"
         payload_path.write_text(json.dumps(_payload()), encoding="utf-8")
-        out = knowledge_base_root / "Units" / "Papers" / "built.md"
+        out = knowledge_base_root / "Wiki" / "Papers" / "built.md"
 
         # 1. Build the note from the payload, verifying quotes against the mirror before writing.
         built = runner.invoke(

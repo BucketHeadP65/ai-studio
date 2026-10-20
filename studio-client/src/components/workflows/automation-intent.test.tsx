@@ -67,7 +67,11 @@ describe("the intent panel", () => {
       />,
     );
 
-    expect(screen.getByText(/Nothing records a request for this draft/)).toBeVisible();
+    expect(
+      screen.getByText(
+        "Nothing records a request for this draft. Ask for a change below and the agent records what you asked for with it.",
+      ),
+    ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Save what you asked for" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Assumption 1")).not.toBeInTheDocument();
   });

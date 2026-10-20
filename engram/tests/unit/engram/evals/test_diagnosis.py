@@ -518,16 +518,15 @@ class TestAdditiveDefaults:
 
 
 class TestLayeredMetricKeysPassThroughUnaffected:
-    """Pins that a case's namespaced layer keys never confuse the legacy headline pick.
+    """Pins that a case's namespaced layer keys never confuse the headline pick.
 
     A case's scores may now also carry `citation_` / `surfaced_` / `ranking_`-namespaced keys
-    (`engram.evals.outcomes.domain.evaluators`) alongside the legacy `recall@k` / `precision@k` / `mrr`.
+    (`engram.evals.outcomes.domain.evaluators`) alongside the unprefixed `recall@k` / `precision@k` / `mrr`.
     `primary_at_k_key` matches on the bare `recall@` / `precision@` prefix, so a namespaced key
-    (which never starts with that bare prefix) cannot be picked as the headline, and the read stays
-    exactly what it was before those keys existed.
+    (which never starts with that bare prefix) cannot be picked as the headline.
     """
 
-    def test_the_headline_pick_still_reads_the_legacy_bare_key(self):
+    def test_the_headline_pick_reads_the_unprefixed_key(self):
         case = _case(
             gold=("paper.a",),
             cited=("paper.a",),
@@ -550,7 +549,7 @@ class TestLayeredMetricKeysPassThroughUnaffected:
 
     def test_namespaced_keys_still_ride_the_general_overall_average(self):
         # BucketMetrics.metrics and Diagnosis.overall generalize over whatever a case's scores
-        # carry, so the new keys are averaged in beside the legacy ones without any reader change.
+        # carry, so the new keys are averaged in beside the unprefixed ones without any reader change.
         case = _case(scores={"recall@5": 1.0, "citation_recall@5": 1.0, "surfaced_recall@5": 0.5, "n_tool_calls": 1.0})
 
         diagnosis = diagnose(_Report(cases=[case]))

@@ -72,6 +72,7 @@ class FakeTaskRunner:
             usage=ResourceUsage(
                 input_tokens=10, output_tokens=5, requests=1, cost_usd=self.baseline_cost if variant == "baseline" else self.candidate_cost
             ),
+            diagnostics=(),
         )
 
 

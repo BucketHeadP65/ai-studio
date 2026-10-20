@@ -331,8 +331,7 @@ class SearchSchema:
             document keeps at most that many and folds the rest under its best hit, each folded unit with a snippet
             when the tuning sets `folded_snippet_chars`. A tuning with `partition_col` reads both of those numbers
             for each hit's own partition. Unset, the search renders
-            its fixed constants, unchanged from before tuning existed. Every surface name must then be a plain
-            identifier, since it names a weight.
+            its fixed constants. Every surface name must then be a plain identifier, since it names a weight.
     """
 
     surfaces: tuple[SearchSurface, ...]

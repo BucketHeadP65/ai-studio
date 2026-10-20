@@ -29,16 +29,18 @@ from harness.domain.events import (
     TurnSettled,
     TurnStarted,
     TurnSteered,
+    UnreadableLine,
     decode,
     encode,
     last_forgotten_at,
     live_session,
     logged_run_ids,
     open_turns,
+    read_line,
     session_spans,
 )
 from harness.domain.exceptions import CardUnreadableError
-from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode, effective_gate_mode
+from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode
 from harness.domain.page_context import PageContext, compose_prompt, strip_page_context
 from harness.domain.ports import (
     BRIEFING_ONLY_BUDGET,
@@ -67,7 +69,6 @@ from harness.domain.readiness import (
     effective_presentation,
     refusal_text,
 )
-from harness.domain.replies import said
 from harness.domain.session_types import DEFAULT_SESSION_TYPE, UNKNOWN_SESSION, SessionType, session_type_of
 
 __all__ = [
@@ -125,12 +126,12 @@ __all__ = [
     "TurnSettled",
     "TurnStarted",
     "TurnSteered",
+    "UnreadableLine",
     "WorkflowPresentationPatch",
     "admitted_arguments",
     "card_readiness",
     "compose_prompt",
     "decode",
-    "effective_gate_mode",
     "effective_presentation",
     "encode",
     "last_forgotten_at",
@@ -138,8 +139,8 @@ __all__ = [
     "logged_run_ids",
     "open_turns",
     "presentation_of",
+    "read_line",
     "refusal_text",
-    "said",
     "selected_knowledge_bases",
     "session_spans",
     "session_type_of",

@@ -183,7 +183,6 @@ export const ScheduleReportSchema = z.object({
 export type ScheduleReport = z.infer<typeof ScheduleReportSchema>;
 
 export const KnowledgeBaseDetailSchema = KnowledgeBaseListEntrySchema.extend({
-  sources_connector: z.string().nullable(),
   sources_connectors: z.array(z.string()),
   watch_list: z.array(WatchEntrySchema),
   validation: z.array(ValidationRowSchema),
@@ -248,9 +247,7 @@ const FrontmatterFieldSpecSchema = z.object({
 });
 
 // A canonical section (engram.kb.domain.schema.CanonicalSection): a bare slug when the page type
-// declares no display heading for it, or a {slug, heading} object when it does. The backend
-// widened this from a plain string array, so both shapes are live — a headingless entry from an
-// older knowledge-base-schema.json can still arrive as a bare string.
+// declares no display heading for it, or a {slug, heading} object when it does.
 const CanonicalSectionSchema = z.union([
   z.string(),
   z.object({ slug: z.string(), heading: z.string().nullable() }),

@@ -26,6 +26,7 @@ from core.ai.workflows.contracts import (
     FromNode,
     FromParameter,
     Lineage,
+    Outcome,
     ParameterSpec,
     Program,
     RunEvidence,
@@ -114,8 +115,9 @@ async def test_a_coherent_adaptation_runs(quarterly_report: Workflow, registry: 
 def test_trust_carries_for_every_node_the_diff_did_not_touch(quarterly_report: Workflow) -> None:
     born = RunEvidence(
         workflow_id="wf.report",
+        spec_hash="abc",
         outcome="completed",
-        produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"},
+        produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"}, result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()
     )
     child, lineage = adapt(quarterly_report, ops=_stop_before_publishing())
     carried = carried_trust(born, lineage)

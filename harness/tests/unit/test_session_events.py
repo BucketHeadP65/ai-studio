@@ -8,13 +8,12 @@ Forget, and what the conversation spans are.
 
 from __future__ import annotations
 
-import uuid
-
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import pytest
+
 from harness.domain.events import (
-    _LEGACY_SESSION_NS,
     Booted,
     ConversationForgotten,
     DraftSettled,
@@ -56,7 +55,7 @@ def test_new_kinds_roundtrip() -> None:
         target_kind="tool", target="run_command", note="timeout unclear", tool_call_id="call_1", source="live", subject_session_id=None
     )
     for event in (
-        SessionStarted(session_id="s1"),
+        SessionStarted(session_id="s1", session_kind="chat"),
         SessionRenamed(session_id="s1", title="t"),
         SessionArchived(session_id="s1", archived=True),
         SessionDeleted(session_id="s1"),
@@ -68,14 +67,23 @@ def test_new_kinds_roundtrip() -> None:
         assert decoded.event == event
 
 
-def test_old_lines_still_decode() -> None:
-    line = '{"seq": 3, "at": "2026-08-21T10:00:00+00:00", "kind": "conversation_forgotten"}'
-    decoded = decode(line)
-    assert decoded is not None
-    assert isinstance(decoded.event, ConversationForgotten)
+@pytest.mark.parametrize(
+    "line",
+    [
+        '{"seq": 3, "at": "2026-08-21T10:00:00+00:00", "kind": "conversation_forgotten"}',
+        '{"seq": 4, "at": "2026-08-22T12:45:45+00:00", "kind": "turn_started", "chars": 0, "entry": "spa", "prompt_excerpt": null}',
+        '{"seq": 4, "at": "2026-08-22T12:45:45+00:00", "kind": "turn_started", "chars": 0, "entry": "spa", "session_id": "s1"}',
+        '{"seq": 5, "at": "2026-08-22T12:45:47+00:00", "kind": "turn_settled", "run_id": "r1"}',
+        '{"seq": 5, "at": "2026-08-22T12:45:47+00:00", "kind": "turn_failed", "error": "boom", "prompt_excerpt": null}',
+        '{"seq": 5, "at": "2026-08-22T12:45:47+00:00", "kind": "turn_failed", "error": "boom", "started_seq": 4}',
+        '{"seq": 6, "at": "2026-08-22T23:17:43+00:00", "kind": "session_started", "session_id": "s1"}',
+    ],
+)
+def test_a_line_missing_a_field_its_event_requires_is_not_read(line: str) -> None:
+    assert decode(line) is None
 
 
-def test_a_retro_sourced_flag_line_still_decodes() -> None:
+def test_a_flag_line_from_the_retired_retro_pass_is_not_read() -> None:
     line = (
         '{"seq": 29, "at": "2026-08-23T05:29:14+00:00", "kind": "friction_flagged", '
         '"target_kind": "workflow", "target": "tool-result-handles/read_tool_result workflow", '
@@ -83,37 +91,18 @@ def test_a_retro_sourced_flag_line_still_decodes() -> None:
         '"tool_call_id": null, "source": "retro", '
         '"subject_session_id": "c9acd653-b4c7-44a8-8d8f-6cb05d8e932f"}'
     )
-    decoded = decode(line)
-    assert decoded is not None
-    assert isinstance(decoded.event, FrictionFlagged)
-    assert decoded.event.source == "retro"
-
-
-def test_spans_carry_explicit_and_legacy_ids() -> None:
-    events = (
-        _rec(1, TurnStarted(entry="spa", chars=3)),
-        _rec(2, TurnSettled(run_id="r1")),  # legacy span
-        _rec(3, ConversationForgotten()),
-        _rec(4, SessionStarted(session_id="s2")),
-        _rec(5, TurnStarted(entry="spa", chars=3)),
-        _rec(6, TurnSettled(run_id="r2")),
-    )
-    first, second = session_spans(events)
-    assert first.session_id == str(uuid.uuid5(_LEGACY_SESSION_NS, "1"))
-    assert first.run_ids == ("r1",)
-    assert second.session_id == "s2"
-    assert second.ended_at is None
+    assert decode(line) is None
 
 
 def test_live_session_is_the_newest_one_the_timeline_opened() -> None:
     events = (
-        _rec(1, SessionStarted(session_id="a")),
-        _rec(2, TurnStarted(entry="spa", chars=1)),
-        _rec(3, TurnSettled(run_id="ra")),
-        _rec(4, ConversationForgotten()),
-        _rec(5, SessionStarted(session_id="b")),
-        _rec(6, TurnStarted(entry="spa", chars=1)),
-        _rec(7, TurnSettled(run_id="rb")),
+        _rec(1, SessionStarted(session_id="a", session_kind="chat")),
+        _rec(2, TurnStarted(entry="spa", chars=1, session_id="a", prompt_excerpt=None)),
+        _rec(3, TurnSettled(run_id="ra", started_seq=2)),
+        _rec(4, ConversationForgotten(session_id="a")),
+        _rec(5, SessionStarted(session_id="b", session_kind="chat")),
+        _rec(6, TurnStarted(entry="spa", chars=1, session_id="b", prompt_excerpt=None)),
+        _rec(7, TurnSettled(run_id="rb", started_seq=6)),
     )
     live = live_session(events)
     assert live is not None
@@ -127,11 +116,12 @@ class TestCodec:
         events = [
             Booted(resumed_run_id="harness-author-abc123"),
             Booted(resumed_run_id=None),
-            TurnStarted(entry="spa", chars=42),
-            TurnSettled(run_id="harness-author-abc123"),
-            TurnFailed(error="the gateway refused the key"),
+            TurnStarted(entry="spa", chars=42, session_id="s", prompt_excerpt=None),
+            TurnSettled(run_id="harness-author-abc123", started_seq=3),
+            TurnFailed(error="the gateway refused the key", started_seq=3, prompt_excerpt=None),
             TurnAbandoned(started_seq=7),
-            ConversationForgotten(),
+            ConversationForgotten(session_id=None),
+            ConversationForgotten(session_id="s"),
             DraftSettled(name="quarterly-report", version=3),
             PluginSet(plugin="sql", enabled=True),
             ProfileSelected(name="researcher"),
@@ -148,7 +138,7 @@ class TestCodec:
             assert decoded == _rec(seq, event)
 
     def test_a_torn_line_decodes_to_none(self) -> None:
-        whole = encode(_rec(1, ConversationForgotten()))
+        whole = encode(_rec(1, ConversationForgotten(session_id=None)))
 
         assert decode(whole[: len(whole) // 2]) is None
 
@@ -165,16 +155,16 @@ def test_turn_settled_carries_the_calls_it_stopped_for_and_roundtrips() -> None:
     assert decoded is not None
     assert isinstance(decoded.event, TurnSettled)
     assert decoded.event.pending == ("navigate", "toggle_plugin")
-    assert TurnSettled(run_id="run-1").pending == ()
+    assert TurnSettled(run_id="run-1", started_seq=1).pending == ()
 
 
 class TestStampedFolds:
-    """The four scenarios that motivate the stamps: interleaving, legacy, pairing, and closing."""
+    """Interleaving, pairing and closing: every turn names its session, every end names its start."""
 
     def test_interleaved_stamped_turn_brackets_fold_into_two_spans(self) -> None:
         events = (
-            _rec(1, TurnStarted(entry="spa", chars=3, session_id="a")),
-            _rec(2, TurnStarted(entry="spa", chars=4, session_id="b")),
+            _rec(1, TurnStarted(entry="spa", chars=3, session_id="a", prompt_excerpt=None)),
+            _rec(2, TurnStarted(entry="spa", chars=4, session_id="b", prompt_excerpt=None)),
             _rec(3, TurnSettled(run_id="ra", started_seq=1)),
             _rec(4, TurnSettled(run_id="rb", started_seq=2)),
         )
@@ -188,29 +178,10 @@ class TestStampedFolds:
         assert by_id["a"].turns == 1
         assert by_id["b"].turns == 1
 
-    def test_an_unstamped_legacy_journal_folds_exactly_as_today(self) -> None:
-        events = (
-            _rec(1, TurnStarted(entry="spa", chars=3)),
-            _rec(2, TurnSettled(run_id="r1")),
-            _rec(3, ConversationForgotten()),
-            _rec(4, SessionStarted(session_id="s2")),
-            _rec(5, TurnStarted(entry="spa", chars=3)),
-            _rec(6, TurnSettled(run_id="r2")),
-        )
-
-        spans = session_spans(events)
-
-        assert len(spans) == 2
-        assert spans[0].session_id == str(uuid.uuid5(_LEGACY_SESSION_NS, "1"))
-        assert spans[0].run_ids == ("r1",)
-        assert spans[1].session_id == "s2"
-        assert spans[1].run_ids == ("r2",)
-        assert spans[1].ended_at is None
-
     def test_open_turns_pairs_a_stamped_settle_to_its_own_start(self) -> None:
         events = (
-            _rec(1, TurnStarted(entry="spa", chars=1, session_id="a")),
-            _rec(2, TurnStarted(entry="spa", chars=1, session_id="b")),
+            _rec(1, TurnStarted(entry="spa", chars=1, session_id="a", prompt_excerpt=None)),
+            _rec(2, TurnStarted(entry="spa", chars=1, session_id="b", prompt_excerpt=None)),
             _rec(3, TurnSettled(run_id="ra", started_seq=1)),
         )
 
@@ -218,8 +189,8 @@ class TestStampedFolds:
 
     def test_a_stamped_conversation_forgotten_closes_only_its_own_session(self) -> None:
         events = (
-            _rec(1, TurnStarted(entry="spa", chars=1, session_id="a")),
-            _rec(2, TurnStarted(entry="spa", chars=1, session_id="b")),
+            _rec(1, TurnStarted(entry="spa", chars=1, session_id="a", prompt_excerpt=None)),
+            _rec(2, TurnStarted(entry="spa", chars=1, session_id="b", prompt_excerpt=None)),
             _rec(3, TurnSettled(run_id="ra", started_seq=1)),
             _rec(4, ConversationForgotten(session_id="a")),
             _rec(5, TurnSettled(run_id="rb", started_seq=2)),
@@ -236,43 +207,38 @@ class TestStampedFolds:
 
 class TestOpenTurns:
     def test_a_settled_turn_is_not_open(self) -> None:
-        events = (_rec(1, TurnStarted(entry="spa", chars=5)), _rec(2, TurnSettled(run_id=None)))
+        events = (_rec(1, TurnStarted(entry="spa", chars=5, session_id="s", prompt_excerpt=None)), _rec(2, TurnSettled(run_id=None, started_seq=1)))
 
         assert open_turns(events) == ()
 
     def test_a_started_turn_with_no_terminal_event_is_open(self) -> None:
-        events = (_rec(1, TurnStarted(entry="spa", chars=5)),)
+        events = (_rec(1, TurnStarted(entry="spa", chars=5, session_id="s", prompt_excerpt=None)),)
 
         assert [record.seq for record in open_turns(events)] == [1]
 
     def test_a_failed_turn_is_not_open(self) -> None:
-        events = (_rec(1, TurnStarted(entry="acp", chars=5)), _rec(2, TurnFailed(error="boom")))
+        events = (
+            _rec(1, TurnStarted(entry="acp", chars=5, session_id="s", prompt_excerpt=None)),
+            _rec(2, TurnFailed(error="boom", started_seq=1, prompt_excerpt=None)),
+        )
 
         assert open_turns(events) == ()
 
     def test_an_abandonment_closes_exactly_the_turn_it_names(self) -> None:
         events = (
-            _rec(1, TurnStarted(entry="spa", chars=5)),
+            _rec(1, TurnStarted(entry="spa", chars=5, session_id="s", prompt_excerpt=None)),
             _rec(2, TurnAbandoned(started_seq=1)),
-            _rec(3, TurnStarted(entry="spa", chars=6)),
+            _rec(3, TurnStarted(entry="spa", chars=6, session_id="s", prompt_excerpt=None)),
         )
 
         assert [record.seq for record in open_turns(events)] == [3]
 
-    def test_a_terminal_event_closes_the_latest_open_turn(self) -> None:
-        # Turns are sequential in this app; if the log ever carries two open starts, the settle
-        # binds to the newest and the older one stays visibly open for the boot sweep to close.
-        events = (_rec(1, TurnStarted(entry="spa", chars=5)), _rec(2, TurnStarted(entry="spa", chars=6)), _rec(3, TurnSettled(run_id=None)))
-
-        assert [record.seq for record in open_turns(events)] == [1]
-
-
 class TestForgottenAt:
     def test_no_boundary_means_none(self) -> None:
-        assert last_forgotten_at((_rec(1, TurnStarted(entry="spa", chars=5)),)) is None
+        assert last_forgotten_at((_rec(1, TurnStarted(entry="spa", chars=5, session_id="s", prompt_excerpt=None)),)) is None
 
     def test_the_newest_boundary_wins(self) -> None:
-        events = (_rec(1, ConversationForgotten()), _rec(4, ConversationForgotten()))
+        events = (_rec(1, ConversationForgotten(session_id=None)), _rec(4, ConversationForgotten(session_id=None)))
 
         assert last_forgotten_at(events) == _T0.replace(minute=4)
 

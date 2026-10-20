@@ -235,7 +235,8 @@ class SearchHit(BaseModel):
     id: str = Field(description="The matched unit's id. Fetch it to read the source.")
     ref: str | None = Field(
         default=None,
-        description="The exact collection-qualified handle to pass to fetch. None on legacy rows that predate routed reads.",
+        description="The exact collection-qualified handle to pass to fetch, set by the read tool. None on a row read straight "
+        "from the database function.",
     )
     hit_level: str = Field(
         description="This hit's granularity tier: how big the matched unit is. The legal values are "
@@ -352,7 +353,8 @@ class FetchResult(BaseModel):
     id: str = Field(description="The unit's id, as resolved.")
     ref: str | None = Field(
         default=None,
-        description="The exact collection-qualified handle to pass to fetch. None on legacy rows that predate routed reads.",
+        description="The exact collection-qualified handle to pass to fetch, set by the read tool. None on a row read straight "
+        "from the database function.",
     )
     level: str = Field(
         description="This unit's granularity tier: how big the fetched unit is. It uses the same vocabulary as a search hit's `hit_level`."

@@ -643,19 +643,11 @@ class TestRetrievalSpecPrivate:
         assert RetrievalSpec.model_validate({"collection": "legal"}).private is False
 
 
-class TestRetrievalSpecRefusesTheOldPrivacyKey:
-    """A `library` key is refused, never dropped into the default `private: False`, which would read as shared."""
+class TestRetrievalSpecReadsOnlyItsOwnKeys:
+    """A key `RetrievalSpec` does not declare changes nothing it reads."""
 
-    @pytest.mark.parametrize("value", [False, True])
-    def test_a_spec_carrying_library_is_refused_naming_the_rewrite(self, value: bool) -> None:
-        with pytest.raises(ValidationError, match=r"studio\.migrations\.wave4"):
-            RetrievalSpec.model_validate({"collection": "legal", "library": value})
-
-    def test_a_schema_carrying_it_under_retrieval_is_refused_too(self) -> None:
-        with pytest.raises(ValidationError, match=r"studio\.migrations\.wave4"):
-            KnowledgeBaseSchema.from_json(
-                '{"slug": "legal", "page_types": [{"page_type": "note", "id_prefix": "note."}], "retrieval": {"library": false}}'
-            )
+    def test_an_undeclared_library_key_leaves_private_as_declared(self) -> None:
+        assert RetrievalSpec.model_validate({"collection": "legal", "private": True, "library": True}).private is True
 
 
 class TestCollectionDefaultsToSlug:

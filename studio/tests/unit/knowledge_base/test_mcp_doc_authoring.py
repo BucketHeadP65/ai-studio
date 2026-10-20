@@ -45,8 +45,7 @@ def _make_knowledge_base(tmp_path: Path, *, doc_authoring_in_spec: bool = False)
     `retrieval.doc_authoring` set instead, so `_build_mcp_server` reads the knowledge_base_schema-driven
     half of the gate rather than the CLI flag.
     """
-    (tmp_path / "Units").mkdir()
-    (tmp_path / "_meta").mkdir()
+    (tmp_path / "_meta").mkdir(parents=True)
     if doc_authoring_in_spec:
         spec: dict[str, object] = {"slug": "alpha", "page_types": [{"page_type": "note"}], "retrieval": {"doc_authoring": True}}
         (tmp_path / "knowledge-base-schema.json").write_text(json.dumps(spec), encoding="utf-8")

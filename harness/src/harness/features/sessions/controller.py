@@ -15,11 +15,10 @@ from uuid import UUID
 from core.cqrs.contracts import TopicSink
 from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
-from pydantic import JsonValue
 from wireup.integration.fastapi import WireupRoute
 
 from harness import session as session_state
-from harness.domain.contracts import UNKNOWN_SESSION, SessionArchived, SessionDeleted, SessionRenamed, said
+from harness.domain.contracts import UNKNOWN_SESSION, SessionArchived, SessionDeleted, SessionRenamed
 from harness.features.sessions import project_registry
 from harness.features.sessions.api_models import (
     ContextVitals,
@@ -149,31 +148,8 @@ def live_prompt_messages(sessions: Sessions, session_id: str, *, base_idx: int) 
 
 
 def _transcript_message(row: MessageRow) -> TranscriptMessage:
-    """One projected row as the SPA reads it, a response's text parts and text column read back as words through `said`."""
-    payload: JsonValue = json.loads(row.payload)
-    if row.kind != "response":
-        return TranscriptMessage(run_id=row.run_id, idx=row.idx, kind=row.kind, payload=payload, text=row.text_content)
-    return TranscriptMessage(run_id=row.run_id, idx=row.idx, kind=row.kind, payload=_spoken_payload(payload), text=said(row.text_content))
-
-
-def _spoken_payload(payload: JsonValue) -> JsonValue:
-    """A response payload with every text part read back as words, and every other part untouched."""
-    if not isinstance(payload, dict):
-        return payload
-    parts = payload.get("parts")
-    if not isinstance(parts, list):
-        return payload
-    return {**payload, "parts": [_spoken_part(part) for part in parts]}
-
-
-def _spoken_part(part: JsonValue) -> JsonValue:
-    """One payload part, its content read back as words when it is a text part."""
-    if not isinstance(part, dict):
-        return part
-    content = part.get("content")
-    if part.get("part_kind") != "text" or not isinstance(content, str):
-        return part
-    return {**part, "content": said(content)}
+    """One projected row as the SPA reads it."""
+    return TranscriptMessage(run_id=row.run_id, idx=row.idx, kind=row.kind, payload=json.loads(row.payload), text=row.text_content)
 
 
 def _known_project_ids() -> tuple[str, ...]:

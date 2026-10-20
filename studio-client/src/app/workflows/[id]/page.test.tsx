@@ -145,6 +145,7 @@ const DRAFT_REF = {
 } as const;
 
 const PAST_RECORD: RunHistoryRecord = {
+  spend: null,
   run_id: "run-42",
   run_title: "Which cache do we use?",
   workflow_id: DETAIL.id,
@@ -302,6 +303,10 @@ const DRAFT_SESSION: SessionSummary = {
 function mountApi() {
   let historyRuns: unknown[] = [
     {
+      run_title: "",
+      gates_orchestrated: [],
+      spend: null,
+      result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
       run_id: "sess-1",
       workflow_id: DETAIL.id,
       outcome: "live",
@@ -325,6 +330,8 @@ function mountApi() {
       HttpResponse.json({
         runs: [
           {
+            run_title: "",
+            started_at: "",
             session_id: "sess-1",
             workflow_id: DETAIL.id,
             state: "running",

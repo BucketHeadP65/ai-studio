@@ -302,7 +302,7 @@ class TestMediumOf:
 
 
 def _corpus(tmp_path: Path) -> KnowledgeBaseSettings:
-    (tmp_path / "Units").mkdir()
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     (tmp_path / "_meta").mkdir()
     return KnowledgeBaseSettings(path=tmp_path)
 

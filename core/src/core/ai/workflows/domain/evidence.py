@@ -5,7 +5,7 @@ An `Approval` is a person approving a workflow, and a `Grade` is one run's measu
 
 `trust_level` folds a workflow's events into counts, and the level is derived from them, never
 stored. Events are keyed on `spec_hash`, the workflow's content address, never on a library id,
-which can change. `workflow_id` stays the only handle on records that carry no hash.
+which can change.
 """
 
 from __future__ import annotations
@@ -28,9 +28,7 @@ if TYPE_CHECKING:
 def require_spec_identity(spec_hash: str) -> None:
     """Refuse the empty hash as a question about a workflow.
 
-    `""` marks a record that does not know what it ran, so asking about it would match every such
-    record. A caller passing a record's own `spec_hash` back in meets it on a record written
-    without a hash.
+    `""` names no workflow, so no record answers to it.
 
     Args:
         spec_hash: The content address a caller is about to ask about.
@@ -39,7 +37,7 @@ def require_spec_identity(spec_hash: str) -> None:
         ValueError: When `spec_hash` is empty.
     """
     if not spec_hash:
-        msg = "an empty spec hash is not an identity. It marks a record that never said what it exercised"
+        msg = "an empty spec hash is not an identity. It names no workflow"
         raise ValueError(msg)
 
 
@@ -54,36 +52,27 @@ class RunEvidence(BaseModel):
 
     Provenance, never the key. An address belongs to one library and can change, so a lookup keys
     on `spec_hash`."""
-    spec_hash: str = ""
+    spec_hash: str = Field(min_length=1)
     """The content address of the workflow this run exercised, `spec_identity(workflow)`.
-
-    `""` means the record does not know what it ran, and a record written without a hash still
-    parses. A lookup keeps such records apart from confirmed ones and never folds them into a level.
 
     A content address says what ran, not whose it was. Two teams writing byte-identical workflows
     share an identity, so in a shared evidence log one team's runs count for the other's."""
     workflow_version: int | None = None
-    """Which version of the workflow this run exercised, where the runner knew.
-
-    For a record carrying no hash, it answers what `spec_hash` would. Without either, an adapted
-    child saved under its parent's address would inherit the parent's runs."""
+    """Which version of the workflow this run exercised, where the runner knew."""
     outcome: Literal["completed", "failed", "stopped"]
     """How the execution ended. `stopped` is a person ending the run on purpose, and confirms
     nothing, exactly like `failed`. `completed` says the graph reached its end, never that the work
     was done. `result` answers that."""
-    result: Outcome | None = None
-    """What the run's own facts say it did, classified when it ended.
-
-    `None` means this record cannot say, as on a record written without a checked outcome. It is
-    never filled in afterwards."""
+    result: Outcome
+    """What the run's own facts say it did, classified when it ended. Status `unknown` when they establish nothing."""
     gates_approved: tuple[str, ...] = ()
     """Gates a person released the value of, read off run state and never self-reported."""
-    gates_auto: tuple[str, ...] = ()
+    gates_auto: tuple[str, ...]
     """Gates passed automatically, releasing their value without a person deciding.
 
     Never a `gates_approved` entry. `trust_level` ignores this field, because a gate passed
     automatically is not an approval."""
-    gates_orchestrated: tuple[str, ...] = ()
+    gates_orchestrated: tuple[str, ...]
     """Orchestrator gates the host's own agent approved, read off run state and never self-reported.
 
     `trust_level` never reads this field. An orchestrator clearing a gate the workflow said it
@@ -96,7 +85,7 @@ class RunEvidence(BaseModel):
     means no gate was refused, or the runner did not record refusals, and the two read the same."""
     params: WorkflowArguments = Field(default_factory=dict)
     """What this run was given, as the JSON each parameter declares. A replay runs on these
-    inputs. A record whose arguments were all text still parses, and still reads as that text."""
+    inputs."""
     produced: dict[str, str] = Field(default_factory=dict)
     """The shape of what each node produced, by node id, never the value itself."""
     runner: str = ""
@@ -112,11 +101,8 @@ class Approval(BaseModel):
     kind: Literal["approval"] = "approval"
     workflow_id: str
     """Where the workflow was kept when it was approved. Provenance, and `spec_hash` is the key."""
-    spec_hash: str = ""
-    """The content address of the workflow that was approved, `spec_identity(workflow)`.
-
-    `""` means this approval cannot say which workflow it was about, as on a record written
-    without a hash."""
+    spec_hash: str = Field(min_length=1)
+    """The content address of the workflow that was approved, `spec_identity(workflow)`."""
     workflow_version: int | None = None
     """Which version was approved. Approving v1 is not approving what v1 became."""
     by: str
@@ -136,8 +122,8 @@ class Grade(BaseModel):
     kind: Literal["grade"] = "grade"
     workflow_id: str
     """Where the graded run was launched from. Provenance, exactly as on `RunEvidence`."""
-    spec_hash: str = ""
-    """The content address of the workflow the graded run exercised. `""` means unknown, not unanimous."""
+    spec_hash: str = Field(min_length=1)
+    """The content address of the workflow the graded run exercised."""
     workflow_version: int | None = None
     """Which version the graded run exercised, where the grader knew. `None` cannot count for a
     particular version and is excluded from a version-scoped fold."""
@@ -203,7 +189,7 @@ def trust_level(
         events: Whatever the evidence log offered for this workflow.
         version: Ask about one version. An event that did not record which version it exercised
             is excluded. Omit it to ask whether the workflow has ever run successfully.
-        spec_hash: Ask about one exact workflow, by content address. An event carrying no hash is
+        spec_hash: Ask about one exact workflow, by content address. An event carrying another hash is
             excluded.
 
     Returns:
@@ -248,9 +234,9 @@ def trust_level(
     )
 
 
-def _is_confirmed(result: Outcome | None) -> bool:
+def _is_confirmed(result: Outcome) -> bool:
     """Whether a completed run's checked outcome says the declared work happened: `succeeded` or `noop`."""
-    return result is not None and result.status in ("succeeded", "noop")
+    return result.status in ("succeeded", "noop")
 
 
 def approved_gates(workflow: Workflow, values: Mapping[str, object]) -> tuple[str, ...]:
@@ -283,34 +269,3 @@ def orchestrated_gates(workflow: Workflow, values: Mapping[str, object]) -> tupl
         The ids of the approved orchestrator gates, in node order.
     """
     return tuple(node.id for node in workflow.nodes if node.kind == "orchestrator-gate" and node.id in values)
-
-
-class EvidenceHistory(BaseModel):
-    """What an evidence log holds about one workflow, split by what can be confirmed as its own.
-
-    A record that carries no content address is kept apart in `legacy`, never merged into
-    `matched` and never dropped.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    matched: tuple[RunEvidence | Approval | Grade, ...] = ()
-    """Events carrying this workflow's content address, wherever they were filed. A level may be
-    folded from this bucket only, and a workflow keeps these runs when it moves."""
-    legacy: tuple[RunEvidence | Approval | Grade, ...] = ()
-    """Events at the address asked about carrying no content address. They may be this workflow's,
-    an adapted child's, or a namesake's, and nothing here can tell. They are reported, never counted."""
-
-    @property
-    def basis(self) -> Literal["content", "address-only", "none"]:
-        """What a level folded from `matched` would rest on.
-
-        `content`: something carries this workflow's hash. `address-only`: nothing does, but the
-        address holds history nobody can attribute, so `unverified` means unconfirmed rather than
-        never run. `none`: nothing is recorded either way.
-        """
-        if self.matched:
-            return "content"
-        return "address-only" if self.legacy else "none"
-
-

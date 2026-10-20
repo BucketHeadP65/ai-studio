@@ -221,8 +221,8 @@ export function AutomationIntent({
       <section className="flex flex-col gap-1.5 rounded-lg border border-line bg-surface p-5">
         <h2 className="font-semibold text-label-1 text-subtitle">What you asked for</h2>
         <p className="text-caption text-label-2 leading-snug">
-          Nothing records a request for this draft. It was proposed without one, which older drafts
-          often were. Ask for a change below and the agent records what you asked for with it.
+          Nothing records a request for this draft. Ask for a change below and the agent records what
+          you asked for with it.
         </p>
       </section>
     );

@@ -27,12 +27,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import DBAPIError
 
-from core.connection_failures import (
-    DATABASE_CONNECTION_ERRORS,
-    connection_failure_message,
-    is_database_connection_failure,
-    is_database_connection_failure_text,
-)
+from core.connection_failures import DATABASE_CONNECTION_ERRORS, connection_failure_message, is_database_connection_failure
 
 DATABASE = "localhost:5434/knowledge_bases"
 
@@ -177,7 +172,6 @@ def _from_statement(driver_error: PostgresError) -> DBAPIError:
 )
 def test_a_refused_failed_or_closed_connection_is_a_database_connection_failure(error: Exception) -> None:
     assert is_database_connection_failure(error) is True
-    assert is_database_connection_failure_text(type(error).__name__, str(error)) is True
 
 
 @pytest.mark.parametrize(
@@ -191,4 +185,3 @@ def test_a_refused_failed_or_closed_connection_is_a_database_connection_failure(
 )
 def test_an_error_the_statement_or_the_disk_causes_is_not_a_database_connection_failure(error: Exception) -> None:
     assert is_database_connection_failure(error) is False
-    assert is_database_connection_failure_text(type(error).__name__, str(error)) is False

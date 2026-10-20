@@ -254,16 +254,9 @@ class TestRecommendationRoundTrip:
 
         assert isinstance(reloaded.proposals[0].op, AddRelationOp)
 
-    def test_a_recommendation_saved_without_simulation_evidence_still_loads(self, tmp_path: Path):
-        # Backward compatibility: `ProposalEvidence.simulation` defaults to None, so artifacts written
-        # before slice G (whose YAML carries no `simulation` key) must keep validating.
-        recommendation = _recommendation()
+    def test_a_recommendation_saved_without_simulation_evidence_reloads_with_none(self, tmp_path: Path):
         path = tmp_path / "research.yaml"
-        save_recommendation(recommendation, path)
-        stripped = yaml.safe_load(path.read_text(encoding="utf-8"))
-        for proposal in stripped["proposals"]:
-            proposal["evidence"].pop("simulation", None)
-        path.write_text(yaml.safe_dump(stripped), encoding="utf-8")
+        save_recommendation(_recommendation(), path)
 
         loaded = load_recommendation(path)
 

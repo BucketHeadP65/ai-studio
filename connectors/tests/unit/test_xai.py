@@ -13,8 +13,7 @@ if TYPE_CHECKING:
 
 
 def _resources(tmp_path: Path, **settings: dict[str, str]) -> SourceResources:
-    for required in ("Units", "_meta"):
-        (tmp_path / required).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return SourceResources(knowledge_base=KnowledgeBaseSettings(path=tmp_path), settings=settings)
 
 

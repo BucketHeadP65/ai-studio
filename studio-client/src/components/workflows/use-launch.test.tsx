@@ -35,6 +35,7 @@ function sessionRow() {
     usage: { input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0 },
     kind: "runner",
     cost_usd: "0",
+    unpriced: 0,
     context: null,
   };
 }

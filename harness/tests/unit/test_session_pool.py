@@ -69,8 +69,8 @@ async def _seed_stored_session(session_id: str, tmp_path: Path, *, run_id: str, 
     await store.save_snapshot(
         ContinuableSnapshot(run_id=run_id, step_index=0, messages=[ModelRequest(parts=[UserPromptPart(content=said)])])
     )
-    a_session_log(tmp_path).record(SessionStarted(session_id=session_id))
-    started = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=len(said), session_id=session_id))
+    a_session_log(tmp_path).record(SessionStarted(session_id=session_id, session_kind="chat"))
+    started = a_session_log(tmp_path).record(TurnStarted(entry="spa", chars=len(said), session_id=session_id, prompt_excerpt=None))
     assert started is not None
     a_session_log(tmp_path).record(TurnSettled(run_id=run_id, started_seq=started.seq))
 
@@ -277,7 +277,7 @@ async def test_a_project_session_lives_in_the_projects_own_state_home(tmp_path: 
 
     assert runtime.workspace is not None
     assert runtime.workspace.root == tmp_path
-    assert [record.event for record in runtime.workspace.session_log.events()] == [SessionStarted(session_id=runtime.session_id or "")]
+    assert [record.event for record in runtime.workspace.session_log.events()] == [SessionStarted(session_id=runtime.session_id or "", session_kind="chat")]
     assert a_session_log(tmp_path).events() == (), "a project's session is narrated in the project's session log, not the checkout's"
     assert runtime.draft_file == tmp_path / ".aifactory" / "state" / "sessions" / f"{runtime.session_id}.draft.json"
 
@@ -307,7 +307,7 @@ async def test_two_checkout_rooted_sessions_park_their_runs_in_different_files(t
     assert session_state.run_log_path(pool.default) not in {first_path, second_path}
 
 
-async def test_the_process_own_session_keeps_the_legacy_waiting_run_path(tmp_path: Path) -> None:
+async def test_the_process_own_session_keeps_the_unscoped_waiting_run_path(tmp_path: Path) -> None:
     """The unscoped run entries and the boot-time restore read one file, and it does not move."""
     pool = SessionPool(_default_session(tmp_path))
 

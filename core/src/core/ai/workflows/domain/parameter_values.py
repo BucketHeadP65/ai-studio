@@ -245,8 +245,8 @@ def normalize_arguments(workflow: Workflow, supplied: Mapping[str, JsonValue]) -
 
     Each declared parameter's value is checked against that parameter's own schema and kept as it
     is. Supplied text under a parameter that cannot hold text is read as JSON once and then checked
-    like any other value, so a caller with nothing but strings (a stored schedule, a form, an older
-    client) can reach a parameter that declares an array, a number or a boolean.
+    like any other value, so a caller with nothing but strings (a stored schedule, a form) can reach
+    a parameter that declares an array, a number or a boolean.
     Nothing else is converted: a string parameter keeps the string it was given, whatever the text
     looks like, and a value of the wrong JSON type is refused rather than made to fit.
 

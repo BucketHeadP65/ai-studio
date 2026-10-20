@@ -14,24 +14,13 @@ CREATE TABLE IF NOT EXISTS leads (
     spans_digest    text NOT NULL,
     found_by        text NOT NULL,
     seen_at         timestamptz NOT NULL DEFAULT now(),
+    attempted_at    timestamptz,
+    refusal         text,
+    resolution      text NOT NULL DEFAULT 'open' CHECK (resolution IN ('open', 'undecided', 'invalid', 'dismissed')),
     UNIQUE (source, symptom, spans_digest)
 );
 
 CREATE INDEX IF NOT EXISTS leads_by_source ON leads (source);
-
-CREATE TABLE IF NOT EXISTS findings (
-    finding_id      bigserial PRIMARY KEY,
-    lead_id         bigint UNIQUE REFERENCES leads (lead_id) ON DELETE CASCADE,
-    source          text NOT NULL,
-    symptom         text NOT NULL,
-    spans           jsonb NOT NULL,
-    blames          jsonb NOT NULL,
-    found_by        text NOT NULL,
-    model           text,
-    decided_at      timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS findings_by_source ON findings (source);
 
 CREATE TABLE IF NOT EXISTS questions (
     question_id     bigserial PRIMARY KEY,
@@ -48,13 +37,18 @@ CREATE TABLE IF NOT EXISTS questions (
 
 CREATE INDEX IF NOT EXISTS questions_by_source ON questions (source);
 
--- Alterations, appended in order, each safe to run again.
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS attempted_at timestamptz;
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS refusal text;
-ALTER TABLE findings ADD COLUMN IF NOT EXISTS question_id bigint REFERENCES questions (question_id) ON DELETE SET NULL;
-ALTER TABLE findings ADD COLUMN IF NOT EXISTS explanation text NOT NULL DEFAULT '';
-ALTER TABLE leads ADD COLUMN IF NOT EXISTS resolution text
-    CHECK (resolution IN ('open', 'undecided', 'invalid', 'dismissed'));
-UPDATE leads SET resolution = CASE WHEN attempted_at IS NULL THEN 'open' ELSE 'undecided' END WHERE resolution IS NULL;
-ALTER TABLE leads ALTER COLUMN resolution SET DEFAULT 'open';
-ALTER TABLE leads ALTER COLUMN resolution SET NOT NULL;
+CREATE TABLE IF NOT EXISTS findings (
+    finding_id      bigserial PRIMARY KEY,
+    lead_id         bigint UNIQUE REFERENCES leads (lead_id) ON DELETE CASCADE,
+    source          text NOT NULL,
+    symptom         text NOT NULL,
+    spans           jsonb NOT NULL,
+    blames          jsonb NOT NULL,
+    found_by        text NOT NULL,
+    model           text,
+    decided_at      timestamptz NOT NULL DEFAULT now(),
+    question_id     bigint REFERENCES questions (question_id) ON DELETE SET NULL,
+    explanation     text NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS findings_by_source ON findings (source);

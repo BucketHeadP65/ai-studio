@@ -169,9 +169,9 @@ Beta takes a retrieval-focused angle.
 def _alpha_knowledge_base(root: Path) -> Path:
     """Build a three-page alpha knowledge base under `root` (a paper with a qualified claim, its prunable entity, and its qualifier target)."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "alpha-method", _ALPHA_PAPER)
-    builder.add_unit_document("Entities", "alpha-entity", _ALPHA_ENTITY)
-    builder.add_unit_document("Entities", "alpha-task", _ALPHA_TASK_ENTITY)
+    builder.add_unit_document("Wiki/Papers", "alpha-method", _ALPHA_PAPER)
+    builder.add_unit_document("Wiki/Entities", "alpha-entity", _ALPHA_ENTITY)
+    builder.add_unit_document("Wiki/Entities", "alpha-task", _ALPHA_TASK_ENTITY)
     builder.add_source_mirror("alpha-method", _ALPHA_MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -182,9 +182,9 @@ def _alpha_knowledge_base(root: Path) -> Path:
 def _alpha_knowledge_base_minus_entity(root: Path) -> Path:
     """Build the alpha knowledge base with the entity page removed (for phase 3); the qualifier's target entity stays present."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "alpha-method", _ALPHA_PAPER)
+    builder.add_unit_document("Wiki/Papers", "alpha-method", _ALPHA_PAPER)
     # ent.alpha-entity intentionally omitted — simulates a deleted note
-    builder.add_unit_document("Entities", "alpha-task", _ALPHA_TASK_ENTITY)
+    builder.add_unit_document("Wiki/Entities", "alpha-task", _ALPHA_TASK_ENTITY)
     builder.add_source_mirror("alpha-method", _ALPHA_MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -195,8 +195,8 @@ def _alpha_knowledge_base_minus_entity(root: Path) -> Path:
 def _beta_knowledge_base(root: Path) -> Path:
     """Build a two-page beta knowledge base under `root` (a paper with a qualified claim, plus its target entity)."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "beta-approach", _BETA_PAPER)
-    builder.add_unit_document("Entities", "beta-entity", _BETA_ENTITY)
+    builder.add_unit_document("Wiki/Papers", "beta-approach", _BETA_PAPER)
+    builder.add_unit_document("Wiki/Entities", "beta-entity", _BETA_ENTITY)
     builder.add_source_mirror("beta-approach", _BETA_MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -320,8 +320,8 @@ _SHARED_PURPOSE_B = "# Purpose\n\nKnowledge base B's own distinct purpose text f
 def _shared_knowledge_base_a(root: Path) -> Path:
     """Build knowledge base A: declares `paper.shared-note` + `ent.shared-helper`, with knowledge base A's own distinct content."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "shared-note", _SHARED_NOTE_A)
-    builder.add_unit_document("Entities", "shared-helper", _SHARED_HELPER_A)
+    builder.add_unit_document("Wiki/Papers", "shared-note", _SHARED_NOTE_A)
+    builder.add_unit_document("Wiki/Entities", "shared-helper", _SHARED_HELPER_A)
     builder.add_source_mirror("shared-source", _SHARED_MIRROR_A)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -333,8 +333,8 @@ def _shared_knowledge_base_a(root: Path) -> Path:
 def _shared_knowledge_base_b(root: Path) -> Path:
     """Build knowledge base B: declares the SAME `paper.shared-note` + `ent.shared-helper` ids, with knowledge base B's own distinct content."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "shared-note", _SHARED_NOTE_B)
-    builder.add_unit_document("Entities", "shared-helper", _SHARED_HELPER_B)
+    builder.add_unit_document("Wiki/Papers", "shared-note", _SHARED_NOTE_B)
+    builder.add_unit_document("Wiki/Entities", "shared-helper", _SHARED_HELPER_B)
     builder.add_source_mirror("shared-source", _SHARED_MIRROR_B)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -409,7 +409,7 @@ Knowledge base B's widget entity.
 def _vocab_knowledge_base_a(root: Path) -> Path:
     """Build a knowledge base whose entity-types registry defines `widget` with knowledge base A's own definition."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Entities", "vocab-a-widget", _VOCAB_ENTITY_A)
+    builder.add_unit_document("Wiki/Entities", "vocab-a-widget", _VOCAB_ENTITY_A)
     builder.add_vocabulary()
     (root / "_meta" / "vocabulary" / "entity-types.md").write_text(_VOCAB_ENTITY_TYPES_A, encoding="utf-8")
     builder.add_meta_stubs()
@@ -420,7 +420,7 @@ def _vocab_knowledge_base_a(root: Path) -> Path:
 def _vocab_knowledge_base_b(root: Path) -> Path:
     """Build a knowledge base whose entity-types registry defines the SAME `widget` term with knowledge base B's own, different definition."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Entities", "vocab-b-widget", _VOCAB_ENTITY_B)
+    builder.add_unit_document("Wiki/Entities", "vocab-b-widget", _VOCAB_ENTITY_B)
     builder.add_vocabulary()
     (root / "_meta" / "vocabulary" / "entity-types.md").write_text(_VOCAB_ENTITY_TYPES_B, encoding="utf-8")
     builder.add_meta_stubs()
@@ -437,7 +437,7 @@ async def _index(engine: AsyncEngine, knowledge_base: Path, collection: str) -> 
     knowledge base root did not most recently index, never an accidental foreign write.
     """
     handler = IndexKnowledgeBaseHandler(
-        FilesystemKnowledgeBaseReader(knowledge_base),
+        FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders),
         FakeEmbedding(),
         KnowledgeBaseUnitOfWorkFactory(engine),
         FileValidationReportSink(knowledge_base),
@@ -449,11 +449,10 @@ async def _index(engine: AsyncEngine, knowledge_base: Path, collection: str) -> 
 async def _page_ids_for_collection(engine: AsyncEngine, collection: str) -> set[str]:
     """Return the set of non-meta page ids belonging to `collection`.
 
-    `meta.about` keeps its bare literal id only for the legacy `"research"` collection
-    (`engram.indexing.service.orientation.orientation_page_id`); every other collection's copy is
-    suffixed (`meta.about@{collection}`) and never collides with another non-research
-    collection's copy. Exclude it anyway so the query focuses on actual knowledge base content
-    pages, not the synthetic orientation page.
+    Every collection's `meta.about` is suffixed (`meta.about@{collection}`,
+    `engram.indexing.service.orientation.orientation_page_id`), so no two collections' copies
+    collide. Exclude it anyway so the query focuses on actual knowledge base content pages, not
+    the synthetic orientation page.
     """
     async with engine.connect() as conn:
         result = await conn.execute(text("SELECT id FROM kb.pages WHERE collection = :c AND id NOT LIKE 'meta.%'"), {"c": collection})
@@ -609,8 +608,7 @@ class TestMultiCollectionIndex:
     async def test_alpha_rows_survive_beta_index(self, engine: AsyncEngine, tmp_path: Path) -> None:  # type: ignore[override]
         """Phase 1 + 2: index alpha, then beta; alpha's rows must STILL be present at EVERY table.
 
-        `meta.about` keeps its bare literal id only for the legacy `"research"` collection; alpha
-        and beta each get their own suffixed copy and never collide — it is excluded here anyway,
+        Alpha and beta each get their own suffixed `meta.about` and never collide. It is excluded here anyway,
         since it is a synthetic orientation page, not knowledge base content. `unit_summaries` is seeded
         directly (`SummaryStage` is wired separately from `IndexKnowledgeBaseHandler` and is not
         exercised here).

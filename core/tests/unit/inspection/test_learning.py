@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pydantic import ValidationError
+
 from core.ai.evaluation.contracts import (
     ComparisonPlan,
     ImprovementProposal,
@@ -94,13 +96,9 @@ async def test_repeated_evidence_is_idempotent_but_conflicting_history_is_refuse
     assert await learning_store.load(initial.key) == initial
 
 
-async def test_a_base_commit_shaped_record_loads_with_a_typed_symptom_count(tmp_path: Path) -> None:
-    """A record whose execution rows predate the general kernel's `diagnostics` field still loads."""
-    trial = await attempt("legacy")
-    original_execution = trial.evaluation.trials[0].execution
-    assert original_execution is not None
-    assert original_execution.symptom_count == 2
-
+async def test_a_record_whose_execution_rows_lack_diagnostics_is_refused(tmp_path: Path) -> None:
+    """Every execution row carries its diagnostics. A row without them is not a record this store reads."""
+    trial = await attempt("without-diagnostics")
     base = record().add_attempt(trial)
     payload = base.model_dump(mode="json")
     for attempt_row in payload["attempts"]:
@@ -110,9 +108,5 @@ async def test_a_base_commit_shaped_record_loads_with_a_typed_symptom_count(tmp_
                 del execution["diagnostics"]
     (tmp_path / f"{base.key.fingerprint}.json").write_text(json.dumps(payload))
 
-    loaded = await store(tmp_path).load(base.key)
-
-    assert loaded is not None
-    restored_execution = loaded.attempts[0].evaluation.trials[0].execution
-    assert restored_execution is not None
-    assert restored_execution.symptom_count == 2
+    with pytest.raises(ValidationError, match="diagnostics"):
+        await store(tmp_path).load(base.key)

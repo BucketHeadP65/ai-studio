@@ -19,7 +19,7 @@ def test_two_logs_over_one_file_never_mint_the_same_sequence_number(tmp_path: Pa
 
     def append(log: SessionLog) -> None:
         for _ in range(40):
-            log.record(TurnStarted(entry="spa", chars=1))
+            log.record(TurnStarted(entry="spa", chars=1, session_id="s1", prompt_excerpt=None))
 
     threads = [threading.Thread(target=append, args=(log,)) for log in logs]
     for thread in threads:
@@ -33,11 +33,11 @@ def test_two_logs_over_one_file_never_mint_the_same_sequence_number(tmp_path: Pa
 def test_a_torn_last_line_does_not_stop_the_count(tmp_path: Path) -> None:
     path = tmp_path / "session-log.jsonl"
     log = SessionLog(path, topics=None)
-    log.record(TurnStarted(entry="spa", chars=1))
+    log.record(TurnStarted(entry="spa", chars=1, session_id="s1", prompt_excerpt=None))
     with path.open("a", encoding="utf-8") as handle:
         handle.write('{"seq": 2, "torn')
 
-    recorded = log.record(TurnStarted(entry="spa", chars=1))
+    recorded = log.record(TurnStarted(entry="spa", chars=1, session_id="s1", prompt_excerpt=None))
 
     assert recorded is not None
     assert recorded.seq == 2

@@ -8,6 +8,9 @@ precedence, the recompute-failure rule, `moved_page_ids` attribution, and the er
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pydantic
 import pytest
 
 from engram.evals.generation.contracts import (
@@ -67,7 +70,7 @@ def _mirror_anchored_ref(
     )
 
 
-def _legacy_ref(*, case_name: str = "paper.x-0", gold_ids: tuple[str, ...] = ("p1",)) -> CaseFreshnessRef:
+def _unanchored_ref(*, case_name: str = "paper.x-0", gold_ids: tuple[str, ...] = ("p1",)) -> CaseFreshnessRef:
     return CaseFreshnessRef(case_name=case_name, seed_key=None, archetype=None, gold_ids=gold_ids, anchors=(), mirror_hash=None)
 
 
@@ -81,7 +84,7 @@ class TestCaseEra:
     def test_mirror_hash_present_is_mirror_anchored(self):
         assert case_era(_mirror_anchored_ref()) == "mirror_anchored"
 
-    def test_mirror_hash_wins_even_with_a_legacy_positional_name(self):
+    def test_mirror_hash_wins_even_with_a_positional_name(self):
         ref = CaseFreshnessRef(case_name="paper.x-0", seed_key=None, archetype=None, gold_ids=("p1",), anchors=(), mirror_hash=_MIRROR)
 
         assert case_era(ref) == "mirror_anchored"
@@ -96,8 +99,8 @@ class TestCaseEra:
 
         assert case_era(ref) == "page_anchored"
 
-    def test_no_anchors_and_no_parseable_seed_key_is_legacy(self):
-        assert case_era(_legacy_ref()) == "legacy"
+    def test_no_anchors_and_no_parseable_seed_key_is_unanchored(self):
+        assert case_era(_unanchored_ref()) == "unanchored"
 
 
 class TestEvaluateCase:
@@ -131,11 +134,11 @@ class TestEvaluateCase:
         assert result.verdict == "gold_gone"
         assert result.moved_page_ids == ("p2",)
 
-    def test_legacy_case_is_unanchored_even_when_gold_is_gone(self):
-        result = evaluate_case(_legacy_ref(), current_ids=frozenset(), current_hashes={}, recomputed_mirror_hash=None)
+    def test_an_unanchored_case_stays_unanchored_even_when_gold_is_gone(self):
+        result = evaluate_case(_unanchored_ref(), current_ids=frozenset(), current_hashes={}, recomputed_mirror_hash=None)
 
         assert result.verdict == "unanchored"
-        assert result.era == "legacy"
+        assert result.era == "unanchored"
         assert result.moved_page_ids == ()
 
     def test_mirror_era_recompute_mismatch_flags_mirror_stale(self):
@@ -208,7 +211,7 @@ class TestStalenessFraction:
             _verdict(verdict="gold_gone"),
             _verdict(verdict="mirror_stale", era="mirror_anchored"),
             _verdict(verdict="fresh"),
-            _verdict(verdict="unanchored", era="legacy"),
+            _verdict(verdict="unanchored", era="unanchored"),
         ]
 
         assert staleness_fraction(verdicts) == 2 / 3  # two stale over three verdict-able (unanchored excluded)
@@ -219,7 +222,7 @@ class TestStalenessFraction:
         assert staleness_fraction(verdicts) == 0.0  # intact-mirror drift stays out of the numerator
 
     def test_all_unanchored_is_zero(self):
-        assert staleness_fraction([_verdict(verdict="unanchored", era="legacy")]) == 0.0
+        assert staleness_fraction([_verdict(verdict="unanchored", era="unanchored")]) == 0.0
 
     def test_empty_is_zero(self):
         assert staleness_fraction([]) == 0.0
@@ -244,7 +247,7 @@ class TestRetiringNames:
         assert retiring_names(verdicts) == frozenset()
 
     def test_fresh_and_unanchored_never_retire(self):
-        verdicts = [_verdict(name="e", verdict="fresh"), _verdict(name="f", verdict="unanchored", era="legacy")]
+        verdicts = [_verdict(name="e", verdict="fresh"), _verdict(name="f", verdict="unanchored", era="unanchored")]
 
         assert retiring_names(verdicts) == frozenset()
 
@@ -290,7 +293,7 @@ class TestCaseFreshnessRefs:
         assert [ref.seed_key for ref in case_freshness_refs(cases)] == [seed_key]
         assert [ref.seed_key for ref in parent_case_refs(cases)] == [seed_key]
 
-    def test_keeps_legacy_cases_with_a_none_seed_key(self):
+    def test_keeps_unanchored_cases_with_a_none_seed_key(self):
         cases = [
             EvaluationCase(
                 name="paper.x-0",
@@ -302,11 +305,11 @@ class TestCaseFreshnessRefs:
 
         refs = case_freshness_refs(cases)
 
-        assert len(refs) == 1  # unlike parent_case_refs, legacy cases are kept (reported as unanchored)
+        assert len(refs) == 1  # unlike parent_case_refs, unanchored cases are kept and reported
         assert refs[0].seed_key is None
         assert refs[0].anchors == ()
         assert refs[0].mirror_hash is None
-        assert case_era(refs[0]) == "legacy"
+        assert case_era(refs[0]) == "unanchored"
 
 
 class TestBuildReport:
@@ -432,13 +435,13 @@ class TestEvaluatePremises:
         assert premise.intact is True
         assert premise.missing == ()
 
-    def test_legacy_and_unlabelled_names_are_skipped(self):
-        legacy = _legacy_ref()
+    def test_positional_and_unlabelled_names_are_skipped(self):
+        positional = _unanchored_ref()
         unlabelled = CaseFreshnessRef(
             case_name="trace:a>b#0", seed_key="trace:a>b", archetype=None, gold_ids=(), anchors=(), mirror_hash=None
         )
 
-        assert _premises([legacy, unlabelled]) == ()
+        assert _premises([positional, unlabelled]) == ()
 
     def test_premise_outcomes_never_move_a_verdict(self):
         # The verdict core and the premise core are independent: a broken premise coexists with a
@@ -459,7 +462,7 @@ class TestPremiseReads:
             _seeded_ref("synthesis:extends:src", Archetype.SYNTHESIS),
             _seeded_ref("pinpoint:c1", Archetype.PINPOINT),
             _seeded_ref("passage:paper.alpha#setup", Archetype.PASSAGE),
-            _legacy_ref(),
+            _unanchored_ref(),
         ]
 
         reads = premise_reads(refs)
@@ -491,16 +494,19 @@ class TestStructuralReport:
         assert "checked: 1, broken: 1" in markdown
         assert "edge a->b gone" in markdown
 
-    def test_a_pre_phase7_artifact_still_loads(self):
-        report = build_report("research", "v1.yaml", [])
-        payload = report.model_dump(mode="json")
-        del payload["structural"]
-        del payload["n_premise_broken"]
+    @pytest.mark.parametrize("key", ["structural", "n_premise_broken"])
+    def test_a_report_missing_its_premise_section_is_refused(self, key: str):
+        payload = build_report("research", "v1.yaml", []).model_dump(mode="json")
+        del payload[key]
 
-        loaded = freshness.FreshnessReport.model_validate(payload)
+        with pytest.raises(pydantic.ValidationError, match=key):
+            freshness.FreshnessReport.model_validate(payload)
 
-        assert loaded.structural == ()
-        assert loaded.n_premise_broken == 0
+    def test_the_committed_report_loads_with_its_premise_section(self):
+        report = load_freshness_report(Path(__file__).parents[4] / "evals" / "freshness" / "p6smoke.v1.freshness.yaml")
+
+        assert report.structural == ()
+        assert report.n_premise_broken == 0
 
 
 class TestAuditInvalidation:
@@ -513,7 +519,7 @@ class TestAuditInvalidation:
             ("page_drifted", "page_anchored", True),
             ("page_drifted", "mirror_anchored", False),
             ("fresh", "page_anchored", False),
-            ("unanchored", "legacy", False),
+            ("unanchored", "unanchored", False),
         ],
     )
     def test_is_audit_invalidating_is_era_aware(self, verdict: FreshnessVerdict, era: AnchorEra, expected: bool):

@@ -73,7 +73,7 @@ async def _index(root: Path, db_url: str) -> None:
     engine = create_async_engine(db_url, poolclass=NullPool)
     await orm.register_pgvector(engine)
     try:
-        reader = FilesystemKnowledgeBaseReader(root, "Sources", spec.note_folders, note_files=spec.note_files)
+        reader = FilesystemKnowledgeBaseReader(root, "Sources", note_folders=spec.note_folders, note_files=spec.note_files)
         handler = IndexKnowledgeBaseHandler(
             reader, FakeEmbedding(), lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine), FakeValidationReportSink(), spec=spec
         )

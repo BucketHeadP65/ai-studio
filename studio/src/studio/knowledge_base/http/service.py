@@ -20,7 +20,7 @@ from engram.identity import LastRun, disk_content_hashes, read_identity
 from engram.indexing.contracts import FilesystemKnowledgeBaseReader
 from engram.init.contracts import code_head_revision, load_template, scaffold, write_scaffold
 from engram.kb import contracts as kb
-from engram.kb.contracts import KnowledgeBaseSchema, load_indexed_schema
+from engram.kb.contracts import KnowledgeBaseSchema
 from engram.retrieval.contracts import decide_page, list_decisions
 from engram.sources.contracts import SourceQueue, WatchListFile, known_scanners
 from pydantic import ValidationError
@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from core.cqrs.contracts import Enqueued, Job, JobQueries, Jobs
     from engram.identity import KnowledgeBaseIdentity
     from engram.init.contracts import InitReport, Template
-    from engram.kb.contracts import IndexedSchemaQueries
     from engram.retrieval.contracts import KnowledgeBaseInfo, KnowledgeBasesHandler, KnowledgeBaseValidationHandler
     from engram.sources.contracts import SourceQueueEntry, WatchEntry
 
@@ -63,7 +62,7 @@ if TYPE_CHECKING:
     from studio.knowledge_base.http.internal_contracts import RegisteredKnowledgeBaseQueries, RegisteredKnowledgeBases
     from studio.knowledge_base.refresh.contracts import RefreshRun
     from studio.knowledge_base.settings import DatabaseSettings, Schedule
-    from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway
+    from studio.knowledge_base.wiring.contracts import AdminSqlGateway
 
 _logger = get_logger(__name__)
 
@@ -194,52 +193,22 @@ def unreadable_error(refusal: KnowledgeBaseRefusal, what: str, name: str, error:
     return KnowledgeBaseRefusedError(refusal, f"{what} for {name!r} could not be read: {error}")
 
 
-async def schema_or_indexed(entry: KnowledgeBaseEntry, name: str, reader: IndexedSchemaQueries) -> KnowledgeBaseSchema:
-    """The knowledge base's schema from its folder, or else the schema it was last indexed with.
-
-    The index is read only when the folder holds no `knowledge-base-schema.json` at all.
-    A schema file that fails to read or validate raises as it is.
-    When neither holds a schema, the folder's own error is raised, and it names `studio init --template`.
-
-    Args:
-        entry: The registered knowledge base.
-        name: The registered name, which the index holds the schema under.
-        reader: Reads the indexed schema.
-
-    Returns:
-        The schema.
-
-    Raises:
-        KnowledgeBaseSchemaMissingError: The folder holds no schema and the index holds none either.
-        OSError: The folder's schema file cannot be read.
-        ValueError: The folder's schema file does not validate.
-    """
-    try:
-        return kb.load_knowledge_base_schema(entry.path)
-    except kb.KnowledgeBaseSchemaMissingError as checkout_missing:
-        try:
-            return await load_indexed_schema(reader, name)
-        except kb.KnowledgeBaseSchemaMissingError:
-            raise checkout_missing from None
-
-
-async def knowledge_base_schema(entry: KnowledgeBaseEntry, name: str, reader: ReaderSqlGateway) -> KnowledgeBaseSchema:
-    """The knowledge base's schema from its folder, or else from the index, read through `reader`.
+def knowledge_base_schema(entry: KnowledgeBaseEntry, name: str) -> KnowledgeBaseSchema:
+    """The knowledge base's schema, read from its folder.
 
     Args:
         entry: The registered knowledge base.
         name: The registered name.
-        reader: The read-only gateway the index is read through.
 
     Returns:
         The schema.
 
     Raises:
-        KnowledgeBaseRefusedError: `SCHEMA_NOT_FOUND` when neither holds a schema, with the folder's own sentence,
+        KnowledgeBaseRefusedError: `SCHEMA_NOT_FOUND` when the folder holds no schema, with the folder's own sentence,
             or when the folder's schema file will not load.
     """
     try:
-        return await schema_or_indexed(entry, name, reader.for_collection(name))
+        return kb.load_knowledge_base_schema(entry.path)
     except kb.KnowledgeBaseSchemaMissingError as exc:
         raise KnowledgeBaseRefusedError(KnowledgeBaseRefusal.SCHEMA_NOT_FOUND, str(exc)) from exc
     except (OSError, ValueError) as exc:
@@ -370,7 +339,7 @@ async def knowledge_base_identity(
 ) -> KnowledgeBaseIdentity | None:
     """The knowledge base's identity, read through `admin`, or `None` when no schema can be read for it.
 
-    The note folders and files walked come from the schema in its folder, or else from the index, read through `admin`.
+    The note folders and files walked come from the schema in its folder.
     The walk takes the default sources folder, `Sources`, and runs off the event loop.
     A missing schema is logged at info, and one that will not load at warning.
 
@@ -379,14 +348,14 @@ async def knowledge_base_identity(
         name: The registered name.
         info: The indexed vitals, or `None` when it was never indexed.
         last_refresh_run: The newest finished refresh run, or `None`.
-        admin: The admin gateway the identity and the indexed schema are read through.
+        admin: The admin gateway the identity is read through.
         database: The database the identity names, with its password redacted.
 
     Returns:
         The identity, or `None`.
     """
     try:
-        schema = await schema_or_indexed(entry, name, admin.for_collection(name))
+        schema = kb.load_knowledge_base_schema(entry.path)
     except kb.KnowledgeBaseSchemaMissingError as exc:
         _logger.info("knowledge base identity for {knowledge_base!r}: {reason}", knowledge_base=name, reason=str(exc))
         return None
@@ -489,11 +458,10 @@ class KnowledgeBaseRegistry:
         indexed_knowledge_bases: KnowledgeBasesHandler,
         validation: KnowledgeBaseValidationHandler,
         admin: AdminSqlGateway,
-        reader: ReaderSqlGateway,
         jobs: Jobs,
         job_queries: JobQueries,
     ) -> None:
-        """Hold the ports over the registry of knowledge bases, the database it names, and the readers and the job store behind it.
+        """Hold the ports over the registry of knowledge bases, the database it names, and the reads and the job store behind it.
 
         Args:
             registered_knowledge_bases: The writes to the registry of knowledge bases.
@@ -502,7 +470,6 @@ class KnowledgeBaseRegistry:
             indexed_knowledge_bases: Reads the indexed vitals of every knowledge base.
             validation: Reads the standing validation issues of one knowledge base.
             admin: The admin gateway a knowledge base's identity is read through.
-            reader: The read-only gateway an indexed schema is read through.
             jobs: The writes to the jobs table, where a refresh is enqueued.
             job_queries: The reads of the jobs table.
         """
@@ -512,7 +479,6 @@ class KnowledgeBaseRegistry:
         self._indexed_knowledge_bases = indexed_knowledge_bases
         self._validation = validation
         self._admin = admin
-        self._reader = reader
         self._jobs = jobs
         self._job_queries = job_queries
 
@@ -597,7 +563,6 @@ class KnowledgeBaseRegistry:
         list_entry = _list_entry(name, entry, info, broken.get(name), schema)
         return KnowledgeBaseDetail(
             **list_entry.model_dump(),
-            sources_connector=connectors[0] if connectors else None,
             sources_connectors=connectors,
             validation=issues,
             source_queue=queued,
@@ -674,7 +639,7 @@ class KnowledgeBaseRegistry:
             KnowledgeBaseRefusedError: `UNKNOWN_KNOWLEDGE_BASE`, then every refusal `knowledge_base_schema` raises.
         """
         entry = self._registered_entry(name)
-        schema = await knowledge_base_schema(entry, name, self._reader)
+        schema = knowledge_base_schema(entry, name)
         listing = list_decisions(entry.path, schema)
         outcomes_by_page_type: dict[str, tuple[OutcomeOut, ...]] = {}
         for page_type in schema.decision_page_types:
@@ -741,7 +706,7 @@ class KnowledgeBaseRegistry:
                 private=existing.private if existing is not None else False,
             )
         except ValidationError as exc:
-            msg = f"{payload.path} is not a knowledge base directory (it needs a knowledge-base-schema.json, or the legacy Units/ + _meta/ pair): {exc}"
+            msg = f"{payload.path} is not a knowledge base directory (it needs a knowledge-base-schema.json): {exc}"
             raise KnowledgeBaseRefusedError(KnowledgeBaseRefusal.INVALID_PATH, msg) from exc
         self._registered_knowledge_bases.register(name, entry)
         return RegistrationReport(name=name, path=entry.path, description=entry.description, registered=True)
@@ -904,7 +869,7 @@ class KnowledgeBaseRegistry:
                 and `INVALID_DECISION` for an empty status, or a status or a link field the page's page type does not allow.
         """
         entry = self._registered_entry(name)
-        schema = await knowledge_base_schema(entry, name, self._reader)
+        schema = knowledge_base_schema(entry, name)
         if not payload.status:
             raise KnowledgeBaseRefusedError(KnowledgeBaseRefusal.INVALID_DECISION, "status is empty. Give one of the statuses the page's page type allows")
         try:

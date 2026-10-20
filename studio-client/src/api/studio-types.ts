@@ -82,22 +82,19 @@ export const GraphNodeSchema = z.object({
   work: z.string().optional(),
   // Each argument's JSON Schema, keyed by name -- the leaf's own inputs for a `run` or `map`
   // node (the map's per item argument included), `{}` for a `param` or gate node and for an
-  // unknown step. Defaulted, so a payload from a host that has not shipped this yet still parses.
-  input_schemas: z.record(z.string(), JsonSchemaSchema).default({}),
+  // unknown step.
+  input_schemas: z.record(z.string(), JsonSchemaSchema),
   // What this node hands on: a `run` step's own output schema, a `map`'s wrapped as a JSON
   // Schema array, a `param`'s own schema, or the schema of the value a gate reviews. `null` when
-  // it cannot be resolved, or for an unknown step. Defaulted, so a payload from a host that has
-  // not shipped this yet still parses.
-  output_schema: JsonSchemaSchema.nullable().default(null),
-  // The program text of a carried program step, `""` otherwise. Defaulted, so a payload from a
-  // host that has not shipped this yet still parses.
-  source: z.string().default(""),
+  // it cannot be resolved, or for an unknown step.
+  output_schema: JsonSchemaSchema.nullable(),
+  // The program text of a carried program step, `""` otherwise.
+  source: z.string(),
   // Whether a launch must supply this parameter. Every `param` node carries it; no other kind is
   // ever asked for, so they default rather than each stating a fact that is not theirs.
   required: z.boolean().default(true),
   // Every turn a map node runs, base work first -- one entry for a single-turn map, several for
-  // a map that chains further work after it. `null` for every other kind, and for a payload from
-  // a host that has not shipped turns yet.
+  // a map that chains further work after it. Absent for every other kind.
   turns: z.array(MapTurnSchema).nullable().default(null).optional(),
 });
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
@@ -125,14 +122,12 @@ export const TrustSchema = z.object({
   runs_with_evidence: z.number(),
   failed_runs: z.number(),
   // Who approved this exact version, in the order they did. Empty until an approval lands.
-  // Defaulted so a payload from a host that has not shipped approval yet still parses.
-  approved_by: z.array(z.string()).default([]),
+  approved_by: z.array(z.string()),
   // Reliable and right are different claims: `runs_with_evidence` says the artifact ran;
-  // these say whether anything measured what it produced. Defaulted so a payload from
-  // a host that has not shipped grading yet still parses instead of failing the boundary.
-  structural_grades: z.number().int().nonnegative().default(0),
-  structural_mean: z.number().nullable().default(null),
-  structural_last: z.number().nullable().default(null),
+  // these say whether anything measured what it produced.
+  structural_grades: z.number().int().nonnegative(),
+  structural_mean: z.number().nullable(),
+  structural_last: z.number().nullable(),
 });
 
 export type Trust = z.infer<typeof TrustSchema>;
@@ -144,34 +139,27 @@ export const LibraryEntrySchema = z.object({
   provisional: z.boolean().default(true),
   score: z.number().nullish(),
   trust: TrustSchema,
-  needs: z.array(z.string()).default([]),
+  needs: z.array(z.string()),
   // `null` when the spec could not be read at all — a card that must say
   // "unreadable", not pretend the artifact is runnable.
   missing: z.array(z.string()).nullable(),
-  brings: z.array(z.string()).default([]),
+  brings: z.array(z.string()),
   version: z.number().nullable(),
-  // When this artifact was archived, or `null` while it is live. Defaulted, so a payload from a
-  // host that has not shipped archiving yet still parses as live.
-  archived_at: z.string().datetime({ offset: true }).nullable().default(null),
-  // Node counts off the same graph the workflow's own detail page builds. Defaulted to all
-  // zeros, so a payload from a host that has not shipped this yet still parses, and so does a
+  // When this artifact was archived, or `null` while it is live.
+  archived_at: z.string().datetime({ offset: true }).nullable(),
+  // Node counts off the same graph the workflow's own detail page builds, all zeros for a
   // workflow whose graph cannot be built.
-  shape: z
-    .object({ steps: z.number(), person_gates: z.number(), agent_gates: z.number() })
-    .default({ steps: 0, person_gates: 0, agent_gates: 0 }),
+  shape: z.object({ steps: z.number(), person_gates: z.number(), agent_gates: z.number() }),
   // This artifact's newest ended run off the run archive, or `null` when it has never run.
-  // Defaulted, so a payload from a host that has not shipped this yet still parses as never run.
-  runs: z
-    .object({
-      last: z
-        .object({ outcome: z.string(), started_at: z.string(), ended_at: z.string() })
-        .nullable(),
-    })
-    .default({ last: null }),
+  runs: z.object({
+    last: z
+      .object({ outcome: z.string(), started_at: z.string(), ended_at: z.string() })
+      .nullable(),
+  }),
   // What every priced run of this workflow has cost so far, and how many of its runs were
   // priced at all. Absent or `null` before any run of it has been priced.
   spend: z
-    .object({ cost_usd: z.string(), unpriced: z.number().default(0), runs: z.number() })
+    .object({ cost_usd: z.string(), unpriced: z.number(), runs: z.number() })
     .nullish(),
 });
 export type LibraryEntry = z.infer<typeof LibraryEntrySchema>;
@@ -324,19 +312,18 @@ export const WorkflowDetailSchema = z.object({
   id: z.string(),
   name: z.string(),
   version: z.number(),
-  description: z.string().default(""),
+  description: z.string(),
   // The card a chooser reads -- distinct from the spec's own `description` above, and the one
-  // `PATCH .../card` rewrites. Defaulted, so a backend that predates the card still parses; a
-  // blank `title` is the signal the header falls back to the id for.
-  title: z.string().default(""),
-  summary: z.string().default(""),
-  applicability: z.string().default(""),
-  provisional: z.boolean().default(true),
+  // `PATCH .../card` rewrites. A blank `title` is the signal the header falls back to the id for.
+  title: z.string(),
+  summary: z.string(),
+  applicability: z.string(),
+  provisional: z.boolean(),
   graph: WorkflowGraphSchema,
-  issues: z.array(z.string()).default([]),
+  issues: z.array(z.string()),
   fits: z.boolean(),
-  missing: z.array(z.string()).default([]),
-  brings: z.array(z.string()).default([]),
+  missing: z.array(z.string()),
+  brings: z.array(z.string()),
   spec_yaml: z.string(),
   staleness: z.array(z.string()).nullable(),
   lineage: LineageSchema.nullable(),
@@ -350,19 +337,18 @@ export const WorkflowDetailSchema = z.object({
   // reaching the person who actually opened it, not only the agent fetching the
   // spec over the contract port.
   trust: TrustSchema,
-  // When this artifact was archived, or `null` while it is live. Defaulted, so a payload from a
-  // host that has not shipped archiving yet still parses as live.
-  archived_at: z.string().datetime({ offset: true }).nullable().default(null),
+  // When this artifact was archived, or `null` while it is live.
+  archived_at: z.string().datetime({ offset: true }).nullable(),
   // The same running total the library card carries -- what every priced run of this workflow has
   // cost so far, and how many of its runs were priced at all. Absent or `null` before any run
   // of it has been priced.
   spend: z
-    .object({ cost_usd: z.string(), unpriced: z.number().default(0), runs: z.number() })
+    .object({ cost_usd: z.string(), unpriced: z.number(), runs: z.number() })
     .nullish(),
   // The author's own words, or `null` when the library kept none. Absent stays absent.
   presentation: WorkflowPresentationSchema.nullish(),
-  // The same reading the card route refuses on. Nullish so a host that predates it still parses;
-  // a screen with no reading shows no findings rather than inventing a verdict.
+  // The same reading the card route refuses on. A card answer merged into a cached detail may
+  // carry it as `null`, and a screen with no reading shows no findings.
   readiness: ReadinessSchema.nullish(),
 });
 export type WorkflowDetail = z.infer<typeof WorkflowDetailSchema>;
@@ -378,8 +364,7 @@ export const WorkflowCardSchema = z.object({
   summary: z.string(),
   applicability: z.string(),
   provisional: z.boolean(),
-  // Defaulted, so a payload from a host that has not shipped archiving yet still parses as live.
-  archived_at: z.string().datetime({ offset: true }).nullable().default(null),
+  archived_at: z.string().datetime({ offset: true }).nullable(),
   presentation: WorkflowPresentationSchema.nullish(),
   // `null` on the routes that changed no prose (archive, restore): they answer about a card they
   // did not describe, and a stale reading on the screen is worse than none.
@@ -507,19 +492,17 @@ export const RunStateSchema = z.object({
   running: z.boolean(),
   workflow: z.string().nullable(),
   result: z.string().nullable(),
-  active: z.array(z.string()).default([]),
-  done: z.array(z.string()).default([]),
-  failed: z.array(z.string()).default([]),
+  active: z.array(z.string()),
+  done: z.array(z.string()),
+  failed: z.array(z.string()),
   waiting_at: z.string().nullable(),
-  events: z.array(StepEventSchema).default([]),
+  events: z.array(StepEventSchema),
   seq: z.number(),
   // The live run's own automatic-approval flag, the same one `/api/run/automode` flips.
-  // Defaulted, so a backend that predates this field still parses.
-  auto_approve: z.boolean().default(false),
+  auto_approve: z.boolean(),
   // Who decides a gate this run reaches, read live off the session -- `auto_approve` above is
-  // derived from this, not the other way round. Defaulted, so a backend that predates this field
-  // still parses as the wait every such backend only ever meant.
-  gate_mode: GateModeSchema.default("wait"),
+  // derived from this, not the other way round.
+  gate_mode: GateModeSchema,
 });
 export type RunState = z.infer<typeof RunStateSchema>;
 
@@ -590,18 +573,14 @@ const SpendUsageSchema = z.object({
 });
 
 // A run's own priced cost: the total, and the same reading folded per step, keyed by step name.
-// A step the run never priced (nothing ran it, or it ran before spend tracking existed) carries
-// no key here at all.
+// A step the run never priced (nothing ran it) carries no key here at all.
 export const SpendViewSchema = z.object({
   cost_usd: z.string(),
   // Responses no source could name a figure for. Above zero, `cost_usd` is a floor rather than the
   // cost, and a screen says so rather than showing a number that reads as the whole of it.
-  unpriced: z.number().default(0),
+  unpriced: z.number(),
   usage: SpendUsageSchema,
-  steps: z.record(
-    z.string(),
-    z.object({ cost_usd: z.string(), unpriced: z.number().default(0), usage: SpendUsageSchema }),
-  ),
+  steps: z.record(z.string(), z.object({ cost_usd: z.string(), unpriced: z.number(), usage: SpendUsageSchema })),
 });
 export type SpendView = z.infer<typeof SpendViewSchema>;
 
@@ -697,50 +676,47 @@ export const RunEnvelopeSchema = z.object({
   run_id: z.string(),
   workflow_id: z.string(),
   // What this run itself is called, as whoever started it named it -- never the name of the session
-  // that happens to host it. Defaulted, so a record written before runs were named still parses and
-  // reads as unnamed, which is what lets a reader fall back to the workflow's own card.
-  run_title: z.string().default(""),
+  // that happens to host it. Empty for a run nobody named, which is what lets a reader fall back to
+  // the workflow's own card.
+  run_title: z.string(),
   outcome: z.enum(["completed", "failed", "stopped", "live"]),
-  failure: z.string().default(""),
+  failure: z.string(),
   started_at: z.string(),
-  ended_at: z.string().default(""),
+  ended_at: z.string(),
   runner: z.string(),
   session_id: z.string(),
   // Each declared parameter as the JSON value the run was actually given: an array stays an array
   // and a number a number, which is what lets a rerun reopen the same values in the same controls.
-  params: z.record(z.string(), JsonValueSchema).default({}),
-  gates_approved: z.array(z.string()).default([]),
-  gates_rejected: z.record(z.string(), z.number()).default({}),
-  gates_auto: z.array(z.string()).default([]),
+  params: z.record(z.string(), JsonValueSchema),
+  gates_approved: z.array(z.string()),
+  gates_rejected: z.record(z.string(), z.number()),
+  gates_auto: z.array(z.string()),
   // Gates this run's own orchestrator decided -- an authored orchestrator gate, or a person gate
   // converted under gate_mode orchestrate. Counted apart from `gates_approved` (a person's own
-  // yes) and `gates_auto` (nobody asked), the same honesty those two already keep. Defaulted, so
-  // a record archived before this field existed still parses.
-  gates_orchestrated: z.array(z.string()).default([]),
-  pinned: z.boolean().default(false),
-  // This run's own priced cost, absent or `null` when no ledger exists for it -- a run that
-  // predates spend tracking, or one still too fresh to have priced a single response.
-  spend: SpendViewSchema.nullish(),
+  // yes) and `gates_auto` (nobody asked), the same honesty those two already keep.
+  gates_orchestrated: z.array(z.string()),
+  pinned: z.boolean(),
+  // This run's own priced cost, `null` when no ledger exists for it, as for a run still too fresh
+  // to have priced a single response.
+  spend: SpendViewSchema.nullable(),
   // What the run actually did, checked against its own facts -- a different question from
-  // `outcome`, which says only how the execution ended. Nullish, so a host that reports no checked
-  // outcome reads as unchecked rather than as a verdict this app invented.
-  result: OutcomeSchema.nullish(),
+  // `outcome`, which says only how the execution ended.
+  result: OutcomeSchema,
 });
 export type RunEnvelope = z.infer<typeof RunEnvelopeSchema>;
 
 export const RunHistoryRecordSchema = RunEnvelopeSchema.extend({
   spec: z.unknown(),
-  values: z.record(z.string(), z.string()).default({}),
+  values: z.record(z.string(), z.string()),
   // Each worker step's own messages at the moment the run ended, keyed by step name --
   // pydantic-ai's `ModelMessage` grammar, dumped to JSON. Loose on purpose: rendering reads
   // only `kind` and each part's `part_kind`/`content`, tolerating whatever else a message
-  // carries. Defaulted, so a record archived before workers kept memory still parses.
-  conversations: z.record(z.string(), z.array(z.unknown())).default({}),
-  events: z.array(StepEventSchema).default([]),
+  // carries.
+  conversations: z.record(z.string(), z.array(z.unknown())),
+  events: z.array(StepEventSchema),
   graph: WorkflowGraphSchema.nullable(),
   // Every review a person recorded against this run, oldest first. Empty is a run nobody has
-  // reviewed: owner acceptance unknown, never accepted and never rejected. Defaulted, so a
-  // record written before reviews existed still parses and reads as unreviewed.
-  owner_reviews: z.array(OwnerReviewSchema).default([]),
+  // reviewed: owner acceptance unknown, never accepted and never rejected.
+  owner_reviews: z.array(OwnerReviewSchema),
 });
 export type RunHistoryRecord = z.infer<typeof RunHistoryRecordSchema>;

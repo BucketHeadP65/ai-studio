@@ -10,7 +10,6 @@ from core.ai.history.contracts import PoolDatabase, row_as
 from core.ai.inspection.domain.leads import Lead
 from core.ai.inspection.domain.taxonomy import TAXONOMY, Blame, Finding, Surface, SurfaceKind
 from core.ai.inspection.infrastructure.postgres import InspectionStore
-from core.ai.inspection.infrastructure.schema import create_inspection_schema
 from core.ai.inspection.read_models import StoredBlame
 from core.ai.transcripts.contracts import Span
 from tests.support.fakes.bound_database import BoundDatabase
@@ -255,19 +254,3 @@ async def test_final_verdicts_serialize_on_the_lead_even_when_the_loser_started_
     assert result is (False if finding_wins else None)
     assert len(await store.findings_of("record:run-a")) == (1 if finding_wins else 0)
     assert (stored.resolution == "dismissed") is not finding_wins
-
-
-async def test_legacy_attempted_leads_migrate_to_undecided_and_stay_so_on_restart(inspection_database: PoolDatabase) -> None:
-    store = InspectionStore(inspection_database)
-    (lead_id,) = await store.add_leads("author", [a_lead()])
-    async with inspection_database.acquire() as connection:
-        await connection.execute("ALTER TABLE leads DROP COLUMN resolution")
-        await connection.execute("UPDATE leads SET attempted_at = now(), refusal = 'cannot tell' WHERE lead_id = $1", lead_id)
-
-    await create_inspection_schema(inspection_database)
-    await create_inspection_schema(inspection_database)
-
-    migrated = await store.lead(lead_id)
-    assert migrated is not None
-    assert migrated.resolution == "undecided"
-    assert await store.settled([lead_id]) == set()

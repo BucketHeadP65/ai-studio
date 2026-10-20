@@ -35,15 +35,7 @@ from pydantic import JsonValue, TypeAdapter, ValidationError
 from wireup import Injected
 from wireup.integration.fastapi import WireupRoute
 
-from harness.domain.contracts import (
-    DEFAULT_GATE_MODE,
-    GATE_MODES,
-    UNKNOWN_SESSION,
-    AdmissionRefused,
-    admitted_arguments,
-    effective_gate_mode,
-    presentation_of,
-)
+from harness.domain.contracts import DEFAULT_GATE_MODE, GATE_MODES, UNKNOWN_SESSION, AdmissionRefused, admitted_arguments, presentation_of
 from harness.features.running import service
 from harness.features.running.api_models import (
     ApproveRequest,
@@ -85,9 +77,6 @@ _logger = get_logger(__name__)
 _JSON_VALUE: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
 _UNKNOWN_RUN = "no run with that id here"
-
-_LEGACY_RESULT = Outcome(status="unknown", summary="This run predates outcome reporting.")
-"""What a record that carries no checked outcome reads as. Never written back to the record."""
 
 _LIVE_RESULT = Outcome(status="unknown", summary="This run has not ended, so there is nothing to check yet.")
 """What a run still in flight projects as, so a listing row has the same shape whatever it holds."""
@@ -229,7 +218,7 @@ _REVIEW_SOURCE = "app:harness"
 def run_automode(session: Runtime, body: AutomodeRequest, run: RunSettings) -> JSONResponse:
     """Set `session`'s live automode on or off.
 
-    It sets `gate_mode` together with `auto_approve`, as a launch does. It is refused with a 409 on
+    On sets `gate_mode` to `"auto"` and off sets it to `"wait"`. It is refused with a 409 on
     the Temporal engine, where automode is chosen at launch, and when nothing is running.
 
     Args:
@@ -340,7 +329,7 @@ def _no_such_session() -> JSONResponse:
     return JSONResponse({"ok": False, "message": UNKNOWN_SESSION}, status_code=404)
 
 
-async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflict's own shape to validate)
+async def _start(  # noqa: PLR0911 (each refusal a launch can meet is its own early return with its own status)
     session: Runtime, body: RunRequest, run: RunCollaborators
 ) -> JSONResponse:
     """Start `body`'s workflow in `session` once the library, the environment and the arguments agree, or refuse."""
@@ -348,10 +337,6 @@ async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflic
         return JSONResponse({"ok": False, "message": f"{session.active.workflow_id} is still running"}, status_code=409)
     if (paused := session.active.paused_run_refusal()) is not None:
         return JSONResponse({"ok": False, "message": paused}, status_code=409)
-    try:
-        resolved_mode = effective_gate_mode(body.gate_mode, auto_approve_gates=body.auto_approve_gates)
-    except ValueError as exc:
-        return JSONResponse({"ok": False, "message": str(exc)}, status_code=400)
     try:
         spec = await session.library.fetch_workflow(body.workflow_id)
     except (LibraryError, ValidationError) as exc:
@@ -378,7 +363,7 @@ async def _start(  # noqa: PLR0911 (one more early return, the gate-mode conflic
             spec=spec,
             workflow_id=body.workflow_id,
             params=arguments,
-            gate_mode=resolved_mode,
+            gate_mode=body.gate_mode,
             run=run.run_settings,
             run_title=body.run_title,
         )
@@ -470,10 +455,10 @@ def _live_envelope(session: Runtime, spend: SpendLogQueries) -> dict[str, object
 
 
 def _envelope(record: RunArchiveRecord, spend: SpendLogQueries) -> dict[str, object]:
-    """One archived run without its heavy fields, as a listing reads it, a missing checked outcome read as unknown."""
+    """One archived run without its heavy fields, as a listing reads it."""
     return {
         **record.model_dump(mode="json", exclude={"spec", "values", "events", "conversations", "reviewed"}),
-        "result": (record.result or _LEGACY_RESULT).model_dump(mode="json"),
+        "result": record.result.model_dump(mode="json"),
         "spend": view_of(spend.find(record.run_id)),
     }
 
@@ -787,8 +772,7 @@ class RunningController:
         evidence = self._run.records.evidence
         spec_hash = spec_identity(spec)
         await evidence.append(Approval(workflow_id=workflow_id, spec_hash=spec_hash, workflow_version=spec.version, by=by))
-        history = await evidence.history_for(spec_hash=spec_hash, workflow_id=workflow_id)
-        record = trust_level(history.matched)
+        record = trust_level(await evidence.history_for(spec_hash=spec_hash))
         return JSONResponse(
             {
                 "ok": True,
@@ -833,7 +817,7 @@ class RunningController:
             graph = graph_payload(spec, ready.registry, {})
         return {
             **record.model_dump(mode="json", exclude={"reviewed"}),
-            "result": (record.result or _LEGACY_RESULT).model_dump(mode="json"),
+            "result": record.result.model_dump(mode="json"),
             "values": {node_id: render_for_review(value) for node_id, value in record.values.items()},
             "graph": graph,
             "spend": view_of(self._run.records.spend.find(record.run_id)),

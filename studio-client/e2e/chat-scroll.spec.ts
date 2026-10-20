@@ -120,6 +120,7 @@ const SESSION_S1 = {
   usage: usage(),
   kind: "chat",
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -188,6 +189,8 @@ async function mockApi(page: Page) {
   await page.route("**/api/projects", (route) => json(route, { projects: [] }));
   await page.route("**/api/run/state**", (route) =>
     json(route, {
+      auto_approve: false,
+      gate_mode: "wait",
       running: false,
       workflow: null,
       result: null,

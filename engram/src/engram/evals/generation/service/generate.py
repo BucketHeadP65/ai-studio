@@ -156,7 +156,7 @@ class DatasetGeneration:
         parent_dataset = load_dataset(parent_path)
         parent_stamp = load_stamp(parent_path)
         if parent_stamp is None:
-            msg = f"cannot top up {parent_path}: it carries no dataset stamp (unversioned legacy datasets cannot be topped up)"
+            msg = f"cannot top up {parent_path}: it carries no dataset stamp (an unversioned dataset cannot be topped up)"
             raise ValueError(msg)
 
         config = self._config_for(command)

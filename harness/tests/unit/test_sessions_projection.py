@@ -19,16 +19,7 @@ from pydantic_ai_harness.step_persistence import ContinuableSnapshot, RunRecord
 
 from harness.adapters.models import response_cost
 from harness.adapters.session_log import SessionLog
-from harness.domain.events import (
-    ConversationForgotten,
-    RunLaunched,
-    SessionStarted,
-    TurnAbandoned,
-    TurnFailed,
-    TurnSettled,
-    TurnStarted,
-    session_spans,
-)
+from harness.domain.events import ConversationForgotten, RunLaunched, SessionStarted, TurnAbandoned, TurnFailed, TurnSettled, TurnStarted
 from harness.features.sessions import project_registry
 from harness.features.sessions.infrastructure.projects_log import ProjectsLog
 from harness.features.sessions.service import (
@@ -79,19 +70,18 @@ def _snapshot(run_id: str, *, question: str, answer: str, input_tokens: int = 1,
 
 async def test_fold_session_messages_skips_a_run_whose_snapshot_read_fails(tmp_path: Path) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-good"))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-broken"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-good", started_seq=2))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-broken", started_seq=4))
     events = session_log.events()
 
     store = FakeStepStore(snapshots={"run-good": _snapshot("run-good", question="hi", answer="hello")}, broken=frozenset({"run-broken"}))
 
     # `_fold_session_messages` wants the `_TurnUnderway` shapes `_fold_turns_and_flags` builds from the
     # same session log -- the pair `_project_rows` itself calls, exercised directly here.
-    spans = session_spans(events)
-    turns, _ = _fold_turns_and_flags(events, spans)
+    turns, _ = _fold_turns_and_flags(events)
 
     messages, excerpt = await _fold_session_messages(turns, store)
 
@@ -106,11 +96,11 @@ async def test_a_second_turns_snapshot_that_dropped_two_old_messages_before_its_
     tmp_path: Path,
 ) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-1"))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-2"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-2", started_seq=4))
     events = session_log.events()
 
     request_0 = ModelRequest(parts=[UserPromptPart(content="find the file")])
@@ -132,8 +122,7 @@ async def test_a_second_turns_snapshot_that_dropped_two_old_messages_before_its_
     )
 
     store = FakeStepStore(snapshots={"run-1": snapshot_1, "run-2": snapshot_2})
-    spans = session_spans(events)
-    turns, _ = _fold_turns_and_flags(events, spans)
+    turns, _ = _fold_turns_and_flags(events)
 
     messages, _excerpt = await _fold_session_messages(turns, store)
 
@@ -148,11 +137,11 @@ async def test_a_second_turns_snapshot_that_dropped_two_old_messages_before_its_
 
 async def test_a_second_turns_snapshot_shorter_than_the_first_turns_still_yields_its_new_messages(tmp_path: Path) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-1"))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-2"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-1", started_seq=2))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-2", started_seq=4))
     events = session_log.events()
 
     request_0 = ModelRequest(parts=[UserPromptPart(content="what does file a say")])
@@ -170,8 +159,7 @@ async def test_a_second_turns_snapshot_shorter_than_the_first_turns_still_yields
     snapshot_2 = ContinuableSnapshot(run_id="run-2", step_index=0, messages=[summary, request_1, response_1])
 
     store = FakeStepStore(snapshots={"run-1": snapshot_1, "run-2": snapshot_2})
-    spans = session_spans(events)
-    turns, _ = _fold_turns_and_flags(events, spans)
+    turns, _ = _fold_turns_and_flags(events)
 
     messages, _excerpt = await _fold_session_messages(turns, store)
 
@@ -200,14 +188,13 @@ def test_the_previous_turns_last_message_restamped_with_a_different_timestamp_ru
 
 async def test_a_first_turn_yields_every_message(tmp_path: Path) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-first"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-first", started_seq=2))
     events = session_log.events()
 
     store = FakeStepStore(snapshots={"run-first": _snapshot("run-first", question="hi", answer="hello")})
-    spans = session_spans(events)
-    turns, _ = _fold_turns_and_flags(events, spans)
+    turns, _ = _fold_turns_and_flags(events)
 
     messages, excerpt = await _fold_session_messages(turns, store)
 
@@ -217,11 +204,11 @@ async def test_a_first_turn_yields_every_message(tmp_path: Path) -> None:
 
 async def test_project_rows_still_writes_the_session_row_when_one_run_cannot_be_read(tmp_path: Path) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-good"))
-    session_log.record(TurnStarted(entry="spa", chars=5))
-    session_log.record(TurnSettled(run_id="run-broken"))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-good", started_seq=2))
+    session_log.record(TurnStarted(entry="spa", chars=5, prompt_excerpt=None, session_id=SESSION_A))
+    session_log.record(TurnSettled(run_id="run-broken", started_seq=4))
     events = session_log.events()
 
     store = FakeStepStore(snapshots={"run-good": _snapshot("run-good", question="hi", answer="hello")}, broken=frozenset({"run-broken"}))
@@ -245,8 +232,8 @@ async def test_project_rows_produces_a_row_for_a_session_with_an_open_turn_and_a
     open turn counted, no usage yet since no run ever wrote a message here.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    session_log.record(TurnStarted(entry="spa", chars=12))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    session_log.record(TurnStarted(entry="spa", chars=12, prompt_excerpt=None, session_id=SESSION_A))
     session_log.record(RunLaunched(workflow_id="wf.gate-check.v1", run_id="run-gate-check"))
     events = session_log.events()
 
@@ -264,11 +251,11 @@ async def test_project_rows_produces_a_row_for_a_session_with_an_open_turn_and_a
 
 async def test_one_sessions_broken_run_does_not_stop_another_session_from_projecting(tmp_path: Path) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-broken", started_seq=started_a.seq))
-    session_log.record(SessionStarted(session_id=SESSION_B))
-    started_b = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_B))
+    session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
+    started_b = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_B, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-clean", started_seq=started_b.seq))
     events = session_log.events()
 
@@ -292,13 +279,13 @@ async def test_forget_watermark_scopes_turn_count_usage_and_cost_to_the_conversa
     two runs before it untouched.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started_1 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-1", started_seq=started_1.seq))
-    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    started_2 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-before-2", started_seq=started_2.seq))
     session_log.record(ConversationForgotten(session_id=SESSION_A))
-    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    started_3 = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-after", started_seq=started_3.seq))
     events = session_log.events()
 
@@ -333,10 +320,10 @@ async def test_forget_watermark_scopes_turn_count_usage_and_cost_to_the_conversa
 async def test_forget_watermark_ignores_a_forget_stamped_for_a_different_session(tmp_path: Path) -> None:
     """A Forget names its own session; it must never watermark a session it was not stamped for."""
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnSettled(run_id="run-a", started_seq=started_a.seq))
-    session_log.record(SessionStarted(session_id=SESSION_B))
+    session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
     session_log.record(ConversationForgotten(session_id=SESSION_B))
     events = session_log.events()
 
@@ -348,7 +335,7 @@ async def test_forget_watermark_ignores_a_forget_stamped_for_a_different_session
     assert sessions[0][6] == 1, "session B's own Forget must not clear session A's turn"
 
 
-SESSION_LEGACY = "33333333-3333-3333-3333-333333333333"
+SESSION_CHECKOUT = "33333333-3333-3333-3333-333333333333"
 SESSION_C = "44444444-4444-4444-4444-444444444444"
 
 
@@ -389,17 +376,17 @@ async def test_sweep_projects_visits_every_session_in_every_registered_project(t
     checkout_log = a_session_log(tmp_path / "checkout-state")
     checkout_store = a_transcript(tmp_path / "checkout-state")
 
-    checkout_log.record(SessionStarted(session_id=SESSION_LEGACY))
-    checkout_log.record(TurnStarted(entry="spa", chars=3))
-    checkout_log.record(TurnSettled(run_id="run-legacy"))
+    checkout_log.record(SessionStarted(session_id=SESSION_CHECKOUT, session_kind="chat"))
+    checkout_log.record(TurnStarted(entry="spa", chars=3, prompt_excerpt=None, session_id=SESSION_CHECKOUT))
+    checkout_log.record(TurnSettled(run_id="run-checkout", started_seq=2))
 
     workspace = open_workspace(other_root)
-    workspace.session_log.record(SessionStarted(session_id=SESSION_B))
-    workspace.session_log.record(TurnStarted(entry="spa", chars=3, session_id=SESSION_B))
-    workspace.session_log.record(TurnSettled(run_id="run-b"))
-    workspace.session_log.record(SessionStarted(session_id=SESSION_C))
-    workspace.session_log.record(TurnStarted(entry="spa", chars=3, session_id=SESSION_C))
-    workspace.session_log.record(TurnSettled(run_id="run-c"))
+    workspace.session_log.record(SessionStarted(session_id=SESSION_B, session_kind="chat"))
+    workspace.session_log.record(TurnStarted(entry="spa", chars=3, session_id=SESSION_B, prompt_excerpt=None))
+    workspace.session_log.record(TurnSettled(run_id="run-b", started_seq=2))
+    workspace.session_log.record(SessionStarted(session_id=SESSION_C, session_kind="chat"))
+    workspace.session_log.record(TurnStarted(entry="spa", chars=3, session_id=SESSION_C, prompt_excerpt=None))
+    workspace.session_log.record(TurnSettled(run_id="run-c", started_seq=5))
 
     project_registry.boot(checkout)
     project_registry.register(other_root, project_id=project_id_of(other_root))
@@ -410,10 +397,10 @@ async def test_sweep_projects_visits_every_session_in_every_registered_project(t
 
     assert spy.pools == [pool, pool, pool], "every refresh writes through the one pool the sweep was given"
     swept_session_ids = {session_id for _root, session_id in spy.calls}
-    assert swept_session_ids == {SESSION_LEGACY, SESSION_B, SESSION_C}, "a boot must never leave fewer rows than the session logs hold"
+    assert swept_session_ids == {SESSION_CHECKOUT, SESSION_B, SESSION_C}, "a boot must never leave fewer rows than the session logs hold"
 
-    legacy_call = next(call for call in spy.calls if call[1] == SESSION_LEGACY)
-    assert legacy_call[0] == str(checkout.resolve()), "the legacy session is swept off the checkout's own root, not a workspace"
+    checkout_call = next(call for call in spy.calls if call[1] == SESSION_CHECKOUT)
+    assert checkout_call[0] == str(checkout.resolve()), "the checkout's own session is swept off the checkout's own root, not a workspace"
     other_roots = {root for root, session_id in spy.calls if session_id in {SESSION_B, SESSION_C}}
     assert other_roots == {str(other_root.resolve())}
 
@@ -439,11 +426,11 @@ async def test_last_activity_at_is_each_sessions_own_last_turn_not_the_sweeps_mo
     one newest line (the sweep's own moment); the fix must give each its own newest turn instead.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_incrementing_clock(), topics=None)
-    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A))
+    started_a = recorded(session_log, TurnStarted(entry="spa", chars=5, session_id=SESSION_A, prompt_excerpt=None))
     settled_a = recorded(session_log, TurnSettled(run_id="run-a", started_seq=started_a.seq))
-    started_b = recorded(session_log, TurnStarted(entry="spa", chars=4, session_id=SESSION_B))
+    started_b = recorded(session_log, TurnStarted(entry="spa", chars=4, session_id=SESSION_B, prompt_excerpt=None))
     settled_b = recorded(session_log, TurnSettled(run_id="run-b", started_seq=started_b.seq))
-    started_c = recorded(session_log, TurnStarted(entry="spa", chars=3, session_id=SESSION_LEGACY))
+    started_c = recorded(session_log, TurnStarted(entry="spa", chars=3, session_id=SESSION_CHECKOUT, prompt_excerpt=None))
     settled_c = recorded(session_log, TurnSettled(run_id="run-c", started_seq=started_c.seq))
     events = session_log.events()
 
@@ -453,8 +440,8 @@ async def test_last_activity_at_is_each_sessions_own_last_turn_not_the_sweeps_mo
     by_id = {row[0]: row for row in sessions}
     assert by_id[SESSION_A][4] == settled_a.at, "A's last activity is A's own settle"
     assert by_id[SESSION_B][4] == settled_b.at, "B's last activity is B's own settle"
-    assert by_id[SESSION_LEGACY][4] == settled_c.at, "the last-opened session's own settle, incidentally also the session log's newest line"
-    assert len({by_id[SESSION_A][4], by_id[SESSION_B][4], by_id[SESSION_LEGACY][4]}) == 3, (
+    assert by_id[SESSION_CHECKOUT][4] == settled_c.at, "the last-opened session's own settle, incidentally also the session log's newest line"
+    assert len({by_id[SESSION_A][4], by_id[SESSION_B][4], by_id[SESSION_CHECKOUT][4]}) == 3, (
         "the bug stamped every open session with the sweep's one newest timestamp -- these three must differ"
     )
 
@@ -467,8 +454,8 @@ async def test_title_falls_back_to_a_failed_turns_own_prompt_excerpt_when_no_run
     itself is still counted, since it exists on the session log whatever its outcome.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started = recorded(session_log, TurnStarted(entry="spa", chars=67, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started = recorded(session_log, TurnStarted(entry="spa", chars=67, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnFailed(error="Exceeded maximum output retries (1)", started_seq=started.seq, prompt_excerpt="write me a summary"))
     events = session_log.events()
 
@@ -492,10 +479,10 @@ async def test_a_failed_turns_run_is_claimed_back_from_the_step_log(tmp_path: Pa
     kept the run all along; the fold now matches it back by the turn's own time window.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started = recorded(session_log, TurnStarted(entry="spa", chars=20, session_id=SESSION_A))
-    session_log.record(TurnFailed(error="The next request would exceed the request_limit of 32.", started_seq=started.seq))
-    abandoned = recorded(session_log, TurnStarted(entry="spa", chars=9, session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started = recorded(session_log, TurnStarted(entry="spa", chars=20, session_id=SESSION_A, prompt_excerpt=None))
+    session_log.record(TurnFailed(error="The next request would exceed the request_limit of 32.", started_seq=started.seq, prompt_excerpt=None))
+    abandoned = recorded(session_log, TurnStarted(entry="spa", chars=9, session_id=SESSION_A, prompt_excerpt=None))
     session_log.record(TurnAbandoned(started_seq=abandoned.seq))
     events = session_log.events()
 
@@ -523,9 +510,9 @@ async def test_a_failed_turns_run_is_claimed_back_from_the_step_log(tmp_path: Pa
 async def test_a_turn_that_never_registered_a_run_still_projects_with_none(tmp_path: Path) -> None:
     """A turn that died before its first request has no run to claim, and another conversation's run is never taken."""
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
-    started = recorded(session_log, TurnStarted(entry="spa", chars=20, session_id=SESSION_A))
-    session_log.record(TurnFailed(error="boom before any request", started_seq=started.seq))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
+    started = recorded(session_log, TurnStarted(entry="spa", chars=20, session_id=SESSION_A, prompt_excerpt=None))
+    session_log.record(TurnFailed(error="boom before any request", started_seq=started.seq, prompt_excerpt=None))
     events = session_log.events()
 
     store = FakeStepStore(runs=[RunRecord(run_id="run-other", conversation_id=SESSION_B, started_at=_clock())])
@@ -544,7 +531,7 @@ async def test_a_turn_cut_off_before_any_run_still_titles_the_session_with_its_o
     the session log had kept only the prompt's length.
     """
     session_log = SessionLog(tmp_path / "session-log.jsonl", clock=_clock, topics=None)
-    session_log.record(SessionStarted(session_id=SESSION_A))
+    session_log.record(SessionStarted(session_id=SESSION_A, session_kind="chat"))
     started = recorded(session_log, TurnStarted(entry="spa", chars=1731, session_id=SESSION_A, prompt_excerpt="adapt wf.research-compound"))
     session_log.record(TurnAbandoned(started_seq=started.seq))
     events = session_log.events()

@@ -128,37 +128,6 @@ def load_knowledge_base_schema_or_fail(knowledge_base_path: Path) -> kb.Knowledg
         _fail(str(exc))
 
 
-def _warn_vault_alias(value: str | None) -> str | None:
-    """The `--vault` callback: warn on stderr when the flag carried a value, and pass the value through unchanged."""
-    if value is not None:
-        typer.echo("warning: --vault is deprecated, use --knowledge-base", err=True)
-    return value
-
-
-def vault_option() -> str | None:
-    """The hidden, deprecated `--vault` option, to pair with `resolve_knowledge_base_alias`.
-
-    It warns on stderr only when `--vault` itself was used, never for `--knowledge-base`.
-
-    Returns:
-        The Typer option, whose value is the path given or `None`.
-    """
-    return typer.Option(default=None, hidden=True, callback=_warn_vault_alias, help="Deprecated, use --knowledge-base.")
-
-
-def resolve_knowledge_base_alias(knowledge_base: str | None, vault: str | None) -> str | None:
-    """Merge a command's `--knowledge-base` and its deprecated `--vault` alias, `--knowledge-base` winning when both are set.
-
-    Args:
-        knowledge_base: The `--knowledge-base` value, or `None`.
-        vault: The `--vault` value, or `None`.
-
-    Returns:
-        `knowledge_base` when it is set, else `vault`.
-    """
-    return knowledge_base if knowledge_base is not None else vault
-
-
 def resolve_partition(explicit: str | None, schema: kb.KnowledgeBaseSchema) -> str:
     """The collection a write goes into: `explicit` when given, else the one the knowledge base's schema declares.
 

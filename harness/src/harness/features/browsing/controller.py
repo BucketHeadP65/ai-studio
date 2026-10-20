@@ -139,7 +139,7 @@ class BrowsingController:
                 workflow: Workflow | None = await session.library.fetch_workflow(workflow_id)
             except (LibraryError, ValidationError):
                 workflow = None
-            return workflow_id, await _trust(evidence, workflow, workflow_id)
+            return workflow_id, await _trust(evidence, workflow)
 
         async def fit(workflow_id: str) -> tuple[str, _JsonObject | None]:
             try:
@@ -219,7 +219,7 @@ class BrowsingController:
         # The report and the graph share one preparation. A second one would mint different step classes.
         ready = prepare(workflow, session.registry)
         evidence = self._evidence
-        trust = await _trust(evidence, workflow, workflow_id)
+        trust = await _trust(evidence, workflow)
         staleness = await _staleness(session, workflow, workflow_id, custom_root(self._self_authoring))
         lineage = await _lineage(session, workflow_id)
         claims = await _claims(evidence, workflow, workflow_id, lineage)
@@ -256,8 +256,6 @@ class BrowsingController:
                 "missing": missing,
                 "brings": sorted(inline_names),
                 "spec_yaml": yaml.safe_dump(workflow.model_dump(mode="json"), sort_keys=False, allow_unicode=True, width=1000),
-                # `basis` distinguishes `unverified` on `none` (nothing ever ran it) from `unverified`
-                # on `address-only` (evidence here cannot be tied to this workflow).
                 "trust": trust,
                 # `[]` is checked and fresh, and a list names what moved. `null` is unknown (the
                 # workflow carries no stamp), which is a weaker claim than fresh.
@@ -386,20 +384,14 @@ def _intent(card: SavedWorkflow) -> _JsonObject | None:
     return None if card.intent is None else card.intent.model_dump(mode="json")
 
 
-async def _trust(evidence: EvidenceLog, workflow: Workflow | None, workflow_id: str) -> _Trust:
+async def _trust(evidence: EvidenceLog, workflow: Workflow | None) -> _Trust:
     """What this exact workflow has earned by its content address, or nothing when it could not be read."""
-    if workflow is None:
-        record, basis, unconfirmed = trust_level(()), "none", 0
-    else:
-        history = await evidence.history_for(spec_hash=spec_identity(workflow), workflow_id=workflow_id)
-        record, basis, unconfirmed = trust_level(history.matched), history.basis, len(history.legacy)
+    record = trust_level(()) if workflow is None else trust_level(await evidence.history_for(spec_hash=spec_identity(workflow)))
     return {
         "level": record.level,
         "runs_with_evidence": record.runs_with_evidence,
         "failed_runs": record.failed_runs,
         "approved_by": list(record.approved_by),
-        "basis": basis,
-        "unconfirmed": unconfirmed,
         "structural_grades": record.structural_grades,
         "structural_mean": record.structural_mean,
         "structural_last": record.structural_last,

@@ -162,7 +162,7 @@ class RefreshRun(BaseModel):
     trigger: RefreshTrigger = "manual"
     """`manual` for a pass the HTTP route queued, `schedule` for one the ticker queued."""
     counts: RefreshCounts = Field(default_factory=RefreshCounts)
-    """What the refresh brought in. A run stored before the counts existed, and an abandoned run read back from its job, carry zeros."""
+    """What the refresh brought in. An abandoned run read back from its job carries zeros."""
 
 
 def _trigger_of(payload: Mapping[str, JsonValue]) -> RefreshTrigger:
@@ -174,19 +174,16 @@ def _trigger_of(payload: Mapping[str, JsonValue]) -> RefreshTrigger:
 
 
 def _result_of(text: str | None) -> RefreshResult:
-    """A done job's stored result, read as a plain detail when it is not the document a pass writes."""
+    """A done job's stored result, the document a clean pass writes, or an empty result when it stored none."""
     if not text:
         return RefreshResult()
-    try:
-        return RefreshResult.model_validate_json(text)
-    except ValidationError:
-        return RefreshResult(detail=text)
+    return RefreshResult.model_validate_json(text)
 
 
 def refresh_facts(job: Job) -> tuple[RefreshEvent, ...]:
     """The events one job row stands for: a start and its ending, or nothing while the pass is unfinished.
 
-    A `done` job reads as a `RefreshCompleted` carrying the detail and the counts its result holds, or the whole result as the detail when it is plain text.
+    A `done` job reads as a `RefreshCompleted` carrying the detail and the counts its result holds.
     An `abandoned` job reads as a `RefreshAbandoned` carrying its last error.
     A time the job never recorded falls back to an earlier one, so both events always carry a time.
 
@@ -195,6 +192,9 @@ def refresh_facts(job: Job) -> tuple[RefreshEvent, ...]:
 
     Returns:
         The start and its ending, or an empty tuple for a job that is queued, running or waiting to retry.
+
+    Raises:
+        ValidationError: A `done` job's result is not the document a clean pass writes.
     """
     started_at = job.started_at or job.created_at
     trigger = _trigger_of(job.payload)
@@ -274,6 +274,9 @@ def refresh_history(jobs: Sequence[Job], *, limit: int = 20) -> tuple[RefreshRun
 
     Returns:
         The runs, at most `limit` of them.
+
+    Raises:
+        ValidationError: A `done` job's result is not the document a clean pass writes.
     """
     return refresh_runs([fact for job in jobs for fact in refresh_facts(job)], limit=limit)
 

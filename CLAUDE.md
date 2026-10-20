@@ -124,12 +124,19 @@ Docstrings, comments and names are written for a reader who has not read the cod
 7. A CLI command's or HTTP route's docstring is its help text: plain words for the person running it, with no sections. Its parameters are described where the framework reads them, in `typer.Option(help=...)` or in the request model. Every request field with a shape or a constraint has an attribute docstring that states it.
 8. A tool's docstring is what the model reads. It keeps every instruction the model relies on: what the tool does, when to use it, what each argument means and what it refuses.
 9. A public dataclass field or module constant has an attribute docstring when its name and type do not say what it holds.
-10. The contract only. No reasons for the design, no history, no process or paperwork references (no ADR, spec, plan, task, review or wave, not even a bare `ADR-NNNN`), no file paths and no other layers' class names in prose. Reasons live in ADRs. References to other code, such as modules, migration revisions and database roles, are fine. A field kept only for old callers says so as a contract: "Kept for old callers. It must agree with `gate_mode`."
+10. The contract only. No reasons for the design, no history, no process or paperwork references (no ADR, spec, plan, task, review or wave, not even a bare `ADR-NNNN`), no file paths and no other layers' class names in prose. Reasons live in ADRs. References to other code, such as modules, migration revisions and database roles, are fine.
 11. No abstract stand-ins: "the clock", not "what a run measures time with".
 12. Comments follow the same rules and say only what the code cannot. A one-line comment may state what breaks when the code changes ("an unqualified name can resolve into `ag_catalog`"), because that is a fact about the code.
 13. No semicolons, no em dashes and no dash clause breaks in prose. A `noqa` reason is written `# noqa: CODE (why the rule does not apply here)`.
 14. Words are defined once, in the vocabulary (`docs/initiatives/2026-09-02-vocabulary/design.md`). A word is added there before it is used.
 15. These rules do not cover tests.
+
+### No legacy code
+
+No code exists only to cope with something an older version wrote or accepted: no reader for an old stored shape, no
+alias or field kept for old callers, no default that lets an older payload parse. When a shape changes, the same change
+moves existing data forward (a migration, or a one-off script outside the repository) and deletes the old reader. A
+branch that current code still feeds is current behaviour and keeps a plain name.
 
 ### Slices
 

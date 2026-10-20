@@ -12,7 +12,6 @@ from __future__ import annotations
 import math
 
 from collections import defaultdict
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Self
 
 from core.thinking import Thinking
@@ -23,7 +22,7 @@ from engram.evals.paired_comparison.exceptions import RunsNotComparableError
 from engram.evals.tuning.contracts import RetrievalStrategy
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
 INTERVAL_Z = 1.96
 """The normal quantile the 95 percent interval of a paired difference spans on either side of the mean."""
@@ -36,12 +35,7 @@ _MISSING = "missing"
 
 
 class ResultsHeader(BaseModel):
-    """How one evaluation run was set up, as the first line of its results file records it.
-
-    A header written before code mode and the thinking level were recorded reads them as off and unset. One written before
-    `search_date_range` was recorded reads it as the opposite of `pinned_search`, one written before the index build
-    was recorded reads it as None, and one written before the source scoring version was recorded reads it as 1.
-    """
+    """How one evaluation run was set up, as the first line of its results file records it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -49,11 +43,11 @@ class ResultsHeader(BaseModel):
     """The retrieval strategy the agent under test ran under."""
     sql: bool
     """Whether the agent under test had the SQL tools."""
-    code_mode: bool = False
+    code_mode: bool
     """Whether the agent under test drove its tools through the sandboxed `run_code` tool."""
     model: str
     """The model under test, as the run named it."""
-    thinking: Thinking | None = None
+    thinking: Thinking | None
     """The thinking level the model under test was built at, or None for the model's own default."""
     instructions_sha256: str
     """The SHA-256 of the agent's instructions, in hex."""
@@ -71,22 +65,14 @@ class ResultsHeader(BaseModel):
     """The knowledge base the run read."""
     knowledge_base_fingerprint: str
     """The knowledge base's index fingerprint and its name."""
-    index_build: str | None = None
-    """The index build the run read, its indexer version, embedding model, vocabulary and switches, or None, shown as unknown, when unrecorded."""
+    index_build: str
+    """The index build the run read, its indexer version, embedding model, vocabulary and switches."""
     started: str
     """When the run started, as an ISO 8601 time with its offset."""
     source_lookup_error: str | None
     """What the lookup of the cited pages' sources raised, or None when it succeeded or the run mapped no sources."""
-    source_scoring_version: int = 1
-    """The version of the source-level scoring rule the lines were scored under. 1 in a header that did not record it."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _date_range_from_pinning(cls, data: object) -> object:
-        """Read an unrecorded `search_date_range` as the opposite of `pinned_search`, which every older run had."""
-        if isinstance(data, Mapping) and "search_date_range" not in data and "pinned_search" in data:
-            return {**data, "search_date_range": not data["pinned_search"]}
-        return data
+    source_scoring_version: int
+    """The version of the source-level scoring rule the lines were scored under."""
 
 
 class ResultsLine(BaseModel):
@@ -115,9 +101,9 @@ class ResultsLine(BaseModel):
     """The reciprocal rank of the case's first gold id, or None for a case with no gold ids."""
     other_collection: bool
     """Whether a row the case's SQL statements returned from a view of knowledge base content named another knowledge base."""
-    seen_recall: float | None = None
-    """The share of the case's gold sources its tool results named, or None for a case with no gold ids, a run that mapped no
-    sources or a line written before it was recorded."""
+    seen_recall: float | None
+    """The share of the case's gold sources its tool results named, or None for a case with no gold ids or a run that mapped no
+    sources."""
 
 
 class ResultsFile(BaseModel):
@@ -313,8 +299,8 @@ def source_level_retrieval(lines: Iterable[ResultsLine]) -> SourceLevelRetrieval
 
     A line counts when its run mapped its citations to sources and its case has gold ids. A failed case counts with
     the zero scores its line carries, and with the seen recall of what its tool results named before it failed. The
-    seen recall is the mean over the counted lines that carry one, so a results file written before it was recorded has
-    none rather than zero.
+    seen recall is the mean over the counted lines that carry one, so a run whose lines carry none has none rather than
+    zero.
 
     Args:
         lines: The case lines of one run, all of them or any subset.
@@ -436,9 +422,9 @@ def paired_comparison_markdown(comparisons: Sequence[PairedComparison]) -> str:
             "whose citations it mapped to sources and that have gold source ids, a failed case scoring 0. None means the run "
             "scored no case there. The seen recall table gives each run's mean share of the gold sources that any tool result "
             "the model received named, a failed case counting what it saw before it failed, and the mean per-case difference "
-            "over the cases both runs scored. Missing means the run's results file holds no seen recall there, as a file "
-            "written before it was recorded does, never that the run saw nothing. Each run's index build is shown beside "
-            "its knowledge base fingerprint, unknown for a results file written before it was recorded."
+            "over the cases both runs scored. Missing means the run's results file holds no seen recall there, as for a run "
+            "that mapped no sources, never that the run saw nothing. Each run's index build is shown beside its knowledge "
+            "base fingerprint."
         ),
     ]
     for comparison in comparisons:
@@ -682,10 +668,9 @@ def _mean_cells(retrieval: SourceLevelRetrieval | None) -> tuple[str, str, str]:
 def _variant(header: ResultsHeader) -> str:
     """A run's strategy, SQL switch, code mode, thinking level, knowledge base fingerprint and index build, as the report prints them."""
     thinking = f"thinking {header.thinking}" if header.thinking is not None else "no thinking level"
-    index_build = header.index_build if header.index_build is not None else "unknown"
     return (
         f"strategy {header.strategy.value}, SQL {'on' if header.sql else 'off'}, code mode {'on' if header.code_mode else 'off'}, "
-        f"{thinking}, knowledge base {header.knowledge_base_fingerprint}, index build {index_build}"
+        f"{thinking}, knowledge base {header.knowledge_base_fingerprint}, index build {header.index_build}"
     )
 
 

@@ -30,6 +30,7 @@ interface RawSession {
   };
   kind: "chat" | "runner" | "master";
   cost_usd: string;
+  unpriced: number;
   context: {
     used_tokens: number;
     window_tokens: number;
@@ -51,6 +52,7 @@ function sessionFixture(overrides: Partial<RawSession> = {}): RawSession {
     usage: { input_tokens: 10, output_tokens: 20, cache_read_tokens: 0, cache_write_tokens: 0 },
     kind: "chat",
     cost_usd: "0",
+    unpriced: 0,
     context: null,
     ...overrides,
   };
@@ -88,13 +90,6 @@ describe("sessionsApi", () => {
     stubFetch({ sessions: [sessionFixture({ kind: "runner" })] });
     const sessions = await sessionsApi.list();
     expect(sessions[0]?.kind).toBe("runner");
-  });
-
-  it("defaults a legacy session with no kind field to chat", async () => {
-    const { kind, ...withoutKind } = sessionFixture();
-    stubFetch({ sessions: [withoutKind] });
-    const sessions = await sessionsApi.list();
-    expect(sessions[0]?.kind).toBe("chat");
   });
 
   it("parses master kind, cost, and context vitals on a summary", async () => {
@@ -266,6 +261,8 @@ describe("sessionsApi", () => {
         HttpResponse.json({
           runs: [
             {
+              run_title: "",
+              started_at: "",
               session_id: "sess-1",
               workflow_id: "wf.lit-check.v5",
               state: "waiting",
@@ -298,6 +295,8 @@ describe("sessionsApi", () => {
         HttpResponse.json({
           runs: [
             {
+              run_title: "",
+              started_at: "",
               session_id: "sess-1",
               workflow_id: "wf.lit-check.v5",
               state: "running",
@@ -449,6 +448,8 @@ describe("sessionsApi", () => {
     server.use(
       http.get(`${BASE}/api/sessions/sess-1/run/state`, () =>
         HttpResponse.json({
+          auto_approve: false,
+          gate_mode: "wait",
           running: true,
           workflow: "wf.lit-check.v5",
           result: null,
@@ -710,6 +711,8 @@ describe("reconcileRun", () => {
 
   function endedRun(sessionId: string) {
     return {
+      spend: null,
+      result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
       run_id: "run-7",
       workflow_id: "wf.decide.v2",
       run_title: "Decide",

@@ -130,8 +130,7 @@ def _ambient_knowledge_base(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 def _knowledge_base_root(tmp_path: Path) -> Path:
     """A research knowledge base on disk, the shape `KnowledgeBaseSettings` accepts."""
     knowledge_base_root = tmp_path / "knowledge_base"
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
     (knowledge_base_root / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
     return knowledge_base_root
 
@@ -255,8 +254,7 @@ class TestEvalsRun:
 
     def test_an_explicit_knowledge_base_is_the_one_resolved(self, tmp_path: Path):
         named_knowledge_base = tmp_path / "named-knowledge-base"
-        for required in ("Units", "_meta"):
-            (named_knowledge_base / required).mkdir(parents=True)
+        (named_knowledge_base / "_meta").mkdir(parents=True)
         (named_knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         dataset_path = _write_golden(tmp_path)
 
@@ -1480,7 +1478,7 @@ def _resolver_container(tmp_path: Path) -> ContainerResolver:
 
     `_factory`'s `build()` deliberately returns `object` (the `ctx.obj` contract); helper-level tests
     call `_default_run_instructions` directly, so they hand it the same `Resolver` adapter the
-    commands build. Building it also materialises the knowledge base's `Memory/` + `_meta/` directories the
+    commands build. Building it also materialises the knowledge base's schema file and the `_meta/` folder the
     active-policy file lives in.
     """
     from studio.knowledge_base.container import create_container
@@ -1561,7 +1559,7 @@ class TestRollbackPolicyCli:
         knowledge_base = tmp_path / "pkb"
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "A"}), knowledge_base_path=knowledge_base)
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "B"}), knowledge_base_path=knowledge_base)
-        (knowledge_base / "Units").mkdir(parents=True, exist_ok=True)
+        knowledge_base.mkdir(parents=True, exist_ok=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
 
         result = runner.invoke(app, ["evals", "rollback-policy", "--knowledge-base", str(knowledge_base)], obj=_RollbackFactory())
@@ -1572,7 +1570,6 @@ class TestRollbackPolicyCli:
 
     def test_rollback_without_history_exits_cleanly(self, tmp_path: Path):
         empty = tmp_path / "empty"
-        (empty / "Units").mkdir(parents=True)
         (empty / "_meta").mkdir(parents=True)
         (empty / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
 
@@ -1585,7 +1582,7 @@ class TestRollbackPolicyCli:
         knowledge_base = tmp_path / "alpha"
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "A"}), knowledge_base_path=knowledge_base)
         apply_retrieval_policy(baseline_policy().model_copy(update={"instructions": "B"}), knowledge_base_path=knowledge_base)
-        (knowledge_base / "Units").mkdir(parents=True, exist_ok=True)
+        knowledge_base.mkdir(parents=True, exist_ok=True)
         # slug "alpha" (not the research template's own) so the announced identity is this test's,
         # proving the banner reads the flag knowledge base's own spec, not some other one.
         (knowledge_base / "knowledge-base-schema.json").write_text(
@@ -1657,24 +1654,27 @@ class TestImportJudgmentsCli:
 
 
 def _write_results_file(
-    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int | None = None, scored: bool = False
+    path: Path, *, strict: tuple[bool, ...], model: str = "test-model", source_scoring_version: int = SOURCE_SCORING_VERSION, scored: bool = False
 ) -> None:
     header: dict[str, object] = {
         "strategy": "search-hybrid",
         "sql": False,
+        "code_mode": False,
         "model": model,
+        "thinking": None,
         "instructions_sha256": "a" * 64,
         "max_tool_calls": 8,
         "pinned_search": True,
+        "search_date_range": True,
         "dataset": "sample",
         "dataset_sha256": "b" * 64,
         "collection": "notes",
         "knowledge_base_fingerprint": "hash:notes",
+        "index_build": "7+500-1000 test-embedding",
         "started": "2026-10-13T09:00:00+00:00",
         "source_lookup_error": None,
+        "source_scoring_version": source_scoring_version,
     }
-    if source_scoring_version is not None:
-        header["source_scoring_version"] = source_scoring_version
     lines = [
         {
             "case": f"c{index}",
@@ -1690,6 +1690,9 @@ def _write_results_file(
             "recall@10": 1.0 if scored else None,
             "mrr": 1.0 if scored else None,
             "other_collection": False,
+            "transient": False,
+            "seen_recall": None,
+            "seen_gold": None,
         }
         for index, correct in enumerate(strict)
     ]
@@ -1742,8 +1745,8 @@ class TestCompareCli:
 
     def test_runs_scored_under_different_source_scoring_versions_are_refused_saying_which_to_run_again(self, tmp_path: Path):
         older, newer = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
-        _write_results_file(older, strict=(True, False), scored=True)
-        _write_results_file(newer, strict=(True, True), scored=True, source_scoring_version=SOURCE_SCORING_VERSION)
+        _write_results_file(older, strict=(True, False), scored=True, source_scoring_version=1)
+        _write_results_file(newer, strict=(True, True), scored=True)
         out = tmp_path / "compare.md"
 
         result = runner.invoke(app, ["evals", "compare", "--pair", f"{older},{newer}", "--out", str(out)])
@@ -1884,7 +1887,7 @@ class TestScoreCli:
     @staticmethod
     def _invoke(tmp_path: Path, handler: RecordingCommandHandler | _FailingHandler, *extra: str) -> Result:
         knowledge_base = tmp_path / "research"
-        (knowledge_base / "Units").mkdir(parents=True)
+        knowledge_base.mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         bus = MessageBus({ScoreDataset: handler}, {})
         arguments = ["evals", "score", "--dataset", "set.yaml", "--out", str(tmp_path / "scores"), "--knowledge-base", str(knowledge_base)]
@@ -1974,7 +1977,7 @@ class TestCheckGeneratorCli:
     @staticmethod
     def _invoke(tmp_path: Path, handler: RecordingCommandHandler | _RefusingHandler) -> Result:
         knowledge_base = tmp_path / "research"
-        (knowledge_base / "Units").mkdir(parents=True)
+        knowledge_base.mkdir(parents=True)
         (knowledge_base / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
         bus = MessageBus({CheckGenerator: handler}, {})
         arguments = [

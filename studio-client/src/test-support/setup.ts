@@ -5,6 +5,7 @@
 import "@testing-library/jest-dom/vitest";
 
 import { installTestLifecycle } from "client-core/test-support/setup";
+import { afterEach } from "vitest";
 
 import { server } from "./msw/server";
 
@@ -12,6 +13,19 @@ import { server } from "./msw/server";
 // listen/reset/close with onUnhandledFrame:"error") lives in client-core. The
 // MSW server instance + its handlers stay app-local.
 installTestLifecycle(server);
+
+// MSW answers 500 when a handler throws, so an `expect` inside a handler would fail only the request,
+// never the test. Every exception a handler raises fails the test it ran in.
+const handlerExceptions: unknown[] = [];
+server.events.on("unhandledException", ({ error }) => {
+  handlerExceptions.push(error);
+});
+afterEach(() => {
+  const raised = handlerExceptions.splice(0);
+  if (raised.length > 0) {
+    throw raised[0];
+  }
+});
 
 // React Flow (@xyflow/react) needs a handful of browser APIs jsdom lacks —
 // this is xyflow's own documented test shim. ResizeObserver fires its callback

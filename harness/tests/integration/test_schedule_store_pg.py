@@ -59,7 +59,7 @@ async def test_insert_then_get_round_trips(store: PostgresSchedules) -> None:
     assert fetched.cadence == "every 30m"
     assert fetched.enabled is True
     assert fetched.gate_policy == "wait"
-    assert fetched.auto_approve_gates is False
+    assert fetched.gate_mode == "wait"
     assert fetched.session_id == ""
     assert fetched.last_outcome == ""
 

@@ -45,7 +45,6 @@ const KNOWLEDGE_BASES = {
 // instead of its own heading.
 const KNOWLEDGE_BASE_DETAIL = {
   ...KNOWLEDGE_BASES.knowledge_bases[0],
-  sources_connector: null,
   sources_connectors: [],
   watch_list: [],
   validation: [],
@@ -71,6 +70,7 @@ const NEW_SESSION = {
   usage: usage(),
   kind: "chat",
   cost_usd: "0",
+  unpriced: 0,
   context: null,
 };
 
@@ -108,7 +108,7 @@ async function mockApi(page: Page) {
     }
     if (url.pathname === "/api/sessions/m-1") {
       return json(route, {
-        session: { ...NEW_SESSION, id: "m-1", kind: "master", cost_usd: "0", context: null },
+        session: { ...NEW_SESSION, id: "m-1", kind: "master", cost_usd: "0", unpriced: 0, context: null },
         turns: [],
       });
     }
@@ -118,6 +118,8 @@ async function mockApi(page: Page) {
   await page.route("**/api/projects", (route) => json(route, { projects: [] }));
   await page.route("**/api/run/state**", (route) =>
     json(route, {
+      auto_approve: false,
+      gate_mode: "wait",
       running: false,
       workflow: null,
       result: null,

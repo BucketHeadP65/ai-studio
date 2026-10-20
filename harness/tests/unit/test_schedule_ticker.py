@@ -22,6 +22,7 @@ from harness.features.running import service as running_service
 from harness.features.running.contracts import schedule_runner
 from harness.features.running.records import RunCollaborators
 from harness.features.scheduling.domain import Schedule, ScheduleUpdate
+from harness.features.scheduling.exceptions import ScheduleSettingInvalidError
 from harness.features.scheduling.service import CAUGHT_UP_OUTCOME, ENGINE_UNREACHABLE_OUTCOME, MISSED_OUTCOME, Scheduler
 from harness.session import NoSessionLog, Runtime, SessionPool
 from harness.settings import RunSettings
@@ -194,6 +195,69 @@ async def test_a_fire_that_cannot_reach_the_engine_is_stamped_rather_than_lost(r
     assert session.active.task is None, "nothing was launched"
 
 
+async def test_an_orchestrate_schedule_is_refused_when_saved_on_temporal(registry: StepRegistry) -> None:
+    schedules = FakeSchedules()
+
+    with pytest.raises(ScheduleSettingInvalidError, match="Temporal, where an orchestrated gate"):
+        await Scheduler(schedules, schedules, FakeBroadcaster()).create_schedule(
+            FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}),
+            registry,
+            workflow_id="wf-sales",
+            arguments={"quarter": "Q1"},
+            cadence="every 30m",
+            gate_policy="wait",
+            gate_mode="orchestrate",
+            capacity_key=None,
+            capacity_limit=None,
+            blackout=None,
+            catch_up=False,
+            names=None,
+            now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+            run_engine="temporal",
+        )
+
+    assert await schedules.list_all() == [], "a refused schedule is never stored"
+
+
+async def test_changing_a_schedule_to_orchestrate_is_refused_on_temporal(registry: StepRegistry) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule()
+    await schedules.insert(schedule)
+
+    with pytest.raises(ScheduleSettingInvalidError, match="wait or auto"):
+        await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+            FakeWorkflowStore(), registry, schedule.id, ScheduleUpdate(gate_mode="orchestrate"), names=None, run_engine="temporal"
+        )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.gate_mode == "wait"
+
+
+async def test_an_orchestrate_schedule_already_stored_on_temporal_is_stamped_refused_rather_than_raising(registry: StepRegistry, tmp_path: Path) -> None:
+    """A schedule saved before the refusal existed fires into a stamped refusal, never an error out of the fire."""
+    records = records_under(tmp_path)
+    store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
+    pool = SessionPool(_runtime(registry, store))
+    schedules = FakeSchedules()
+    schedule = _schedule(gate_mode="orchestrate")
+    await schedules.insert(schedule)
+    now = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    on_temporal = RunCollaborators(records=records, topics=FakeBroadcaster(), run_settings=RunSettings(run_engine="temporal"))
+
+    outcome = await Scheduler(schedules, schedules, FakeBroadcaster()).run_now(pool, schedule.id, run=on_temporal, now=now)
+
+    assert outcome.startswith("refused: ")
+    assert "Temporal" in outcome
+    assert outcome.endswith("Save the schedule in wait or auto mode.")
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.last_outcome == outcome
+    assert after.next_run_at == now + timedelta(minutes=30)
+    session = await pool.get(after.session_id)
+    assert session.active.task is None, "nothing was launched"
+
+
 async def test_a_due_schedule_launches_once_and_restamps(registry: StepRegistry, tmp_path: Path) -> None:
     records = records_under(tmp_path)
     store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
@@ -262,13 +326,13 @@ async def test_a_schedule_fires_the_newest_live_version_of_its_workflow(registry
     await _settle(session.active.task)
 
 
-async def test_a_schedules_own_auto_approve_gates_crosses_the_gate_unattended(registry: StepRegistry, quarterly_report: Workflow, tmp_path: Path) -> None:
+async def test_a_schedules_own_auto_gate_mode_crosses_the_gate_unattended(registry: StepRegistry, quarterly_report: Workflow, tmp_path: Path) -> None:
     """A schedule's own setting reaches the session: nobody is watching a cron fire."""
     records = records_under(tmp_path)
     store = FakeWorkflowStore(specs={"wf.gated": quarterly_report})
     pool = SessionPool(_runtime(registry, store))
     schedules = FakeSchedules()
-    schedule = _schedule(workflow_id="wf.gated", auto_approve_gates=True)
+    schedule = _schedule(workflow_id="wf.gated", gate_mode="auto")
     await schedules.insert(schedule)
 
     await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=RunCollaborators(records=records, topics=FakeBroadcaster(), run_settings=RunSettings()), now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
@@ -276,7 +340,7 @@ async def test_a_schedules_own_auto_approve_gates_crosses_the_gate_unattended(re
     after = await schedules.get(schedule.id)
     assert after is not None
     session = await pool.get(after.session_id)
-    assert session.active.auto_approve is True
+    assert session.active.gate_mode == "auto"
     task = session.active.task
     assert task is not None
     await task
@@ -379,7 +443,7 @@ async def test_turning_a_schedule_off_stamps_its_pause_with_the_schedulers_clock
     paused = datetime(2026, 8, 25, 9, 0, tzinfo=UTC)
 
     await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
-        FakeWorkflowStore(), registry, schedule.id, ScheduleUpdate(enabled=False), names=None, now=paused
+        FakeWorkflowStore(), registry, schedule.id, ScheduleUpdate(enabled=False), names=None, run_engine="in_process", now=paused
     )
 
     after = await schedules.get(schedule.id)

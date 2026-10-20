@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from core.cqrs.contracts import Broadcaster
 
 from harness.adapters.wiring import session_log
-from harness.domain.events import ConversationForgotten
 from harness.settings import StateSettings
 from tests.support.fakes.topics import FakeListener, FakeNotifier
 
@@ -29,13 +28,14 @@ def test_the_session_log_factory_creates_its_home(tmp_path: Path) -> None:
     assert home.is_dir()
 
 
-def test_the_session_log_factory_opens_the_log_with_the_forgotten_marker(tmp_path: Path) -> None:
-    """The boot sweep migrates a marker an older process left, which needs the path at construction."""
+def test_the_session_log_factory_reads_no_forgotten_at_file(tmp_path: Path) -> None:
+    """A Forget is a session log entry naming its session. A `forgotten-at` file in the state folder is not read."""
     state = StateSettings(home=tmp_path / "state")
     log = session_log(state, _a_channel())
-    state.forgotten_marker.write_text("2026-09-01T10:00:00+00:00", encoding="utf-8")
+    marker = state.home / "forgotten-at"
+    marker.write_text("2026-09-01T10:00:00+00:00", encoding="utf-8")
 
     log.boot_sweep()
 
-    assert [type(record.event) for record in log.events()] == [ConversationForgotten]
-    assert not state.forgotten_marker.exists(), "the marker is deleted once the log carries the boundary"
+    assert log.events() == ()
+    assert marker.exists()

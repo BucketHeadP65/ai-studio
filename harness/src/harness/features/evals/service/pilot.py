@@ -216,8 +216,8 @@ class ArchivedRunOutcomeQueries:
             workflow_design=workflow_design(record, intent),
             evidence_support=evidence_support(record),
             task_success=task_success(result, case.labels),
-            observed_result=result.summary if result is not None else None,
-            artifact_refs=result.artifacts if result is not None else (),
+            observed_result=result.summary,
+            artifact_refs=result.artifacts,
             usage=self.usage_of(run_id),
         )
 
@@ -311,11 +311,11 @@ class WorkflowAutomationTaskRunner:
             raise EvaluationError(msg, usage=recorded_usage(self.spend, trial.run_id))
         result = record.result
         return WorkflowAutomationExecution(
-            output=result.summary if result is not None else "",
+            output=result.summary,
             usage=recorded_usage(self.spend, trial.run_id),
             diagnostics=(
                 DiagnosticObservation(code="execution_outcome", detail=record.outcome),
-                DiagnosticObservation(code="checked_outcome", detail=result.status if result is not None else "absent"),
+                DiagnosticObservation(code="checked_outcome", detail=result.status),
             ),
             run_id=trial.run_id,
             trial_id=trial.trial_id,

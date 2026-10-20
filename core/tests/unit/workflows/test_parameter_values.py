@@ -99,7 +99,7 @@ def test_a_string_schema_keeps_a_string_that_looks_like_something_else() -> None
 
 
 @pytest.mark.parametrize(
-    ("parameter", "legacy", "decoded"),
+    ("parameter", "text", "decoded"),
     [
         ("include_rejected", "true", True),
         ("options_wanted", "4", 4),
@@ -107,8 +107,8 @@ def test_a_string_schema_keeps_a_string_that_looks_like_something_else() -> None
         ("budget", '{"amount": 10, "currency": "EUR"}', {"amount": 10, "currency": "EUR"}),
     ],
 )
-def test_a_legacy_string_under_a_non_string_schema_decodes_once(parameter: str, legacy: str, decoded: object) -> None:
-    supplied = {"question": "Which cache?", "knowledge_bases": ["research"], parameter: legacy}
+def test_a_string_under_a_non_string_schema_decodes_once(parameter: str, text: str, decoded: object) -> None:
+    supplied = {"question": "Which cache?", "knowledge_bases": ["research"], parameter: text}
 
     assert normalize_arguments(_brief(), supplied)[parameter] == decoded
 

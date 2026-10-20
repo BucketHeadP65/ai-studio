@@ -240,24 +240,7 @@ class TestBodyOnlyEditHappyPath:
 
         await run_incremental(IndexKnowledgeBase(collection="research"), deps=deps)
 
-        assert uow.fingerprint.touch_calls == [("research", "/fake/knowledge_base", deps.spec)]
-
-    async def test_the_re_stamp_carries_the_spec_so_a_live_collection_never_stays_null(self) -> None:
-        """0043's `index_fingerprint.spec` must not wait on a full rebuild to fill in.
-
-        A collection that never runs a full rebuild again (an unchanged knowledge base, incremental
-        forever) would otherwise keep `spec` NULL past the migration that added the column --
-        `touch` re-stamps it every incremental run too, from the same spec the fingerprint match
-        already proved is current.
-        """
-        uow = FakeKnowledgeBaseUnitOfWork()
-        deps = _build_deps(uow, paper_body=_PAPER_BODY_V2)
-
-        await run_incremental(IndexKnowledgeBase(collection="research"), deps=deps)
-
-        assert len(uow.fingerprint.touch_calls) == 1
-        _collection, _knowledge_base_root, spec = uow.fingerprint.touch_calls[0]
-        assert spec == deps.spec
+        assert uow.fingerprint.touch_calls == [("research", "/fake/knowledge_base")]
 
     async def test_page_type_contracts_are_written_on_a_body_only_edit_too(self) -> None:
         """The spec is always parsed, so an incremental run keeps the page-type contracts current, not only a full rebuild."""

@@ -192,13 +192,6 @@ def test_a_graded_outcome_surfaces_the_rework_the_archived_run_recorded() -> Non
     assert "4 rework(s)" in outcome.task_success.reason
 
 
-def test_a_run_that_recorded_no_checked_outcome_is_unknown_rather_than_anything_else() -> None:
-    record = an_archived_run(result=None)
-    assert task_success(record.result, _case().labels).status == "unknown"
-    assert structural_validity(record).status == "unknown"
-    assert evidence_support(record).status == "unknown"
-
-
 @pytest.mark.parametrize(
     ("record", "expected"),
     [

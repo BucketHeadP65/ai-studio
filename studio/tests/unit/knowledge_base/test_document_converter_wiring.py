@@ -59,8 +59,7 @@ def _spec(connector: str, *, slug: str = "test-knowledge-base") -> KnowledgeBase
 
 
 def _application_settings(knowledge_base_root: Path, *, spec_json: str | None = None) -> ApplicationSettings:
-    for required in ("Units", "_meta"):
-        (knowledge_base_root / required).mkdir(parents=True, exist_ok=True)
+    (knowledge_base_root / "_meta").mkdir(parents=True, exist_ok=True)
     if spec_json is not None:
         (knowledge_base_root / "knowledge-base-schema.json").write_text(spec_json, encoding="utf-8")
     return ApplicationSettings(sources=SourceSettings({"zotero": {"data_dir": str(knowledge_base_root)}}))

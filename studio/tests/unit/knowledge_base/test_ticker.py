@@ -95,9 +95,9 @@ class TestIsDue:
 
 
 def _knowledge_base_dir(path: Path) -> Path:
-    """A minimal knowledge base tree satisfying `KnowledgeBaseEntry.path` validation (the legacy `Units/`+`_meta/` shape)."""
-    for sub in ("Units", "_meta"):
-        (path / sub).mkdir(parents=True, exist_ok=True)
+    """A minimal knowledge base tree satisfying `KnowledgeBaseEntry.path` validation."""
+    (path / "_meta").mkdir(parents=True, exist_ok=True)
+    (path / "knowledge-base-schema.json").write_text("{}", encoding="utf-8")
     return path
 
 

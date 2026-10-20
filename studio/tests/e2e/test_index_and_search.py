@@ -118,8 +118,8 @@ LightRAG consistently outperforms GraphRAG, particularly in larger datasets with
 def _build_knowledge_base(root: Path) -> Path:
     """Lay down the mini knowledge base (paper + entity + mirror + registries + meta stubs)."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "lightrag-2025", _PAPER)
-    builder.add_unit_document("Entities", "lightrag", _ENTITY)
+    builder.add_unit_document("Wiki/Papers", "lightrag-2025", _PAPER)
+    builder.add_unit_document("Wiki/Entities", "lightrag", _ENTITY)
     builder.add_source_mirror("lightrag-2025", _MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
@@ -131,7 +131,7 @@ class _Factory:
     """A `ctx.obj` container factory whose `MessageBus` runs a real-PG, fake-embed handler."""
 
     def __init__(self, engine: AsyncEngine, knowledge_base: Path) -> None:
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
         handler = IndexKnowledgeBaseHandler(
             self._reader,
             FakeEmbedding(),  # the ONLY fake — real reader + real PG UoW + real dashboard writer
@@ -307,7 +307,7 @@ class TestIncrementalIndex:
         assert runner.invoke(app, ["index", "--knowledge-base", str(knowledge_base)], obj=_Factory(engine, knowledge_base)).exit_code == 0
 
         # Edit one note's body in place, then a bare `index` (incremental by default).
-        (knowledge_base / "Units" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
+        (knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
         incremental = runner.invoke(app, ["index", "--knowledge-base", str(knowledge_base)], obj=_Factory(engine, knowledge_base))
 
         assert incremental.exit_code == 0, incremental.stdout
@@ -322,7 +322,7 @@ class TestIncrementalIndex:
         assert first.exit_code == 0, first.stdout
         full_embedded = _embedded_count(first.stdout)
 
-        (knowledge_base / "Units" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
+        (knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
         incremental = runner.invoke(app, ["index", "--knowledge-base", str(knowledge_base)], obj=_Factory(engine, knowledge_base))
 
         assert incremental.exit_code == 0, incremental.stdout
@@ -338,7 +338,7 @@ class TestIncrementalIndex:
     def test_full_index_after_incremental_reproduces_an_identical_db(self, engine: AsyncEngine, tmp_path: Path):
         knowledge_base = _build_knowledge_base(tmp_path)
         assert runner.invoke(app, ["index", "--knowledge-base", str(knowledge_base)], obj=_Factory(engine, knowledge_base)).exit_code == 0
-        (knowledge_base / "Units" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
+        (knowledge_base / "Wiki" / "Papers" / "lightrag-2025.md").write_text(_PAPER_EDITED, encoding="utf-8")
         assert runner.invoke(app, ["index", "--knowledge-base", str(knowledge_base)], obj=_Factory(engine, knowledge_base)).exit_code == 0
 
         counts_after_incremental = {table: _count(engine, table) for table in _PARITY_TABLES}
@@ -386,7 +386,7 @@ class _ServeFactory:
         self._gateway = ReadOnlySqlGateway(self.engine)
         self._embedder = FakeEmbedding()
         self._admin_gateway = AdminSqlGateway(admin_engine)  # the identity announce's read, over the same migrated DB
-        self._reader = FilesystemKnowledgeBaseReader(knowledge_base)
+        self._reader = FilesystemKnowledgeBaseReader(knowledge_base, note_folders=load_knowledge_base_schema(knowledge_base).note_folders)
 
     def __call__(self) -> _ServeContainer:
         return _ServeContainer(self._gateway, self._embedder, self._admin_gateway, self._reader)

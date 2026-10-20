@@ -108,13 +108,13 @@ class SchedulingController:
                 cadence=body.cadence,
                 gate_policy=body.gate_policy,
                 gate_mode=body.gate_mode,
-                auto_approve_gates=body.auto_approve_gates,
                 capacity_key=body.capacity_key,
                 capacity_limit=body.capacity_limit,
                 blackout=body.blackout,
                 catch_up=body.catch_up,
                 names=self._run.knowledge_bases,
                 now=datetime.now(UTC),
+                run_engine=self._run.run_settings.run_engine,
             )
         except (WorkflowUnavailableError, WorkflowNotRunnableError, WorkflowParametersMissingError, ScheduleSettingInvalidError) as exc:
             return _refusal(exc)
@@ -133,6 +133,7 @@ class SchedulingController:
                 schedule_id,
                 ScheduleUpdate(**body.model_dump()),
                 names=self._run.knowledge_bases,
+                run_engine=self._run.run_settings.run_engine,
             )
         except (ScheduleNotFoundError, WorkflowUnavailableError, WorkflowNotRunnableError, WorkflowParametersMissingError, ScheduleSettingInvalidError) as exc:
             return _refusal(exc)

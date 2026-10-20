@@ -8,7 +8,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.cag-2024
-    kind: comparative
     difficulty: medium
   expected_output:
     answer: 'CAG wins when the whole corpus fits inside the model''s effective context:
@@ -26,7 +25,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.gepa-2025
-    kind: benchmark
     difficulty: medium
   expected_output:
     answer: Yes. As an inference-time search strategy, GEPA lifts GPT-4o on AMD-NPU
@@ -42,7 +40,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.gnn-rag-2024
-    kind: factual
     difficulty: medium
   expected_output:
     answer: No. Augmenting all three retrievers (GNN, GNN+SR, and RoG paths) does
@@ -57,7 +54,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.msrs-2025
-    kind: factual
     difficulty: easy
   expected_output:
     answer: 'Multi-source retrieval-augmented generation: retrieving complementary
@@ -74,7 +70,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.horma-2026
-    kind: factual
     difficulty: medium
   expected_output:
     answer: Yes. Augmenting a plain embedding-similarity retriever with HORMA's structured
@@ -89,7 +84,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.simgrag-2024
-    kind: factual
     difficulty: hard
   expected_output:
     answer: 'It is training-free: an LLM rewrites the query into a graph pattern,
@@ -105,7 +99,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.search-r1-2025
-    kind: factual
     difficulty: easy
   expected_output:
     answer: 'With reinforcement learning: it trains the model to reason while interleaving
@@ -120,7 +113,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.hypergraphrag-2025
-    kind: factual
     difficulty: medium
   expected_output:
     answer: A knowledge hypergraph of n-ary relational facts. Given a query it bidirectionally
@@ -136,7 +128,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.graph-rag-survey-2025
-    kind: synthesis
     difficulty: easy
   expected_output:
     answer: The survey 'When to use Graphs in RAG' provides a comprehensive analysis
@@ -151,7 +142,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.leanrag-2025
-    kind: factual
     difficulty: medium
   expected_output:
     answer: Semantic aggregation together with hierarchical retrieval over the knowledge
@@ -165,7 +155,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.kag-2024
-    kind: factual
     difficulty: easy
   expected_output:
     answer: Boosting LLMs in professional domains via knowledge-augmented generation
@@ -179,7 +168,6 @@ cases:
     task: null
   metadata:
     anchor_page_id: paper.graphr1-2025
-    kind: factual
     difficulty: medium
   expected_output:
     answer: An agentic GraphRAG framework trained end-to-end with reinforcement learning.

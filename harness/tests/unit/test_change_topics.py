@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 
 from harness.adapters import topics
 from harness.adapters.session_log import SessionLog
-from harness.domain.events import Booted, TurnStarted
+from harness.domain.events import Booted, TurnSettled, TurnStarted
 from harness.features.running.domain.progress import LiveProgress, RunTopics, Watchers
 from harness.features.running.records import RunCollaborators
 from harness.features.scheduling.service import Scheduler
@@ -126,13 +126,13 @@ class TestJournalTopics:
     def test_an_event_naming_a_session_announces_that_session_too(self, tmp_path: Path) -> None:
         channel = FakeBroadcaster()
         session_log = SessionLog(tmp_path / "session-log.jsonl", topics=channel)
-        session_log.record(TurnStarted(entry="spa", chars=5, session_id="s-1"))
+        session_log.record(TurnStarted(entry="spa", chars=5, session_id="s-1", prompt_excerpt=None))
         assert channel.published == ["sessions", "session.s-1"]
 
     def test_an_event_whose_session_is_unknown_announces_the_list_only(self, tmp_path: Path) -> None:
         channel = FakeBroadcaster()
         session_log = SessionLog(tmp_path / "session-log.jsonl", topics=channel)
-        session_log.record(TurnStarted(entry="spa", chars=5))
+        session_log.record(TurnSettled(run_id=None, started_seq=1))
         assert channel.published == ["sessions"]
 
     def test_a_log_over_the_installed_broadcaster_announces_through_it(self, tmp_path: Path, broadcaster: Broadcaster) -> None:

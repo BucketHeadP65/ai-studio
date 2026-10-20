@@ -123,6 +123,7 @@ async def test_a_completed_reuse_writes_one_evidence_record_and_one_grade_sharin
     evidence_records = [event for event in events if isinstance(event, RunEvidence)]
     grades = [event for event in events if isinstance(event, Grade)]
     assert [evidence_record.outcome for evidence_record in evidence_records] == ["completed"]
+    assert evidence_records[0].result.status == "unknown", "the proof runs the graph directly and checks no outcome"
     assert len(grades) == 1
     assert grades[0].spec_hash == evidence_records[0].spec_hash
     assert grades[0].graded_run_at == evidence_records[0].at

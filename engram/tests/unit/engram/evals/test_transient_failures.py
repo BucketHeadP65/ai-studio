@@ -27,12 +27,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import DBAPIError
 
-from engram.evals.harness.transient_failures import (
-    TRANSIENT_MODEL_MESSAGES,
-    TRANSIENT_STATUS_CODES,
-    is_transient_error_text,
-    is_transient_failure,
-)
+from engram.evals.harness.transient_failures import TRANSIENT_MODEL_MESSAGES, TRANSIENT_STATUS_CODES, is_transient_failure
 
 
 def test_the_rule_names_429_and_every_server_error() -> None:
@@ -123,71 +118,6 @@ def test_a_tool_call_limit_a_refusal_and_every_other_error_is_not_transient(erro
     assert is_transient_failure(error) is False
 
 
-@pytest.mark.parametrize("error", [*_TRANSIENT, *_KEPT, *_DATABASE_TRANSIENT, *_DATABASE_KEPT], ids=repr)
-def test_the_error_text_a_case_records_reads_the_same_way_as_the_error(error: BaseException) -> None:
-    recorded = f"{type(error).__name__}: {error}"
-
-    assert is_transient_error_text(recorded) is is_transient_failure(error)
-
-
-@pytest.mark.parametrize(
-    ("text", "transient"),
-    [
-        ("ModelAPIError: Connection error.", True),
-        ("ModelAPIError: Request timed out.", True),
-        ("ModelHTTPError: status_code: 429, model_name: deployment-a, body: None", True),
-        ("ModelHTTPError: status_code: 502, model_name: deployment-a, body: None", True),
-        ("ModelHTTPError: status_code: 401, model_name: deployment-a, body: None", False),
-        ("UsageLimitExceeded: The next tool call(s) would exceed the tool_calls_limit of 2 (tool_calls=3).", False),
-        ("RuntimeError: Connection error.", False),
-        ("ModelAPIError: Connection error. Retry later.", False),
-        ("ConnectionRefusedError: [Errno 61] Connect call failed ('127.0.0.1', 5434)", True),
-        ("OSError: [Errno 28] No space left on device", False),
-        ("OSError: Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 2] No such file or directory", False),
-        (
-            (
-                "ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.PostgresSyntaxError'>: "
-                'syntax error at or near "SELEC"'
-            ),
-            False,
-        ),
-        (
-            (
-                "DBAPIError: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.QueryCanceledError'>: "
-                "canceling statement due to statement timeout"
-            ),
-            False,
-        ),
-        ("", False),
-        (None, False),
-    ],
-)
-def test_an_older_line_reads_its_error_text(text: str | None, transient: bool) -> None:
-    assert is_transient_error_text(text) is transient
-
-
-_OUTAGE_TEXTS = [
-    "OSError: Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 5434)",
-    (
-        "DBAPIError: (sqlalchemy.dialects.postgresql.asyncpg.Error) <class 'asyncpg.exceptions.ConnectionDoesNotExistError'>: connection was "
-        "closed in the middle of operation\n[SQL: SELECT * FROM api.search(query => $1)]\n[parameters: ('regional influence',)]\n"
-        "(Background on this error at: https://sqlalche.me/e/20/dbapi)"
-    ),
-    "CannotConnectNowError: the database system is shutting down",
-]
-
-
-@pytest.mark.parametrize("text", _OUTAGE_TEXTS, ids=["refused on every address", "closed mid-statement", "shutting down"])
-def test_the_error_texts_a_database_outage_leaves_are_transient(text: str) -> None:
-    assert is_transient_error_text(text) is True
-
-
-def test_a_statement_cut_off_by_a_closed_connection_records_the_outage_text() -> None:
-    error = _from_statement(ConnectionDoesNotExistError("connection was closed in the middle of operation"))
-
-    assert f"{type(error).__name__}: {error}" == _OUTAGE_TEXTS[1]
-
-
 class _FailingTransport(httpx2.AsyncBaseTransport):
     """Answers every request with one scripted network error or HTTP status."""
 
@@ -226,4 +156,3 @@ async def test_the_rule_reads_what_the_model_client_raises(transport: _FailingTr
     error = await _model_failure(transport)
 
     assert is_transient_failure(error) is transient
-    assert is_transient_error_text(f"{type(error).__name__}: {error}") is transient

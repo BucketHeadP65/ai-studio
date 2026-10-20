@@ -10,13 +10,14 @@ from __future__ import annotations
 import asyncio
 
 from contextlib import AsyncExitStack
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, NoReturn
 from uuid import UUID
 
 import pytest
 
 from core.ai.history.contracts import ContinuationAttempt, ContinuationUnsafeReplayError
-from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, StepConversationContinuation
+from core.ai.workflows.contracts import DEFAULT_TASK_QUEUE, DurableWorkflowRun, StepConversationContinuation, spec_identity
+from temporalio.client import WorkflowHandle
 
 from harness.adapters.temporal_server import ServerOutcome
 from harness.adapters.wiring import REGISTRATIONS, durable_turns
@@ -29,6 +30,7 @@ from harness.session import NoSessionLog, Runtime
 from harness.settings import HarnessSettings, RunSettings
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.step_store import FakeContinuationCheckpoints, FakeStepStore
+from tests.support.runtime import a_runtime
 from tests.support.state import a_state, records_under
 
 if TYPE_CHECKING:
@@ -48,8 +50,8 @@ def _the_engine_answers_unless_a_test_says_otherwise() -> Iterator[None]:
 
 @pytest.fixture
 def session(registry: StepRegistry, tmp_path: Path) -> Runtime:
-    """A session with no store and no agent, as `test_attestation` builds one: dispatch never reaches them."""
-    return Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", None), session_log=NoSessionLog(), state=a_state(tmp_path))
+    """A session over an empty library and an agent that reaches no model. Dispatch never reaches either."""
+    return a_runtime(registry=registry, session_log=NoSessionLog(), state=a_state(tmp_path))
 
 
 def test_the_default_engine_is_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -105,14 +107,14 @@ async def test_start_hands_the_run_to_temporal_when_selected(session: Runtime, q
     assert started == ["wf.report"]
 
 
-async def test_automode_reaches_the_durable_engine_as_a_request_flag(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+async def test_the_gate_mode_reaches_the_durable_engine_as_it_was_asked(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The same launch on either engine: the run itself decides its gates, and the ledger says so."""
     records = records_under(tmp_path)
     on_temporal = RunSettings(run_engine="temporal")
-    flags: list[bool] = []
+    modes: list[object] = []
 
     async def _fake_launch(_session: Runtime, **kwargs: object) -> None:
-        flags.append(bool(kwargs["auto_approve_gates"]))
+        modes.append(kwargs["gate_mode"])
 
     monkeypatch.setattr(durable, "launch", _fake_launch)
     await service.start(
@@ -123,12 +125,12 @@ async def test_automode_reaches_the_durable_engine_as_a_request_flag(session: Ru
         spec=quarterly_report,
         workflow_id="wf.report",
         params={"quarter": "Q2"},
-        auto_approve_gates=True,
+        gate_mode="auto",
     )
     await service.start(
         session, records=records, topics=FakeBroadcaster(), run=on_temporal, spec=quarterly_report, workflow_id="wf.report", params={"quarter": "Q2"}
     )
-    assert flags == [True, False]
+    assert modes == ["auto", "wait"]
 
 
 async def test_a_durable_launch_leaves_the_session_in_the_mode_it_started_with(session: Runtime, quarterly_report: Workflow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -167,11 +169,10 @@ async def test_a_durable_launch_leaves_the_session_in_the_mode_it_started_with(s
         spec=quarterly_report,
         workflow_id="wf.report",
         params={"quarter": "Q2"},
-        auto_approve_gates=True,
+        gate_mode="auto",
     )
 
     assert session.active.gate_mode == "auto"
-    assert session.active.auto_approve is True
     assert not session.active.paused_by_restart
     assert session.active.run_id == "run-abc"
     spend = records.spend.read("run-abc", "wf.report")
@@ -264,3 +265,32 @@ async def test_a_turn_whose_run_wrote_no_settled_step_is_refused_rather_than_com
 def test_the_process_that_serves_durable_runs_also_holds_the_ledger_their_lines_live_in() -> None:
     """Choosing the durable engine is choosing to carry a multi-turn line in the record rather than in this process."""
     assert durable_turns in REGISTRATIONS
+
+
+class _SilentHandle(WorkflowHandle[DurableWorkflowRun, object]):
+    """A workflow handle whose queries go unanswered, as a closed workflow's do. Built without a client, which no query reaches."""
+
+    def __init__(self) -> None:
+        """Hold nothing: the one call a test makes on this handle raises before it needs a client."""
+
+    async def query(self, *_args: object, **_kwargs: object) -> NoReturn:
+        msg = "no worker answers"
+        raise RuntimeError(msg)
+
+
+async def test_a_durable_runs_evidence_carries_the_content_address_of_the_workflow_it_ran(
+    session: Runtime, quarterly_report: Workflow, tmp_path: Path
+) -> None:
+    """A trust lookup keys on the content address, so a durable run's record must carry it like any other run's."""
+    records = records_under(tmp_path)
+    session.active.workflow_id = "wf.report"
+
+    await durable._record_evidence(
+        session,
+        _SilentHandle(),
+        records=records,
+        ran=durable.DurableRunOutcome(spec=quarterly_report, params={"quarter": "Q2"}, outcome="completed"),
+    )
+
+    (written,) = await records.evidence.events_for("wf.report")
+    assert written.spec_hash == spec_identity(quarterly_report)

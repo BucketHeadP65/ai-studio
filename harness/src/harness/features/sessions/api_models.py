@@ -86,7 +86,7 @@ class FlagView(BaseModel):
     target: str = Field(description="The named thing.")
     note: str = Field(description="What ground.")
     tool_call_id: str | None = Field(description="Offending call, when the flag names one.")
-    source: FlagSource = Field(description="live, or retro for a line the retired pass wrote.")
+    source: FlagSource = Field(description="live: filed by the agent during a turn.")
     created_at: datetime = Field(description="When it was filed.")
 
 

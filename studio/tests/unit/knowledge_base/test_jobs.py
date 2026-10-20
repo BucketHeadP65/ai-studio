@@ -51,8 +51,7 @@ def _one_validation_error() -> ValidationReport:
 
 def _knowledge_base(root: Path) -> Path:
     """A minimal knowledge base tree satisfying `KnowledgeBaseEntry.path` validation."""
-    for sub in ("Units", "_meta"):
-        (root / sub).mkdir(parents=True, exist_ok=True)
+    (root / "_meta").mkdir(parents=True, exist_ok=True)
     return root
 
 

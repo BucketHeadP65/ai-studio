@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from core.ai.decision_models import RequestShape
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -42,18 +42,12 @@ class GraphBackend(StrEnum):
 
 
 def _check_knowledge_base_shape(path: Path) -> None:
-    """Fail fast unless `path` declares a `knowledge-base-schema.json`, or the legacy `Units/` + `_meta/` pair."""
+    """Fail fast unless `path` is a directory holding a `knowledge-base-schema.json`."""
     if not path.is_dir():
         msg = f"knowledge_base.path is not an existing directory: {path}"
         raise ValueError(msg)
-    has_spec = (path / "knowledge-base-schema.json").is_file()
-    missing_legacy = [name for name in ("Units", "_meta") if not (path / name).is_dir()]
-    if not has_spec and missing_legacy:
-        msg = (
-            f"knowledge_base.path {path} matches neither acceptable knowledge base shape: "
-            f"a knowledge-base-schema.json file, or both of the legacy subdirectories Units/ and _meta/ "
-            f"(missing: {', '.join(missing_legacy)})"
-        )
+    if not (path / "knowledge-base-schema.json").is_file():
+        msg = f"knowledge_base.path {path} holds no knowledge-base-schema.json file"
         raise ValueError(msg)
 
 
@@ -136,9 +130,8 @@ class KnowledgeBaseSettings(BaseModel):
 class KnowledgeBaseEntry(BaseModel):
     """A named registry member: a knowledge base root plus a human description.
 
-    `path` carries the same shape validation as `KnowledgeBaseSettings.path` (a `knowledge-base-schema.json`, or the
-    legacy `Units/` + `_meta/` pair), so a registered knowledge base always constructs as the active
-    `KnowledgeBaseSettings`. Frozen: a registry is a mapping of these, replaced whole on edit, never changed in place.
+    `path` carries the same shape validation as `KnowledgeBaseSettings.path` (a `knowledge-base-schema.json` at its
+    root), so a registered knowledge base always constructs as the active `KnowledgeBaseSettings`. Frozen: a registry is a mapping of these, replaced whole on edit, never changed in place.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -150,39 +143,6 @@ class KnowledgeBaseEntry(BaseModel):
     def _check_shape(self) -> KnowledgeBaseEntry:
         _check_knowledge_base_shape(self.path)
         return self
-
-
-def resolve_active_knowledge_base_path(settings: Mapping[str, Any], *, name: str | None = None) -> str:
-    """Read the active knowledge base path out of a raw `application_settings.json` mapping, in the old or the registry shape.
-
-    When `name` is given and `knowledge_bases` holds it, its path wins. Otherwise, when `knowledge_bases` is not
-    empty, the entry whose path matches `knowledge_base.path` wins, then the sole entry when there is exactly one.
-    An old-shape file (no `knowledge_bases`, or an empty one) answers `knowledge_base.path` directly.
-
-    Args:
-        settings: The raw settings mapping, in the old or the registry shape.
-        name: The name of a registered knowledge base to prefer. When `knowledge_bases` does not hold it,
-            the other rules apply unchanged.
-
-    Returns:
-        The active knowledge base path, as written in the settings.
-
-    Raises:
-        ValueError: A registry of several knowledge bases holds neither `name` nor `knowledge_base.path`.
-            Treat it the same as a missing or malformed file, never guess.
-    """
-    knowledge_bases = settings.get("knowledge_bases") or {}
-    if knowledge_bases:
-        if name is not None and name in knowledge_bases:
-            return str(knowledge_bases[name]["path"])
-        active = settings.get("knowledge_base", {}).get("path")
-        if active is not None and any(entry.get("path") == active for entry in knowledge_bases.values()):
-            return str(active)
-        if len(knowledge_bases) == 1:
-            return str(next(iter(knowledge_bases.values()))["path"])
-        msg = f"knowledge_base.path {active!r} names no entry in the knowledge bases registry {sorted(knowledge_bases)}"
-        raise ValueError(msg)
-    return str(settings["knowledge_base"]["path"])
 
 
 class IngestionSettings(BaseModel):

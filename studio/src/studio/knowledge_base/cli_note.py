@@ -28,8 +28,6 @@ from studio.knowledge_base.cli_support import (
     announce_knowledge_base,
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
-    resolve_knowledge_base_alias,
-    vault_option,
 )
 
 if TYPE_CHECKING:
@@ -108,7 +106,6 @@ def note_validate_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root for vocabulary resolution, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
 ) -> None:
     """Validate one note with the same checks `studio index` runs on it, and exit 1 on any error.
 
@@ -116,8 +113,7 @@ def note_validate_cmd(
     anchors and vocabulary. Links to other notes are not checked here. One notice gives their count instead.
     Warnings and that notice are printed and never fail the command.
     """
-    knowledge_base_override = resolve_knowledge_base_alias(knowledge_base, vault)
-    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base_override)
+    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -129,7 +125,7 @@ def note_validate_cmd(
         _fail(f"parse error: {exc}")
 
     report = validate_note(
-        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base_override)
+        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base)
     )
     _print_validation_report(f"validate {note_path.name}", report)
     if report.n_errors > 0:
@@ -159,7 +155,6 @@ def note_build_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root for spec + vocabulary resolution, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
     *,
     verify_quotes: bool = typer.Option(default=False, help="Verify each quote against its source mirror."),
     force: bool = typer.Option(default=False, help="Overwrite an existing file."),
@@ -178,8 +173,7 @@ def note_build_cmd(
         _fail(f"refusing to overwrite {out_path} (pass --force to replace it)")
 
     # Everything up to the write can fail, and a failure leaves no file behind.
-    knowledge_base_override = resolve_knowledge_base_alias(knowledge_base, vault)
-    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(knowledge_base_override)
+    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -187,7 +181,7 @@ def note_build_cmd(
     try:
         data = json.loads(Path(payload).read_text(encoding="utf-8"))
         rendered, note, report = _render_and_validate(
-            data, out_path.name, vocabulary, schema, _path_root(knowledge_base_path, schema), knowledge_base_path_origin(knowledge_base_override)
+            data, out_path.name, vocabulary, schema, _path_root(knowledge_base_path, schema), knowledge_base_path_origin(knowledge_base)
         )
     except (OSError, ValueError) as exc:
         _fail(f"invalid payload: {exc}")
@@ -241,7 +235,6 @@ def note_build_batch_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root for spec + vocabulary resolution, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
     *,
     force: bool = typer.Option(default=False, help="Overwrite existing notes."),
 ) -> None:
@@ -252,8 +245,7 @@ def note_build_batch_cmd(
     that fails writes nothing and is reported. Exits 1 when any entry failed. Nothing is indexed, so run
     `studio index` once afterwards.
     """
-    knowledge_base_override = resolve_knowledge_base_alias(knowledge_base, vault)
-    knowledge_base_path, _ = _resolve_knowledge_base_for_authoring(knowledge_base_override)
+    knowledge_base_path, _ = _resolve_knowledge_base_for_authoring(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -267,7 +259,7 @@ def note_build_batch_cmd(
 
     # Validate every entry before writing any.
     path_root = _path_root(knowledge_base_path, schema)
-    path_root_source = knowledge_base_path_origin(knowledge_base_override)
+    path_root_source = knowledge_base_path_origin(knowledge_base)
     ready: list[tuple[Path, str]] = []
     failures: list[tuple[str, str]] = []
     for index, entry in enumerate(entries):
@@ -296,13 +288,12 @@ def note_verify_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root for spec + mirror resolution, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
 ) -> None:
     """Check each claim's quote against the note's source mirror, and exit 1 on any failure.
 
     The schema and mirrors come from `--knowledge-base`, or from the knowledge base the working directory sits in.
     """
-    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(resolve_knowledge_base_alias(knowledge_base, vault))
+    knowledge_base_path, sources_subdir = _resolve_knowledge_base_for_authoring(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
     note_path = Path(path)
@@ -324,7 +315,6 @@ def note_normalize_cmd(
     knowledge_base: str | None = typer.Option(
         default=None, help="Knowledge base root for spec + vocabulary resolution, defaults to the working directory when it holds a knowledge-base-schema.json."
     ),
-    vault: str | None = vault_option(),
 ) -> None:
     """Merge frontmatter into an existing note in place, keeping its body byte for byte.
 
@@ -334,8 +324,7 @@ def note_normalize_cmd(
     `--knowledge-base`, or from the knowledge base the working directory sits in.
     """
     note_path = Path(path)
-    knowledge_base_override = resolve_knowledge_base_alias(knowledge_base, vault)
-    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base_override)
+    knowledge_base_path = _resolve_knowledge_base_path(knowledge_base)
     announce_knowledge_base(knowledge_base_path)
     vocabulary = _load_vocabulary(knowledge_base_path)
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
@@ -360,7 +349,7 @@ def note_normalize_cmd(
         _fail(f"normalized note does not parse: {exc}")
 
     report = validate_note(
-        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base_override)
+        note, vocabulary, spec=schema, path_root=_path_root(knowledge_base_path, schema), path_root_source=knowledge_base_path_origin(knowledge_base)
     )
     if report.n_errors > 0:
         _print_validation_report(f"normalize {note_path.name}", report)
@@ -372,12 +361,10 @@ def note_normalize_cmd(
 
 @note_app.command(name="schema")
 def note_schema_cmd(
-    ctx: typer.Context,
     page_type: str = typer.Option(..., "--type", help="The page type to emit a JSON schema for."),
     knowledge_base: str = typer.Option(
         default=".", help="Knowledge base root for spec resolution, defaults to '.' (the working directory)."
     ),
-    vault: str | None = vault_option(),
 ) -> None:
     """Print the authoring JSON schema of one page type, and exit 1 on a page type the knowledge base does not have.
 
@@ -385,11 +372,7 @@ def note_schema_cmd(
     `note schema --type recipe --knowledge-base <cooking>` prints the recipe schema of that knowledge base. A
     knowledge base with no `knowledge-base-schema.json` exits 1, naming a template to start one from.
     """
-    # An explicit `--knowledge-base`, "." included, wins over `--vault`, so the parameter source says whether it
-    # was given. The source enum `ctx` returns is not `click.ParameterSource`, so it is compared by `.name`.
-    knowledge_base_source = ctx.get_parameter_source("knowledge_base")
-    knowledge_base_given = knowledge_base_source is not None and knowledge_base_source.name != "DEFAULT"
-    knowledge_base_path = Path(knowledge_base) if knowledge_base_given or vault is None else Path(vault)
+    knowledge_base_path = Path(knowledge_base)
     announce_knowledge_base(knowledge_base_path, err=True)  # stdout carries only the JSON schema
     schema = load_knowledge_base_schema_or_fail(knowledge_base_path)
     if page_type not in schema.page_type_values:

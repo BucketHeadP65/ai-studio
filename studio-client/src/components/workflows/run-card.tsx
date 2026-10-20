@@ -160,7 +160,7 @@ function GateDetail({ card }: { card: FleetCard }): ReactElement | null {
 // where the bytes are asked for.
 function Produced({ card }: { card: FleetCard }): ReactElement | null {
   if (card.kind !== "recent") return null;
-  const artifacts = card.run.result?.artifacts ?? [];
+  const artifacts = card.run.result.artifacts;
   return (
     <>
       <div data-section="result" className="border-ground border-t px-4 pt-3 pb-3">

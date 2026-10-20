@@ -707,8 +707,8 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
         standing_validation = await uow.validation_store.whole_report(collection)
         await uow.manifest.upsert_many(write.manifest_rows, collection=collection)
         await uow.manifest.delete_paths(write.removed_paths, collection=collection)
-        # Stamp the index time and the schema on the fingerprint row, which exists on this path.
-        await uow.fingerprint.touch(collection, knowledge_base_root=str(deps.kb_reader.root), spec=deps.spec)
+        # Stamp the index time and the knowledge base root on the fingerprint row, which exists on this path.
+        await uow.fingerprint.touch(collection, knowledge_base_root=str(deps.kb_reader.root))
         # Keep the page-type contracts current on every run.
         await uow.page_type_contracts.upsert_many(page_type_contract_rows(deps.spec, collection))
         await uow.page_type_contracts.prune_missing({pt.page_type for pt in deps.spec.page_types}, collection=collection)

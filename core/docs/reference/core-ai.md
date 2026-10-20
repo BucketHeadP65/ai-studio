@@ -133,8 +133,8 @@ non-empty value is not evidence that any useful work happened.
 gate passed, `noop` only when the primary was handed nothing and the workflow declared
 `empty_primary: noop`, `partial` when some succeeded and some did not, and `failed` when none
 succeeded or a gate spent its last reach. Everything else is `unknown`: an incomplete generation,
-contradictory facts, a run that did not complete, a workflow that declared no result, and a record
-written before runs reported one. `unknown` is never rewritten into a verdict afterwards.
+contradictory facts, a run that did not complete, and a workflow that declared no result. `unknown` is
+never rewritten into a verdict afterwards.
 
 `RunEvidence.result` carries the `Outcome` beside the execution's own `outcome`. `trust_level` folds
 a completed run into `runs_with_evidence` only when its result is `succeeded` or `noop`. Every other
@@ -174,7 +174,7 @@ What it does and does not convert:
   is never read as a boolean, and nothing is made to fit.
 - Supplied text under a parameter whose schema cannot hold text is read once with `json.loads`, and
   the decoded value is then checked like any other. That is what lets a caller with nothing but
-  strings -- a stored schedule, a form, an older client -- reach a parameter declaring an array, a
+  strings (a stored schedule, a form) reach a parameter declaring an array, a
   number or a boolean. Whether a schema can hold text is read off the schema: its `type`, its
   `enum` or `const`, its local `$ref`, or its `anyOf`/`oneOf`/`allOf` branches.
 - A string parameter keeps the string it was given, whatever the text looks like. `'true'` under
@@ -245,8 +245,8 @@ refused presentation leaves no file and no page.
 
 Reads are deliberately the other way round. A stored presentation that no longer parses reads as
 absent, the same rule `fetch_fingerprint` and `fetch_lineage` already follow: a hand-edited file
-or page must not take down the listing that would have shown it. A card written before
-presentations existed parses as `None` and re-saves byte for byte.
+or page must not take down the listing that would have shown it. A card saved without a presentation
+parses as `None` and re-saves byte for byte.
 
 ### The intent: what the person asked for
 
@@ -269,8 +269,8 @@ are the author's, the request is the asker's, and a surface that showed one in p
 would be answering the wrong question.
 
 Both records read the same forgiving way a fingerprint does. A stored intent that no longer parses
-reads as absent rather than taking down the listing that would have shown it, and a card written
-before intents existed parses as `None` and re-saves byte for byte.
+reads as absent rather than taking down the listing that would have shown it, and a card with no
+intent parses as `None` and re-saves byte for byte.
 
 ### Writing a presentation onto a workflow that already exists
 
@@ -557,8 +557,7 @@ before the runs those attempts name.
 A multi-turn `MapNode` gives one worker one conversation per item, and every turn of it is asked
 with the same standing surface. `TurnFacts` carries two unions for that, computed once per map from
 the briefings its `turns` name: `tools`, and `skills`. `TurnOnTheWire` carries both across the
-activity boundary, `skills` defaulted to empty so a payload recorded before it existed still
-decodes. Neither union reaches the identity a durable line is addressed by: a conversation id and an
+activity boundary, `skills` empty when the turns hold none. Neither union reaches the identity a durable line is addressed by: a conversation id and an
 attempt id are derived from where a turn stands, never from what it holds, so mounting one more
 skill cannot orphan the checkpoints a line has already committed.
 

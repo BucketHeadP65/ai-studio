@@ -57,7 +57,7 @@ class ApproveEverything:
 
 
 def begun(path: Path, spec: Workflow) -> RunLog:
-    return RunLog.begin(path=path, run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=spec, params={"quarter": "Q2"})
+    return RunLog.begin(path=path, run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=spec, params={"quarter": "Q2"}, started_at="2026-08-22T12:00:00+00:00")
 
 
 def test_snapshot_survives_and_revives(tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry) -> None:
@@ -196,7 +196,7 @@ def test_revive_types_a_multi_turn_maps_dotted_values_independently() -> None:
 
 
 def test_revive_drops_a_wrong_shaped_dotted_value_alone() -> None:
-    """One turn's run_log predates a shape change.
+    """One turn's value in the run log has the wrong shape.
 
     That turn's list is dropped, the map's own value stays, and the indexer re-runs a map
     missing any turn's list whole.
@@ -299,15 +299,17 @@ def test_the_log_carries_every_generation_of_facts_and_the_input_each_belongs_to
     assert settled["1:1:bb"].detail == "the fetch timed out"
 
 
-def test_a_log_written_before_a_run_said_what_its_work_did_reads_as_unknown_rather_than_regenerated(tmp_path: Path) -> None:
-    path = tmp_path / "run-log.json"
-    path.write_text(json.dumps({"workflow_id": "wf.report", "spec": _MINIMAL_SPEC, "params": {}, "values": {}}), encoding="utf-8")
+@pytest.mark.parametrize("key", ["work_facts", "batches", "retry_feedback", "gate_decisions", "gate_generations", "run_id"])
+def test_a_log_missing_any_of_its_run_state_is_a_log_nothing_resumes_from(
+    tmp_path: Path, quarterly_report: Workflow, key: str
+) -> None:
+    log = begun(tmp_path / "run-log.json", quarterly_report)
+    log.started("fetch_costs")
+    raw = json.loads((tmp_path / "run-log.json").read_text(encoding="utf-8"))
+    del raw[key]
+    (tmp_path / "run-log.json").write_text(json.dumps(raw), encoding="utf-8")
 
-    waiting = load_waiting(path)
-
-    assert waiting is not None
-    assert waiting.work_facts == []
-    assert waiting.batches == {}, "no batch means the primary work cannot be classified at all"
+    assert load_waiting(tmp_path / "run-log.json") is None
 
 
 def test_a_damaged_batch_costs_the_batches_and_not_the_whole_log(tmp_path: Path) -> None:
@@ -331,7 +333,7 @@ def test_the_values_a_run_reviewed_are_readable_back_as_a_set_and_cleared_for_th
     assert {json.loads(value.canonical)["text"] for value in kept} == {"net: 400", "net: 500"}
     assert {value.ref.run_id for value in kept} == {LAUNCHED_RUN}
 
-    second = RunLog.begin(path=path, run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={})
+    second = RunLog.begin(path=path, run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={}, started_at="2026-08-22T12:00:00+00:00")
 
     assert second.reviewed() == (), "a new run starts with nothing beside its log -- nothing could read the old values anyway"
     assert not list((path.parent / "reviewed").glob("*.json"))
@@ -356,12 +358,14 @@ def test_an_ending_reads_what_was_refused_before_the_log_closes_and_takes_it_wit
 def test_one_sessions_run_never_deletes_another_sessions_captured_values(tmp_path: Path, quarterly_report: Workflow) -> None:
     """Two pooled sessions keep their run logs side by side, so their reviewed values must not share a home."""
     first = RunLog.begin(
-        path=tmp_path / "sess-a.waiting-run.json", run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-a.waiting-run.json", run_id=LAUNCHED_RUN, workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     held = first.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 400"})
 
     second = RunLog.begin(
-        path=tmp_path / "sess-b.waiting-run.json", run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-b.waiting-run.json", run_id="another-run", workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     second.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 900"})
 
@@ -387,11 +391,12 @@ def test_the_boot_sweep_removes_every_reviewed_subtree_no_run_log_still_names(tm
     running.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 400"})
     running.started("draft_report")
     pooled = RunLog.begin(
-        path=tmp_path / "sess-a.waiting-run.json", run_id="pooled-run", workflow_id="wf.report", spec=quarterly_report, params={}
+        path=tmp_path / "sess-a.waiting-run.json", run_id="pooled-run", workflow_id="wf.report", spec=quarterly_report, params={},
+        started_at="2026-08-22T12:00:00+00:00",
     )
     pooled.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 900"})
     pooled.started("draft_report")
-    orphan = RunLog.begin(path=tmp_path / "gone.json", run_id="dead-run", workflow_id="wf.report", spec=quarterly_report, params={})
+    orphan = RunLog.begin(path=tmp_path / "gone.json", run_id="dead-run", workflow_id="wf.report", spec=quarterly_report, params={}, started_at="2026-08-22T12:00:00+00:00")
     orphan.state.reviewed_artifacts.persist("draft_report", None, {"text": "net: 000"})
     orphan.started("draft_report")
     (tmp_path / "gone.json").unlink()  # the process died here, so nothing ever closed that run
@@ -414,6 +419,7 @@ def test_a_run_log_keeps_the_gate_mode_timeout_and_runner_it_was_launched_with(t
         gate_timeout=None,
         runner="schedule:nightly",
         session_kind="runner",
+        started_at="2026-08-22T12:00:00+00:00",
     )
     log.started("fetch_costs")
 
@@ -424,19 +430,15 @@ def test_a_run_log_keeps_the_gate_mode_timeout_and_runner_it_was_launched_with(t
     assert waiting.session_kind == "runner"
 
 
-def test_a_run_log_written_before_the_launch_settings_reads_back_the_launch_defaults(tmp_path: Path, quarterly_report: Workflow) -> None:
+@pytest.mark.parametrize("key", ["gate_mode", "gate_timeout", "runner", "session_kind", "run_title", "started_at"])
+def test_a_run_log_missing_a_launch_setting_is_a_log_nothing_resumes_from(tmp_path: Path, quarterly_report: Workflow, key: str) -> None:
     log = begun(tmp_path / "run-log.json", quarterly_report)
     log.started("fetch_costs")
     raw = json.loads((tmp_path / "run-log.json").read_text(encoding="utf-8"))
-    for key in ("gate_mode", "gate_timeout", "runner", "session_kind"):
-        raw.pop(key, None)
+    del raw[key]
     (tmp_path / "run-log.json").write_text(json.dumps(raw), encoding="utf-8")
 
-    waiting = load_waiting(tmp_path / "run-log.json")
-
-    assert waiting is not None
-    assert (waiting.gate_mode, waiting.gate_timeout, waiting.runner) == ("wait", 900.0, "app:harness")
-    assert waiting.session_kind == "chat"
+    assert load_waiting(tmp_path / "run-log.json") is None
 
 
 def test_a_run_log_reads_an_unknown_session_kind_as_chat_and_keeps_its_start_time(tmp_path: Path, quarterly_report: Workflow) -> None:

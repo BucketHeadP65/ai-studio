@@ -110,7 +110,7 @@ async def test_an_artifact_whose_environment_moved_names_what_moved(library: Fol
     assert any("digest-one" in finding and moved in finding for finding in body["staleness"])
 
 
-async def test_an_artifact_that_predates_stamps_reads_as_unknown_not_fresh(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+async def test_an_unstamped_artifact_reads_as_unknown_not_fresh(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """The tri-state, at the one place a person meets it. `null` is not `[]`."""
     workflow_id = await library.put(quarterly_report, title="Q", summary="s", applicability="a", provenance={"saved_by": "test"})
     controller = _install(registry, library, tmp_path)
@@ -200,9 +200,8 @@ async def test_a_stamp_that_no_longer_parses_is_unknown_rather_than_a_crash(libr
 
 async def _record_evidence(spec: Workflow, workflow_id: str, produced: dict[str, str], tmp_path: Path) -> None:
     """Write one completed run into the ledger the view reads."""
-    del spec
     await records_under(tmp_path).evidence.append(
-        RunEvidence(workflow_id=workflow_id, outcome="completed", produced=produced, runner="test")
+        RunEvidence(workflow_id=workflow_id, spec_hash=spec_identity(spec), outcome="completed", produced=produced, runner="test", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=())
     )
 
 
@@ -245,7 +244,9 @@ async def test_a_run_that_failed_is_not_birth_evidence(library: FolderLibrary, q
     records = records_under(tmp_path)
     workflow_id = await save(quarterly_report, library, registry, title="Q", summary="s", applicability="a", saved_by="test")
     await records.evidence.append(
-        RunEvidence(workflow_id=workflow_id, outcome="failed", produced={"fetch_sales": "SalesData"}, runner="test")
+        RunEvidence(
+            workflow_id=workflow_id, spec_hash=spec_identity(quarterly_report), outcome="failed", produced={"fetch_sales": "SalesData"}, runner="test", result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()
+        )
     )
     controller = _install(registry, library, tmp_path)
 
@@ -269,9 +270,10 @@ async def test_a_child_that_never_ran_says_which_nodes_its_parent_vouched_for(li
     await records.evidence.append(
         RunEvidence(
             workflow_id=parent_id,
+            spec_hash=spec_identity(quarterly_report),
             workflow_version=quarterly_report.version,
             outcome="completed",
-            produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"},
+            produced={"fetch_sales": "SalesData", "fetch_costs": "CostData", "reconcile": "Ledger", "publish": "ReportUrl"}, result=Outcome(status="unknown", summary="nothing was checked"), gates_auto=(), gates_orchestrated=()
         )
     )
     child, lineage = adapt(quarterly_report, ops=({"op": "remove_node", "id": "publish"}, {"op": "set_output", "to": {"node": "approve"}}))
@@ -304,7 +306,7 @@ async def test_runs_earned_under_another_address_still_count_for_the_artifact(li
             workflow_id="wf.somewhere.else.v3",
             spec_hash=spec_identity(quarterly_report),
             outcome="completed",
-            result=Outcome(status="succeeded", summary="the report was published"),
+            result=Outcome(status="succeeded", summary="the report was published"), gates_auto=(), gates_orchestrated=()
         )
     )
     controller = _install(registry, library, tmp_path)
@@ -312,57 +314,41 @@ async def test_runs_earned_under_another_address_still_count_for_the_artifact(li
     trust = (await _body(controller, workflow_id))["trust"]
     assert trust["level"] == "machine-confirmed"
     assert trust["runs_with_evidence"] == 1
-    assert trust["basis"] == "content"
-
-
-async def test_history_that_predates_hashes_reads_as_unconfirmed_rather_than_never_run(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
-    """The silent half: an empty lookup and an unattributable one both rendered as a confident zero.
-
-    The record below is real history at this address that nothing can tie to this spec. It must not
-    be counted -- it may be a namesake's or an adapted child's -- and it must not be hidden either,
-    because "never run" is a claim, and this is not the evidence for it.
-    """
-    records = records_under(tmp_path)
-    workflow_id = await save(quarterly_report, library, registry, title="Q", summary="s", applicability="a", saved_by="test")
-    await records.evidence.append(RunEvidence(workflow_id=workflow_id, outcome="completed"))
-    controller = _install(registry, library, tmp_path)
-
-    trust = (await _body(controller, workflow_id))["trust"]
-    assert trust["runs_with_evidence"] == 0, "an unattributable record is not this artifact's run"
-    assert trust["basis"] == "address-only"
-    assert trust["unconfirmed"] == 1
 
 
 async def test_an_artifact_nothing_has_ever_recorded_says_exactly_that(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
-    """`none`, and it has to be a different word from `address-only` or the tri-state is a two-state."""
+    """No record at all reads unverified with nothing counted."""
     workflow_id = await save(quarterly_report, library, registry, title="Q", summary="s", applicability="a", saved_by="test")
     controller = _install(registry, library, tmp_path)
 
     trust = (await _body(controller, workflow_id))["trust"]
     assert trust["level"] == "unverified"
-    assert trust["basis"] == "none"
-    assert trust["unconfirmed"] == 0
+    assert trust["runs_with_evidence"] == 0
+    assert trust["failed_runs"] == 0
 
 
 async def test_a_child_cannot_inherit_its_parents_runs_through_the_hash(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """Content addressing must not reopen the laundering route the version filter closed.
 
     The parent's run is attested at the child's own address -- the exact shape a name-scoped library
-    produces. It names the parent's spec, so it is known to be about something else: not counted,
-    and not offered as unconfirmable either.
+    produces. It names the parent's spec, so it is known to be about something else and is not counted.
     """
     records = records_under(tmp_path)
     child, lineage = adapt(quarterly_report, ops=({"op": "set_description", "to": "Now with commentary."},))
     child_id = await save(child, library, registry, title="Q", summary="s", applicability="a", saved_by="test", lineage=lineage)
     await records.evidence.append(
-        RunEvidence(workflow_id=child_id, spec_hash=spec_identity(quarterly_report), outcome="completed")
+        RunEvidence(
+            workflow_id=child_id,
+            spec_hash=spec_identity(quarterly_report),
+            outcome="completed",
+            result=Outcome(status="succeeded", summary="the report was published"), gates_auto=(), gates_orchestrated=()
+        )
     )
     controller = _install(registry, library, tmp_path)
 
     trust = (await _body(controller, child_id))["trust"]
     assert trust["level"] == "unverified"
-    assert trust["basis"] == "none", "the parent's run said what it exercised, and it was not this"
-    assert trust["unconfirmed"] == 0
+    assert trust["runs_with_evidence"] == 0, "the parent's run said what it exercised, and it was not this"
 
 
 async def test_grades_ride_beside_the_tier_without_moving_it(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:

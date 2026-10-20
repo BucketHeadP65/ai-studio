@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/dom";
+import { screen, waitFor } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
@@ -32,7 +32,6 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
     enabled: true,
     gate_policy: "wait",
     gate_mode: "wait",
-    auto_approve_gates: false,
     capacity_key: null,
     capacity_limit: null,
     blackout: null,
@@ -44,6 +43,10 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
     next_run_at: "2026-08-23T10:30:00Z",
     live: null,
     paused_at: null,
+    spend_today_usd: "0",
+    spend_week_usd: "0",
+    spend_today_unpriced: 0,
+    spend_week_unpriced: 0,
     ...overrides,
   };
 }
@@ -57,12 +60,16 @@ function mountApi(
     http.get(`${BASE}/api/library`, () =>
       HttpResponse.json(
         libraryCards.map((card) => ({
+          archived_at: null,
+          shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+          runs: { last: null },
           id: card.id,
           title: card.title,
           summary: "",
           provisional: false,
           score: null,
           trust: {
+            approved_by: [],
             level: "unverified",
             runs_with_evidence: 0,
             failed_runs: 0,
@@ -173,6 +180,7 @@ describe("SchedulesPage", () => {
 
   it("opens the create form from New schedule and posts every field on submit", async () => {
     mountApi([], [{ id: "wf-sales", title: "Sales" }]);
+    let posted: unknown = null;
     server.use(
       http.get(`${BASE}/api/workflow/wf-sales`, () =>
         HttpResponse.json({
@@ -181,6 +189,11 @@ describe("SchedulesPage", () => {
           name: "sales",
           version: 1,
           description: "",
+          title: "Sales",
+          summary: "",
+          applicability: "",
+          provisional: false,
+          archived_at: null,
           graph: { name: "sales", version: 1, nodes: [], edges: [] },
           issues: [],
           fits: true,
@@ -194,6 +207,7 @@ describe("SchedulesPage", () => {
           predictions: null,
           prediction_record: null,
           trust: {
+            approved_by: [],
             level: "unverified",
             runs_with_evidence: 0,
             failed_runs: 0,
@@ -204,18 +218,7 @@ describe("SchedulesPage", () => {
         }),
       ),
       http.post(`${BASE}/api/schedules`, async ({ request }) => {
-        const body = await request.json();
-        expect(body).toEqual({
-          workflow_id: "wf-sales",
-          arguments: {},
-          cadence: "every 30m",
-          gate_policy: "wait",
-          auto_approve_gates: false,
-          capacity_key: "gpu-pool",
-          capacity_limit: 3,
-          blackout: "22:00-06:00",
-          catch_up: true,
-        });
+        posted = await request.json();
         return HttpResponse.json({ schedule: scheduleFixture({ id: "sched-9" }) });
       }),
     );
@@ -236,7 +239,19 @@ describe("SchedulesPage", () => {
     );
     await userEvent.click(await screen.findByRole("button", { name: "Create" }));
 
-    await screen.findByText("No schedules yet.");
+    await waitFor(() =>
+      expect(posted).toEqual({
+        workflow_id: "wf-sales",
+        arguments: {},
+        cadence: "every 30m",
+        gate_policy: "wait",
+        gate_mode: "wait",
+        capacity_key: "gpu-pool",
+        capacity_limit: 3,
+        blackout: "22:00-06:00",
+        catch_up: true,
+      }),
+    );
   });
 
   it("toggles a schedule's enable switch without navigating", async () => {

@@ -52,12 +52,12 @@ def a_log_under(state: StateSettings) -> SessionLog:
     For a caller that already holds the state a session was composed with, so the log and every
     other file that session writes hang off the one home.
     """
-    return SessionLog(state.session_log, forgotten_marker=state.forgotten_marker, topics=None)
+    return SessionLog(state.session_log, topics=None)
 
 
 def a_transcript(home: Path) -> FileStepStore:
     """One transcript under `home`."""
-    return FileStepStore(a_state(home).steps)
+    return FileStepStore(a_state(home).home / "steps")
 
 
 def recorded(log: SessionEvents, event: SessionEvent) -> Recorded:

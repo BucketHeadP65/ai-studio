@@ -153,7 +153,7 @@ async def test_a_gate_nobody_answered_is_refused_by_the_deadline_and_says_so(tmp
 async def test_automode_crosses_the_gate_with_no_decision_future(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
     """Automode answers `review` itself: nothing waits, and the gate's own count says so."""
     session = _session(registry, tmp_path)
-    session.active.auto_approve = True
+    session.active.gate_mode = "auto"
     approval = ChatApproval(session=session, workflow="wf.gated", spec=quarterly_report)
     assert (await approval.review("approve", "the draft")).source == "auto"
     assert session.active.decision is None
@@ -167,7 +167,7 @@ async def test_an_automode_run_attests_the_gate_as_auto_not_approved(quarterly_r
     records = records_under(tmp_path)
     session = _session(registry, tmp_path)
     session.session_id = "sess-automode"
-    service.launch(session, records=records, topics=FakeBroadcaster(), spec=quarterly_report, workflow_id="wf.automode", params={"quarter": "Q2"}, auto_approve_gates=True)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=quarterly_report, workflow_id="wf.automode", params={"quarter": "Q2"}, gate_mode="auto")
     task = session.active.task
     assert task is not None
     await task
@@ -238,7 +238,7 @@ async def test_the_automode_endpoint_flips_mid_run_and_refuses_when_idle(tmp_pat
         flipped = await client.post("/api/run/automode", json={"on": True})
         assert flipped.status_code == 200
         assert flipped.json() == {"ok": True, "auto_approve": True}
-        assert pool.default.active.auto_approve is True
+        assert pool.default.active.gate_mode == "auto"
 
         state = await client.get("/api/run/state")
         assert state.json()["auto_approve"] is True, "the poll must see the same flag the flip just set"
@@ -295,7 +295,7 @@ def test_the_value_a_gate_refused_outlives_every_newer_value_the_run_produced(tm
     when it comes back, and copied into the archive record before the log closes.
     """
     path = tmp_path / "waiting.json"
-    log = RunLog.begin(path=path, run_id="run-one", workflow_id="wf.gated", spec=_spec_with_brought_parent(), params={})
+    log = RunLog.begin(path=path, run_id="run-one", workflow_id="wf.gated", spec=_spec_with_brought_parent(), params={}, started_at="2026-08-22T12:00:00+00:00")
     refused = log.state.reviewed_artifacts.persist("draft", None, {"draft": "A"})
     log.state.reviewed_artifacts.persist("draft", None, {"draft": "B"})
 
@@ -313,9 +313,9 @@ def test_a_run_refuses_to_read_a_value_another_run_was_refused_over(tmp_path: Pa
     path = tmp_path / "waiting.json"
     spec = _spec_with_brought_parent()
 
-    first = RunLog.begin(path=path, run_id="run-one", workflow_id="wf.gated", spec=spec, params={})
+    first = RunLog.begin(path=path, run_id="run-one", workflow_id="wf.gated", spec=spec, params={}, started_at="2026-08-22T12:00:00+00:00")
     refused = first.state.reviewed_artifacts.persist("draft", None, {"draft": "A"})
-    second = RunLog.begin(path=path, run_id="run-two", workflow_id="wf.gated", spec=spec, params={})
+    second = RunLog.begin(path=path, run_id="run-two", workflow_id="wf.gated", spec=spec, params={}, started_at="2026-08-22T12:00:00+00:00")
 
     assert refused.run_id == "run-one"
     with pytest.raises(ValueError, match="another run"):
@@ -338,7 +338,7 @@ async def test_a_spent_gate_ceiling_ends_the_run_holding_the_refused_value(tmp_p
     registry = StepRegistry()
     registry.register(draft_task)
     spec = _spec_with_brought_parent().model_copy(update={"inline": ()})
-    log = RunLog.begin(path=tmp_path / "waiting.json", run_id="run-one", workflow_id="wf.gated", spec=spec, params={})
+    log = RunLog.begin(path=tmp_path / "waiting.json", run_id="run-one", workflow_id="wf.gated", spec=spec, params={}, started_at="2026-08-22T12:00:00+00:00")
 
     with pytest.raises(RetryExhaustedError) as raised:
         await build_graph(spec, registry, approval=RefuseEverything(), observer=log).run(state=log.state)
@@ -403,7 +403,7 @@ def test_the_run_log_stages_each_snapshot_under_a_hidden_temp_name(tmp_path: Pat
     """A listing or a glob that skips dotfiles never sees a run log still being written."""
     staged = staged_names(monkeypatch)
 
-    log = RunLog.begin(path=tmp_path / "waiting.json", run_id="run-one", workflow_id="wf.gated", spec=_spec_with_brought_parent(), params={})
+    log = RunLog.begin(path=tmp_path / "waiting.json", run_id="run-one", workflow_id="wf.gated", spec=_spec_with_brought_parent(), params={}, started_at="2026-08-22T12:00:00+00:00")
     log.started("draft")
 
     assert staged, "the run log is swapped into place"

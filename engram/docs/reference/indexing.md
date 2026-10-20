@@ -60,7 +60,7 @@ It then dispatches `IndexKnowledgeBase` incremental, with embeddings on and no s
   [The chunk planner and cut plans](#the-chunk-planner-and-cut-plans)), and a `dry_run` preview
   (`DryRunPreview`, `None` on a real run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
 - **Events:** the handler emits the pipeline `Event`s as it advances. After `PagesLoaded`
-  it emits `CitingPagesChanged{paper_ids}` (`src/engram/indexing/domain/models.py`), consumed by the
+  it emits `CitingPagesChanged{page_ids}` (`src/engram/indexing/domain/models.py`), consumed by the
   evals QA-generation subscriber to enqueue papers whose datasets may need
   (re)generation, see [evals.md](evals.md). On an incremental run the set is **narrowed**
   to only the `page_type == "paper"` pages whose indexed output changed. A full rebuild or a

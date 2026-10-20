@@ -31,8 +31,7 @@ This document is written from the landed code. Every claim below names the modul
 
 `ApplicationSettings.knowledge_bases: dict[str, KnowledgeBaseEntry]` (`studio/src/studio/knowledge_base/settings.py`) is the whole registry of knowledge
 bases: name maps to `{path, description}`. `KnowledgeBaseEntry` (`engram/src/engram/config.py`) carries the same shape validation
-`KnowledgeBaseSettings.path` does: `path` must be an existing directory declaring either a `knowledge-base-schema.json` or the legacy `Units/` +
-`_meta/` pair.
+`KnowledgeBaseSettings.path` does: `path` must be an existing directory holding a `knowledge-base-schema.json`.
 
 `ApplicationSettings.knowledge_base: KnowledgeBaseSettings | None` is never read from the settings JSON or the environment. It exists only as
 an init-kwarg one process supplies for its own single knowledge base (a CLI command's `--knowledge-base`, or the per-job container
@@ -40,7 +39,7 @@ an init-kwarg one process supplies for its own single knowledge base (a CLI comm
 serve-http` and `studio worker` build their `ApplicationSettings` with no knowledge base path at all
 (`fetch_application_settings`), so both hold `knowledge_base: None` for their whole run. They serve the registry and hold no knowledge
 base of their own (section 7's identity lines reflect this: neither process has a single knowledge base to report on before a request
-or a job names one). A non-empty registry is validated (`ApplicationSettings._check_corpora`): every name is non-empty and every
+or a job names one). A non-empty registry is validated (`ApplicationSettings._check_knowledge_bases`): every name is non-empty and every
 path is unique. Nothing checks `knowledge_base.path` against the registry, since a registry-serving process has no `knowledge_base.path` to
 check. `active_knowledge_base_name()` still serves a process that does carry one (a CLI command's own scoped run): it returns the
 registry name whose path matches `knowledge_base.path`, `None` when there is no active knowledge base or no match.
@@ -218,7 +217,7 @@ the page only and says so on stderr: the indexed knowledge base reads the new st
 Registration is a settings-JSON write only, never a scaffold. `PUT` (body: `{path, description?}`) runs the same
 hidden-directory/name-collision/path-collision refusal chain the `POST /api/knowledge-bases` order above uses, then the same
 `KnowledgeBaseEntry` shape validation (`invalid_path`) and the same `registry_write_refused` belt. Unlike `POST`, it never scaffolds
-files. `path` must already be a knowledge base directory (a `knowledge-base-schema.json`, or the legacy `Units/` + `_meta/` pair). One
+files. `path` must already be a knowledge base directory (one holding a `knowledge-base-schema.json`). One
 carve-out from that collision chain: a name already registered at its **same** `path` is not a collision. It is a
 re-registration (refreshing `description`, or fixing a since-repaired broken row), so that case falls through to the write
 instead of refusing. A name registered at a **different** path still refuses `name_collision` (re-pointing a name elsewhere is
@@ -522,7 +521,7 @@ database with no `alembic_version` table yet reports `at no revision`. A knowled
 with no outcome slot, there is nothing to report an outcome for. An indexing run whose fingerprint is stale against a failed
 refresh run reports the outcome `failed`, with the run's own detail appended in parentheses. `code expects <revision>` is
 `engram.init.contracts.code_head_revision()`, the alembic head the installed code declares, independent of what the database is
-actually at. `<when>` is `memory.index_fingerprint.indexed_at`, re-stamped by every indexing run that writes rows, full or
+actually at. `<when>` is `kb.index_fingerprint.indexed_at`, re-stamped by every indexing run that writes rows, full or
 incremental, so it names the last time the collection actually took a write, not the last global-invalidator change.
 
 The `<changed tail>` names how many files on disk differ from the stored index manifest, the same raw diff an incremental
@@ -575,9 +574,9 @@ The text comes from `core.connection_failures.connection_failure_message`, the s
 a failed case. Any other failure keeps its own text unchanged.
 
 **A collection belongs to the knowledge base root that indexed it.** Each indexing run stamps its knowledge base root onto
-`memory.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
+`kb.index_fingerprint.knowledge_base_root`. A later indexing run from a different root, with `--collection` omitted, refuses
 before writing a single row and exits 2, because the indexing run's prune would delete everything the owning knowledge base put there.
-This is the exact hazard a schema-less knowledge base falling back to the default `research` collection creates:
+Two knowledge base roots whose schemas name the same collection meet this refusal:
 
 ```
 collection research was indexed from /Users/x/research-vault, this knowledge base is at /tmp/scratch. Pass --collection research
@@ -586,7 +585,8 @@ to take the collection over, or index the knowledge base that owns it.
 
 Passing `--collection <name>` explicitly is the deliberate takeover (`resolve_partition`'s standing contract): the index
 runs as a full index and re-stamps the root. A `--dry-run` never refuses, its preview of the would-be prune is the
-warning. Rows from before the column existed read as unclaimed and are claimed by their next indexing run.
+warning. A row whose root is empty, such as one a retrieval switch write created before any indexing run, reads as
+unclaimed and is claimed by its next indexing run.
 
 **`status`, `search`, and `fetch` no longer default `--collection` to the literal `"research"`.** Each now resolves an
 omitted `--collection` from the knowledge base's own declared `retrieval.collection` (`resolve_partition`, the same partition

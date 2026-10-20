@@ -45,8 +45,8 @@ class ArchivedRun(Protocol):
         ...
 
     @property
-    def result(self) -> Outcome | None:
-        """The run's own checked outcome, or `None` for a record that captured none."""
+    def result(self) -> Outcome:
+        """The run's own checked outcome."""
         ...
 
     @property
@@ -229,7 +229,6 @@ def structural_validity(record: ArchivedRun) -> Assessment:
     """Whether the run ended holding a result that holds together.
 
     Counts that do not add up and an execution that never completed are both failures of structure.
-    A record carrying no checked outcome at all is unknown: nothing was captured to check.
 
     Args:
         record: The archived run.
@@ -238,8 +237,6 @@ def structural_validity(record: ArchivedRun) -> Assessment:
         The structural validity assessment.
     """
     result = record.result
-    if result is None:
-        return Assessment(status="unknown", reason="the archived run records no checked outcome", grader=_GRADER)
     if result.attempted != result.succeeded + result.skipped + result.failed:
         reason = f"the counts do not add up: {result.attempted} attempted against {result.succeeded}/{result.skipped}/{result.failed}"
         return Assessment(status="fail", reason=reason, grader=_GRADER)
@@ -285,8 +282,6 @@ def evidence_support(record: ArchivedRun) -> Assessment:
         The evidence support assessment.
     """
     result = record.result
-    if result is None:
-        return Assessment(status="unknown", reason="the archived run records no checked outcome", grader=_GRADER)
     required = tuple(check for check in result.checks if check.required)
     if not required:
         return Assessment(status="not_applicable", reason="the result requires no recorded acceptance", grader=_GRADER)
@@ -299,7 +294,7 @@ def evidence_support(record: ArchivedRun) -> Assessment:
     return Assessment(status="pass", reason=f"{len(required)} required gate(s) accepted the value the run ended holding", grader=_GRADER)
 
 
-def task_success(result: Outcome | None, labels: CaseLabels) -> Assessment:
+def task_success(result: Outcome, labels: CaseLabels) -> Assessment:
     """Whether the run did the work the case asked for, by the case's own criterion.
 
     Success is the one status that passes on its own. `noop` passes only where the case permits no
@@ -307,14 +302,12 @@ def task_success(result: Outcome | None, labels: CaseLabels) -> Assessment:
     a verdict at all.
 
     Args:
-        result: The run's checked outcome, or `None` for a record that captured none.
+        result: The run's checked outcome.
         labels: The case's labels, whose `permits_no_work` decides a `noop`.
 
     Returns:
         The task success assessment.
     """
-    if result is None:
-        return Assessment(status="unknown", reason="the archived run records no checked outcome", grader=_GRADER)
     if result.status == "unknown":
         return Assessment(status="unknown", reason=f"the run's own facts establish nothing: {result.summary}", grader=_GRADER)
     if result.status == "succeeded":

@@ -24,9 +24,11 @@ from harness.domain.contracts import (
     SessionStarted,
     TurnAbandoned,
     TurnStarted,
+    UnreadableLine,
     decode,
     encode,
     open_turns,
+    read_line,
 )
 
 if TYPE_CHECKING:
@@ -70,7 +72,6 @@ class SessionLog:
         self,
         path: Path,
         *,
-        forgotten_marker: Path | None = None,
         clock: Callable[[], datetime] = _now,
         topics: TopicSink | None,
     ) -> None:
@@ -78,13 +79,10 @@ class SessionLog:
 
         Args:
             path: The JSONL file. Its folder is created on the first append.
-            forgotten_marker: The `forgotten-at` marker file an older process may have left, which
-                `boot_sweep` turns into an event. `None` skips that step.
             clock: What stamps each event. Defaults to the UTC time, to the second.
             topics: Where each append is announced, or `None` to announce nothing.
         """
         self._path = path
-        self._forgotten_marker = forgotten_marker
         self._clock = clock
         self._topics = topics
 
@@ -114,24 +112,10 @@ class SessionLog:
         return recorded
 
     def boot_sweep(self) -> None:
-        """Bring the log up to date before the first request.
+        """Close every turn that started and never ended as abandoned, before the first request.
 
-        First, a `forgotten-at` marker an older process left becomes a forgotten boundary event stamped
-        with the marker's own time, and the marker is deleted. An unreadable marker is dropped with a warning.
-        Then every turn that started and never ended is closed as abandoned.
-        Call it before `resume`, so resume honours the migrated boundary. It records no `Booted` event,
-        which the caller records once it knows what it resumed.
-        A log opened with no marker path only closes the open turns.
+        Call it before `resume`. It records no `Booted` event, which the caller records once it knows what it resumed.
         """
-        marker = self._forgotten_marker
-        if marker is not None and marker.exists():
-            try:
-                stamp = datetime.fromisoformat(marker.read_text(encoding="utf-8").strip())
-            except ValueError:
-                _logger.warning("dropping an unreadable forgotten-at marker")
-            else:
-                self.record(ConversationForgotten(), at=stamp)
-            marker.unlink(missing_ok=True)
         for open_turn in open_turns(self.events()):
             self.record(TurnAbandoned(started_seq=open_turn.seq))
 
@@ -147,7 +131,8 @@ class SessionLog:
     def events(self) -> tuple[Recorded, ...]:
         """Every readable entry, in order.
 
-        A torn last line or an unknown event type costs that one line, never the whole read.
+        A line that cannot be read costs that one line, never the whole read, and logs a warning naming the file,
+        the line number and why.
 
         Returns:
             The entries in sequence order, empty when the file is missing or cannot be read.
@@ -156,7 +141,14 @@ class SessionLog:
             text = self._path.read_text(encoding="utf-8")
         except OSError:
             return ()
-        return tuple(record for line in text.splitlines() if (record := decode(line)) is not None)
+        entries: list[Recorded] = []
+        for number, line in enumerate(text.splitlines(), start=1):
+            record = read_line(line)
+            if isinstance(record, UnreadableLine):
+                _logger.warning("line {line} of {path} was skipped: {reason}", line=number, path=str(self._path), reason=record.reason)
+            else:
+                entries.append(record)
+        return tuple(entries)
 
     def _next_seq(self) -> int:
         """One past the newest readable sequence number, read from the log's tail so a restart keeps counting."""

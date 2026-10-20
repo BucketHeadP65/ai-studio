@@ -195,7 +195,6 @@ class FakeSchedules:
             "cadence": changes.cadence,
             "enabled": changes.enabled,
             "gate_policy": changes.gate_policy,
-            "auto_approve_gates": changes.auto_approve_gates,
             "capacity_key": changes.capacity_key,
             "capacity_limit": changes.capacity_limit,
             "blackout": changes.blackout,

@@ -267,7 +267,6 @@ class Schedule(BaseModel):
     A schedule with no `next_run_at` never comes due.
     `capacity_key` shares a limit of `capacity_limit` live runs across every schedule that names it.
     `catch_up` makes a held fire run once as soon as the hold clears, instead of skipping to the next turn.
-    `auto_approve_gates` is kept for old callers and always agrees with `gate_mode`.
     A schedule built disabled with no `paused_at` is paused from its `created_at`.
     """
 
@@ -280,7 +279,6 @@ class Schedule(BaseModel):
     gate_policy: str = "wait"
     """`wait` or `fail_after:<seconds>`, as `gate_wait_seconds` reads it."""
     gate_mode: GateMode = "wait"
-    auto_approve_gates: bool = False
     capacity_key: str | None = None
     capacity_limit: int | None = None
     blackout: str | None = None
@@ -335,7 +333,6 @@ class ScheduleUpdate(BaseModel):
     enabled: bool | None = None
     gate_policy: str | None = None
     gate_mode: GateMode | None = None
-    auto_approve_gates: bool | None = None
     capacity_key: str | None = None
     capacity_limit: int | None = None
     blackout: str | None = None
@@ -396,4 +393,4 @@ def chains_after(evidence: RunEvidence) -> bool:
     Returns:
         True when the run's checked outcome is one of `CHAINED_OUTCOMES`.
     """
-    return evidence.result is not None and evidence.result.status in CHAINED_OUTCOMES
+    return evidence.result.status in CHAINED_OUTCOMES

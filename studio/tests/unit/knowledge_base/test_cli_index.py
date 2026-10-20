@@ -56,7 +56,6 @@ from typer.testing import CliRunner
 
 from studio.knowledge_base import cli as cli_module
 from studio.knowledge_base.cli import app
-from studio.knowledge_base.cli_support import resolve_knowledge_base_alias
 from studio.knowledge_base.settings import AzureOpenAiSettings, IngestionSettings, fetch_application_settings
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
 from tests.support.connection_errors import ENDPOINT_HOST, REFUSED_DATABASE, endpoint_connection_error
@@ -425,12 +424,6 @@ class TestKnowledgeBaseFlag:
         active = cli_module._resolve_settings(str(tmp_path), cwd=Path("/"))
 
         assert active.knowledge_base.path == tmp_path
-
-    def test_the_deprecated_alias_names_the_same_knowledge_base(self, tmp_path: Path):
-        (tmp_path / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
-
-        assert resolve_knowledge_base_alias(None, str(tmp_path)) == str(tmp_path)
-        assert resolve_knowledge_base_alias(str(tmp_path), "/other") == str(tmp_path)
 
     def test_without_the_flag_the_working_directory_decides(self, tmp_path: Path):
         (tmp_path / "knowledge-base-schema.json").write_text(research_spec().model_dump_json(), encoding="utf-8")
@@ -843,11 +836,11 @@ class TestHelp:
         assert "--knowledge-base" in result.stdout
         assert "no-embed" in result.stdout
 
-    def test_index_help_hides_vault_flag(self):
-        # --vault is a deprecated alias, kept out of --help.
-        result = runner.invoke(app, ["index", "--help"])
+    def test_index_refuses_the_vault_flag(self, tmp_path: Path):
+        result = runner.invoke(app, ["index", "--vault", str(tmp_path)])
 
-        assert "--vault" not in result.stdout
+        assert result.exit_code == 2
+        assert "No such option: --vault" in result.output
 
     def test_index_help_lists_full_flag(self):
         result = runner.invoke(app, ["index", "--help"])

@@ -1,7 +1,7 @@
 """Runner sessions as a first-class kind: the projected column and the HTTP filter.
 
-The projection folds the event's `session_kind` (defaulting a legacy line to `chat`) and carries
-a real column through `ensure_schema`'s idempotent evolution. The HTTP layer maps `kind` on the
+The projection folds the event's `session_kind` into a real
+column. The HTTP layer maps `kind` on the
 wire to `session_kind` on the event and the column: `POST /api/sessions` mints one,
 `GET /api/sessions` filters by it. Every test runs against the isolated `projection_pool`, never
 the developer's live projection: `rebuild` truncates whatever pool it is handed.
@@ -25,7 +25,6 @@ from harness.adapters.store import ScheduleDatabase
 from harness.domain.events import SessionStarted
 from harness.features.sessions import project_registry, service
 from harness.features.sessions.infrastructure.projects_log import ProjectsLog
-from harness.features.sessions.infrastructure.schema import ensure_schema
 from harness.features.sessions.internal_contracts import ProjectionPool, Sessions
 from harness.features.sessions.service import ProjectedIndex, rebuild
 from harness.session import Runtime, SessionPool
@@ -54,18 +53,6 @@ def _fresh_registry(tmp_path: Path) -> Iterator[None]:
     project_registry._REGISTRY = None
 
 
-async def test_ensure_schema_adds_session_kind_to_a_sessions_table_that_predates_it(projection_pool: ProjectionPool) -> None:
-    await projection_pool.execute("ALTER TABLE sessions DROP COLUMN IF EXISTS session_kind")
-
-    await ensure_schema(projection_pool)
-
-    columns = {
-        row["column_name"]
-        for row in await projection_pool.fetch("SELECT column_name FROM information_schema.columns WHERE table_name = 'sessions'")
-    }
-    assert "session_kind" in columns
-
-
 async def test_rebuild_projects_session_kind_from_the_event(tmp_path: Path, projection_pool: ProjectionPool) -> None:
     session_log = SessionLog(tmp_path / "session-log.jsonl", topics=None)
     session_log.record(SessionStarted(session_id=SESSION, session_kind="runner"))
@@ -75,19 +62,6 @@ async def test_rebuild_projects_session_kind_from_the_event(tmp_path: Path, proj
     row = await projection_pool.fetchrow("SELECT session_kind FROM sessions WHERE id = $1", SESSION)
     assert row is not None
     assert row["session_kind"] == "runner"
-
-
-async def test_rebuild_projects_a_legacy_session_started_line_as_chat(tmp_path: Path, projection_pool: ProjectionPool) -> None:
-    journal_path = tmp_path / "session-log.jsonl"
-    journal_path.write_text(
-        f'{{"seq": 1, "at": "2026-08-22T12:00:00+00:00", "kind": "session_started", "session_id": "{SESSION}"}}\n'
-    )
-
-    await rebuild(projection_pool, SessionLog(journal_path, topics=None).events(), InMemoryStepStore(), project_root=tmp_path)
-
-    row = await projection_pool.fetchrow("SELECT session_kind FROM sessions WHERE id = $1", SESSION)
-    assert row is not None
-    assert row["session_kind"] == "chat", "an old line with no session_kind at all projects as chat"
 
 
 def _default_runtime() -> Runtime:

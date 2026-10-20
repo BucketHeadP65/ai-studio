@@ -676,8 +676,8 @@ class TestGenerateEvalDatasetTopUp:
         assert [record.seed_key for record in gone] == ["pinpoint:paper.p2"]  # only the case whose gold page vanished
 
     async def test_top_up_requires_a_stamped_parent(self, tmp_path: Path):
-        # A legacy dataset saved without a stamp cannot be topped up: a clean error, not a silent guess.
-        legacy = build_dataset(
+        # A dataset saved without a stamp cannot be topped up: a clean error, not a silent guess.
+        unstamped = build_dataset(
             [
                 AuthoredCase(
                     question=QaInput(question="q"),
@@ -687,7 +687,7 @@ class TestGenerateEvalDatasetTopUp:
             ]
         )
         version_path = dataset_version_path(tmp_path, "research", 1)
-        save_dataset(legacy, version_path)  # no stamp sidecar
+        save_dataset(unstamped, version_path)  # no stamp sidecar
         write_current(tmp_path, "research", version_path)
         repo = FakeSeedQueries({Archetype.PINPOINT: [_pinpoint_seed("0")]})
         handler, _, _ = _handler(repo, config=_config(total_cases=3))
@@ -1451,22 +1451,6 @@ class TestTuneRetrievalHandler:
         assert all(verdict.verdict == "fresh" for verdict in artifact.verdicts)
         assert "Structural integrity" in Path(report.markdown).read_text(encoding="utf-8")
 
-    def test_report_without_the_staleness_field_deserializes_as_none(self):
-        # An old serialized report predates the additive field, it must still load (None default).
-        report = TuningReport.model_validate(
-            {
-                "out": "w.yaml",
-                "n_rounds": 1,
-                "accepted_rounds": 1,
-                "stop_reason": "max_rounds",
-                "baseline_recall": 0.4,
-                "winner_recall": 0.6,
-            }
-        )
-
-        assert report.dataset_staleness is None
-
-
 class TestApplyRuntimeGuardrails:
     """`--apply-runtime` applies iff all four guardrails pass; every refusal is a reported outcome.
 
@@ -1923,7 +1907,7 @@ class TestCheckFreshnessHandler:
         assert via_explicit.dataset_version == "research.v1.yaml"
         assert {via_none.counts["fresh"], via_current.counts["fresh"], via_explicit.counts["fresh"]} == {1}
 
-    async def test_legacy_cases_are_unanchored_and_excluded_from_the_fraction(self, tmp_path: Path):
+    async def test_unanchored_cases_are_excluded_from_the_fraction(self, tmp_path: Path):
         cases = [
             _freshness_case(
                 "pe",
@@ -1931,7 +1915,7 @@ class TestCheckFreshnessHandler:
                 anchors=(AnchorHash(unit_id="pe", body_hash="he"),),
                 mirror_hash_value=mirror_hash(("e",)),
             ),
-            _freshness_case("leg"),  # no anchors, no mirror hash, positional name -> legacy era
+            _freshness_case("leg"),  # no anchors, no mirror hash, positional name -> unanchored era
         ]
         path = _save_freshness_version(tmp_path, "research", 1, cases)
         reader = FakeFreshnessReader(hashes={"pe": "he", "leg": "hleg"}, sources={"pe-0": ("e",)})
@@ -2105,27 +2089,6 @@ class TestVerifyRecommendationStaleness:
         report = await handler.handle(VerifyRecommendation(recommendation=str(recommendation_path)))
 
         assert report.dataset_staleness is None
-
-    def test_report_without_the_staleness_field_deserializes_as_none(self):
-        # An old serialized verify report predates the additive field, it must still load (None default).
-        report = VerifyReport.model_validate(
-            {
-                "recommendation": "a.yaml",
-                "out": "a.verify.md",
-                "dataset": "d.yaml",
-                "collection": "research",
-                "n_retained": 2,
-                "n_dropped": 0,
-                "predictions_held": 1,
-                "predictions_failed": 0,
-                "predictions_unmeasurable": 0,
-                "targeted_mean_delta": 0.0,
-                "untargeted_mean_delta": 0.0,
-            }
-        )
-
-        assert report.dataset_staleness is None
-
 
 # -- FreezeDatasetHandler ------------------------------------------------------
 #

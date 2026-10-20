@@ -3,7 +3,7 @@ r"""Unit tests for the filesystem knowledge base reader + the pure mirror headin
 Two surfaces in `src/engram/indexing/infrastructure/knowledge_base_reader.py` and `src/engram/indexing/domain/mirror_chunks.py`:
 
 * :class:`FilesystemKnowledgeBaseReader` — globs the four read surfaces the Parse stage
-  consumes (`Memory/**/*.md`, `Sources/*.md`, `_meta/vocabulary/*.md`, named
+  consumes (the declared note folders, `Sources/*.md`, `_meta/vocabulary/*.md`, named
   ``_meta/`` pages), yielding :class:`RawDocument`\s with **knowledge-base-relative** paths
   in **deterministic sorted** order (stable indexes), tolerating missing dirs.
 * :func:`chunk_mirror` — splits a raw mirror body by its numbered headings into
@@ -15,6 +15,8 @@ Two surfaces in `src/engram/indexing/infrastructure/knowledge_base_reader.py` an
 """
 
 from __future__ import annotations
+
+import inspect
 
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -80,17 +82,21 @@ Deep prompt body.
 """
 
 
+_NOTE_FOLDERS = ("Wiki/Papers", "Wiki/Entities")
+"""The folders the knowledge base below declares for its page types."""
+
+
 def _build_knowledge_base(tmp_path: Path) -> Path:
     """A tiny on-disk knowledge base with one page, one mirror, two vocabularies + meta stubs."""
-    (tmp_path / "Units" / "Papers").mkdir(parents=True)
-    (tmp_path / "Units" / "Entities").mkdir(parents=True)
+    (tmp_path / "Wiki" / "Papers").mkdir(parents=True)
+    (tmp_path / "Wiki" / "Entities").mkdir(parents=True)
     (tmp_path / "Sources").mkdir(parents=True)
     (tmp_path / "_meta" / "vocabulary").mkdir(parents=True)
 
-    (tmp_path / "Units" / "Papers" / "lightrag-2025.md").write_text("# paper", encoding="utf-8")
-    (tmp_path / "Units" / "Entities" / "lightrag.md").write_text("# entity", encoding="utf-8")
+    (tmp_path / "Wiki" / "Papers" / "lightrag-2025.md").write_text("# paper", encoding="utf-8")
+    (tmp_path / "Wiki" / "Entities" / "lightrag.md").write_text("# entity", encoding="utf-8")
     # A non-markdown sibling and an image must be ignored by the globs.
-    (tmp_path / "Units" / "Papers" / "notes.txt").write_text("ignore me", encoding="utf-8")
+    (tmp_path / "Wiki" / "Papers" / "notes.txt").write_text("ignore me", encoding="utf-8")
     (tmp_path / "Sources" / "lightrag.md").write_text(_MIRROR, encoding="utf-8")
     (tmp_path / "Sources" / "diagram.png").write_bytes(b"\x89PNG")
     (tmp_path / "_meta" / "vocabulary" / "facets.md").write_text("# facets", encoding="utf-8")
@@ -104,17 +110,24 @@ def _build_knowledge_base(tmp_path: Path) -> Path:
 class TestFilesystemKnowledgeBaseReaderGlobs:
     """The four read surfaces: only `.md`, knowledge-base-relative paths, sorted, fault-tolerant."""
 
+    def test_a_caller_must_name_the_note_folders(self):
+        """Forgetting the schema's folders is a type error at the call, never a reader that silently reads no page."""
+        note_folders = inspect.signature(FilesystemKnowledgeBaseReader).parameters["note_folders"]
+
+        assert note_folders.default is inspect.Parameter.empty
+        assert note_folders.kind is inspect.Parameter.KEYWORD_ONLY
+
     def test_memory_notes_globs_only_markdown_recursively(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         docs = list(reader.unit_documents())
 
         paths = [doc.path for doc in docs]
-        assert paths == ["Units/Entities/lightrag.md", "Units/Papers/lightrag-2025.md"]
+        assert paths == ["Wiki/Entities/lightrag.md", "Wiki/Papers/lightrag-2025.md"]
         assert all(isinstance(doc, RawDocument) for doc in docs)
 
     def test_memory_notes_paths_are_knowledge_base_relative_with_forward_slashes(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         paths = [doc.path for doc in reader.unit_documents()]
 
@@ -122,42 +135,39 @@ class TestFilesystemKnowledgeBaseReaderGlobs:
         assert all("\\" not in path for path in paths)
 
     def test_memory_notes_returns_each_file_text(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         by_path = {doc.path: doc.text for doc in reader.unit_documents()}
 
-        assert by_path["Units/Papers/lightrag-2025.md"] == "# paper"
+        assert by_path["Wiki/Papers/lightrag-2025.md"] == "# paper"
 
-    def test_memory_notes_reads_spec_declared_folders_in_place(self, tmp_path: Path):
-        # A domain-general knowledge base keeps notes outside Units/; the reader globs the spec's declared
-        # folders too (knowledge_base-root-relative), in addition to the always-read Units/ tree.
+    def test_unit_documents_are_read_from_the_declared_folders_alone(self, tmp_path: Path):
+        # A folder no page type declares is not read, whatever it is called.
         (tmp_path / "notes").mkdir()
         (tmp_path / "MOC").mkdir()
         (tmp_path / "Units").mkdir()
         (tmp_path / "notes" / "alpha.md").write_text("# alpha", encoding="utf-8")
         (tmp_path / "MOC" / "index.md").write_text("# index", encoding="utf-8")
-        (tmp_path / "Units" / "legacy.md").write_text("# legacy", encoding="utf-8")
+        (tmp_path / "Units" / "stray.md").write_text("# stray", encoding="utf-8")
 
         reader = FilesystemKnowledgeBaseReader(tmp_path, note_folders=("notes", "MOC"))
 
         paths = [doc.path for doc in reader.unit_documents()]
 
-        assert paths == ["MOC/index.md", "Units/legacy.md", "notes/alpha.md"]
+        assert paths == ["MOC/index.md", "notes/alpha.md"]
 
-    def test_memory_notes_dedupes_a_folder_already_under_units(self, tmp_path: Path):
-        # The research shape: a declared folder lives under Units/, so it is already covered by the
-        # Units/ glob — the file must be yielded once, not duplicated (the parity-preserving dedup).
-        (tmp_path / "Units" / "Papers").mkdir(parents=True)
-        (tmp_path / "Units" / "Papers" / "p.md").write_text("# p", encoding="utf-8")
+    def test_a_file_under_two_declared_folders_is_yielded_once(self, tmp_path: Path):
+        (tmp_path / "Wiki" / "Papers").mkdir(parents=True)
+        (tmp_path / "Wiki" / "Papers" / "p.md").write_text("# p", encoding="utf-8")
 
-        reader = FilesystemKnowledgeBaseReader(tmp_path, note_folders=("Units/Papers",))
+        reader = FilesystemKnowledgeBaseReader(tmp_path, note_folders=("Wiki", "Wiki/Papers"))
 
         paths = [doc.path for doc in reader.unit_documents()]
 
-        assert paths == ["Units/Papers/p.md"]
+        assert paths == ["Wiki/Papers/p.md"]
 
     def test_source_mirrors_globs_only_markdown(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         paths = [doc.path for doc in reader.source_mirrors()]
 
@@ -172,21 +182,21 @@ class TestFilesystemKnowledgeBaseReaderGlobs:
         (tmp_path / "Sources").mkdir()
         (tmp_path / "Sources" / "stale.md").write_text("# decoy", encoding="utf-8")
 
-        reader = FilesystemKnowledgeBaseReader(tmp_path, sources_subdir="Refs")
+        reader = FilesystemKnowledgeBaseReader(tmp_path, sources_subdir="Refs", note_folders=())
 
         paths = [doc.path for doc in reader.source_mirrors()]
 
         assert paths == ["Refs/paper.md"]
 
     def test_registry_documents_sorted(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         paths = [doc.path for doc in reader.vocabulary_documents()]
 
         assert paths == ["_meta/vocabulary/entity-types.md", "_meta/vocabulary/facets.md"]
 
     def test_meta_document_by_name(self, tmp_path: Path):
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         doc = reader.meta_document("schema")
 
@@ -194,8 +204,8 @@ class TestFilesystemKnowledgeBaseReaderGlobs:
         assert doc.text == "# schema"
 
     def test_missing_directories_yield_empty(self, tmp_path: Path):
-        # tmp_path has none of Memory/Sources/_meta — every iterator must be empty, not raise.
-        reader = FilesystemKnowledgeBaseReader(tmp_path)
+        # tmp_path has none of the declared folders, Sources or _meta, so every iterator must be empty and none may raise.
+        reader = FilesystemKnowledgeBaseReader(tmp_path, note_folders=_NOTE_FOLDERS)
 
         assert list(reader.unit_documents()) == []
         assert list(reader.source_mirrors()) == []
@@ -204,7 +214,7 @@ class TestFilesystemKnowledgeBaseReaderGlobs:
     def test_iterators_are_lazy(self, tmp_path: Path):
         from collections.abc import Iterator as _Iterator
 
-        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+        reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
         assert isinstance(reader.unit_documents(), _Iterator)
 
@@ -317,7 +327,7 @@ def _exhaust(iterator: Iterator[RawDocument]) -> int:
 
 
 def test_memory_glob_does_not_leak_meta_or_sources(tmp_path: Path):
-    # Only the two Memory/ pages — never the mirror, vocabularies, or _meta pages.
-    reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path))
+    # Only the two pages, never the mirror, vocabularies, or _meta pages.
+    reader = FilesystemKnowledgeBaseReader(_build_knowledge_base(tmp_path), note_folders=_NOTE_FOLDERS)
 
     assert _exhaust(reader.unit_documents()) == 2

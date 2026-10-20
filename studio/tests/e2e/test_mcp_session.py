@@ -97,7 +97,7 @@ def _mirror(source_key: str, source_hash: str, body: str) -> str:
 def _build_knowledge_base(root: Path) -> Path:
     """Lay down the one paper, its mirror, the registries, and the meta stubs."""
     builder = KnowledgeBaseBuilder(root)
-    builder.add_unit_document("Papers", "graph-cost", _PAPER)
+    builder.add_unit_document("Wiki/Papers", "graph-cost", _PAPER)
     builder.add_source_mirror("graph-cost", _mirror("GRAPHKEY1", "g001", "Graph index construction token cost."))
     builder.add_vocabulary()
     builder.add_meta_stubs()

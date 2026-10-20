@@ -906,7 +906,7 @@ def test_a_patch_replaces_only_the_fields_it_carries() -> None:
 
 
 def test_a_patch_onto_nothing_starts_from_an_empty_presentation() -> None:
-    """A legacy card carries none, and a partial patch onto it stays partial rather than inventing the rest."""
+    """An undescribed card carries none, and a partial patch onto it stays partial rather than inventing the rest."""
     merged = effective_presentation(None, WorkflowPresentationPatch(purpose="Ship the same way every time."))
 
     assert merged.purpose == "Ship the same way every time."
@@ -1043,7 +1043,7 @@ async def test_a_check_carrying_an_intent_settles_it_onto_the_draft_and_keeps_it
 async def test_a_check_that_says_nothing_about_the_intent_keeps_the_one_the_draft_holds(
     tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry
 ) -> None:
-    """Every caller that predates the argument keeps working, and none of them erases an intent."""
+    """A check that names no intent never erases the one the draft holds."""
     ctx = _ctx(tmp_path, registry, draft=Draft(intent=ASKED_FOR))
     spec_yaml = yaml.safe_dump(quarterly_report.model_dump(mode="json"), sort_keys=False)
 

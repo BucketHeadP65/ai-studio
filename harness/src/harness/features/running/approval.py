@@ -121,7 +121,7 @@ class ChatApproval:
             self.session.state,
             GateReached(run_id=self.session.active.run_id or "", workflow_id=self.session.active.workflow_id, gate_id=gate_id),
         )
-        if self.session.active.auto_approve:
+        if self.session.active.gate_mode == "auto":
             self._auto[gate_id] = self._auto.get(gate_id, 0) + 1
             _logger.info("gate {gate} auto-approved, nobody asked", gate=gate_id)
             return GateDecision(approve=True, source="auto")

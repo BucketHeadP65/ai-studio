@@ -1,8 +1,7 @@
 """The conversation the panel shows, and the conversation a restart restores.
 
-Three behaviors under test. First: a text part written before replies were plain prose is a JSON
-envelope on disk, read back for its `message` field only -- never by grepping for the key, which
-would trust any lookalike dict. Second: forgetting must bind the disk too. The transcript is
+Three behaviors under test. First: a text part is shown exactly as the model wrote it, JSON or
+prose. Second: forgetting must bind the disk too. The transcript is
 append-only and stays; the watermark stops a reboot from resurrecting a conversation the person
 explicitly dismissed -- the dual-history divergence in the flesh. Third: what a restart restores
 is the draft kept on disk, never the history's own retyping of it -- the transcript no longer
@@ -49,14 +48,15 @@ def _dialogue(*parts: object) -> list[ModelRequest | ModelResponse]:
     return messages
 
 
-def _legacy_envelope(*, message: str, spec_yaml: str = "", title: str = "") -> str:
-    """The pre-prose reply's wire shape, exactly as a run recorded before this change would have written it."""
+def _shaped_like_a_draft(*, message: str, spec_yaml: str = "", title: str = "") -> str:
+    """Reply text that is a JSON object naming a draft, as a model could write it."""
     return json.dumps({"message": message, "spec_yaml": spec_yaml, "title": title, "summary": "", "applicability": ""})
 
 
-def test_an_old_transcripts_envelope_reads_back_as_its_message() -> None:
-    history = _dialogue(UserPromptPart(content="draft me a workflow"), TextPart(content=_legacy_envelope(message="Here is the graph.")))
-    assert _turns(history) == [{"who": "you", "text": "draft me a workflow"}, {"who": "agent", "text": "Here is the graph."}]
+def test_a_reply_shaped_like_a_draft_is_shown_as_written() -> None:
+    reply = _shaped_like_a_draft(message="Here is the graph.")
+    history = _dialogue(UserPromptPart(content="draft me a workflow"), TextPart(content=reply))
+    assert _turns(history) == [{"who": "you", "text": "draft me a workflow"}, {"who": "agent", "text": reply}]
 
 
 def test_prose_parts_are_shown_as_themselves() -> None:
@@ -64,10 +64,10 @@ def test_prose_parts_are_shown_as_themselves() -> None:
     assert _turns(history) == [{"who": "agent", "text": "thinking about the wiring..."}]
 
 
-def test_json_that_is_not_the_legacy_shape_is_not_mined_for_a_message_key() -> None:
+def test_json_is_not_mined_for_a_message_key() -> None:
     alien = '{"message": "spoofed", "other": 42}'
     history = _dialogue(TextPart(content=alien))
-    assert _turns(history) == [{"who": "agent", "text": alien}], "a lookalike dict is not the legacy envelope"
+    assert _turns(history) == [{"who": "agent", "text": alien}]
 
 
 def _record(run_id: str, *, minutes_ago: int) -> RunRecord:
@@ -134,10 +134,10 @@ def test_a_remembered_draft_beats_the_one_in_the_transcript(quarterly_report: Wo
 
     The dialogue rebuilds from the transcript, but the settled draft cannot: it is whatever passed
     `check_draft`, and the checker's finding never enters the transcript. A transcript whose own
-    text is a JSON envelope naming a different, unverified spec must not win.
+    text is a JSON object naming a different, unverified spec must not win.
     """
     session_state.remember_draft(Draft(spec_yaml=yaml.safe_dump(quarterly_report.model_dump(mode="json"), sort_keys=False), title="Kept"), path=_draft(tmp_path))
-    stale = _legacy_envelope(message="x", spec_yaml="name: retyped-and-wrong\nversion: 1\n", title="Retyped")
+    stale = _shaped_like_a_draft(message="x", spec_yaml="name: retyped-and-wrong\nversion: 1\n", title="Retyped")
 
     conversation = Conversation()
     session_state.restore_conversation(conversation, _dialogue(TextPart(stale)), registry, draft_file=_draft(tmp_path))
@@ -151,7 +151,7 @@ def test_with_nothing_remembered_no_draft_comes_back(registry: StepRegistry, tmp
 
     History no longer supplies a draft at all: `restore_conversation` reads the kept file only.
     """
-    shaped_like_a_draft = _legacy_envelope(message="x", spec_yaml="name: from-history\nversion: 1\n", title="From history")
+    shaped_like_a_draft = _shaped_like_a_draft(message="x", spec_yaml="name: from-history\nversion: 1\n", title="From history")
     conversation = Conversation()
     session_state.restore_conversation(conversation, _dialogue(TextPart(shaped_like_a_draft)), registry, draft_file=_draft(tmp_path))
 

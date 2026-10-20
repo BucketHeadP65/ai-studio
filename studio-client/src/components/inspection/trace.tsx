@@ -23,8 +23,8 @@ import { RowContent, RowLabel } from "./trace-rows";
 // made, folded to a table of the same calls in full, and the composer that continues that
 // conversation. The composer renders as soon as the finding has a question to continue --
 // disabled until the conversation itself loads -- so a challenge from the judgment table above
-// always has somewhere to land, however long the fetch takes. A rule-decided finding, or one
-// from before conversations were recorded, has no calls to read and says so instead.
+// always has somewhere to land, however long the fetch takes. A rule-decided finding has no
+// calls to read and says so instead.
 
 interface KeyedEntry {
   entry: TraceEntry;

@@ -89,7 +89,6 @@ async def _turn_the_embeddings_switch_on(migrated: str) -> None:
                 vocabulary_hash="seed",
                 embed_model="seed",
                 knowledge_base_root="",
-                spec=research_spec(),
             )
             await IndexFingerprints(db).set_switches(collection=WRITTEN, switches=RetrievalSwitches(embeddings=True))
             await db.commit()
@@ -137,7 +136,6 @@ async def _turn_the_graph_switch_on(migrated: str) -> None:
                 vocabulary_hash="seed",
                 embed_model="seed",
                 knowledge_base_root="",
-                spec=research_spec(),
             )
             await IndexFingerprints(db).set_switches(collection=GRAPH_WRITTEN, switches=RetrievalSwitches(graph=True))
             await db.commit()

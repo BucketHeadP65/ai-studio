@@ -412,8 +412,8 @@ def _spec() -> KnowledgeBaseSchema:
     return KnowledgeBaseSchema(
         slug=_COLLECTION,
         page_types=(
-            PageTypeSpec(page_type="note", id_prefix="note.", canonical_sections=findings, claims_enabled=True),
-            PageTypeSpec(page_type="topic", id_prefix="topic.", canonical_sections=findings),
+            PageTypeSpec(page_type="note", id_prefix="note.", folder="Wiki/Notes", canonical_sections=findings, claims_enabled=True),
+            PageTypeSpec(page_type="topic", id_prefix="topic.", folder="Wiki/Topics", canonical_sections=findings),
         ),
         claim_types=(VocabEntry(value="observation", definition="Something observed"),),
         claims=ClaimGrammarSpec(section="findings", edge_relations=("concerns",)),
@@ -451,7 +451,7 @@ async def _index(knowledge_base: Path, migrated: str, spec: KnowledgeBaseSchema,
     await orm.register_pgvector(engine)
     try:
         handler = IndexKnowledgeBaseHandler(
-            FilesystemKnowledgeBaseReader(knowledge_base),
+            FilesystemKnowledgeBaseReader(knowledge_base, note_folders=spec.note_folders),
             FakeEmbedding(),
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine),
             FakeValidationReportSink(),
@@ -496,12 +496,12 @@ class TestAnIncrementalIndexAddingMoreLinkSurfacesThanTheLimit:
             if relative.startswith("_meta/vocabulary/"):
                 (tmp_path / relative).parent.mkdir(parents=True, exist_ok=True)
                 (tmp_path / relative).write_text(body, encoding="utf-8")
-        builder.add_unit_document("note", "citing", _citing_note())
+        builder.add_unit_document("Wiki/Notes", "citing", _citing_note())
         await _index(tmp_path, migrated, spec, full=True)
         assert await _targets_of_the_citing_claim(migrated) == []
 
         for number in range(_TOPICS):
-            builder.add_unit_document("topic", f"t{number}", _topic(number))
+            builder.add_unit_document("Wiki/Topics", f"t{number}", _topic(number))
         report = await _index(tmp_path, migrated, spec, full=False)
 
         assert report.mode == "incremental"

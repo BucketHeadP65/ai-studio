@@ -62,7 +62,8 @@ gate (`uv sync`, `uv run ruff check`, `uv run pyright`, `uv run pytest`) in `cor
 
 ## Tests
 
-Tiered layout: `tests/unit/` (pure, no Docker), `tests/integration/` (a Postgres the tier skips without),
+Tiered layout: `tests/unit/` (pure, no Docker), `tests/integration/` (a throwaway Postgres testcontainer per session,
+skipped without Docker, `CORE_TEST_DATABASE_URL` names another throwaway database instead),
 `tests/support/fakes/` for structural fakes (public scriptable attributes, no leading underscores).
 
 ## Code standard

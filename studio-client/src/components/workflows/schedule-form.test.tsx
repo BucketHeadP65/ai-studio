@@ -9,18 +9,21 @@ import { render } from "@/test-support/render";
 import { ScheduleForm } from "./schedule-form";
 
 // The create-only route onto a schedule: a workflow (fixed or picked), its declared parameters,
-// a cadence with a live preview, and the gate/auto-approve knobs — every request its mount can
-// fire is mocked here (MSW errors on anything unhandled).
+// a cadence with a live preview, and the gate mode options. Every request its mount can fire is
+// mocked here (MSW errors on anything unhandled).
 
 const BASE = "http://studio.test";
 
 const CARD = {
+  archived_at: null,
+  shape: { steps: 0, person_gates: 0, agent_gates: 0 },
+  runs: { last: null },
   id: "wf-sales",
   title: "Fetch sales",
   summary: "",
   provisional: false,
   score: 1,
-  trust: { level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
+  trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
   needs: [],
   missing: [],
   brings: [],
@@ -29,11 +32,16 @@ const CARD = {
 
 function workflowFixture() {
   return {
+    title: "",
+    summary: "",
+    applicability: "",
+    archived_at: null,
     ok: true,
     id: "wf-sales",
     name: "wf-sales",
     version: 1,
     description: "fetch sales",
+    provisional: false,
     graph: {
       name: "wf-sales",
       version: 1,
@@ -83,7 +91,7 @@ function workflowFixture() {
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: { level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
+    trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
   };
 }
 

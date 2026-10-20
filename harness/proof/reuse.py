@@ -35,6 +35,7 @@ from core.ai.workflows.contracts import (
     FromNode,
     Grade,
     LibraryCollection,
+    Outcome,
     RunEvidence,
     WorkflowState,
     approved_gates,
@@ -80,6 +81,9 @@ if TYPE_CHECKING:
     from proof.groundtruth import ResearchQuestion
 
 _logger = get_logger(__name__)
+
+_NOT_CHECKED = "The reuse proof runs the graph directly and does not check its outcome."
+"""Why a reuse run's checked outcome is unknown."""
 
 OUT = Path(__file__).parent / "out"
 DISTILLATION = OUT / "distillation.json"
@@ -162,7 +166,10 @@ async def run_reuse(
         spec_hash=spec_hash,
         workflow_version=spec.version,
         outcome="failed" if failed else "completed",
+        result=Outcome(status="unknown", summary=_NOT_CHECKED),
         gates_approved=approved_gates(spec, state.values),
+        gates_auto=(),
+        gates_orchestrated=(),
         params={name: str(value) for name, value in state.params.items()},
         produced=shapes_of(state.values),
         runner="proof:reuse",

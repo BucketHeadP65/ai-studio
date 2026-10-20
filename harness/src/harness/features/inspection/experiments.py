@@ -122,7 +122,7 @@ class PairedInspector:
             raise
         self.responses[key] = response
         return TaskExecution(
-            output=response.prediction.model_dump_json(), symptom_count=len(response.prediction.symptoms), usage=response.usage
+            output=response.prediction.model_dump_json(), symptom_count=len(response.prediction.symptoms), usage=response.usage, diagnostics=()
         )
 
 

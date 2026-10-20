@@ -25,19 +25,15 @@ export const ScheduleSchema = z.object({
   cadence: z.string(),
   enabled: z.boolean(),
   gate_policy: z.string(),
-  // Who decides a gate this schedule's own run reaches. Defaulted, so a row read from a backend
-  // that predates this field still parses as the wait every such backend only ever meant.
-  gate_mode: GateModeSchema.default("wait"),
-  auto_approve_gates: z.boolean(),
+  // Who decides a gate this schedule's own run reaches.
+  gate_mode: GateModeSchema,
   // A shared concurrency budget (`capacity_key` paired with `capacity_limit`), this schedule's
   // own daily quiet hours (`blackout`), and whether a held fire catches up the moment it clears
-  // (`catch_up`) rather than skipping to the cadence's next legitimate occurrence. All four are
-  // absent on a row read from a backend that predates them, so each defaults rather than
-  // requiring the key — the same wire-compatibility discipline `ScheduleArgumentsSchema` follows.
-  capacity_key: z.string().nullable().default(null),
-  capacity_limit: z.number().nullable().default(null),
-  blackout: z.string().nullable().default(null),
-  catch_up: z.boolean().default(false),
+  // (`catch_up`) rather than skipping to the cadence's next legitimate occurrence.
+  capacity_key: z.string().nullable(),
+  capacity_limit: z.number().nullable(),
+  blackout: z.string().nullable(),
+  catch_up: z.boolean(),
   session_id: z.string(),
   created_at: z.string(),
   last_run_at: z.string().nullable(),
@@ -46,16 +42,16 @@ export const ScheduleSchema = z.object({
   // Where the schedule's own runner session stands right now, read off the live pool: "running",
   // "waiting", "paused", or `null` when nothing is live.
   live: z.string().nullable(),
-  // When a person last flipped this schedule off, `null` while it is on or when it predates this
-  // field. Cleared the moment it flips back on.
-  paused_at: z.string().nullable().default(null),
-  // What this schedule's own runs have cost today, and over the past seven days. Absent or
-  // null before any run of it has been priced.
-  spend_today_usd: z.string().nullish(),
-  spend_week_usd: z.string().nullish(),
+  // When a person last flipped this schedule off, `null` while it is on. Cleared the moment it
+  // flips back on.
+  paused_at: z.string().nullable(),
+  // What this schedule's own runs have cost today, and over the past seven days, as decimal strings.
+  // "0" before any run of it has been priced.
+  spend_today_usd: z.string(),
+  spend_week_usd: z.string(),
   // Responses in each figure that no source could price. Above zero, the figure beside it is a floor.
-  spend_today_unpriced: z.number().nullish(),
-  spend_week_unpriced: z.number().nullish(),
+  spend_today_unpriced: z.number(),
+  spend_week_unpriced: z.number(),
 });
 export type Schedule = z.infer<typeof ScheduleSchema>;
 
@@ -71,9 +67,6 @@ export interface ScheduleCreateInput {
   cadence: string;
   gate_policy: string;
   gate_mode?: GateMode;
-  // The legacy switch `gate_mode` grew from -- kept here for compatibility with any caller still
-  // sending it; the schedule form itself sends `gate_mode` only.
-  auto_approve_gates?: boolean;
   capacity_key?: string | null;
   capacity_limit?: number | null;
   blackout?: string | null;
@@ -89,9 +82,6 @@ export interface ScheduleUpdateInput {
   enabled?: boolean;
   gate_policy?: string;
   gate_mode?: GateMode;
-  // The legacy switch `gate_mode` grew from -- kept here for compatibility with any caller still
-  // sending it; the schedule form itself sends `gate_mode` only.
-  auto_approve_gates?: boolean;
   capacity_key?: string | null;
   capacity_limit?: number | null;
   blackout?: string | null;

@@ -4,14 +4,12 @@ from collections.abc import AsyncIterator
 from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
-import pytest
 import pytest_asyncio
 
 from sqlalchemy import text
 
 from core.cqrs.contracts import create_coordination_schema
 from core.db import async_dsn, build_engine
-from tests.integration.conftest import DATABASE_URL
 
 THROWAWAY = "core_coordination_test"
 TABLES = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'coordination' ORDER BY table_name"
@@ -23,16 +21,13 @@ def _named(url: str, database: str) -> str:
 
 
 @pytest_asyncio.fixture
-async def throwaway_url() -> AsyncIterator[str]:
-    """A database of its own for the test, dropped afterwards, or a skip when there is no Postgres."""
-    try:
-        admin = await asyncpg.connect(DATABASE_URL)
-    except (OSError, asyncpg.PostgresError) as exc:
-        pytest.skip(f"no Postgres at {DATABASE_URL}: {type(exc).__name__}")
+async def throwaway_url(database_url: str) -> AsyncIterator[str]:
+    """A database of its own for the test, dropped afterwards."""
+    admin = await asyncpg.connect(database_url)
     try:
         await admin.execute(f"DROP DATABASE IF EXISTS {THROWAWAY}")
         await admin.execute(f"CREATE DATABASE {THROWAWAY}")
-        yield _named(DATABASE_URL, THROWAWAY)
+        yield _named(database_url, THROWAWAY)
         await admin.execute(f"DROP DATABASE IF EXISTS {THROWAWAY} WITH (FORCE)")
     finally:
         await admin.close()
