@@ -4,8 +4,8 @@ These pin the MCPServer wiring **without** a transport or a database: the factor
 DI-friendly (its tools close over the injected gateway + describe handler — no
 container/env reads inside), so a unit test can build a server from a
 :class:`FakeSqlGateway` + a real :class:`DescribeSchemaHandler` over a fake, then
-drive the tools through the SDK's in-memory client↔server session
-(:func:`mcp.shared.memory.create_connected_server_and_client_session`, which accepts a
+drive the tools through the SDK's in-memory client
+(:class:`mcp.client.Client`, which accepts a
 :class:`~mcp.server.mcpserver.MCPServer` directly). They fix the binding contract:
 
 * the server registers **exactly two** tools — `describe_schema` and `run_sql` —
