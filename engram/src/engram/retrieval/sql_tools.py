@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, cast
 
 from core.ai.embedding import query_model_of
 from core.ai.retrieval.contracts import RefusedStatementError, VectorQueryRewrite, single_statement
+from core.connection_failures import is_database_connection_failure
 from core.observability import get_logger
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import JsonValue
@@ -283,7 +284,8 @@ def make_run_sql(
     runs as written, so an `api.search` or `api.fetch` call through it returns the `meta.*` pages that
     the `search` and `fetch` tools hide. A statement the guard refuses raises `ToolError` from the tool,
     carrying the guard's reason, and a statement that did not run raises it carrying `read_only_error`'s text.
-    With `retry_refusals` set, both raise `ModelRetry` with the same text instead.
+    With `retry_refusals` set, both raise `ModelRetry` with the same text instead. Without it, a statement that
+    did not run because the database connection failed raises that error as it is, for the server to name.
 
     Args:
         gateway: The read-only SQL gateway the statement runs through.
@@ -301,6 +303,8 @@ def make_run_sql(
         except RefusedStatementError as exc:
             raise _refusal(str(exc), retry=retry_refusals) from exc
         except STATEMENT_ERRORS as exc:
+            if not retry_refusals and is_database_connection_failure(exc):
+                raise
             _logger.info("run_sql rejected (read-only role): {problem}", problem=exc.__class__.__name__)
             raise _refusal(read_only_error(exc), retry=retry_refusals) from exc
         aside = " ".join(part for part in (note, result.truncated_message) if part)

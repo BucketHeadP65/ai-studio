@@ -4,7 +4,8 @@ r"""The MCP stdio server over the retrieval read side.
 environment. `describe_schema` and `run_sql` are always registered. `run_sql` caps rows at
 `min(row_limit, 50)` and answers a read-only violation with a message rather than a crash. The read
 tools, `run_code` and the opt-in authoring, tuning and recommendation tools register only when their
-dependencies are wired. Importing this module imports `engram.evals`.
+dependencies are wired. A tool whose connection to the database or to an endpoint failed answers with the
+service it reached and the error's text. Importing this module imports `engram.evals`.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from typing import TYPE_CHECKING
 
 # `GraphPathsResult` and `GraphResult` must be imported at runtime: MCPServer evaluates tool annotations to publish `outputSchema`.
 from core.ai.retrieval.contracts import RUN_CODE, TOOL_NAMES, GraphPathsResult
+from core.connection_failures import connection_failure_message
 from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ModelRetry
@@ -75,6 +77,8 @@ if TYPE_CHECKING:
 
     from core.ai.embedding import QueryEmbedder
     from core.ai.retrieval.contracts import StampSource
+    from mcp.server.mcpserver import Context
+    from mcp.types import CallToolResult, InputRequiredResult
     from pydantic_ai import FunctionToolset
     from pydantic_ai.messages import ModelMessage, ModelResponse
     from pydantic_ai.models import ModelRequestParameters
@@ -99,6 +103,28 @@ if TYPE_CHECKING:
 
 # The most seeds one `propose_eval_seeds` call draws, whatever `count` asks for.
 _MAX_SEED_COUNT = 50
+
+
+class _NamingServer(MCPServer[object]):
+    """An `MCPServer` that answers a tool's failed connection to the database or an endpoint as a `ToolError` naming it."""
+
+    def __init__(self, *, instructions: str, database: str | None) -> None:
+        super().__init__("engram", instructions=instructions)
+        self._database = database
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, object], context: Context[object, object] | None = None
+    ) -> CallToolResult | InputRequiredResult:
+        """Call the tool, raising its failed connection to a service again as a `ToolError` that names the service."""
+        try:
+            return await super().call_tool(name, arguments, context)
+        except UnexpectedToolError as error:
+            failure = error.__cause__
+            message = None if failure is None else connection_failure_message(failure, database=self._database)
+            if message is None:
+                raise
+            named = f"{error}: {message}"
+            raise ToolError(named) from error
 
 
 # The MCP graph tools extend the shared descriptions with their extra arguments. Each anchor sits in a
@@ -336,6 +362,7 @@ def create_mcp_server(
     read_surfaces: tuple[ReadSurface, ...] | None = None,
     facet_keys: tuple[str, ...] = (),
     hits_per_document: int = 0,
+    database: str | None = None,
 ) -> MCPServer:
     """Build the MCP server with its tools closing over the injected dependencies.
 
@@ -406,6 +433,9 @@ def create_mcp_server(
         hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the
             single-base `search` description states, inside `run_code` too. 0 (the default) keeps every hit and
             states nothing about documents. Unread with `read_surfaces`, each of which carries its own.
+        database: The database URL with its password redacted, which a tool's failed database connection names.
+            None (the default) names no database, so such a failure answers as a bare tool error. A failed endpoint
+            connection is named either way.
 
     Returns:
         The server. The host runs it with `.run(transport="stdio")`.
@@ -426,7 +456,7 @@ def create_mcp_server(
     )
     library_paragraph = _library_paragraph(collection, read_surfaces, available)
     combined_instructions = f"{library_paragraph}\n\n{instructions}" if instructions else library_paragraph
-    server = MCPServer(name="engram", instructions=combined_instructions)
+    server = _NamingServer(instructions=combined_instructions, database=database)
 
     # The same callables serve the code-mode sandbox below.
     describe_schema = make_describe_schema(describe_handler)
