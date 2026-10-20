@@ -186,6 +186,41 @@ source_hash: bd72
 LightRAG consistently outperforms GraphRAG, particularly in larger datasets with complex language contexts.
 """
 
+# An article digest names its mirror only through `digest_of`, never the key field: the page an incremental index must
+# re-check when that mirror changes, as a full rebuild does.
+_ARTICLE = """\
+---
+id: art.lightrag-blog
+type: article
+title: LightRAG blog post
+summary: A post on how LightRAG retrieves.
+status: active
+digest_of: blog-lightrag
+---
+
+## TL;DR
+
+A post on how LightRAG retrieves.
+
+## Findings
+
+- The post says LightRAG retrieves at two levels. ^c1
+    - loc:: blog-lightrag:0
+    - quote:: "LightRAG retrieves at a low level and at a high level"
+    - kind:: benchmark-result
+"""
+
+_ARTICLE_MIRROR = """\
+---
+source_key: blog-lightrag
+provider: example-library
+source_hash: b1
+---
+# LightRAG blog post
+
+LightRAG retrieves at a low level and at a high level.
+"""
+
 # An entity with introduction prose before its first heading (the reserved preamble section), an
 # H2 and a nested H3: the page whose section set the removal scenarios shrink.
 _ENTITY_SECTIONS = """\
@@ -276,6 +311,8 @@ def _build_baseline(builder: KnowledgeBaseBuilder) -> None:
     builder.add_unit_document("Wiki/Comparisons", "rag-approaches", _COMPARISON_EDITED)
     builder.add_unit_document("Wiki/Comparisons", "retrieval-modes", _COMPARISON_UNTOUCHED)
     builder.add_source_mirror("lightrag-2025", _MIRROR)
+    builder.add_unit_document("Wiki/Articles", "lightrag-blog", _ARTICLE)
+    builder.add_source_mirror("lightrag-blog", _ARTICLE_MIRROR)
     builder.add_vocabulary()
     builder.add_meta_stubs()
     builder.add_knowledge_base_schema()
@@ -395,6 +432,12 @@ def _edit_change_source_mirror(knowledge_base: Path) -> None:
     mirror.write_text(_MIRROR.replace("## 3 The LightRAG Architecture", "## 3 The LightRAG Architecture (revised)"), encoding="utf-8")
 
 
+def _edit_change_article_mirror(knowledge_base: Path) -> None:
+    """Change the mirror an article digest names only through `digest_of`, so its quote no longer reads in it."""
+    mirror = knowledge_base / "Sources" / "lightrag-blog.md"
+    mirror.write_text(_ARTICLE_MIRROR.replace("at a low level and at a high level", "in two passes"), encoding="utf-8")
+
+
 def _edit_noop(knowledge_base: Path) -> None:
     """E1.8 — the no-op reindex: leave the baselined knowledge base untouched."""
     del knowledge_base
@@ -462,6 +505,7 @@ _SCENARIOS: tuple[_Scenario, ...] = (
         "delete-link-target", _edit_delete_link_target, stale_ids=(("pages", "ent.graphrag"), ("unit_summaries", "ent.graphrag"))
     ),
     _Scenario("change-source-mirror", _edit_change_source_mirror),
+    _Scenario("change-article-mirror", _edit_change_article_mirror),
     _Scenario("no-op", _edit_noop),
     _Scenario(
         "remove-h3",
@@ -864,6 +908,19 @@ async def test_a_full_index_prunes_only_the_summaries_whose_unit_is_gone(bed: _B
 
     assert report.mode == "full"
     assert await _summary_unit_ids(bed.a_engine) == {kept_page, kept_section}
+
+
+async def test_an_incremental_index_rechecks_an_article_digest_whose_mirror_changed(bed: _Bed, tmp_path: Path) -> None:
+    """The article names its mirror only through `digest_of`, and the incremental index still finds its quote gone."""
+    knowledge_base = _baselined_knowledge_base(tmp_path / "article")
+    baseline = await _index(bed.a_engine, knowledge_base, full=True)
+    _edit_change_article_mirror(knowledge_base)
+
+    report = await _index(bed.a_engine, knowledge_base, full=False)
+
+    assert not any(issue.page_id == "art.lightrag-blog" for issue in baseline.validation.errors)
+    assert report.mode == "incremental"
+    assert any(issue.rule == "quote-not-in-source" and issue.page_id == "art.lightrag-blog" for issue in report.validation.errors)
 
 
 async def test_an_incremental_index_leaves_a_second_collection_with_colliding_ids_untouched(bed: _Bed, tmp_path: Path) -> None:

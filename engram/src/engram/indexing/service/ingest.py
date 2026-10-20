@@ -136,6 +136,7 @@ class IngestPageHandler:
                 facets=spec.facets,
                 claim_grammar=spec.claims,
                 source_key_field=spec.sources.key_field,
+                digest_link_field=spec.sources.digest_link_field,
                 source_hash_field=spec.sources.hash_field,
                 date_field=spec.retrieval.date_field,
             )

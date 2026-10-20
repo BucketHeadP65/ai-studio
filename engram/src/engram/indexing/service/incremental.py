@@ -41,7 +41,7 @@ from engram.indexing.domain.models import (
     PartitionPreview,
     ValidationIssue,
     ValidationReport,
-    frontmatter_value,
+    cited_mirror_key,
     loadable_mirrors,
 )
 from engram.indexing.domain.resolver import build_link_index, build_link_index_from_pages, resolve_with_index
@@ -201,6 +201,7 @@ async def run_incremental(
         # kept after its mirror was removed. Both satisfy the pages foreign key.
         known_source_keys=frozenset(mirror_texts) | frozenset(page.source_id for page in clean if page.source_id),
         source_key_field=deps.spec.sources.key_field,
+        digest_link_field=deps.spec.sources.digest_link_field,
         source_hash_field=deps.spec.sources.hash_field,
         date_field=deps.spec.retrieval.date_field,
         chunk_sizes=chunk_sizes,
@@ -215,7 +216,11 @@ async def run_incremental(
         edge_src_ids=row_ids(load.pages) | dirty_set.deleted_page_ids,
         deleted_page_ids=set(dirty_set.deleted_page_ids),
         deleted_source_keys=_deletable_source_keys(
-            dirty_set, clean=clean, dirty_notes=resolved.notes, source_key_field=deps.spec.sources.key_field
+            dirty_set,
+            clean=clean,
+            dirty_notes=resolved.notes,
+            source_key_field=deps.spec.sources.key_field,
+            digest_link_field=deps.spec.sources.digest_link_field,
         ),
         removed_paths=set(diff.removed),
     )
@@ -304,6 +309,7 @@ async def preview_dirty_set(cmd: IndexKnowledgeBase, *, deps: IncrementalDeps) -
         facets=deps.spec.facets,
         claim_grammar=deps.spec.claims,
         source_key_field=deps.spec.sources.key_field,
+        digest_link_field=deps.spec.sources.digest_link_field,
         source_hash_field=deps.spec.sources.hash_field,
         date_field=deps.spec.retrieval.date_field,
     )
@@ -577,11 +583,15 @@ def _other_page_ids(clean: Sequence[CleanPage], dirty_set: DirtySet, resolved: R
 
 
 def _deletable_source_keys(
-    dirty_set: DirtySet, *, clean: Sequence[CleanPage], dirty_notes: Sequence[ResolvedNote], source_key_field: str
+    dirty_set: DirtySet, *, clean: Sequence[CleanPage], dirty_notes: Sequence[ResolvedNote], source_key_field: str, digest_link_field: str
 ) -> set[str]:
     """The removed source keys no surviving page still cites, which the load may delete."""
     surviving_refs = {page.source_id for page in clean if page.source_id and page.id not in dirty_set.deleted_page_ids}
-    surviving_refs |= {key for resolved in dirty_notes if (key := frontmatter_value(resolved.note.frontmatter, source_key_field))}
+    surviving_refs |= {
+        key
+        for resolved in dirty_notes
+        if (key := cited_mirror_key(resolved.note.frontmatter, key_field=source_key_field, digest_link_field=digest_link_field))
+    }
     return set(dirty_set.deleted_source_keys) - surviving_refs
 
 
@@ -628,6 +638,7 @@ def _build_dirty_load(  # noqa: PLR0913 (one param per row-build input)
     claim_grammar: ClaimGrammarSpec | None = None,
     known_source_keys: frozenset[str] | None = None,
     source_key_field: str,
+    digest_link_field: str,
     source_hash_field: str,
     date_field: str,
     chunk_sizes: ChunkSizes = DEFAULT_CHUNK_SIZES,
@@ -642,6 +653,7 @@ def _build_dirty_load(  # noqa: PLR0913 (one param per row-build input)
         claim_grammar=claim_grammar,
         known_source_keys=known_source_keys,
         source_key_field=source_key_field,
+        digest_link_field=digest_link_field,
         source_hash_field=source_hash_field,
         date_field=date_field,
         chunk_sizes=chunk_sizes,

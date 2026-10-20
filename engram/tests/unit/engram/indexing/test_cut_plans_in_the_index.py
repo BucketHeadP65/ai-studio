@@ -117,7 +117,7 @@ def _row_builder() -> RowBuilder:
     return RowBuilder(
         "research",
         section_summary_spec=SectionSummarySpec(),
-        source_key_field=spec.sources.key_field,
+        source_key_field=spec.sources.key_field, digest_link_field=spec.sources.digest_link_field,
         source_hash_field=spec.sources.hash_field,
         date_field="created",
         chunk_sizes=_SIZES,

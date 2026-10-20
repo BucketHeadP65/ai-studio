@@ -92,7 +92,9 @@ It then dispatches `IndexKnowledgeBase` incremental, with embeddings on and no s
   every issue stored for the collection once the load committed, and the exit code reads that.
   A claim quote the cited mirror does not read is the error `quote-not-in-source`. The cited mirror is the one
   the page's `sources.key_field` names, or else the one its `sources.digest_link_field` names, so an article
-  digest that carries only the digest link is checked as a paper digest is.
+  digest that carries only the digest link is checked as a paper digest is. The same key is the page's
+  `kb.pages.source_id` when the knowledge base holds that mirror, so source-level scoring credits an article digest
+  to its source, and an incremental index re-checks the digest when its mirror changes.
 - **Config:** knowledge base path via `KnowledgeBaseSettings`. Embedding provider via
   `EmbeddingProviderSettings` (both resolved by wireup in `deps.py`). Chunk sizes via
   `IngestionSettings.chunk_target_tokens` and `chunk_max_tokens`, and the chunk planner via

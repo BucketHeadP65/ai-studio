@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from engram.indexing.domain import card
 from engram.indexing.domain.embed_strategy import build_note_embed_strategies, build_source_embed_strategies
 from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, chunk_mirror
-from engram.indexing.domain.models import EdgeRow, IndexedPage, ValidationIssue, frontmatter_value
+from engram.indexing.domain.models import EdgeRow, IndexedPage, ValidationIssue, cited_mirror_key, frontmatter_value
 from engram.indexing.domain.rows import ClaimQualifierRow, ClaimRow, LinkRefRow, SectionRow, ValidationRow
 from engram.indexing.domain.section_summary import derive_section_summary
 from engram.indexing.service.orientation import ORIENTATION_PAGES, orientation_page_id
@@ -273,6 +273,7 @@ class RowBuilder:
         claim_grammar: ClaimGrammarSpec | None = None,
         known_source_keys: frozenset[str] | None = None,
         source_key_field: str,
+        digest_link_field: str,
         source_hash_field: str,
         date_field: str,
         chunk_sizes: ChunkSizes = DEFAULT_CHUNK_SIZES,
@@ -289,7 +290,9 @@ class RowBuilder:
             claim_grammar: The schema's claim grammar, whose declared field order the claim embed text follows. `None` keeps
                 each claim's own order.
             known_source_keys: The source keys a page may cite. A page citing another key gets no `source_id`. `None` skips the check.
-            source_key_field: The frontmatter field holding a page's source key.
+            source_key_field: The frontmatter field holding a page's source key. A page with a value there takes it as its `source_id`.
+            digest_link_field: The frontmatter field a digest names its source by. A page with no key field value takes its value
+                as its `source_id`.
             source_hash_field: The frontmatter field holding the hash of the cited source.
             date_field: The frontmatter field a page's page date is read from. A value that is no date leaves it empty.
             chunk_sizes: How many tokens a chunk of a mirror aims for and may hold. Custom `source_strategies` must cut by the same sizes.
@@ -309,6 +312,7 @@ class RowBuilder:
         self._facets = facets
         self._known_source_keys = known_source_keys
         self._source_key_field = source_key_field
+        self._digest_link_field = digest_link_field
         self._source_hash_field = source_hash_field
         self._date_field = date_field
         self._facet_keys = frozenset(facet.key for facet in facets)
@@ -362,7 +366,9 @@ class RowBuilder:
             status=note.frontmatter.status,
             superseded_by=resolved.superseded_by_id,
             # A blank key is no source at all: the pages.source_id foreign key takes NULL, never "".
-            source_id=self._gated_source_id(frontmatter_value(note.frontmatter, self._source_key_field) or None),
+            source_id=self._gated_source_id(
+                cited_mirror_key(note.frontmatter, key_field=self._source_key_field, digest_link_field=self._digest_link_field) or None
+            ),
             source_hash=frontmatter_value(note.frontmatter, self._source_hash_field) or None,
             created=_frontmatter_date(note.frontmatter, "created"),
             page_date=_frontmatter_date(note.frontmatter, self._date_field),
