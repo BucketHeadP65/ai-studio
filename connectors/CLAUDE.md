@@ -16,7 +16,8 @@ lazily at wiring time.
   (hand-rolled over `httpx`, no dedicated transcript library). Extra: `youtube`.
 - `source_queue/`: the `Connector` adapter over a knowledge base's general source queue
   (`engram.sources.contracts.SourceQueue`), one resolver per `SourceType`
-  (`VideoResolver`, `ArxivResolver`, `ArticleResolver`, `PostResolver`). Extra: `source-queue`, registered name `intake`.
+  (`VideoResolver`, `ArxivResolver`, `ArticleResolver`, `PostResolver`). A web page that is a bot check (`challenge_reason`)
+  fails its row at fetch and is never served from the cache. Extra: `source-queue`, registered name `intake`.
 - `x/`: the `Scanner` for `x` watch-list entries. A Grok model with native X search lists an
   account's recent posts and renders each one straight into the source queue cache, so the
   refresh that follows never re-fetches it. Extra: `x` (`pydantic-ai`, `pydantic-ai-slim[xai]`).

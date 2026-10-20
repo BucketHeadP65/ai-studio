@@ -38,6 +38,13 @@ _INTERSTITIAL_TITLE = re.compile(
     r"|checking your browser|are you a robot|bot verification|enable javascript and cookies|403 forbidden",
     re.IGNORECASE,
 )
+# What a challenge page asks of the reader when it keeps the site's own title. Read only on a short page.
+_CHALLENGE_BODY = re.compile(
+    r"complete the (?:security )?check below|checking if the site connection is secure|please complete the verification"
+    r"|verify(?:ing)? (?:that )?you are (?:a )?human|enable javascript and cookies to continue|verifying your browser",
+    re.IGNORECASE,
+)
+_CHALLENGE_PAGE_WORDS = 150
 _MIN_ARTICLE_WORDS = 40
 
 
@@ -259,12 +266,34 @@ class PaperResolver:
         return await resolver.resolve(entry)
 
 
+def _word_count(markdown: str) -> int:
+    return sum(1 for token in markdown.split() if any(char.isalnum() for char in token))
+
+
+def challenge_reason(title: str, markdown: str, *, url: str) -> str | None:
+    """Why a page fetched for `url` is a bot check rather than the article, or `None` when it is not one.
+
+    A page is a bot check when its title is a challenge title, or when it is short and its body asks the reader to
+    pass a check, whatever title it keeps.
+
+    Args:
+        title: The page's title.
+        markdown: The page rendered as markdown.
+        url: The URL the page was fetched for, named in the reason.
+
+    Returns:
+        The reason a source queue row carries when it fails, or `None`.
+    """
+    if _INTERSTITIAL_TITLE.search(title) or (_word_count(markdown) < _CHALLENGE_PAGE_WORDS and _CHALLENGE_BODY.search(markdown)):
+        return f"{url} answered a bot-check page, not the article: {title!r}"
+    return None
+
+
 def _refuse_interstitial(title: str, markdown: str, *, url: str) -> None:
     """Raise `ResolveError` when a fetch answered a bot check or too few words to be the page asked for."""
-    if _INTERSTITIAL_TITLE.search(title):
-        msg = f"{url} answered a bot-check page, not the article: {title!r}"
-        raise ResolveError(msg)
-    words = sum(1 for token in markdown.split() if any(char.isalnum() for char in token))
+    if (reason := challenge_reason(title, markdown, url=url)) is not None:
+        raise ResolveError(reason)
+    words = _word_count(markdown)
     if words < _MIN_ARTICLE_WORDS:
         msg = f"{url} answered {words} words, too few to be the article"
         raise ResolveError(msg)

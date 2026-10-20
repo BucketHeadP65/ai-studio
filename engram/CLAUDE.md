@@ -114,7 +114,9 @@ an `article` keyed by URL hash. The connector registered as `intake`
 (`engram_connectors.source_queue`) then resolves a `requested` row through the source type's resolver (a YouTube
 transcript, an arXiv or an article conversion) and caches its rendered markdown under
 `<knowledge_base>/_meta/source-queue-cache/`. A `resolved` row is served straight from that cache on every later
-sync, and a `failed` row moves back to `requested` on retry.
+sync, and a `failed` row moves back to `requested` on retry. A web page that answers a bot check (by its title, or a
+short body asking the reader to pass a check) is never stored or served: the fetch fails the row, and a cached one is
+deleted, its row failed, or fetched again when the row was retried.
 
 The watch list (`engram.sources.service.watch_list`) watches for new URLs to add to that source queue. Each row of
 `<knowledge_base>/_meta/watch-list.yaml` names the scanner that reads it (`scanner`), what that scanner reads

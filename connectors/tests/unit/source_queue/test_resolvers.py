@@ -174,6 +174,36 @@ async def test_article_resolver_refuses_a_bot_check_page_instead_of_mirroring_it
         await ArticleResolver(BotCheck(), cache_dir=tmp_path).resolve(_entry("https://openreview.net/forum?id=x", SourceType.ARTICLE, "url-0123456789abcdef"))
 
 
+async def test_article_resolver_refuses_a_challenge_page_under_the_sites_own_title(tmp_path: Path) -> None:
+    """A challenge page that keeps the site's title is still a bot check: its body asks the reader to pass a check."""
+
+    class ChallengeUnderSiteTitle:
+        async def to_markdown(self, pdf_path: Path, *, source_url: str | None = None) -> ConversionResult:
+            body = (
+                "Verifying your browser. Complete the check below to continue to OpenReview. Please complete the verification above. "
+                "Have an OpenReview account? Sign in to skip this check. This process is automatic and your browser will redirect "
+                "to the requested content shortly once the check is complete."
+            )
+            return ConversionResult(markdown=f"# OpenReview\n\n{body}", page_count=1, converter="article/trafilatura", assets={})
+
+    with pytest.raises(ResolveError, match="answered a bot-check page, not the article: 'OpenReview'"):
+        await ArticleResolver(ChallengeUnderSiteTitle(), cache_dir=tmp_path).resolve(
+            _entry("https://openreview.net/forum?id=x", SourceType.ARTICLE, "url-0123456789abcdef")
+        )
+
+
+async def test_article_resolver_keeps_a_long_article_that_mentions_a_browser_check(tmp_path: Path) -> None:
+    class LongArticle:
+        async def to_markdown(self, pdf_path: Path, *, source_url: str | None = None) -> ConversionResult:
+            prose = "Agents that browse the web meet pages that say complete the check below to continue, and they must stop there. " * 20
+            return ConversionResult(markdown=f"# How agents meet bot checks\n\n{prose}", page_count=1, converter="article/trafilatura", assets={})
+
+    resolved = await ArticleResolver(LongArticle(), cache_dir=tmp_path).resolve(
+        _entry("https://blog.example.org/checks", SourceType.ARTICLE, "url-0123456789abcdef")
+    )
+    assert resolved.title == "How agents meet bot checks"
+
+
 async def test_article_resolver_refuses_a_near_empty_page(tmp_path: Path) -> None:
     class Thin:
         async def to_markdown(self, pdf_path: Path, *, source_url: str | None = None) -> ConversionResult:

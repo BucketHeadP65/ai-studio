@@ -36,6 +36,7 @@ from engram_connectors.source_queue.infrastructure.resolvers import (
     PdfResolver,
     PostResolver,
     VideoResolver,
+    challenge_reason,
     fetch_arxiv_pdf,
 )
 from engram_connectors.xai import xai_resource
@@ -74,7 +75,9 @@ class SourceQueueConnector:
 
     A `requested` row is resolved once. Its markdown is cached under `cache_dir/<key>.md` beside a
     `<key>.meta.json` carrying the title, URL, channel, published date and converter label.
-    From then on the row is `resolved` and served from that cache.
+    From then on the row is `resolved` and served from that cache. A cached web page that is a bot check
+    is never served: its cache files are deleted, a `requested` row (a retry) is fetched again, and any
+    other row is marked `failed` with the reason.
     A row whose source type has no resolver is marked `skipped`.
     A resolver that raises a `ResolveError`, or an `OSError` from a file its converter could not read,
     marks the row `failed` with the reason, and the other rows still serve.
@@ -241,6 +244,12 @@ class SourceQueueConnector:
 
     async def _item_for(self, entry: SourceQueueEntry) -> SourceItem | None:
         meta = self._read_meta(entry)
+        if meta is not None and entry.source_type is SourceType.ARTICLE and (reason := challenge_reason(meta.title, meta.markdown, url=entry.url)):
+            self._forget(entry)
+            if entry.status is not SourceQueueStatus.REQUESTED:
+                self._queue.mark(entry.key, SourceQueueStatus.FAILED, reason=reason)
+                return None
+            meta = None
         if meta is not None and entry.status is SourceQueueStatus.REQUESTED:
             self._queue.mark(entry.key, SourceQueueStatus.RESOLVED)
         if meta is None:
@@ -303,6 +312,11 @@ class SourceQueueConnector:
             if cached.title.strip() == wanted:
                 return other
         return None
+
+    def _forget(self, entry: SourceQueueEntry) -> None:
+        """Delete the cached resolution of `entry`, so a retry fetches the page again."""
+        for path in (self._cache_dir / f"{entry.key}.md", self._cache_dir / f"{entry.key}.meta.json"):
+            path.unlink(missing_ok=True)
 
     def _read_meta(self, entry: SourceQueueEntry) -> Resolved | None:
         """The cached resolution for `entry`, or `None` when it is absent or unreadable."""
