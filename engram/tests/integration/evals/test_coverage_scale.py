@@ -86,7 +86,7 @@ class _RecordingExecutor:
         self._session = session
         self.calls: list[_Recorded] = []
 
-    async def execute[T: tuple[object, ...]](self, statement: Select[T]) -> Result[T]:
+    async def execute[*Ts](self, statement: Select[*Ts]) -> Result[*Ts]:
         result = await self._session.execute(statement)
         frozen = result.freeze()
         self.calls.append(_Recorded(sql=str(statement), rows=len(frozen().all())))

@@ -42,7 +42,7 @@ _META_PAGE_TYPE = "meta"
 class SupportsExecute(Protocol):
     """A session that runs a typed `SELECT`. An `AsyncSession` is one."""
 
-    async def execute[T: tuple[object, ...]](self, statement: Select[T]) -> Result[T]:
+    async def execute[*Ts](self, statement: Select[*Ts]) -> Result[*Ts]:
         """Run a typed `SELECT`.
 
         Args:
@@ -496,7 +496,7 @@ def _salted_hash(key: SQLColumnExpression[str], salt: str) -> ColumnElement[str]
     return func.md5(key.concat(salt))
 
 
-def passage_sections[T: tuple[object, ...]](statement: Select[T], collection: str) -> Select[T]:
+def passage_sections[*Ts](statement: Select[*Ts], collection: str) -> Select[*Ts]:
     """Join a `kb.sections` statement to each section's page and keep only the sections that seed a `passage`.
 
     A section qualifies when it belongs to `collection`, its body has at least `MIN_PASSAGE_CHARS`
@@ -571,7 +571,7 @@ def _assemble_trace_paths(
     return paths
 
 
-def _in_pages[T: tuple[object, ...]](statement: Select[T], page_ids: tuple[str, ...], column: SQLColumnExpression[str]) -> Select[T]:
+def _in_pages[*Ts](statement: Select[*Ts], page_ids: tuple[str, ...], column: SQLColumnExpression[str]) -> Select[*Ts]:
     """Narrow `statement` to rows whose `column` is in `page_ids`, or leave it unfiltered when empty."""
     if not page_ids:
         return statement
