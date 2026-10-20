@@ -43,11 +43,13 @@ _ROWS: tuple[Row, ...] = (
 
 
 class _FakeSearch:
-    def __init__(self, rows: tuple[Row, ...]) -> None:
+    def __init__(self, rows: tuple[Row, ...], *, delay_seconds: float = 0.0) -> None:
         self.rows = rows
+        self.delay_seconds = delay_seconds
 
     async def __call__(self, query: Search) -> SqlResult:
         del query
+        await asyncio.sleep(self.delay_seconds)
         return SqlResult(rows=self.rows, columns=("id", "snippet", "score"))
 
 
@@ -76,6 +78,7 @@ def _reranked(
     requests: RequestShape = "per_hit",
     deadline_seconds: float = 5.0,
     max_input_tokens: int = 32_000,
+    search_seconds: float = 0.0,
 ) -> tuple[RerankedSearch[Search], _FakeFetch]:
     fetch = _FakeFetch({"spend": "spend body", "restart": "restart body after a boot", "durable": "durable body"})
     rerank = Reranking(
@@ -85,7 +88,7 @@ def _reranked(
         deadline_seconds=deadline_seconds,
         max_input_tokens=max_input_tokens,
     )
-    return rerank.over(_FakeSearch(rows), fetch), fetch
+    return rerank.over(_FakeSearch(rows, delay_seconds=search_seconds), fetch), fetch
 
 
 async def test_hits_come_back_in_the_order_of_their_probability_beside_their_fused_score() -> None:
@@ -170,6 +173,14 @@ async def test_chunk_fetching_past_the_deadline_returns_the_search_order() -> No
     result = await search(Search(query="q", collection=None))
 
     assert result.rows == _ROWS
+
+
+async def test_a_search_slower_than_the_deadline_still_leaves_the_re_rank_its_whole_deadline() -> None:
+    search, _ = _reranked(FakeDecisionModel(yes=_by_keyword), deadline_seconds=0.2, search_seconds=0.3)
+
+    result = await search(Search(query="q", collection=None))
+
+    assert [row["id"] for row in result.rows] == ["restart", "durable", "spend"]
 
 
 async def test_an_empty_snippet_is_still_ranked() -> None:

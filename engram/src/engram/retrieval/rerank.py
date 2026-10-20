@@ -39,7 +39,9 @@ class Reranking:
     requests: RequestShape = "per_hit"
     """One request per hit, or one for every hit."""
     deadline_seconds: float = 3.0
-    """How long the whole re-rank may take, chunk fetching included, before the search answers in its own order."""
+    """How long the whole re-rank may take, chunk fetching included, before the search answers in its own order.
+
+    The clock starts when the search answers, so a slow search never shortens it."""
     max_input_tokens: int = 32_000
     """The most tokens one request may carry."""
 
@@ -81,11 +83,11 @@ class RerankedSearch[S: Search]:
             The hits, re-ranked, or the search's own result when the re-rank answered nothing.
         """
         loop = asyncio.get_running_loop()
-        started = loop.time()
         async with read_snapshot():
             result = await self.search(query)
             if not result.rows:
                 return result
+            started = loop.time()
             keys = [f"h{index}" for index in range(len(result.rows))]
             try:
                 texts = await asyncio.wait_for(self._texts(result.rows), self.reranking.deadline_seconds)

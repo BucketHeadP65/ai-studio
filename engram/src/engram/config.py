@@ -68,7 +68,7 @@ class RerankSettings(BaseModel):
     requests: RequestShape = "per_hit"
     """One request per hit, or one request for every hit."""
     deadline_seconds: float = Field(default=3.0, gt=0, le=60)
-    """How long a re-rank may take before the search answers in its own order."""
+    """How long a re-rank may take, counted from when the search returns, before the hits come back in the search's own order."""
     max_input_tokens: int = Field(default=32_000, ge=1_000)
     """The most tokens one request may carry. A chunk is cut to fit it."""
     max_concurrent_requests: int = Field(default=8, ge=1)
