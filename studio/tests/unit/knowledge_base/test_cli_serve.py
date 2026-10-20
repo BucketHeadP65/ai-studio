@@ -612,6 +612,24 @@ class TestBuildMcpServerStamp:
         assert result.structured_content["knowledge_base"]["slug"] == "research"
 
 
+class TestBuildMcpServerConnectionFailures:
+    """The served server names the reader database, without its password, when a tool's connection to it fails."""
+
+    async def test_a_search_whose_database_refuses_the_connection_names_the_redacted_reader_database(self, tmp_path: Path):
+        container = _McpServerContainer(knowledge_base=_make_knowledge_base(tmp_path), gateway=_UnreachableReaderGateway())
+
+        server = await _build_mcp_server(container, authoring=False)
+        async with Client(server) as client:
+            result = await client.call_tool("search", {"query": "graph rag"})
+
+        block = result.content[0]
+        reader = redact_db("postgresql+asyncpg://r:p@h:5433/knowledge_bases")
+        assert result.is_error
+        assert block.type == "text"
+        assert block.text == f"Error executing tool search: database {reader}: [Errno 61] Connect call failed ('127.0.0.1', 5434)"
+        assert "r:p@" not in block.text
+
+
 def _make_auto_knowledge_base(tmp_path: Path) -> KnowledgeBaseSettings:
     """A knowledge base like `_make_knowledge_base`'s whose schema lets the stored switches decide its retrieval."""
     settings = _make_knowledge_base(tmp_path)

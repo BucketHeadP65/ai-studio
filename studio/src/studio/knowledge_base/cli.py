@@ -603,6 +603,7 @@ async def _build_mcp_server(
         doc_authoring_tools=doc_authoring_tools,
         read_surfaces=surfaces,
         hits_per_document=surfaces[0].hits_per_document,
+        database=redact_db(database.reader_url),
     )
     # The admin engine pools connections and `stamp` reads through it. Disposing it before this loop closes
     # makes the served loop open fresh connections instead of reusing ones bound to this loop.
