@@ -79,16 +79,23 @@ predates the current format: `studio evals compare` and `--resume` refuse it, na
 missing keys, and the evaluation is run again to write it anew. `--resume` also says to name another results file
 or to run without resuming, which replaces the file. A failed case is written as incorrect, and its `transient` key
 says whether it was a transient failure: a model connection error, a model request timeout, an
-HTTP 429 or 5xx from the model, or a database connection failure. A database connection failure is
+HTTP 429 or 5xx from the model, a database connection failure, or a statement timeout (a statement the
+database cancelled past the reader role's statement timeout). A database connection failure is
 a connection to the knowledge base's database that was refused, could not be opened or closed under
 a statement, or a database shutting down or starting up. It is matched by the error's type
 (Python's connection errors and asyncpg's connection and shutdown errors, raised alone or wrapped
 by SQLAlchemy) and by asyncio's text for a failed connection attempt, such as
 `OSError: Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 5434)`.
-A tool-call limit, a refused answer, an error the agent's own SQL statement causes (a syntax error,
-an undefined column, a refused permission, a statement timeout) and every other error are not
-transient. The rule lives in `engram.evals.harness.transient_failures`, which reads database
-connection failures through `core.connection_failures`.
+A tool-call limit, a refused answer, any other error an SQL statement causes (a syntax error,
+an undefined column, a refused permission) and every other error are not transient. The rule lives in
+`engram.evals.harness.transient_failures`, which reads database connection failures and statement
+timeouts through `core.connection_failures`.
+
+`studio evals score` reads the same rule. A case whose search or source lookup fails transiently runs
+again after a wait, at most `CASE_RETRIES` (5) times. The first wait is `FIRST_RETRY_WAIT_SECONDS` (2 s)
+and each later one is twice the one before. A case that still fails after its last retry, or fails for
+any other reason, fails the score. The score report counts the retries per case and in all (`retries`),
+and the CLI prints the total. Both constants live in `engram.evals.scoring.contracts`.
 
 A failed case whose connection to a service failed records an error that names the service before
 the error's own text, so the results file and the printed failures table say which one failed:

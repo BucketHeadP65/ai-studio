@@ -10,13 +10,23 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
+from asyncpg.exceptions import PostgresSyntaxError, QueryCanceledError
 from core.ai.retrieval.contracts import SqlResult
 from pydantic import ValidationError
 
 from engram.evals.commands import ScoreDataset
 from engram.evals.generation.contracts import AuthoredCase, build_dataset, save_dataset
 from engram.evals.handlers import ScoreDatasetHandler
-from engram.evals.scoring.contracts import SEARCH_SETUPS, HitRef, ranked_sources, score_case, score_dataset, write_score_report
+from engram.evals.scoring.contracts import (
+    CASE_RETRIES,
+    FIRST_RETRY_WAIT_SECONDS,
+    SEARCH_SETUPS,
+    HitRef,
+    ranked_sources,
+    score_case,
+    score_dataset,
+    write_score_report,
+)
 from engram.evals.scoring.domain import source_gold
 from engram.evals.shared.contracts import ExpectedQa, QaCaseMeta, QaInput
 
@@ -378,3 +388,85 @@ async def test_the_cases_whose_search_returned_no_hits_are_counted_and_printed_o
     assert yaml.safe_load(claim_yaml.read_text(encoding="utf-8"))["cases_without_hits"] == 2
     assert "Cases whose search returned no hits at all: 2 of 2." in claim_markdown.read_text(encoding="utf-8")
     assert "returned no hits" not in hybrid_markdown.read_text(encoding="utf-8")
+
+
+class _FailingSearch(_FakeSearch):
+    """Fails each question's first searches with the scripted error, then answers it with its scripted rows."""
+
+    def __init__(self, rows_by_question: Mapping[str, Sequence[Mapping[str, object]]], *, error: Exception, failures: int) -> None:
+        super().__init__(rows_by_question)
+        self.error = error
+        self.failures = failures
+
+    async def __call__(self, query: Search) -> SqlResult:
+        failed = sum(asked.query == query.query for asked in self.queries)
+        self.queries.append(query)
+        if failed < self.failures:
+            raise self.error
+        return SqlResult(rows=tuple(dict(row) for row in self.rows_by_question[query.query]))
+
+
+class _RecordedSleep:
+    """Records every wait instead of waiting."""
+
+    def __init__(self) -> None:
+        self.waits: list[float] = []
+
+    async def __call__(self, seconds: float) -> None:
+        self.waits.append(seconds)
+
+
+_TRANSIENT_SEARCH_FAILURES = [
+    QueryCanceledError("canceling statement due to statement timeout"),
+    ConnectionResetError(54, "Connection reset by peer"),
+]
+
+
+@pytest.mark.parametrize("error", _TRANSIENT_SEARCH_FAILURES, ids=["statement timeout", "database connection failure"])
+async def test_a_case_whose_search_fails_transiently_runs_again_after_a_growing_wait_and_is_counted(tmp_path: Path, error: Exception):
+    rows = {"Q1?": [{"id": "d1:0", "hit_level": "raw", "page_id": None}], "Q2?": [{"id": "d2:0", "hit_level": "raw", "page_id": None}]}
+    search = _FailingSearch(rows, error=error, failures=2)
+    sleep = _RecordedSleep()
+
+    score = await score_dataset(_dataset(tmp_path), collection="scifact", search=search, sources=_FakeSources({}), sleep=sleep)
+
+    assert score.means["recall@1"] == 1.0
+    assert [case.retries for case in score.cases] == [2, 2]
+    assert score.retries == 4
+    assert sorted(sleep.waits) == [FIRST_RETRY_WAIT_SECONDS] * 2 + [FIRST_RETRY_WAIT_SECONDS * 2] * 2
+    yaml_path, markdown = write_score_report(score, dataset=tmp_path / "set.yaml", collection="scifact", out_dir=tmp_path / "scores")
+    assert yaml.safe_load(yaml_path.read_text(encoding="utf-8"))["retries"] == 4
+    assert "Retries after a transient failure: 4." in markdown.read_text(encoding="utf-8")
+
+
+async def test_a_case_still_failing_transiently_after_its_last_retry_fails_the_score(tmp_path: Path):
+    error = QueryCanceledError("canceling statement due to statement timeout")
+    search = _FailingSearch({"q1?": []}, error=error, failures=CASE_RETRIES + 1)
+    sleep = _RecordedSleep()
+
+    with pytest.raises(QueryCanceledError):
+        await score_dataset(_saved(tmp_path, _case("q1", ("d1",))), collection="kb", search=search, sources=_FakeSources({}), sleep=sleep)
+
+    assert len(search.queries) == CASE_RETRIES + 1
+    assert sleep.waits == [FIRST_RETRY_WAIT_SECONDS * 2**retry for retry in range(CASE_RETRIES)]
+
+
+async def test_a_search_failure_that_is_not_transient_fails_the_score_at_once(tmp_path: Path):
+    search = _FailingSearch({"q1?": []}, error=PostgresSyntaxError('syntax error at or near "SELEC"'), failures=1)
+    sleep = _RecordedSleep()
+
+    with pytest.raises(PostgresSyntaxError):
+        await score_dataset(_saved(tmp_path, _case("q1", ("d1",))), collection="kb", search=search, sources=_FakeSources({}), sleep=sleep)
+
+    assert len(search.queries) == 1
+    assert sleep.waits == []
+
+
+async def test_the_handler_answers_the_retries(tmp_path: Path):
+    rows = {"Q1?": [{"id": "d1:0", "hit_level": "raw", "page_id": None}], "Q2?": []}
+    search = _FailingSearch(rows, error=ConnectionResetError(54, "Connection reset by peer"), failures=1)
+    handler = ScoreDatasetHandler(search, _FakeSources({}), sleep=_RecordedSleep())
+
+    report = await handler.handle(ScoreDataset(dataset=str(_dataset(tmp_path)), collection="scifact", out=str(tmp_path / "scores")))
+
+    assert report.retries == 2

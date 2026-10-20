@@ -1034,7 +1034,7 @@ class ScoreDataset(Command):
 
 
 class DatasetScored(BaseModel):
-    """The result of scoring a dataset: the setup, the means, the case count, what named no source and the two files written.
+    """The result of scoring a dataset: the setup, the means, the case count, what named no source, the retries and the files written.
 
     Attributes:
         dataset: The scored dataset file's name.
@@ -1045,6 +1045,7 @@ class DatasetScored(BaseModel):
         unmapped_hits: How many hits named no source document.
         unmappable_gold: How many gold ids named a page with no source document.
         cases_without_gold: How many cases were left out of the scores and the means because no gold id named a source document.
+        retries: How many times a case ran again after its search failed transiently.
         out: The score YAML path written.
         markdown: The markdown summary path written beside it.
     """
@@ -1059,6 +1060,7 @@ class DatasetScored(BaseModel):
     unmapped_hits: int
     unmappable_gold: int
     cases_without_gold: int
+    retries: int
     out: str
     markdown: str
 

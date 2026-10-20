@@ -104,6 +104,8 @@ class CaseScore(BaseModel):
     unmapped_hits: int = 0
     hits: int = 0
     """How many hits the case's search returned, 0 when it returned none at all."""
+    retries: int = 0
+    """How many times the case ran again after its search failed transiently."""
 
 
 def page_ids_of(hits: Sequence[HitRef]) -> list[str]:
@@ -236,10 +238,12 @@ class DatasetScore(BaseModel):
     """How many cases were left out of the scores and the means because no gold id named a source document."""
     cases_without_hits: int
     """How many scored cases' searches returned no hits at all."""
+    retries: int
+    """How many times a case ran again after its search failed transiently, over every scored case."""
 
 
 def dataset_score(cases: Sequence[CaseScore], *, setup: str, unmappable_gold: int, cases_without_gold: int) -> DatasetScore:
-    """The means of every metric over `cases`, all zero for an empty dataset, and how many cases' searches returned no hits.
+    """The means of every metric over `cases`, all zero for an empty dataset, the cases with no hits, and the retries.
 
     Args:
         cases: The scored cases.
@@ -263,11 +267,12 @@ def dataset_score(cases: Sequence[CaseScore], *, setup: str, unmappable_gold: in
         unmappable_gold=unmappable_gold,
         cases_without_gold=cases_without_gold,
         cases_without_hits=sum(case.hits == 0 for case in cases),
+        retries=sum(case.retries for case in cases),
     )
 
 
 def score_markdown(score: DatasetScore, *, dataset: str, collection: str) -> str:
-    """The markdown summary of a dataset's score: its setup, the means, what named no source, and the cases that found nothing.
+    """The markdown summary of a score: its setup, the means, what named no source, the retries, and the cases that found nothing.
 
     It counts the cases whose search returned no hits only when there are any, and names the cases that ranked no gold
     document.
@@ -292,6 +297,7 @@ def score_markdown(score: DatasetScore, *, dataset: str, collection: str) -> str
         f"Hits that named no source document: {score.unmapped_hits}.",
         f"Gold ids that name a page with no source document: {score.unmappable_gold}.",
         f"Cases left out because no gold id names a source document: {score.cases_without_gold}.",
+        f"Retries after a transient failure: {score.retries}.",
         "Each hit holds one rank. A hit with no source document, or a repeat of a document ranked above it, matches nothing.",
         "Recall past 10 is not reported.",
     ]

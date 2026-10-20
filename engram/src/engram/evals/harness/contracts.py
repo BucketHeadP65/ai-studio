@@ -22,6 +22,7 @@ from engram.evals.harness.service import (
     run_experiment,
     run_traced_eval_on_dataset,
 )
+from engram.evals.harness.transient_failures import is_transient_failure
 
 __all__ = [
     "AnswerAccuracy",
@@ -43,6 +44,7 @@ __all__ = [
     "enable_local_span_recording",
     "expand_variants",
     "experiment_span",
+    "is_transient_failure",
     "make_task",
     "resolve_logfire_settings",
     "run_eval",
