@@ -14,6 +14,7 @@ from asyncpg.exceptions import (
     ConnectionFailureError,
     ConnectionRejectionError,
     CrashShutdownError,
+    LockNotAvailableError,
     PostgresError,
     PostgresSyntaxError,
     QueryCanceledError,
@@ -32,6 +33,7 @@ from core.connection_failures import (
     DATABASE_CONNECTION_ERRORS,
     connection_failure_message,
     is_database_connection_failure,
+    is_lock_timeout,
     is_statement_timeout,
 )
 
@@ -193,33 +195,66 @@ def test_an_error_the_statement_or_the_disk_causes_is_not_a_database_connection_
     assert is_database_connection_failure(error) is False
 
 
+_STATEMENT_TIMEOUT = "canceling statement due to statement timeout"
+_LOCK_TIMEOUT = "canceling statement due to lock timeout"
+_USER_CANCEL = "canceling statement due to user request"
+_LOCKED_ROW = 'could not obtain lock on row in relation "pages"'
+
+
 @pytest.mark.parametrize(
     "error",
-    [
-        QueryCanceledError("canceling statement due to statement timeout"),
-        _from_statement(QueryCanceledError("canceling statement due to statement timeout")),
-    ],
+    [QueryCanceledError(_STATEMENT_TIMEOUT), _from_statement(QueryCanceledError(_STATEMENT_TIMEOUT))],
     ids=["alone", "wrapped by SQLAlchemy"],
 )
-def test_a_statement_the_database_cancelled_is_a_statement_timeout(error: Exception) -> None:
+def test_a_statement_cancelled_past_its_statement_timeout_is_a_statement_timeout(error: Exception) -> None:
     assert is_statement_timeout(error) is True
 
 
 @pytest.mark.parametrize(
     "error",
     [
+        QueryCanceledError(_USER_CANCEL),
+        _from_statement(QueryCanceledError(_USER_CANCEL)),
+        LockNotAvailableError(_LOCK_TIMEOUT),
         _from_statement(PostgresSyntaxError('syntax error at or near "SELEC"')),
         _from_statement(ConnectionDoesNotExistError("connection was closed in the middle of operation")),
         TimeoutError("Request timed out."),
     ],
-    ids=["statement error", "closed under a statement", "other timeout"],
+    ids=["user cancel", "user cancel wrapped", "lock timeout", "statement error", "closed under a statement", "other timeout"],
 )
 def test_any_other_error_is_not_a_statement_timeout(error: Exception) -> None:
     assert is_statement_timeout(error) is False
 
 
-def test_a_statement_timeout_is_not_a_database_connection_failure() -> None:
-    error = _from_statement(QueryCanceledError("canceling statement due to statement timeout"))
+@pytest.mark.parametrize(
+    "error",
+    [LockNotAvailableError(_LOCK_TIMEOUT), _from_statement(LockNotAvailableError(_LOCK_TIMEOUT))],
+    ids=["alone", "wrapped by SQLAlchemy"],
+)
+def test_a_statement_cancelled_past_its_lock_timeout_is_a_lock_timeout(error: Exception) -> None:
+    assert is_lock_timeout(error) is True
 
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        LockNotAvailableError(_LOCKED_ROW),
+        _from_statement(LockNotAvailableError(_LOCKED_ROW)),
+        QueryCanceledError(_STATEMENT_TIMEOUT),
+        _from_statement(QueryCanceledError(_USER_CANCEL)),
+        TimeoutError("Request timed out."),
+    ],
+    ids=["row locked", "row locked wrapped", "statement timeout", "user cancel", "other timeout"],
+)
+def test_any_other_error_is_not_a_lock_timeout(error: Exception) -> None:
+    assert is_lock_timeout(error) is False
+
+
+@pytest.mark.parametrize(
+    "error",
+    [_from_statement(QueryCanceledError(_STATEMENT_TIMEOUT)), _from_statement(LockNotAvailableError(_LOCK_TIMEOUT))],
+    ids=["statement timeout", "lock timeout"],
+)
+def test_a_statement_or_lock_timeout_is_not_a_database_connection_failure(error: Exception) -> None:
     assert is_database_connection_failure(error) is False
     assert connection_failure_message(error, database=DATABASE) is None

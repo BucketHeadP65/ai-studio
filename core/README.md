@@ -14,7 +14,7 @@ folder as an editable path dependency.
 | `core.net` | The page fetcher that refuses a URL resolving to a private address. |
 | `core.cqrs` | The message bus: commands, events, the unit of work, the outbox, the job coordination schema and the worker. |
 | `core.observability` | The logging facade and Logfire tracing. |
-| `core.connection_failures` | Whether an error is a database connection failure or a statement timeout, and the message naming the service a failed connection reached. |
+| `core.connection_failures` | Whether an error is a database connection failure, a statement timeout or a lock timeout, and the message naming the service a failed connection reached. |
 | `core.resolver`, `core.wiring` | The dependency-injection port, and the helpers that build a wireup container from a settings tree. |
 | `core.fingerprints`, `core.statistics`, `core.column_types`, `core.supervisor` | Text fingerprints, a paired bootstrap bound, Postgres column types, and a child process kept alive with backoff. |
 | `core.ai` | Model and embedding factories, the retrieval strategy and its SQL builders, progressive disclosure, format maps for large tool output, the conversation record, transcripts and run inspection. |
