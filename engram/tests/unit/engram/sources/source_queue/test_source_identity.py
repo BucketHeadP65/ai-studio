@@ -23,3 +23,11 @@ def test_a_doi_url_names_the_doi_it_carries() -> None:
 def test_nothing_names_nothing() -> None:
     assert source_identities(url=None, doi=None) == frozenset()
     assert source_identities(url="  ", doi="") == frozenset()
+
+
+def test_an_arxiv_doi_names_its_arxiv_id() -> None:
+    assert "arxiv:2401.00001" in source_identities(url="https://publisher.example/paper", doi="10.48550/arXiv.2401.00001")
+
+
+def test_an_arxiv_doi_url_names_its_arxiv_id() -> None:
+    assert "arxiv:2401.00001" in source_identities(url="https://doi.org/10.48550/arXiv.2401.00001", doi=None)

@@ -71,7 +71,8 @@ and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](i
   run never archives orphans. One mirror per source ([ADR-0051](../adr/0051-a-sync-admits-one-mirror-per-source.md)):
   an item with no live mirror of its own whose URL, arXiv id or DOI an active mirror under
   another key already holds is never converted or written, whichever connector holds that
-  mirror. The first mirror in wins, within a run too.
+  mirror. The first mirror in wins, within an applying run too. A dry run over several connectors plans each
+  connector against the mirrors on disk, so it can plan a mirror a later connector's applying run refuses.
 - **Errors:** the CLI exits 1 when `report.errors` is non-empty.
   `unavailable` items do not fail the run, and a dry run never fails.
 - **Config:** `KnowledgeBaseSettings`, `DocumentIntelligenceSettings` and the knowledge base's own
@@ -102,7 +103,7 @@ flowchart TD
 
 Before `decide`, `holder_of` (`engram/src/engram/sources/domain/sync.py`) names the active mirror
 under another key that already holds the item's source, matched on `source_identities` (the URL,
-the arXiv id and the lower-cased DOI). An item it names goes to `already_mirrored` and is not
+the arXiv id, also read from an arXiv DOI, and the lower-cased DOI). An item it names goes to `already_mirrored` and is not
 decided. `decide` (`handlers.py`) is the pure per-item function: CREATE when there is no
 live mirror, RECONVERT when the PDF hash changed, REFRESH when only the metadata
 version changed, else SKIP. A dry run computes the same decisions into

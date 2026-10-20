@@ -17,11 +17,19 @@ import pytest
 from core.cqrs.contracts import MessageBus
 
 from engram.export.contracts import ExportOkf
-from engram.sources.contracts import MultiConnectorSync, SyncError, SyncMirrors, SyncReport
+from engram.sources.contracts import MultiConnectorSync, SyncError, SyncMirrors, SyncMirrorsHandler, SyncReport
 from engram.sources.domain.sync import PlannedAction, SyncAction, SyncCompleted, SyncStarted
+from engram.testing.factories.source_item import SourceItemFactory
+from engram.testing.fakes.connector import FakeConnector
+from engram.testing.fakes.conversion import FakeDocumentConverter
+from engram.testing.fakes.mirror import FakeMirrorStore
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from core.cqrs.contracts import Event
+
+    from engram.sources.contracts import SourceItem
 
 
 class FakeSync:
@@ -162,3 +170,52 @@ async def test_a_connector_that_raises_is_absent_from_the_split() -> None:
     report = await sync.handle(SyncMirrors())
 
     assert report.created_by_connector == {"zotero": 1}
+
+
+class TestTwoConnectorsOverOneStore:
+    """Two real handlers over one mirror store: the library connector first, the source queue second, one paper in both."""
+
+    @staticmethod
+    def _paper(tmp_path: Path, key: str, url: str) -> SourceItem:
+        pdf = tmp_path / f"{key}.pdf"
+        pdf.write_bytes(f"%PDF {key}".encode())
+        return SourceItemFactory.build(provider_key=key, source_id=key, version=1, url=url, doi=None, year=None, pdf_path=pdf)
+
+    @staticmethod
+    def _sync(store: FakeMirrorStore, library: list[SourceItem], queue: list[SourceItem]) -> MultiConnectorSync:
+        return MultiConnectorSync(
+            {
+                "library": SyncMirrorsHandler(FakeConnector(items=library, name="library"), FakeDocumentConverter(), store),
+                "queue": SyncMirrorsHandler(FakeConnector(items=queue, name="queue"), FakeDocumentConverter(), store),
+            }
+        )
+
+    async def test_the_queue_copy_of_a_paper_the_library_holds_is_not_admitted(self, tmp_path: Path) -> None:
+        store = FakeMirrorStore()
+        library = [self._paper(tmp_path, "LIBRARY1", "https://arxiv.org/abs/2401.00001")]
+        await self._sync(store, library, []).handle(SyncMirrors())
+
+        report = await self._sync(store, library, [self._paper(tmp_path, "arxiv-2401.00001", "https://arxiv.org/abs/2401.00001")]).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"arxiv-2401.00001": "LIBRARY1"}
+        assert sorted(store.index) == ["LIBRARY1"]
+
+    async def test_a_library_item_added_after_the_queue_copy_is_not_admitted(self, tmp_path: Path) -> None:
+        store = FakeMirrorStore()
+        queue = [self._paper(tmp_path, "arxiv-2401.00001", "https://arxiv.org/pdf/2401.00001v2")]
+        await self._sync(store, [], queue).handle(SyncMirrors())
+
+        report = await self._sync(store, [self._paper(tmp_path, "LIBRARY1", "https://arxiv.org/abs/2401.00001")], queue).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"LIBRARY1": "arxiv-2401.00001"}
+        assert sorted(store.index) == ["arxiv-2401.00001"]
+
+    async def test_both_new_in_one_run_write_the_first_connectors_copy(self, tmp_path: Path) -> None:
+        store = FakeMirrorStore()
+        library = [self._paper(tmp_path, "LIBRARY1", "https://arxiv.org/abs/2401.00001")]
+        queue = [self._paper(tmp_path, "arxiv-2401.00001", "https://arxiv.org/abs/2401.00001")]
+
+        report = await self._sync(store, library, queue).handle(SyncMirrors())
+
+        assert report.created == 1
+        assert report.already_mirrored == {"arxiv-2401.00001": "LIBRARY1"}
