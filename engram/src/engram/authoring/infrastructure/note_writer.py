@@ -522,12 +522,13 @@ class NoteWriter:
         return self._target.path if self._target.schema.path_root == "knowledge_base" else self._target.path.parent
 
     def _cited_mirror(self, payload: Mapping[str, object]) -> str | None:
-        """The text of the mirror `payload` names through the schema's `sources.key_field`, when the knowledge base verifies quotes."""
+        """The text of the mirror `payload` names through `sources.key_field`, else `sources.digest_link_field`, when the knowledge base verifies quotes."""
         sources = self._target.schema.sources
         frontmatter = payload.get("frontmatter")
-        if not sources.quote_verify or not sources.key_field or not isinstance(frontmatter, Mapping):
+        if not sources.quote_verify or not isinstance(frontmatter, Mapping):
             return None
-        key = frontmatter.get(sources.key_field)
-        if not isinstance(key, str) or not key.strip():
-            return None
-        return mirror_text(self._target.path, key.strip())
+        for field in (sources.key_field, sources.digest_link_field):
+            key = frontmatter.get(field) if field else None
+            if isinstance(key, str) and key.strip():
+                return mirror_text(self._target.path, key.strip())
+        return None

@@ -981,6 +981,55 @@ class TestTheSourceKeyFieldComesFromTheSpec:
 
         assert any(i.rule == "quote-not-in-source" for i in report.errors)
 
+    def test_a_page_naming_its_mirror_only_through_the_digest_link_field_has_its_quotes_checked(self, vocabulary: VocabularyIndex):
+        note = _document(derived_from="Sources/handbook.md", claims=(_claim(quote="never written"),))
+        resolved = resolve((note,))
+
+        report = validate(
+            resolved.notes,
+            vocabulary,
+            mirror_texts={"Sources/handbook.md": "before\na verbatim line\nafter"},
+            resolve_result=resolved,
+            spec=_PATH_KEYED_SPEC,
+        )
+
+        assert any(i.rule == "quote-not-in-source" for i in report.errors)
+
+    def test_a_quote_the_digest_link_fields_mirror_reads_passes(self, vocabulary: VocabularyIndex):
+        note = _document(derived_from="Sources/handbook.md", claims=(_claim(quote="a verbatim line"),))
+        resolved = resolve((note,))
+
+        report = validate(
+            resolved.notes,
+            vocabulary,
+            mirror_texts={"Sources/handbook.md": "before\na verbatim line\nafter"},
+            resolve_result=resolved,
+            spec=_PATH_KEYED_SPEC,
+        )
+
+        assert "quote-not-in-source" not in _rules(report)
+
+    def test_the_key_field_names_the_mirror_before_the_digest_link_field(self, vocabulary: VocabularyIndex):
+        note = _document(source_path="Sources/handbook.md", derived_from="Sources/other.md", claims=(_claim(quote="a verbatim line"),))
+        resolved = resolve((note,))
+
+        report = validate(
+            resolved.notes,
+            vocabulary,
+            mirror_texts={"Sources/handbook.md": "a verbatim line", "Sources/other.md": "something else"},
+            resolve_result=resolved,
+            spec=_PATH_KEYED_SPEC,
+        )
+
+        assert "quote-not-in-source" not in _rules(report)
+
+    def test_validate_note_checks_a_quote_against_the_digest_link_fields_mirror(self, vocabulary: VocabularyIndex):
+        note = _document(derived_from="Sources/handbook.md", claims=(_claim(quote="never written"),))
+
+        report = validate_note(note, vocabulary, mirror_text="before\na verbatim line\nafter", spec=_PATH_KEYED_SPEC)
+
+        assert any(i.rule == "quote-not-in-source" for i in report.errors)
+
     def test_validate_note_keys_its_single_mirror_by_the_declared_field(self, vocabulary: VocabularyIndex):
         note = _document(source_path="Sources/handbook.md", claims=(_claim(quote="a verbatim line"),))
 
