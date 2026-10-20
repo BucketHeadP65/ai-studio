@@ -320,6 +320,7 @@ class TestDescribeSchemaTool:
             result = await client.call_tool("describe_schema", {"objects": [f"api.obj{i}" for i in range(9)]})
 
         assert result.is_error
+        assert "names at a time, not 9." in _text(result)
 
 
 class TestRunSqlTool:
