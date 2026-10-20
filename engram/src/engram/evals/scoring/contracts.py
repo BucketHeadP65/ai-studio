@@ -18,10 +18,12 @@ from engram.evals.scoring.domain import (
 from engram.evals.scoring.infrastructure.files import score_report_stem, write_score_report
 from engram.evals.scoring.infrastructure.sources import AdminHitSources
 from engram.evals.scoring.internal_contracts import HitSources, Searcher
-from engram.evals.scoring.service import SEARCH_K, score_dataset
+from engram.evals.scoring.service import CASE_RETRIES, FIRST_RETRY_WAIT_SECONDS, SEARCH_K, score_dataset
 
 __all__ = [
+    "CASE_RETRIES",
     "DEFAULT_SEARCH_SETUP",
+    "FIRST_RETRY_WAIT_SECONDS",
     "NDCG_K",
     "SCORE_KS",
     "SEARCH_K",

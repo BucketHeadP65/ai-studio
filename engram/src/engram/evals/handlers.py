@@ -7,6 +7,7 @@ A handler that reads the database opens a fresh reader or repository per command
 
 from __future__ import annotations
 
+import asyncio
 import re
 import secrets
 import time
@@ -111,7 +112,7 @@ from .commands import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from core.cqrs.contracts import Command, Event
 
@@ -365,15 +366,17 @@ class ScoreDatasetHandler:
     It never writes the database or changes the dataset file.
     """
 
-    def __init__(self, search: Searcher, sources: HitSources) -> None:
-        """Bind the search and the page-to-source lookup.
+    def __init__(self, search: Searcher, sources: HitSources, *, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
+        """Bind the search, the page-to-source lookup and the wait before a case runs again.
 
         Args:
             search: The search every case runs through.
             sources: Reads the source document each page names.
+            sleep: Waits the given seconds before a case whose search failed transiently runs again.
         """
         self._search = search
         self._sources = sources
+        self._sleep = sleep
         self.events: list[Event] = []
 
     async def __call__(self, command: Command) -> DatasetScored:
@@ -395,11 +398,11 @@ class ScoreDatasetHandler:
             command: The dataset, the knowledge base searched, the search setup and the output directory.
 
         Returns:
-            The setup, the means, the case count, what named no source document and the two files written.
+            The setup, the means, the case count, what named no source document, the retries and the two files written.
         """
         dataset = Path(command.dataset)
         score = await score_dataset(
-            dataset, collection=command.collection, search=self._search, sources=self._sources, setup_name=command.setup
+            dataset, collection=command.collection, search=self._search, sources=self._sources, setup_name=command.setup, sleep=self._sleep
         )
         yaml_path, markdown_path = write_score_report(score, dataset=dataset, collection=command.collection, out_dir=Path(command.out))
         return DatasetScored(
@@ -411,6 +414,7 @@ class ScoreDatasetHandler:
             unmapped_hits=score.unmapped_hits,
             unmappable_gold=score.unmappable_gold,
             cases_without_gold=score.cases_without_gold,
+            retries=score.retries,
             out=str(yaml_path),
             markdown=str(markdown_path),
         )

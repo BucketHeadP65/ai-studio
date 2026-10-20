@@ -252,10 +252,14 @@ test("the companion toggles a plugin after approval and the station shows it", a
   await expect(page.getByText("The companion wants to act")).toBeVisible();
   await page.getByRole("button", { name: "Approve toggle_plugin" }).click();
 
-  // The act's outcome is an earlier step of the turn, folded above the closing text that is the
-  // bubble's answer. Opening the fold shows it in place.
+  // The act's outcome is an earlier step of the turn, listed above the closing text that is the
+  // bubble's answer. A settled turn keeps its earlier steps open unless the person chose to fold
+  // them, so the outcome shows in place without a click.
   await expect(page.getByText("Plugin sql is on.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "1 earlier step" }).click();
+  await expect(page.getByRole("button", { name: "1 earlier step" })).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   await expect(page.getByText("toggle_plugin: Plugin sql is on.")).toBeVisible();
   // The companion is still up, mid-conversation, not crashed or collapsed by the round trip.
   await expect(page.getByText("Companion", { exact: true })).toBeVisible();

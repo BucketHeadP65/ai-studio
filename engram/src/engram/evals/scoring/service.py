@@ -1,4 +1,4 @@
-"""Score a dataset file with search alone, a bounded number of cases at a time."""
+"""Score a dataset file with search alone, a bounded number of cases at a time, running a transiently failed case again."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from engram.evals.generation.contracts import load_dataset
+from engram.evals.harness.contracts import is_transient_failure
 from engram.evals.scoring.domain import (
     DEFAULT_SEARCH_SETUP,
     CaseScore,
@@ -24,7 +25,7 @@ from engram.evals.scoring.domain import (
 from engram.evals.shared.contracts import Search
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Sequence
+    from collections.abc import Awaitable, Callable, Collection, Sequence
     from pathlib import Path
 
     from engram.evals.generation.contracts import EvaluationCase
@@ -33,16 +34,30 @@ if TYPE_CHECKING:
 SEARCH_K = 50
 """How many hits each case asks for, the most `api.search` returns."""
 
+CASE_RETRIES = 5
+"""How many times a case whose search failed transiently runs again before its failure fails the score."""
+
+FIRST_RETRY_WAIT_SECONDS = 2.0
+"""How long a case waits before it first runs again, in seconds. Each later wait is twice the one before."""
+
 _CONCURRENCY = 4
 
 
-async def score_dataset(
-    dataset: Path, *, collection: str, search: Searcher, sources: HitSources, setup_name: str = DEFAULT_SEARCH_SETUP
+async def score_dataset(  # noqa: PLR0913 (the dataset, the collection, the search, the source lookup, the setup and the wait are distinct inputs)
+    dataset: Path,
+    *,
+    collection: str,
+    search: Searcher,
+    sources: HitSources,
+    setup_name: str = DEFAULT_SEARCH_SETUP,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> DatasetScore:
     """Run one search per case of `dataset` under one search setup and score each against its gold ids and judgments.
 
     A gold or judged id that names a page is scored as the source document its page names. A case left with no gold
-    id runs no search and is only counted. An unknown setup name is refused before the dataset is read.
+    id runs no search and is only counted. An unknown setup name is refused before the dataset is read. A case whose
+    search or source lookup fails transiently runs again after a wait, at most `CASE_RETRIES` times, and its last
+    failure fails the score. Any other failure fails the score at once.
 
     Args:
         dataset: The dataset file.
@@ -50,6 +65,7 @@ async def score_dataset(
         search: The search every case runs through.
         sources: The page-to-source lookup.
         setup_name: The name of the search setup every search runs under.
+        sleep: Waits the given seconds before a case runs again.
 
     Returns:
         Every scored case's score, in dataset order, the means, the setup name, and the counts of gold that named no source.
@@ -62,7 +78,7 @@ async def score_dataset(
 
     async def scored(case: EvaluationCase, gold: SourceGold) -> CaseScore:
         async with gate:
-            return await _score_one(case, gold, collection=collection, setup=setup, search=search, sources=sources)
+            return await _retried(lambda: _score_one(case, gold, collection=collection, setup=setup, search=search, sources=sources), sleep)
 
     cases = load_dataset(dataset).cases
     golds = await _source_golds(cases, collection=collection, sources=sources)
@@ -71,6 +87,21 @@ async def score_dataset(
     return dataset_score(
         scores, setup=setup_name, unmappable_gold=sum(gold.unmappable for gold in golds), cases_without_gold=len(cases) - len(kept)
     )
+
+
+async def _retried(score: Callable[[], Awaitable[CaseScore]], sleep: Callable[[float], Awaitable[None]]) -> CaseScore:
+    """The case's score, running `score` again after a doubling wait while it fails transiently, at most `CASE_RETRIES` times."""
+    retries = 0
+    while True:
+        try:
+            scored = await score()
+        except Exception as error:
+            if retries == CASE_RETRIES or not is_transient_failure(error):
+                raise
+            await sleep(FIRST_RETRY_WAIT_SECONDS * 2**retries)
+            retries += 1
+        else:
+            return scored.model_copy(update={"retries": retries})
 
 
 async def _source_golds(cases: Sequence[EvaluationCase], *, collection: str, sources: HitSources) -> list[SourceGold]:

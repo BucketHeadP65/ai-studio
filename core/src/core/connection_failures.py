@@ -1,9 +1,11 @@
-"""Whether an error reports a failed connection, and which service it reached: an embedding endpoint, a model endpoint or the database.
+"""Whether an error reports a failed connection and which service it reached, or a statement cancelled past a timeout.
 
 A database connection failure is a connection to the database that was refused, could not be opened or closed under a
 statement, or a database shutting down or starting up. It is matched by the error's type, raised alone or wrapped by
 SQLAlchemy, and by asyncio's text for a connection attempt that failed. An error the statement itself causes, such as a
-syntax error, an undefined column, a refused permission or a statement timeout, is not one.
+syntax error, an undefined column, a refused permission, a statement timeout or a lock timeout, is not one.
+`is_statement_timeout` matches a statement cancelled past its statement timeout, and `is_lock_timeout` one cancelled
+past its lock timeout, each by its asyncpg error and the server's text.
 
 A service connection failure's message names the service before the error's own text, so a person can tell which one
 failed. An embedding endpoint is an OpenAI-compatible endpoint whose request path ends in `/embeddings`, and any other
@@ -25,12 +27,15 @@ from asyncpg.exceptions import (
     ConnectionFailureError,
     ConnectionRejectionError,
     CrashShutdownError,
+    LockNotAvailableError,
+    PostgresError,
+    QueryCanceledError,
 )
 from openai import APIConnectionError
 from sqlalchemy.exc import DBAPIError
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
 DATABASE_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
     ConnectionError,
@@ -61,6 +66,11 @@ _CONNECT_ATTEMPT_FAILURE = re.compile(rf"{_CONNECT_CALL_FAILED}|Multiple excepti
 
 _EMBEDDINGS_PATH = "/embeddings"
 
+# The server's English texts for a statement cancelled past its statement timeout and past its lock timeout. A server
+# whose `lc_messages` names another language words them differently, and then neither matches.
+_STATEMENT_TIMEOUT_TEXT = "canceling statement due to statement timeout"
+_LOCK_TIMEOUT_TEXT = "canceling statement due to lock timeout"
+
 
 def is_database_connection_failure(error: BaseException) -> bool:
     """Whether `error` is a database connection failure.
@@ -77,6 +87,32 @@ def is_database_connection_failure(error: BaseException) -> bool:
     if type(error) in _CONNECT_ATTEMPT_ERRORS:
         return _CONNECT_ATTEMPT_FAILURE.fullmatch(str(error)) is not None
     return isinstance(error, DATABASE_CONNECTION_ERRORS)
+
+
+def is_statement_timeout(error: BaseException) -> bool:
+    """Whether `error` reports a statement the database cancelled because it ran past its statement timeout.
+
+    Args:
+        error: What was raised.
+
+    Returns:
+        True for asyncpg's `QueryCanceledError` whose text is the statement timeout's, alone or wrapped by SQLAlchemy. A
+        statement a cancel request stopped raises the same error with another text and is not a statement timeout.
+    """
+    return _is_cancelled_with(error, QueryCanceledError, _STATEMENT_TIMEOUT_TEXT)
+
+
+def is_lock_timeout(error: BaseException) -> bool:
+    """Whether `error` reports a statement the database cancelled because it waited past its lock timeout for a lock.
+
+    Args:
+        error: What was raised.
+
+    Returns:
+        True for asyncpg's `LockNotAvailableError` whose text is the lock timeout's, alone or wrapped by SQLAlchemy. A
+        lock refused at once, as `NOWAIT` refuses one, is not a lock timeout.
+    """
+    return _is_cancelled_with(error, LockNotAvailableError, _LOCK_TIMEOUT_TEXT)
 
 
 def connection_failure_message(error: BaseException, *, database: str | None) -> str | None:
@@ -108,6 +144,12 @@ def _failed_service(error: BaseException, *, database: str | None) -> str | None
         if database is not None and is_database_connection_failure(link):
             return f"database {database}"
     return None
+
+
+def _is_cancelled_with(error: BaseException, kind: type[PostgresError], text: str) -> bool:
+    """Whether `error`, alone or wrapped by SQLAlchemy, is a `kind` whose first line is `text`."""
+    candidates: Iterable[BaseException] = _causes(error) if isinstance(error, DBAPIError) else (error,)
+    return any(isinstance(candidate, kind) and str(candidate).partition("\n")[0] == text for candidate in candidates)
 
 
 def _causes(error: BaseException) -> Iterator[BaseException]:
