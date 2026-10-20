@@ -312,7 +312,7 @@ class SqliteZoteroConnector:
         """Yield a read-only connection to a throwaway copy of the live database."""
         with tempfile.TemporaryDirectory(prefix="zotero-ro-") as temp_dir:
             copy = self._copy_db(Path(temp_dir))
-            engine = create_async_engine(f"sqlite+aiosqlite:///{copy}?mode=ro", connect_args={"uri": True})
+            engine = create_async_engine(f"sqlite+aiosqlite:///file:{copy}?mode=ro&uri=true")
             try:
                 async with engine.connect() as connection:
                     yield connection
