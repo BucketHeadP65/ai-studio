@@ -6,8 +6,8 @@ The whole read path through the MCP surface: a mini `knowledge_base_builder` kno
 a :class:`~mcp.server.mcpserver.MCPServer` built by :func:`create_mcp_server` over the
 production read-only :class:`~engram.retrieval.infrastructure.gateway.ReaderSqlGateway` (the
 `kb_reader` role; the `reader_url` fixture) → an **in-process** MCP client
-session (the SDK's `create_connected_server_and_client_session` memory transport —
-no stdio subprocess needed to prove the tools).
+(the SDK's `mcp.client.Client` over its memory transport, so
+no stdio subprocess is needed to prove the tools).
 
 It asserts the agent-facing contract:
 
@@ -144,7 +144,7 @@ def _text(result: CallToolResult) -> str:
 
 
 async def _open_session(reader_url: str) -> tuple[MCPServer, AsyncEngine]:
-    """A MCP server bound to the reader engine, plus the engine to dispose afterwards.
+    """An MCP server bound to the reader engine, plus the engine to dispose afterwards.
 
     The caller opens the in-memory client session over the returned server (an async
     context manager) and disposes the engine once the session closes.
