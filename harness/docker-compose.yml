@@ -45,7 +45,7 @@ services:
   # 5433 (ParadeDB) and 5434 (the local Postgres), and two projects fighting over a port is a
   # confusing way to find out you started the wrong database.
   temporal-postgresql:
-    image: postgres:17.6
+    image: postgres:17.11
     container_name: workflows-temporal-postgres
     profiles:
       - persistent
