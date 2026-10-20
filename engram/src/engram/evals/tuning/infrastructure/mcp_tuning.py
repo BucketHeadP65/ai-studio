@@ -3,7 +3,8 @@
 `diagnose` scores the shipped baseline policy on a named dataset and returns its `Diagnosis`.
 `evaluate_policy` validates and scores a proposed `RetrievalPolicy` and returns `{metrics, diagnosis}`.
 `submit_tuning` validates a policy and saves it as the `<name>.yaml` file `evals apply-policy` later reads.
-An unsafe name or a malformed or out-of-set policy is answered with a JSON `{error}` object, never an exception.
+An unsafe name, a dataset name with no file, or a malformed or out-of-set policy is answered with a JSON `{error}`
+object, never an exception.
 A dataset or policy name must be one segment of letters, digits, `_` or `-`, so no tool reads or writes outside its folder.
 """
 
@@ -88,8 +89,8 @@ def register_tuning_tools(
 ) -> None:
     """Register the three opt-in MCP tuning tools, closing over the injected deps.
 
-    Each tool returns JSON and converts a bad input (an unsafe dataset / policy name, a malformed or
-    out-of-set policy) into an actionable error object rather than tearing down the session.
+    Each tool returns JSON and converts a bad input (an unsafe dataset / policy name, a dataset name with no
+    file, a malformed or out-of-set policy) into an actionable error object rather than tearing down the session.
 
     Args:
         server: The MCP server to register the three tuning tools on.
@@ -100,14 +101,14 @@ def register_tuning_tools(
     """
 
     async def diagnose_tool(dataset: str, model: str = _DEFAULT_MODEL) -> str:
-        dataset_path = _dataset_path(dataset, datasets_dir)
+        dataset_path = _dataset_file(dataset, datasets_dir)
         if isinstance(dataset_path, str):
             return dataset_path
         report = await evaluator_factory(model).evaluate(baseline_policy(), dataset=load_dataset(dataset_path))
         return diagnose(report).model_dump_json()
 
     async def evaluate_policy_tool(policy_json: str, dataset: str, model: str = _DEFAULT_MODEL) -> str:
-        dataset_path = _dataset_path(dataset, datasets_dir)
+        dataset_path = _dataset_file(dataset, datasets_dir)
         if isinstance(dataset_path, str):
             return dataset_path
         policy = _parse_policy(policy_json)
@@ -149,13 +150,13 @@ def _parse_policy(policy_json: str) -> RetrievalPolicy | None:
         return None
 
 
-def _dataset_path(name: str, datasets_dir: Path) -> Path | str:
-    """The dataset file `name` names, or the JSON error answering a name that is unsafe or has no file."""
+def _dataset_file(name: str, datasets_dir: Path) -> Path | str:
+    """The file a dataset name names, or the JSON error for a name that is unsafe or has no file."""
     path = _resolve_named(name, datasets_dir)
     if path is None:
         return _name_error(name)
     if not path.is_file():
-        return json.dumps({"error": f"no dataset named {name!r}: name a dataset that exists"})
+        return _missing_dataset_error(name)
     return path
 
 
@@ -163,6 +164,11 @@ def _name_error(name: str) -> str:
     """The actionable JSON error for an unsafe dataset / policy name (names the value and the rule)."""
     reason = f"invalid name {name!r}: must match {_SAFE_NAME.pattern} (one segment of letters, digits, _ or -)"
     return json.dumps({"error": reason})
+
+
+def _missing_dataset_error(name: str) -> str:
+    """The actionable JSON error for a safe dataset name with no file behind it."""
+    return json.dumps({"error": f"no dataset named {name!r}: name a dataset that exists"})
 
 
 def _policy_error() -> str:
