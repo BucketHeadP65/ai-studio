@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import pytest
 import yaml
 
-from asyncpg.exceptions import PostgresSyntaxError, QueryCanceledError
+from asyncpg.exceptions import LockNotAvailableError, PostgresSyntaxError, QueryCanceledError
 from core.ai.retrieval.contracts import SqlResult
 from pydantic import ValidationError
 
@@ -418,11 +418,12 @@ class _RecordedSleep:
 
 _TRANSIENT_SEARCH_FAILURES = [
     QueryCanceledError("canceling statement due to statement timeout"),
+    LockNotAvailableError("canceling statement due to lock timeout"),
     ConnectionResetError(54, "Connection reset by peer"),
 ]
 
 
-@pytest.mark.parametrize("error", _TRANSIENT_SEARCH_FAILURES, ids=["statement timeout", "database connection failure"])
+@pytest.mark.parametrize("error", _TRANSIENT_SEARCH_FAILURES, ids=["statement timeout", "lock timeout", "database connection failure"])
 async def test_a_case_whose_search_fails_transiently_runs_again_after_a_growing_wait_and_is_counted(tmp_path: Path, error: Exception):
     rows = {"Q1?": [{"id": "d1:0", "hit_level": "raw", "page_id": None}], "Q2?": [{"id": "d2:0", "hit_level": "raw", "page_id": None}]}
     search = _FailingSearch(rows, error=error, failures=2)

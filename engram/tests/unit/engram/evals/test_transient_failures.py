@@ -11,6 +11,7 @@ from asyncpg.exceptions import (
     CannotConnectNowError,
     ConnectionDoesNotExistError,
     InsufficientPrivilegeError,
+    LockNotAvailableError,
     PostgresError,
     PostgresSyntaxError,
     ProtocolViolationError,
@@ -85,6 +86,8 @@ _DATABASE_TRANSIENT: list[BaseException] = [
     _from_statement(AdminShutdownError("terminating connection due to administrator command")),
     _from_statement(QueryCanceledError("canceling statement due to statement timeout")),
     QueryCanceledError("canceling statement due to statement timeout"),
+    _from_statement(LockNotAvailableError("canceling statement due to lock timeout")),
+    LockNotAvailableError("canceling statement due to lock timeout"),
 ]
 
 _DATABASE_KEPT: list[BaseException] = [
@@ -92,6 +95,8 @@ _DATABASE_KEPT: list[BaseException] = [
     _from_statement(UndefinedColumnError('column "titel" does not exist')),
     _from_statement(InsufficientPrivilegeError("permission denied for table pages")),
     _from_statement(ProtocolViolationError("bind message supplies 1 parameters, but prepared statement requires 2")),
+    _from_statement(QueryCanceledError("canceling statement due to user request")),
+    _from_statement(LockNotAvailableError('could not obtain lock on row in relation "pages"')),
     PostgresSyntaxError('syntax error at or near "SELEC"'),
     FileNotFoundError(2, "No such file or directory"),
     OSError("Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 2] No such file or directory"),
@@ -99,7 +104,7 @@ _DATABASE_KEPT: list[BaseException] = [
 
 
 @pytest.mark.parametrize("error", _DATABASE_TRANSIENT, ids=repr)
-def test_a_refused_failed_or_closed_database_connection_or_a_statement_timeout_is_transient(error: BaseException) -> None:
+def test_a_refused_failed_or_closed_database_connection_or_a_statement_or_lock_timeout_is_transient(error: BaseException) -> None:
     assert is_transient_failure(error) is True
 
 

@@ -78,9 +78,14 @@ only in their index build. The header's `search_date_range` says whether `search
 predates the current format: `studio evals compare` and `--resume` refuse it, naming the line and the
 missing keys, and the evaluation is run again to write it anew. `--resume` also says to name another results file
 or to run without resuming, which replaces the file. A failed case is written as incorrect, and its `transient` key
-says whether it was a transient failure: a model connection error, a model request timeout, an
-HTTP 429 or 5xx from the model, a database connection failure, or a statement timeout (a statement the
-database cancelled past the reader role's statement timeout). A database connection failure is
+says whether it was a transient failure: a connection error or a request timeout from a model or
+embedding endpoint, an HTTP 429 or 5xx from one, a database connection failure, a statement timeout or a
+lock timeout. A statement timeout is a statement the database cancelled past the reader role's
+`statement_timeout` (`QueryCanceledError` with the text `canceling statement due to statement timeout`,
+so a statement a cancel request stopped is not one). A lock timeout is a statement cancelled past the
+reader role's `lock_timeout`, such as a read queued behind the indexer (`LockNotAvailableError` with the text
+`canceling statement due to lock timeout`, so a lock `NOWAIT` refuses is not one). Both are matched raised
+alone or wrapped by SQLAlchemy, by the server's English text. A database connection failure is
 a connection to the knowledge base's database that was refused, could not be opened or closed under
 a statement, or a database shutting down or starting up. It is matched by the error's type
 (Python's connection errors and asyncpg's connection and shutdown errors, raised alone or wrapped
@@ -88,14 +93,16 @@ by SQLAlchemy) and by asyncio's text for a failed connection attempt, such as
 `OSError: Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 5434)`.
 A tool-call limit, a refused answer, any other error an SQL statement causes (a syntax error,
 an undefined column, a refused permission) and every other error are not transient. The rule lives in
-`engram.evals.harness.transient_failures`, which reads database connection failures and statement
-timeouts through `core.connection_failures`.
+`engram.evals.harness.transient_failures`, which reads database connection failures, statement
+timeouts and lock timeouts through `core.connection_failures`.
 
-`studio evals score` reads the same rule. A case whose search or source lookup fails transiently runs
-again after a wait, at most `CASE_RETRIES` (5) times. The first wait is `FIRST_RETRY_WAIT_SECONDS` (2 s)
-and each later one is twice the one before. A case that still fails after its last retry, or fails for
-any other reason, fails the score. The score report counts the retries per case and in all (`retries`),
-and the CLI prints the total. Both constants live in `engram.evals.scoring.contracts`.
+`studio evals score` and `studio evals check-generator` score through the same path
+(`engram.evals.scoring.contracts.score_dataset`) and read the same rule. A case whose search or source
+lookup fails transiently runs again after a wait, at most `CASE_RETRIES` (5) times. The first wait is
+`FIRST_RETRY_WAIT_SECONDS` (2 s) and each later one is twice the one before. A case that still fails after
+its last retry, or fails for any other reason, fails the score. Every score report counts the retries per
+case and in all (`retries`), the generator check's per-setup reports included, and `studio evals score`
+prints the total. Both constants live in `engram.evals.scoring.contracts`.
 
 A failed case whose connection to a service failed records an error that names the service before
 the error's own text, so the results file and the printed failures table say which one failed:

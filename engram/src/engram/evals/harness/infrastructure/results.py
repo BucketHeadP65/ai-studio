@@ -114,8 +114,8 @@ class ResultsLine:
     transient: bool
     """Whether the case failed transiently.
 
-    A transient failure is a model connection error or timeout, an HTTP 429 or 5xx, a database connection failure or a
-    statement timeout. False for an answered case.
+    A transient failure is a connection error or request timeout from a model or embedding endpoint, an HTTP 429 or 5xx
+    from one, a database connection failure, a statement timeout or a lock timeout. False for an answered case.
     """
     seen_recall: float | None
     """The share of the gold ids among the sources the case's tool results named, or None for a case with no gold ids or a run
