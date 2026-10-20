@@ -570,3 +570,116 @@ class TestAgeRule:
         report = await self._aged_handler([old], FakeMirrorStore(), max_age_years=2).handle(SyncMirrors(dry_run=True))
         assert report.too_old == ("OLD4",)
         assert report.planned == ()
+
+
+class TestOneMirrorPerSource:
+    """A sync admits no new mirror for a source another active mirror already holds, matched by URL, arXiv id or DOI."""
+
+    @staticmethod
+    def _paper(tmp_path: Path, *, key: str, url: str | None = None, doi: str | None = None, contents: bytes = b"%PDF paper") -> SourceItem:
+        return SourceItemFactory.build(
+            provider_key=key, source_id=key, version=1, url=url, doi=doi, year=None, pdf_path=_write_pdf(tmp_path, f"{key}.pdf", contents)
+        )
+
+    @staticmethod
+    def _held(key: str, *, url: str | None = None, doi: str | None = None, status: MirrorStatus = MirrorStatus.ACTIVE) -> FakeMirrorStore:
+        return FakeMirrorStore(index={key: MirrorFileFactory.build(source_key=key, provider="other-library", url=url, doi=doi, status=status)})
+
+    async def test_an_item_whose_arxiv_id_another_mirror_holds_is_refused_and_reported(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1", url="https://arxiv.org/abs/2401.00001")
+        converter = FakeDocumentConverter()
+        item = self._paper(tmp_path, key="arxiv-2401.00001", url="https://arxiv.org/pdf/2401.00001v3")
+
+        report = await _handler([item], store, converter).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"arxiv-2401.00001": "LIBRARY1"}
+        assert report.created == 0
+        assert store.written == []
+        assert converter.call_count == 0
+
+    async def test_an_item_whose_doi_another_mirror_holds_is_refused_whatever_the_case(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1", doi="10.1000/Example.42")
+        item = self._paper(tmp_path, key="ITEM0001", url="https://example.org/paper", doi="10.1000/example.42")
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"ITEM0001": "LIBRARY1"}
+
+    async def test_a_doi_url_matches_the_doi_another_mirror_holds(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1", doi="10.1000/example.42")
+        item = self._paper(tmp_path, key="ITEM0001", url="https://doi.org/10.1000/example.42")
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"ITEM0001": "LIBRARY1"}
+
+    async def test_an_item_whose_url_another_mirror_holds_is_refused(self, tmp_path: Path) -> None:
+        store = self._held("url-0001", url="https://example.org/post")
+        item = self._paper(tmp_path, key="ITEM0001", url="https://example.org/post")
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {"ITEM0001": "url-0001"}
+
+    async def test_a_removed_mirror_holds_nothing(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1", url="https://arxiv.org/abs/2401.00001", status=MirrorStatus.REMOVED)
+        item = self._paper(tmp_path, key="arxiv-2401.00001", url="https://arxiv.org/abs/2401.00001")
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {}
+        assert report.created == 1
+
+    async def test_an_item_naming_no_url_and_no_doi_is_admitted(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1")
+        item = self._paper(tmp_path, key="ITEM0001")
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {}
+        assert report.created == 1
+
+    async def test_two_new_items_of_one_source_in_one_run_write_one_mirror(self, tmp_path: Path) -> None:
+        first = self._paper(tmp_path, key="ITEM0001", url="https://arxiv.org/abs/2401.00001", contents=b"%PDF one")
+        second = self._paper(tmp_path, key="ITEM0002", url="https://arxiv.org/html/2401.00001v2", contents=b"%PDF two")
+        store = FakeMirrorStore()
+
+        report = await _handler([first, second], store).handle(SyncMirrors())
+
+        assert report.created == 1
+        assert report.already_mirrored == {"ITEM0002": "ITEM0001"}
+        assert [frontmatter.source_key for frontmatter in store.written] == ["ITEM0001"]
+
+    async def test_an_item_with_a_live_mirror_of_its_own_keeps_converging(self, tmp_path: Path) -> None:
+        item = self._paper(tmp_path, key="ITEM0001", url="https://arxiv.org/abs/2401.00001")
+        store = FakeMirrorStore(
+            index={
+                "LIBRARY1": MirrorFileFactory.build(source_key="LIBRARY1", provider="other-library", url="https://arxiv.org/abs/2401.00001"),
+                "ITEM0001": MirrorFileFactory.build(
+                    source_key="ITEM0001", source_version=1, source_hash=pdf_sha256(item.pdf_path), url="https://arxiv.org/abs/2401.00001"
+                ),
+            }
+        )
+
+        report = await _handler([item], store).handle(SyncMirrors())
+
+        assert report.already_mirrored == {}
+        assert report.skipped == 1
+
+    async def test_the_dry_run_reports_the_refusal_without_planning_it(self, tmp_path: Path) -> None:
+        store = self._held("LIBRARY1", url="https://arxiv.org/abs/2401.00001")
+        item = self._paper(tmp_path, key="arxiv-2401.00001", url="https://arxiv.org/abs/2401.00001")
+
+        report = await _handler([item], store).handle(SyncMirrors(dry_run=True))
+
+        assert report.already_mirrored == {"arxiv-2401.00001": "LIBRARY1"}
+        assert report.planned == ()
+
+    async def test_the_dry_run_plans_one_create_for_two_new_items_of_one_source(self, tmp_path: Path) -> None:
+        first = self._paper(tmp_path, key="ITEM0001", url="https://arxiv.org/abs/2401.00001", contents=b"%PDF one")
+        second = self._paper(tmp_path, key="ITEM0002", url="https://arxiv.org/abs/2401.00001", contents=b"%PDF two")
+
+        report = await _handler([first, second], FakeMirrorStore()).handle(SyncMirrors(dry_run=True))
+
+        assert [row.key for row in report.planned] == ["ITEM0001"]
+        assert report.already_mirrored == {"ITEM0002": "ITEM0001"}

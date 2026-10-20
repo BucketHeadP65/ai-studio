@@ -17,15 +17,17 @@ _EPOCH = datetime(2024, 1, 1, tzinfo=UTC)
 
 
 class MirrorFileFactory(ModelFactory[MirrorFile]):
-    """A `MirrorFile` with a pinned provider, ACTIVE by default. Override `provider`, `source_version`, `source_hash` or `status`.
+    """A `MirrorFile` with a pinned provider, ACTIVE by default. Override `provider`, `source_version`, `source_hash`, `status`, `url` or `doi`.
 
     `provider` is always `example-library`, so a sync run's orphan pass narrows the index to a
-    known name.
+    known name. `url` and `doi` are `None`, so a built mirror holds no source a sync item could match.
     """
 
     __use_defaults__ = True
     provider = "example-library"
     status = MirrorStatus.ACTIVE
+    url = None
+    doi = None
 
 
 class MirrorFrontmatterFactory(ModelFactory[MirrorFrontmatter]):

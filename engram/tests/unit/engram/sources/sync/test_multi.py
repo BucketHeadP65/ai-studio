@@ -67,6 +67,15 @@ async def test_reports_merge_across_providers() -> None:
     assert intake.commands == [SyncMirrors(limit=5)]
 
 
+async def test_the_items_another_mirror_holds_merge_across_providers() -> None:
+    zotero = FakeSync(SyncReport(already_mirrored={"LIBRARY1": "arxiv-2401.00001"}))
+    intake = FakeSync(SyncReport(already_mirrored={"arxiv-2401.00002": "LIBRARY2"}))
+
+    report = await MultiConnectorSync({"zotero": zotero, "intake": intake}).handle(SyncMirrors())
+
+    assert report.already_mirrored == {"LIBRARY1": "arxiv-2401.00001", "arxiv-2401.00002": "LIBRARY2"}
+
+
 async def test_a_dry_run_concatenates_the_plans() -> None:
     a = FakeSync(SyncReport(dry_run=True, planned=(PlannedAction(key="a", title="A", action=SyncAction.CREATE),)))
     b = FakeSync(SyncReport(dry_run=True, planned=(PlannedAction(key="b", title="B", action=SyncAction.SKIP),)))

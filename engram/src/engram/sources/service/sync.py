@@ -19,6 +19,7 @@ from core.cqrs.contracts import narrow_command, utcnow
 from core.observability import get_logger
 
 from engram.sources.domain.mirror import MirrorStatus
+from engram.sources.domain.source_queue import source_identities
 from engram.sources.domain.sync import (
     PlannedAction,
     SyncAction,
@@ -30,6 +31,8 @@ from engram.sources.domain.sync import (
     build_frontmatter,
     decide,
     full_run_archives,
+    holder_of,
+    mirrors_by_identity,
     should_archive,
 )
 
@@ -73,6 +76,12 @@ def pdf_sha256(path: Path) -> str:
             item into the report's `unavailable` list.
     """
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _hold(held: dict[str, str], item: SourceItem) -> None:
+    """Record that `item`'s own mirror now holds every identifier its source carries, keeping an earlier holder."""
+    for identity in source_identities(url=item.url, doi=item.doi):
+        held.setdefault(identity, item.provider_key)
 
 
 class SyncMirrorsHandler:
@@ -124,7 +133,10 @@ class SyncMirrorsHandler:
 
         A `limit` slices the item list to a partial backfill and disables orphan archiving. The dry
         run mirrors the applying run exactly, so its plan is a faithful preview of what an applying
-        run would do. In an applying run, an item with a missing or unreadable PDF lands in
+        run would do. An item with no live mirror of its own whose source another active mirror
+        already holds (any identifier `source_identities` names) is never converted or written and lands in
+        `already_mirrored`, and so does a second item of one source within the run. In an applying run,
+        an item with a missing or unreadable PDF lands in
         `unavailable`, any other per-item failure lands in `errors`, and neither aborts the run. A
         failing orphan soft-delete is appended to `errors` and never aborts the pass. A REFRESH
         that reuses the stored body keeps the mirror's existing converter label and writes no
@@ -172,14 +184,19 @@ class SyncMirrorsHandler:
     async def _apply(self, items: list[SourceItem], *, archive_orphans: bool) -> SyncReport:
         """Converge mirrors to `items`, idempotent and per-item fault-tolerant, then archive orphans when asked."""
         index = await self._store.load_index()
+        held = mirrors_by_identity(index)
         now = self._clock()
         actions: list[SyncAction] = []
         errors: list[SyncError] = []
         unavailable: list[str] = []
         too_old: list[str] = []
+        already_mirrored: dict[str, str] = {}
         for item in items:
             if self._refused_by_age(item, existing=index.get(item.provider_key), now=now):
                 too_old.append(item.provider_key)
+                continue
+            if (holder := holder_of(item, index.get(item.provider_key), held)) is not None:
+                already_mirrored[item.provider_key] = holder
                 continue
             try:
                 pdf_hash = pdf_sha256(item.pdf_path)
@@ -189,6 +206,7 @@ class SyncMirrorsHandler:
                 continue
             try:
                 actions.append(await self._apply_one(item, existing=index.get(item.provider_key), pdf_hash=pdf_hash, now=now))
+                _hold(held, item)
             except Exception as error:
                 _logger.exception("Sync failed for item {item}", item=item.provider_key)
                 errors.append(SyncError(key=item.provider_key, message=str(error)))
@@ -198,6 +216,7 @@ class SyncMirrorsHandler:
         counts = Counter(_COUNTER_FIELD[action] for action in actions)
         return SyncReport(
             too_old=tuple(too_old),
+            already_mirrored=already_mirrored,
             created=counts["created"],
             updated=counts["updated"],
             archived=archived,
@@ -250,13 +269,18 @@ class SyncMirrorsHandler:
     async def _plan(self, items: list[SourceItem], *, include_orphans: bool) -> SyncReport:
         """Compute the per-item plan with zero writes or conversions (the dry run)."""
         index = await self._store.load_index()
+        held = mirrors_by_identity(index)
         now = self._clock()
         planned: list[PlannedAction] = []
         unavailable: list[str] = []
         too_old: list[str] = []
+        already_mirrored: dict[str, str] = {}
         for item in items:
             if self._refused_by_age(item, existing=index.get(item.provider_key), now=now):
                 too_old.append(item.provider_key)
+                continue
+            if (holder := holder_of(item, index.get(item.provider_key), held)) is not None:
+                already_mirrored[item.provider_key] = holder
                 continue
             try:
                 pdf_hash = pdf_sha256(item.pdf_path)
@@ -267,6 +291,7 @@ class SyncMirrorsHandler:
             planned.append(
                 PlannedAction(key=item.provider_key, title=item.title, action=decide(item, index.get(item.provider_key), pdf_hash))
             )
+            _hold(held, item)
         if include_orphans:
             present_keys = {item.provider_key for item in items}
             planned.extend(
@@ -274,7 +299,9 @@ class SyncMirrorsHandler:
                 for key, mirror in self._mine(index).items()
                 if should_archive(mirror, present_keys=present_keys)
             )
-        return SyncReport(dry_run=True, planned=tuple(planned), unavailable=tuple(unavailable), too_old=tuple(too_old))
+        return SyncReport(
+            dry_run=True, planned=tuple(planned), unavailable=tuple(unavailable), too_old=tuple(too_old), already_mirrored=already_mirrored
+        )
 
     def _emit(self, event: Event) -> None:
         """Queue `event` for the bus to dispatch after this handler returns."""
@@ -332,6 +359,7 @@ class MultiConnectorSync:
             errors=tuple(e for r in reports for e in r.errors),
             unavailable=tuple(u for r in reports for u in r.unavailable),
             too_old=tuple(k for r in reports for k in r.too_old),
+            already_mirrored={key: holder for r in reports for key, holder in r.already_mirrored.items()},
             dry_run=command.dry_run,
             planned=tuple(p for r in reports for p in r.planned),
             created_by_connector={name: report.created for name, report in zip(self._handlers, reports, strict=True) if report.created},

@@ -113,7 +113,18 @@ async def test_load_index_returns_mirror_file_for_written_note(tmp_path: Path) -
         provider="example-library",
         converter="azure-di/prebuilt-layout+formulas",
         status=MirrorStatus.ACTIVE,
+        url=None,
+        doi=None,
     )
+
+
+async def test_load_index_reads_the_url_and_doi_a_mirror_names(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    await store.write(frontmatter=MirrorFrontmatterFactory.build(url="https://arxiv.org/abs/2401.00001", doi="10.1000/example.42"), body="# Body")
+
+    index = await store.load_index()
+
+    assert (index["ABCD1234"].url, index["ABCD1234"].doi) == ("https://arxiv.org/abs/2401.00001", "10.1000/example.42")
 
 
 async def test_load_index_round_trips_the_on_disk_converter_label(tmp_path: Path) -> None:
@@ -130,7 +141,7 @@ async def test_load_index_defaults_converter_for_a_note_without_the_key(tmp_path
     _write_note(
         tmp_path,
         "HANDWRITTEN.md",
-        {"source_key": "HAND0001", "source_version": 3, "source_hash": "cafef00d", "provider": "example-library", "status": "active"},
+        {"source_key": "HAND0001", "source_version": 3, "source_hash": "cafef00d", "provider": "example-library", "status": "active", "url": None, "doi": None},
     )
 
     index = await store.load_index()
@@ -164,7 +175,7 @@ async def test_a_note_naming_no_provider_is_skipped_by_the_index(tmp_path: Path)
     _write_note(
         tmp_path,
         "Fine.md",
-        {"source_key": "FINE0001", "source_version": 1, "source_hash": "deadbeef", "provider": "example-library", "status": "active"},
+        {"source_key": "FINE0001", "source_version": 1, "source_hash": "deadbeef", "provider": "example-library", "status": "active", "url": None, "doi": None},
     )
 
     index = await store.load_index()
