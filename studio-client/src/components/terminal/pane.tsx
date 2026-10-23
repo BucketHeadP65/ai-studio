@@ -30,7 +30,7 @@ export interface TerminalHandle {
 export interface TerminalSocket {
   binaryType: BinaryType;
   readonly readyState: number;
-  send: (data: string | ArrayBufferView) => void;
+  send: (data: string | ArrayBufferView<ArrayBuffer>) => void;
   close: () => void;
   addEventListener(type: "open", listener: () => void): void;
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
