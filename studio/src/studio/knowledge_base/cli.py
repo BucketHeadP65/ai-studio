@@ -285,6 +285,10 @@ def _print_sync_report(report: SyncReport) -> None:
         typer.echo(f"Planned actions (dry run): {len(report.planned)}")
         for row in report.planned:
             typer.echo(f"  {row.action.value.upper():<9} {row.key}  {row.title}")
+        if report.would_resolve:
+            typer.echo(f"Would resolve first (dry run): {len(report.would_resolve)}")
+            for pending in report.would_resolve:
+                typer.echo(f"  {pending.key}  {pending.source_type.value}  {pending.url}")
     else:
         typer.echo(f"Synced: {report.created} created, {report.updated} updated, {report.archived} archived, {report.skipped} skipped")
     if report.unavailable:
@@ -1369,11 +1373,10 @@ def sync_cmd(
     ),
     dry_run: bool = typer.Option(
         default=False,
-        help="Plan only: list each watch-list row a real run would scan (its scanner and ref) without scanning it, then print "
-        "each item's action without writing mirrors or converting. On a connector-backed knowledge base (e.g. youtube), the "
-        "listing phase itself still fetches each item over the network and updates the source queue before the plan is even "
-        "computed, and resolving a requested source-queue row may call its model. Only the scan, the mirror write and the "
-        "conversion are skipped.",
+        help="Plan only, with no scan, no fetch, no model call, no conversion and no write: list each watch-list row a real run "
+        "would scan (its scanner and ref), each item's action, and each source-queue row a real run would fetch or resolve "
+        "first (its key, source type and URL). A benchmark connector whose dataset was never downloaded downloads it, as a "
+        "real run would.",
     ),
     limit: int | None = typer.Option(default=None, help="Process at most N items. A limited run never archives orphans."),
 ) -> None:

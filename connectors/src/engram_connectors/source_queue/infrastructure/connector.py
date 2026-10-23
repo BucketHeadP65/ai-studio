@@ -16,12 +16,14 @@ from core.net import HttpxPageFetcher
 from core.observability import get_logger
 from engram.sources.contracts import (
     NOT_SERVED,
+    ItemPreview,
     Resolved,
     SourceItem,
     SourceQueue,
     SourceQueueStatus,
     SourceQueueUnreadableError,
     SourceType,
+    UnresolvedItem,
     arxiv_id_of,
     url_key,
 )
@@ -80,7 +82,8 @@ class SourceQueueConnector:
     other row is marked `failed` with the reason.
     A row whose source type has no resolver is marked `skipped`.
     A resolver that raises a `ResolveError`, or an `OSError` from a file its converter could not read,
-    marks the row `failed` with the reason, and the other rows still serve.
+    marks the row `failed` with the reason, and the other rows still serve. `preview_items` reads the cache alone and
+    changes nothing.
     """
 
     name = CONNECTOR
@@ -213,6 +216,35 @@ class SourceQueueConnector:
                 items.append(item)
         return items
 
+    async def preview_items(self) -> ItemPreview:
+        """The rows served from their cached resolutions as items, and the rows a real listing would resolve first.
+
+        It calls no resolver, marks no row and neither writes nor deletes a cache file. A row with no usable
+        cached resolution, or a requested row whose cached page is a bot check, is named in `would_resolve` when
+        its source type has a resolver. Any other row a real listing would fail or skip is left out.
+
+        Returns:
+            The items and the rows awaiting resolution, in queue order.
+
+        Raises:
+            SourceQueueUnreadableError: The queue file cannot be read or does not parse.
+        """
+        items: list[SourceItem] = []
+        pending: list[UnresolvedItem] = []
+        for entry in self._entries():
+            if entry.status in NOT_SERVED:
+                continue
+            meta = self._read_meta(entry)
+            if meta is not None and entry.source_type is SourceType.ARTICLE and challenge_reason(meta.title, meta.markdown, url=entry.url):
+                if entry.status is not SourceQueueStatus.REQUESTED:
+                    continue
+                meta = None
+            if meta is not None:
+                items.append(self._source_item(entry, meta))
+            elif entry.source_type in self._resolvers:
+                pending.append(UnresolvedItem(key=entry.key, source_type=entry.source_type, url=entry.url))
+        return ItemPreview(items=tuple(items), would_resolve=tuple(pending))
+
     def _entries(self) -> list[SourceQueueEntry]:
         """The queue's rows, turning an unreadable file into one sentence naming it."""
         try:
@@ -256,6 +288,10 @@ class SourceQueueConnector:
             meta = await self._resolve(entry)
             if meta is None:
                 return None
+        return self._source_item(entry, meta)
+
+    def _source_item(self, entry: SourceQueueEntry, meta: Resolved) -> SourceItem:
+        """The source item of a row and its resolution, served from the row's cache file."""
         now = self._clock()
         return SourceItem(
             provider_key=entry.key,

@@ -278,3 +278,12 @@ async def test_the_converter_passes_the_cached_file_through(tmp_path: Path) -> N
 
     assert result.markdown == "# T\n\nBody.\n"
     assert result.converter == "multihop_rag"
+
+
+async def test_the_preview_lists_the_same_items_with_nothing_awaiting_resolution(tmp_path: Path) -> None:
+    connector = _connector(tmp_path, _hub())
+
+    preview = await connector.preview_items()
+
+    assert list(preview.items) == await connector.list_items_with_pdf()
+    assert preview.would_resolve == ()

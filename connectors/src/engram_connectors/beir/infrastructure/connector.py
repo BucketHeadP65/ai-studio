@@ -16,7 +16,7 @@ import yaml
 
 from core.files import atomic_write
 from core.net import HttpxPageFetcher
-from engram.sources.contracts import SourceItem, SourceType, url_key
+from engram.sources.contracts import ItemPreview, SourceItem, SourceType, url_key
 from pydantic import ValidationError
 
 from engram_connectors.beir.domain.dataset import BeirDocument, file_stems, judged_queries, parse_documents, parse_judgments, parse_queries
@@ -131,6 +131,17 @@ class BeirConnector:
         documents, stems = await self._documents()
         stamp = self._stamp()
         return [self._item(document, stems[document.id], stamp) for document in documents]
+
+    async def preview_items(self) -> ItemPreview:
+        """The items `list_items_with_pdf` answers, with no row awaiting resolution.
+
+        That listing calls no model and changes no row. Before the dataset's first download it downloads and unpacks
+        the dataset, as a real listing would.
+
+        Returns:
+            Those items, with no row awaiting resolution.
+        """
+        return ItemPreview(items=tuple(await self.list_items_with_pdf()))
 
     async def get(self, provider_key: str) -> SourceItem | None:
         """The one document whose id is `provider_key`.

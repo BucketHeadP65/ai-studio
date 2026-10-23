@@ -245,3 +245,10 @@ class TestBuild:
         connector = SqliteZoteroConnector.build(SourceResources(knowledge_base=KnowledgeBaseSettings(path=tmp_path)))
 
         assert isinstance(connector, SqliteZoteroConnector)
+
+
+async def test_the_preview_lists_the_same_items_with_nothing_awaiting_resolution(connector: SqliteZoteroConnector):
+    preview = await connector.preview_items()
+
+    assert list(preview.items) == await connector.list_items_with_pdf()
+    assert preview.would_resolve == ()

@@ -14,7 +14,17 @@ import yaml
 
 from core.cqrs.contracts import utcnow
 from core.files import atomic_write
-from engram.sources.contracts import NOT_SERVED, SourceItem, SourceQueue, SourceQueueStatus, SourceQueueUnreadableError, SourceType, url_key
+from engram.sources.contracts import (
+    NOT_SERVED,
+    ItemPreview,
+    SourceItem,
+    SourceQueue,
+    SourceQueueStatus,
+    SourceQueueUnreadableError,
+    SourceType,
+    UnresolvedItem,
+    url_key,
+)
 from pydantic import ValidationError
 
 from engram_connectors.youtube.domain.segmenter import transcript_markdown
@@ -130,6 +140,20 @@ class YouTubeConnector:
             if item is not None:
                 items.append(item)
         return items
+
+    async def preview_items(self) -> ItemPreview:
+        """Name every YouTube row a real listing would fetch, since every listing fetches each served row again.
+
+        It fetches nothing, marks no row and writes no cache file, so it answers no item.
+
+        Returns:
+            One row awaiting resolution per served YouTube row, in queue order.
+
+        Raises:
+            SourceQueueUnreadableError: The queue file cannot be read or does not parse.
+        """
+        pending = (UnresolvedItem(key=entry.key, source_type=SourceType.VIDEO, url=entry.url) for entry in self._entries() if self._is_served(entry))
+        return ItemPreview(would_resolve=tuple(pending))
 
     async def get(self, provider_key: str) -> SourceItem | None:
         """Resolve the one row for `provider_key` through the fetcher.

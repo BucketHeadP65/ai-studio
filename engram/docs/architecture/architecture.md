@@ -321,7 +321,7 @@ package installed.
 The load-bearing rule is the **read-only invariant, the adapter NEVER writes Zotero**,
 and `SqliteZoteroConnector` enforces it *structurally* on two layers, not by
 convention. First, engram's `Connector` port exposes **only reads**
-(`list_items_with_pdf`, `get`, plus the three stateless classification methods).
+(`list_items_with_pdf`, `preview_items`, `get`, plus the three stateless classification methods).
 There is no write method to call. Second, the
 adapter never opens the live database: because Zotero holds a write lock while its
 app is open, every call **copies** `zotero.sqlite` (plus any `-wal` / `-shm`
@@ -338,7 +338,7 @@ C4Component
     System_Ext(zlib, "Local Zotero library", "~/Zotero, read-only source of truth", "zotero.sqlite (+ -wal/-shm) and storage/<key>/ files")
 
     Component_Boundary(zo, "engram_connectors/zotero") {
-        Component(port, "Connector", "engram/sources/internal_contracts.py", "Read port: list_items_with_pdf() / get(key), NO write methods")
+        Component(port, "Connector", "engram/sources/internal_contracts.py", "Read port: list_items_with_pdf() / preview_items() / get(key), NO write methods")
         Component(repo, "SqliteZoteroConnector", "infrastructure/connector.py", "Adapter: copy DB to temp -> open ?mode=ro -> JOINs -> ZoteroItem")
         Component(connect, "_connect / _copy_db", "infrastructure/connector.py", "TemporaryDirectory copy of zotero.sqlite (+sidecars), aiosqlite ?mode=ro engine, disposed after")
         Component(itemq, "_items_query", "infrastructure/connector.py", "_ITEMS_SQL: PDF + linkMode IN (0,1,2) + not deletedItems, optional _COLLECTION_CLAUSE")
@@ -399,12 +399,14 @@ classDiagram
         +key_for(url) str
         +source_type_of(item_type) SourceType
         +list_items_with_pdf() list~SourceItem~
+        +preview_items() ItemPreview
         +get(provider_key) SourceItem?
     }
     class SqliteZoteroConnector {
         -LibrarySettings _settings
         +build(resources) Connector
         +list_items_with_pdf() list~SourceItem~
+        +preview_items() ItemPreview
         +get(provider_key) SourceItem?
     }
 

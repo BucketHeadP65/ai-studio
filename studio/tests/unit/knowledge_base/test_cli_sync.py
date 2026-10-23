@@ -29,9 +29,11 @@ from engram.sources.contracts import (
     ScanWatchList,
     ScanWatchListHandler,
     SourceQueue,
+    SourceType,
     SyncMirrors,
     SyncMirrorsHandler,
     SyncReport,
+    UnresolvedItem,
     WatchListFile,
 )
 from engram.sources.service.sync import pdf_sha256
@@ -129,6 +131,7 @@ class SyncContainerFactory:
     def __init__(
         self, *, repo: FakeConnector, converter: FakeDocumentConverter, store: FakeMirrorStore, max_age_years: int | None = None
     ) -> None:
+        self.connector = repo
         self.handler = SyncMirrorsHandler(repo, converter, store, max_age_years=max_age_years)
         self._bus = MessageBus({SyncMirrors: self.handler}, {})
 
@@ -280,6 +283,18 @@ class TestDryRun:
         assert "delete" in result.stdout.lower()
         assert store.deleted == []
         assert converter.call_count == 0
+
+    def test_lists_each_row_a_real_run_would_resolve_first(self, tmp_path: Path):
+        pending = UnresolvedItem(key="x-1234", source_type=SourceType.POST, url="https://x.com/someone/status/1234")
+        factory = _factory([_item(tmp_path, key="ITEM0001")], FakeMirrorStore())
+        factory.connector.would_resolve.append(pending)
+
+        result = runner.invoke(app, ["sync", "--dry-run"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "Would resolve first (dry run): 1" in result.stdout
+        assert "x-1234  post  https://x.com/someone/status/1234" in result.stdout
+        assert factory.connector.listings == 0
 
     def test_missing_pdf_is_listed_distinctly_and_does_not_abort(self, tmp_path: Path):
         items = [_item(tmp_path, key="ITEM0001"), _item_without_pdf(tmp_path, key="GONEPDF1")]

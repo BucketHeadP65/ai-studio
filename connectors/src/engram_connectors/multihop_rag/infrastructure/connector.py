@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from core.files import atomic_write
 from core.net import HttpxPageFetcher
-from engram.sources.contracts import SourceItem, SourceType, url_key
+from engram.sources.contracts import ItemPreview, SourceItem, SourceType, url_key
 
 from engram_connectors.multihop_rag.domain.dataset import (
     ARTICLES_FILE,
@@ -118,6 +118,17 @@ class MultihopRagConnector:
         articles = await self._articles()
         stamp = self._stamp()
         return [self._item(article, stamp) for article in articles]
+
+    async def preview_items(self) -> ItemPreview:
+        """The items `list_items_with_pdf` answers, with no row awaiting resolution.
+
+        That listing calls no model and changes no row. Before the dataset's first download it downloads and unpacks
+        the dataset, as a real listing would.
+
+        Returns:
+            Those items, with no row awaiting resolution.
+        """
+        return ItemPreview(items=tuple(await self.list_items_with_pdf()))
 
     async def get(self, provider_key: str) -> SourceItem | None:
         """The one article whose source id is `provider_key`.

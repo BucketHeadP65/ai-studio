@@ -16,6 +16,7 @@ from core.cqrs.contracts import Command, Event
 from pydantic import BaseModel, ConfigDict, Field
 
 from engram.sources.domain.mirror import MirrorFrontmatter, MirrorStatus
+from engram.sources.domain.source_item import UnresolvedItem
 from engram.sources.domain.source_queue import source_identities
 
 if TYPE_CHECKING:
@@ -39,8 +40,9 @@ class SyncAction(StrEnum):
 class SyncMirrors(Command):
     """Converge the knowledge base's `Sources/` mirrors to the connector's library.
 
-    `dry_run` plans without writing or converting. `limit` processes at most N items and disables
-    orphan archiving, because a partial view must never archive the rest of the library.
+    `dry_run` plans from what the connectors already hold, with no fetch, no model call, no conversion and
+    no write. `limit` processes at most N items and disables orphan archiving, because a partial view must
+    never archive the rest of the library.
     """
 
     dry_run: bool = False
@@ -82,6 +84,8 @@ class SyncReport(BaseModel):
     """The items refused at admission because another active mirror already holds their source, each item's key mapped to that mirror's key."""
     dry_run: bool = False
     planned: tuple[PlannedAction, ...] = ()  # populated only when dry_run
+    would_resolve: tuple[UnresolvedItem, ...] = ()
+    """The rows an applying run would fetch or resolve before planning them. Only a dry run fills it."""
     created_by_connector: dict[str, int] = Field(default_factory=dict)
     """The mirrors each connector created, by connector name. Only the fold over several connectors fills it, and a connector that created none is absent."""
 

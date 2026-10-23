@@ -1,7 +1,8 @@
 """An in-memory `Connector` for reconcile tests that also serves as a `ConnectorClass`.
 
-Serves a seeded list of `SourceItem` from `list_items_with_pdf` and looks items up by
-`provider_key` in `get`. Seed it through the constructor. `claims`, `key_for` and `source_type_of`
+Serves a seeded list of `SourceItem` from `list_items_with_pdf` and `preview_items`, and looks items up by
+`provider_key` in `get`. `preview_items` also names the seeded `would_resolve` rows, and `listings` counts the
+real listings. Seed it through the constructor. `claims`, `key_for` and `source_type_of`
 answer `claims_result`, `key_for_result` and `source_type_result`, public attributes a test sets
 before use. For many distinct URLs or item types, set `claims_from`, `key_for_from` or
 `source_type_from` instead, a plain function consulted ahead of the constant. Pass a constructed
@@ -14,13 +15,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from engram.sources.contracts import SourceType, url_key
+from engram.sources.contracts import ItemPreview, SourceType, url_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from engram.config import SourceResources
-    from engram.sources.contracts import SourceItem
+    from engram.sources.contracts import SourceItem, UnresolvedItem
 
 
 @dataclass
@@ -41,14 +42,27 @@ class FakeConnector:
     claims_from: Callable[[str], SourceType | None] | None = None
     key_for_from: Callable[[str], str] | None = None
     source_type_from: Callable[[str], SourceType] | None = None
+    would_resolve: list[UnresolvedItem] = field(default_factory=list)
+    """The rows `preview_items` names as awaiting resolution."""
+    listings: int = 0
+    """How many times `list_items_with_pdf` ran."""
 
     async def list_items_with_pdf(self) -> list[SourceItem]:
-        """List every seeded item. The fake treats every item as carrying a PDF.
+        """List every seeded item and count the listing. The fake treats every item as carrying a PDF.
 
         Returns:
             A copy of `items`.
         """
+        self.listings += 1
         return list(self.items)
+
+    async def preview_items(self) -> ItemPreview:
+        """Preview the seeded items and the seeded rows awaiting resolution, counting no listing.
+
+        Returns:
+            `items` and `would_resolve`.
+        """
+        return ItemPreview(items=tuple(self.items), would_resolve=tuple(self.would_resolve))
 
     async def get(self, provider_key: str) -> SourceItem | None:
         """Look a seeded item up by its provider key.
