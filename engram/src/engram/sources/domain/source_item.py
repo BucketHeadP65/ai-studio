@@ -52,10 +52,11 @@ class SourceItem(BaseModel):
 
 
 class UnresolvedItem(BaseModel):
-    """A row a real listing would first fetch or resolve, which a dry run names instead of serving."""
+    """A row a real listing would first fetch or resolve, which a dry run names instead of serving, with the connector that would."""
 
     model_config = ConfigDict(frozen=True)
 
+    connector: str
     key: str
     source_type: SourceType
     url: str

@@ -2,10 +2,10 @@
 
 What this pins:
 
-* the role every migration creates passes, so a correct deployment starts;
-* the owner the database was built with fails, and the refusal names the role, what it can do and the setting;
-* a reader that was granted one table outside `api` fails, naming the table;
-* the same check made on every new connection lets the reader read and refuses the owner's first read.
+* The role every migration creates passes, so a correct deployment starts.
+* The owner the database was built with fails, and the refusal names the role, what it can do and the setting.
+* A reader that was granted one table outside `api` fails, naming the table.
+* The same check made on every new connection lets the reader read and refuses the owner's first read.
 """
 
 from __future__ import annotations

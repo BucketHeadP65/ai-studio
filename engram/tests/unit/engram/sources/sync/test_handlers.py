@@ -470,7 +470,7 @@ async def _deliver(bus: MessageBus) -> None:
 class TestDryRunPreview:
     """A dry run lists through the connector's preview, never its real listing."""
 
-    _PENDING = UnresolvedItem(key="VID00001", source_type=SourceType.VIDEO, url="https://video.example/watch/1")
+    _PENDING = UnresolvedItem(connector="fake", key="VID00001", source_type=SourceType.VIDEO, url="https://video.example/watch/1")
 
     async def test_the_dry_run_never_lists_and_reports_the_rows_awaiting_resolution(self, tmp_path: Path):
         connector = FakeConnector(items=[_item(tmp_path, key="ITEM0001")], would_resolve=[self._PENDING])

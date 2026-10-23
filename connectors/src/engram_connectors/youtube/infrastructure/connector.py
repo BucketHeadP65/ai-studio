@@ -152,7 +152,11 @@ class YouTubeConnector:
         Raises:
             SourceQueueUnreadableError: The queue file cannot be read or does not parse.
         """
-        pending = (UnresolvedItem(key=entry.key, source_type=SourceType.VIDEO, url=entry.url) for entry in self._entries() if self._is_served(entry))
+        pending = (
+            UnresolvedItem(connector=self.name, key=entry.key, source_type=SourceType.VIDEO, url=entry.url)
+            for entry in self._entries()
+            if self._is_served(entry)
+        )
         return ItemPreview(would_resolve=tuple(pending))
 
     async def get(self, provider_key: str) -> SourceItem | None:

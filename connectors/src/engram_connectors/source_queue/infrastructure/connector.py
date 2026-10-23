@@ -242,7 +242,7 @@ class SourceQueueConnector:
             if meta is not None:
                 items.append(self._source_item(entry, meta))
             elif entry.source_type in self._resolvers:
-                pending.append(UnresolvedItem(key=entry.key, source_type=entry.source_type, url=entry.url))
+                pending.append(UnresolvedItem(connector=self.name, key=entry.key, source_type=entry.source_type, url=entry.url))
         return ItemPreview(items=tuple(items), would_resolve=tuple(pending))
 
     def _entries(self) -> list[SourceQueueEntry]:

@@ -285,7 +285,7 @@ class TestDryRun:
         assert converter.call_count == 0
 
     def test_lists_each_row_a_real_run_would_resolve_first(self, tmp_path: Path):
-        pending = UnresolvedItem(key="x-1234", source_type=SourceType.POST, url="https://x.com/someone/status/1234")
+        pending = UnresolvedItem(connector="intake", key="x-1234", source_type=SourceType.POST, url="https://x.com/someone/status/1234")
         factory = _factory([_item(tmp_path, key="ITEM0001")], FakeMirrorStore())
         factory.connector.would_resolve.append(pending)
 
@@ -293,7 +293,7 @@ class TestDryRun:
 
         assert result.exit_code == 0
         assert "Would resolve first (dry run): 1" in result.stdout
-        assert "x-1234  post  https://x.com/someone/status/1234" in result.stdout
+        assert "intake  x-1234  post  https://x.com/someone/status/1234" in result.stdout
         assert factory.connector.listings == 0
 
     def test_missing_pdf_is_listed_distinctly_and_does_not_abort(self, tmp_path: Path):

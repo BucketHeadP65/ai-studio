@@ -76,9 +76,10 @@ class Connector(Protocol):
     async def preview_items(self) -> ItemPreview:
         """What `list_items_with_pdf` would answer, read from what is already at hand, for a dry run.
 
-        You must make no network call, no model call and no write here: no fetch, no resolve, no cache
-        write and no change to any row. An item the real listing would first fetch or resolve comes back
-        in `would_resolve`, never in `items`.
+        You must make no model call and no write to the knowledge base: no resolve, no fetch of a row's
+        source, no row mark and no cache write for a row. A dataset connector's preview may download and
+        cache its dataset on a first run, as its real listing would. An item the real listing would first
+        fetch or resolve comes back in `would_resolve`, never in `items`, naming this connector.
 
         Returns:
             The items at hand and the rows a real listing would resolve first.

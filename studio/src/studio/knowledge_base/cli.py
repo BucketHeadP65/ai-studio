@@ -304,7 +304,7 @@ def _print_sync_report(report: SyncReport) -> None:
         if report.would_resolve:
             typer.echo(f"Would resolve first (dry run): {len(report.would_resolve)}")
             for pending in report.would_resolve:
-                typer.echo(f"  {pending.key}  {pending.source_type.value}  {pending.url}")
+                typer.echo(f"  {pending.connector}  {pending.key}  {pending.source_type.value}  {pending.url}")
     else:
         typer.echo(f"Synced: {report.created} created, {report.updated} updated, {report.archived} archived, {report.skipped} skipped")
     if report.unavailable:
@@ -1403,8 +1403,8 @@ def sync_cmd(
         default=False,
         help="Plan only, with no scan, no fetch, no model call, no conversion and no write: list each watch-list row a real run "
         "would scan (its scanner and ref), each item's action, and each source-queue row a real run would fetch or resolve "
-        "first (its key, source type and URL). A benchmark connector whose dataset was never downloaded downloads it, as a "
-        "real run would.",
+        "first (the connector, its key, source type and URL). A benchmark connector whose dataset was never downloaded "
+        "downloads it, as a real run would.",
     ),
     limit: int | None = typer.Option(default=None, help="Process at most N items. A limited run never archives orphans."),
 ) -> None:

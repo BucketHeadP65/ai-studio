@@ -426,4 +426,4 @@ async def test_a_dry_run_sync_resolves_nothing_and_writes_no_queue_or_cache_file
     assert (tmp_path / "source-queue.yaml").read_text(encoding="utf-8") == queue_text
     assert sorted(path.name for path in (tmp_path / "cache").iterdir()) == cache_files
     assert [row.key for row in report.planned] == [cached.key]
-    assert report.would_resolve == (UnresolvedItem(key=requested.key, source_type=SourceType.POST, url=requested.url),)
+    assert report.would_resolve == (UnresolvedItem(connector="intake", key=requested.key, source_type=SourceType.POST, url=requested.url),)

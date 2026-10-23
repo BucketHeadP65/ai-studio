@@ -150,5 +150,5 @@ class TestDryRun:
         assert (tmp_path / "source-queue.yaml").read_text(encoding="utf-8") == queue_text
         assert not (tmp_path / "cache").exists()
         assert report.planned == ()
-        assert report.would_resolve == (UnresolvedItem(key=row.key, source_type=SourceType.VIDEO, url=WATCH_URL),)
+        assert report.would_resolve == (UnresolvedItem(connector="youtube", key=row.key, source_type=SourceType.VIDEO, url=WATCH_URL),)
         assert store.written == []

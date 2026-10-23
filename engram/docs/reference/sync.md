@@ -59,8 +59,8 @@ and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](i
   (`SyncError`), an `unavailable` list (items whose attachment path could not
   resolve), `already_mirrored` (each item refused because another active mirror holds its
   source, mapped to that mirror's key), dry-run `planned` rows (`PlannedAction` over the `SyncAction`
-  enum), and dry-run `would_resolve` rows (`UnresolvedItem`: the key, source type and URL of each row a real
-  listing would fetch or resolve before planning it). Events `SyncStarted` / `SyncCompleted` (carrying the report) bracket the
+  enum), and dry-run `would_resolve` rows (`UnresolvedItem`: the connector, key, source type and URL of each row a
+  real listing would fetch or resolve before planning it). Events `SyncStarted` / `SyncCompleted` (carrying the report) bracket the
   run.
 - **Ports:** the handler drives three protocols, never their
   adapters. `Connector` (`engram/src/engram/sources/internal_contracts.py`, served by a connector in
