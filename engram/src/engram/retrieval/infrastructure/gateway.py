@@ -25,7 +25,8 @@ from contextvars import ContextVar
 from copy import copy
 from typing import TYPE_CHECKING, Self
 
-from sqlalchemy import bindparam, text
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import bindparam, event, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from engram.retrieval.domain import ColumnInfo, ObjectInfo, SchemaDescription, SqlResult
@@ -34,8 +35,11 @@ from engram.retrieval.exceptions import ReaderRoleOverprivilegedError
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Mapping, Sequence
 
+    from asyncpg import Connection
+    from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_connection
     from sqlalchemy.engine import Row as SaRow
     from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+    from sqlalchemy.pool import ConnectionPoolEntry
 
     from .reader_roles import PrivateReaders
 
@@ -188,21 +192,22 @@ WHERE r.rolname = current_user
 """
 
 
-async def verify_reader_role(engine: AsyncEngine) -> None:
-    """Refuse a reader connection that can do more than read the `api` schema.
+class _ReaderRole(BaseModel):
+    """What `_READER_ROLE_SQL` answers about the connected role."""
 
-    The role must keep `default_transaction_read_only` on, hold no role attribute, belong to no role but `kb_reader`,
-    use no schema but `api` and `public`, create in none and hold no privilege on a relation outside `api`, beyond
-    what PUBLIC holds. Call it once, where the reader engine is built.
+    model_config = ConfigDict(frozen=True)
 
-    Args:
-        engine: The reader engine, before any gateway reads through it.
+    role: str
+    read_only: bool
+    attributes: list[str]
+    member_of: list[str]
+    schemas_used: list[str]
+    schemas_created_in: list[str]
+    relations_outside_api: list[str]
 
-    Raises:
-        ReaderRoleOverprivilegedError: When the role fails any of these, naming the role, each problem and `READER_SETTING`.
-    """
-    async with engine.connect() as conn:
-        row = (await conn.execute(text(_READER_ROLE_SQL))).one()
+
+def _refuse_overprivileged(row: _ReaderRole) -> None:
+    """Raise when the role can do more than read the `api` schema."""
     problems = [
         *([] if row.read_only else ["its transactions are not read-only by default"]),
         *([f"it holds {', '.join(row.attributes)}"] if row.attributes else []),
@@ -217,6 +222,50 @@ async def verify_reader_role(engine: AsyncEngine) -> None:
             f"Point {READER_SETTING}, or the export that overrides it, at the read-only kb_reader role."
         )
         raise ReaderRoleOverprivilegedError(msg)
+
+
+async def verify_reader_role(engine: AsyncEngine) -> None:
+    """Refuse a reader connection that can do more than read the `api` schema.
+
+    The role must keep `default_transaction_read_only` on, hold no role attribute, belong to no role but `kb_reader`,
+    use no schema but `api` and `public`, create in none and hold no privilege on a relation outside `api`, beyond
+    what PUBLIC holds. Call it once, where the reader engine is built.
+
+    Args:
+        engine: The reader engine, before any gateway reads through it.
+
+    Raises:
+        ReaderRoleOverprivilegedError: When the role fails any of these, naming the role, each problem and `READER_SETTING`.
+    """
+    async with engine.connect() as conn:
+        row = (await conn.execute(text(_READER_ROLE_SQL))).mappings().one()
+    _refuse_overprivileged(_ReaderRole.model_validate(dict(row)))
+
+
+def verify_reader_role_on_connect(engine: AsyncEngine) -> None:
+    """Check the reader role on every new connection of `engine`, for an engine whose database did not answer when it was built.
+
+    It opens no connection itself. A connection whose role fails the checks `verify_reader_role` makes is refused with
+    `ReaderRoleOverprivilegedError`, so no read runs through it. Calling it twice registers the check once.
+
+    Args:
+        engine: The reader engine, before any gateway reads through it.
+    """
+    if event.contains(engine.sync_engine, "connect", _verify_on_connect):
+        return
+    event.listen(engine.sync_engine, "connect", _verify_on_connect)
+
+
+def _verify_on_connect(dbapi_connection: AsyncAdapt_asyncpg_connection, connection_record: ConnectionPoolEntry) -> None:
+    """Check the role of a new connection, through the asyncpg dialect's `run_async`."""
+    del connection_record
+    dbapi_connection.run_async(_verify_raw_connection)
+
+
+async def _verify_raw_connection(connection: Connection) -> None:
+    """Refuse a raw asyncpg connection whose role can do more than read the `api` schema."""
+    row = await connection.fetchrow(_READER_ROLE_SQL)
+    _refuse_overprivileged(_ReaderRole.model_validate(dict(row) if row is not None else {}))
 
 
 class ReadOnlySqlGateway:

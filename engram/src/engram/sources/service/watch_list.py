@@ -78,6 +78,11 @@ class ScanWatchListHandler:
         self._clock = clock
         self.events: list[Event] = []
 
+    @property
+    def served_scanners(self) -> frozenset[str]:
+        """The scanner names this handler can scan with. A row naming any other fails at scan time."""
+        return frozenset(self._scanners)
+
     async def __call__(self, command: Command) -> ScanReport:
         """Bus entry point, narrowing `command` to the `ScanWatchList` this handler is registered for, so a misregistration fails loudly.
 
