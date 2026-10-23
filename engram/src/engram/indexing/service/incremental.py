@@ -114,7 +114,8 @@ async def run_incremental(
     """Reindex only the dirty set in one transaction and return its report.
 
     You must call it only when the stored fingerprint matches and the manifest is not empty.
-    Pages that vanished or were renamed away are deleted, and every write is scoped to the command's collection.
+    Pages that vanished or were renamed away are deleted, and so is the source row of each removed mirror no surviving
+    page cites. Every write is scoped to the command's collection.
     When `cmd.embed` is set, every file owning a row with no embedding joins the dirty set, and the changed
     rows are embedded after the load. The `PagesLoaded` and `CitingPagesChanged` events commit with the rows.
 
@@ -126,8 +127,9 @@ async def run_incremental(
             section over the maximum chunk size.
 
     Returns:
-        The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `validation` holding
-        the dirty set's issues and `standing_validation` every issue stored for the collection once the load committed.
+        The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `pruned` counting the
+        child rows reconciled away and the source rows deleted, `validation` holding the dirty set's issues and
+        `standing_validation` every issue stored for the collection once the load committed.
     """
     collection = cmd.collection
     files = _read_files(deps.kb_reader, collection)
@@ -212,7 +214,7 @@ async def run_incremental(
         # A parse or mirror error is keyed by its file path, so those paths join the dirty ids and
         # their errors are stored as a full rebuild stores them.
         validation_rows=_validation_rows(validation, row_ids(load.pages) | {issue.page_id for issue in (*parsed.errors, *mirror_errors)}, collection),
-        manifest_rows=_manifest_rows(resolved.notes, hashed, collection),
+        manifest_rows=_manifest_rows(resolved.notes, dirty_mirrors, hashed, collection),
         edge_src_ids=row_ids(load.pages) | dirty_set.deleted_page_ids,
         deleted_page_ids=set(dirty_set.deleted_page_ids),
         deleted_source_keys=_deletable_source_keys(
@@ -701,7 +703,7 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
         pruned += await uow.claims.prune_for_pages(row_ids(load.claims), dirty_page_ids, collection=collection)
 
         await uow.pages.delete_by_ids(write.deleted_page_ids, collection=collection)
-        await uow.sources.delete_sources_by_keys(write.deleted_source_keys, collection=collection)
+        pruned += await uow.sources.delete_sources_by_keys(write.deleted_source_keys, collection=collection)
 
         pruned += await uow.sections.prune_for_pages(section_ids, dirty_page_ids, collection=collection)
 
@@ -729,7 +731,7 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
             await uow.edges.refresh_graph()
 
         # The events commit in the same transaction as the rows they describe. `pruned` counts the
-        # child rows the reconcile deleted.
+        # child rows the reconcile deleted and the removed mirrors' source rows.
         uow.record(
             PagesLoaded(
                 collection=collection,
@@ -750,8 +752,10 @@ def _validation_rows(validation: ValidationReport, dirty_page_ids: set[str], col
     return [validation_row(issue, collection) for issue in (*validation.errors, *validation.warnings) if issue.page_id in dirty_page_ids]
 
 
-def _manifest_rows(resolved_notes: Sequence[ResolvedNote], hashed: Mapping[str, HashedFile], collection: str) -> list[Row]:
-    """One `kb.index_manifest` row per dirty note, from the hash of its exact source path."""
+def _manifest_rows(
+    resolved_notes: Sequence[ResolvedNote], mirrors: Sequence[MirrorDoc], hashed: Mapping[str, HashedFile], collection: str
+) -> list[Row]:
+    """One `kb.index_manifest` row per dirty note and per loaded dirty mirror, from the hash of its exact path."""
     rows: list[Row] = []
     for resolved_note in resolved_notes:
         note = resolved_note.note
@@ -769,6 +773,19 @@ def _manifest_rows(resolved_notes: Sequence[ResolvedNote], hashed: Mapping[str, 
                 "source_key": None,
             }
         )
+    rows.extend(
+        {
+            "collection": collection,
+            "path": hashed_file.path,
+            "kind": FileType.SOURCE.value,
+            "content_hash": hashed_file.content_hash,
+            "identity_hash": hashed_file.identity_hash,
+            "page_id": None,
+            "source_key": mirror.source_key,
+        }
+        for mirror in mirrors
+        if (hashed_file := hashed.get(mirror.path)) is not None
+    )
     return rows
 
 

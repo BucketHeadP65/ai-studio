@@ -288,6 +288,11 @@ link-refs, and lint per source, and re-projects the
 AGE graph only when an edge changed. A persisted per-page validation store lets the
 whole-knowledge-base `n_errors` gate be reassembled exactly.
 
+**Removing a source mirror.** The incremental load writes a manifest row for every mirror it loads, so the next run
+sees the mirror's file go. A removed mirror's `kb.sources_raw` row is then deleted, its `kb.raw_chunks` with it, unless
+a surviving page still cites it. These are the source rows a full rebuild prunes, and each one counts once in the
+run's `pruned`, as it does in a full rebuild (the chunks go by cascade and are not counted).
+
 **Reconciling a rebuilt page's children.** An upsert alone cannot shrink a page: a
 section, a claim or a disclosure summary the page no longer
 produces stays in the database forever. A full rebuild removes those with the
@@ -308,8 +313,9 @@ upserts, and the rows removed are reported as the run's `pruned` count.
 
 **Repairing a database indexed before the reconcile landed.** The reconcile only removes
 what a *later* run finds stale. A row already orphaned by an earlier incremental index is
-never named by any page set again. A full rebuild is the supported repair, and the only
-way to guarantee those rows are gone:
+never named by any page set again. The same holds for a source row whose mirror an earlier
+incremental index loaded with no manifest row and whose file is already gone. A full rebuild is
+the supported repair, and the only way to guarantee those rows are gone:
 
 ```bash
 cd studio

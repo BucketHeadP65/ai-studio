@@ -255,12 +255,14 @@ class _RecordingSourceRepo:
         self.existing_sources &= keep_keys
         return len(deleted)
 
-    async def delete_sources_by_keys(self, source_ids: set[str], *, collection: str) -> None:
+    async def delete_sources_by_keys(self, source_ids: set[str], *, collection: str) -> int:
         if not source_ids:  # mirror the real repo's empty-set early return (records no call)
-            return
+            return 0
         self.deleted_keys.append(set(source_ids))
         self.deleted_keys_collections.append(collection)
+        deleted = self.existing_sources & source_ids
         self.existing_sources -= source_ids
+        return len(deleted)
 
     async def prune_missing_chunks(self, keep_ids: set[str], *, collection: str) -> int:
         self.pruned_chunks.append(set(keep_ids))

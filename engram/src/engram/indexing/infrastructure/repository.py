@@ -883,17 +883,21 @@ class SourceRepository:
         await self._db.flush()
         return _deleted_count(result)
 
-    async def delete_sources_by_keys(self, source_ids: set[str], *, collection: str) -> None:
+    async def delete_sources_by_keys(self, source_ids: set[str], *, collection: str) -> int:
         """Delete the source mirrors in `source_ids` and their chunks, a no-op on an empty set.
 
         Args:
             source_ids: The source ids to delete.
             collection: The collection the sources belong to.
+
+        Returns:
+            The number of source rows removed. Their chunks are not counted.
         """
         if not source_ids:
-            return
-        await self._db.execute(self.delete_sources_by_keys_statement(source_ids, collection))
+            return 0
+        result = await self._db.execute(self.delete_sources_by_keys_statement(source_ids, collection))
         await self._db.flush()
+        return _deleted_count(result)
 
     async def upsert_chunks(self, rows: Sequence[Row]) -> None:
         """Bulk upsert raw chunk rows by `id`, a no-op on an empty batch.
