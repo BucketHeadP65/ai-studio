@@ -348,7 +348,11 @@ class Decision(BaseModel):
 Approve ignores `feedback` outright. It is read only on a rejection. A reject-with-feedback never itself approves the
 retry, and the revised value comes back to the same gate for a person to read, unless automode is on for that run. A
 step file may also carry `budget` (`requests`, optional `tool_calls`). The run enforces it, and the step reads the
-number in its own first turn. A step file may also carry `skills` (names from the skills registry,
+number in its own first turn. In a code-mode step, `tool_calls` counts every call a `run_code` program makes as well as
+the `run_code` call itself (pydantic-ai-harness 0.59.0 and later). A program's call that would cross it ends the step
+with `UsageLimitExceeded` in the middle of the program, and catching that inside the program does not help. The
+shipped template steps that search inside code mode carry doubled budgets for this: `check_adrs` 24, `draft_decision_brief`
+28 and `review_decision_brief` 20. A step file may also carry `skills` (names from the skills registry,
 [ADR 0013](../adr/0013-skills-registry.md)), mounted on that one step alone.
 
 ### What a rejection carries into the rerun
