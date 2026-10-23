@@ -84,5 +84,8 @@ undici 8.12 needs 22.19 or later.
 (`ts.preProcessFile`), which the TypeScript 7 package does not export. Move to TypeScript 7 once an
 `openapi-typescript` release accepts it and the boundary test reads imports without that API.
 
-**sigma stays on 3 and `@react-sigma/core` on 5.** sigma 4 draws right-to-left edge labels upside down (sigma.js
-issue 1544). Move both once a sigma release keeps edge labels upright.
+**The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
+drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and
+`src/components/graph/edge-labels.ts` draws the labels upright on a 2D canvas layer under the WebGL stage. Turn sigma's
+labels back on and delete the layer once a sigma release keeps them upright. `e2e/graph.spec.ts` checks that nodes,
+edges and edge labels are drawn.
