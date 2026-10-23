@@ -5,13 +5,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, getToolName } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError } from "@/shared/api/client";
-
 import type { PageContext, ToolResult } from "@/api/page-context";
 import { sessionsApi } from "@/api/sessions";
 import { studioErrorMessage } from "@/api/studio";
 import { STUDIO_API_URL } from "@/api/studio-config";
 import { type ChatReply, ChatReplySchema } from "@/api/studio-types";
+import { ApiError } from "@/shared/api/client";
 
 import {
   type PendingApproval,
