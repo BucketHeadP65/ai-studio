@@ -54,7 +54,7 @@ step:
         feedback: {type: string}
   tools: [search, fetch, knowledge_base_profile]
   tier: orchestrator
-  budget: {requests: 6, tool_calls: 10}
+  budget: {requests: 6, tool_calls: 20}
 ---
 
 Use as the judge over draft_decision_brief, with the question and constraints wired from the same workflow

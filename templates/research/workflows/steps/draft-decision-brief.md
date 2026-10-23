@@ -94,7 +94,7 @@ step:
         next_action: {type: string}
   tools: [search, fetch, knowledge_base_profile]
   tier: orchestrator
-  budget: {requests: 8, tool_calls: 14}
+  budget: {requests: 8, tool_calls: 28}
 ---
 
 Use as the first stage of a decision brief, with the question, the knowledge bases to read and the project's own

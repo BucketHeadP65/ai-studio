@@ -24,7 +24,7 @@ step:
       required: [outcome, feedback]
   tools: [search, fetch, list_pages]
   tier: orchestrator
-  budget: {requests: 8, tool_calls: 12}
+  budget: {requests: 8, tool_calls: 24}
 ---
 
 Use as the judge after a map of draft_adr, with collection wired from the workflow parameter. Do not use to edit a draft,

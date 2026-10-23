@@ -173,7 +173,7 @@ class Scripted:
             return answer
         if node_id == "review":
             if self.blow_budget:
-                msg = "The next tool call(s) would exceed the tool_calls_limit of 10 (tool_calls=12)."
+                msg = "The next tool call(s) would exceed the tool_calls_limit of 20 (tool_calls=22)."
                 raise UsageLimitExceeded(msg)
             return _validated(implementation.output_type, self.verdicts.pop(0))
         return await implementation.function(**kwargs)
@@ -422,7 +422,7 @@ async def test_a_reviewer_out_of_budget_hands_the_brief_to_the_person_rather_tha
     gate_id, note = reviewer.reviewed[0]
     assert gate_id == "review"
     assert note.startswith("The reviewer ran out of budget before it could decide.")
-    assert "tool_calls_limit of 10" in note
+    assert "tool_calls_limit of 20" in note
     assert scripted.calls == ["draft", "review", "present"], "the run neither failed nor redrafted"
 
 
