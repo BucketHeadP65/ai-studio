@@ -1,6 +1,7 @@
+import { MultiDirectedGraph } from "graphology";
 import { describe, expect, it } from "vitest";
 
-import { edgeLabelPlacement } from "./edge-labels";
+import { edgeLabelPlacement, labelledEdges } from "./edge-labels";
 
 // The label layer draws on a 2D canvas, which jsdom cannot paint, so these tests pin the
 // geometry it draws from. The canvas itself is covered by e2e/graph.spec.ts.
@@ -37,5 +38,38 @@ describe("edgeLabelPlacement", () => {
 
   it("places nothing when the two nodes overlap", () => {
     expect(edgeLabelPlacement({ x: 0, y: 0, size: 10 }, { x: 15, y: 0, size: 10 })).toBeNull();
+  });
+});
+
+describe("labelledEdges", () => {
+  // a - b - c, a - c, and d alone with an edge to c.
+  function graph() {
+    const g = new MultiDirectedGraph();
+    for (const node of ["a", "b", "c", "d"]) g.addNode(node);
+    g.addEdgeWithKey("ab", "a", "b");
+    g.addEdgeWithKey("bc", "b", "c");
+    g.addEdgeWithKey("ca", "c", "a");
+    g.addEdgeWithKey("dc", "d", "c");
+    return g;
+  }
+
+  it("lists an edge whose two nodes both show their labels, and no edge with one unlabelled end", () => {
+    expect([...labelledEdges(graph(), new Set(["a", "b"]), null)]).toEqual(["ab"]);
+  });
+
+  it("lists every edge of the focused node, whatever its other end shows", () => {
+    expect([...labelledEdges(graph(), new Set(), "c")].sort()).toEqual(["bc", "ca", "dc"]);
+  });
+
+  it("lists each edge once when its nodes are labelled and one is focused", () => {
+    expect([...labelledEdges(graph(), new Set(["a", "b", "c"]), "a")].sort()).toEqual([
+      "ab",
+      "bc",
+      "ca",
+    ]);
+  });
+
+  it("ignores a focused or labelled node the graph no longer has", () => {
+    expect([...labelledEdges(graph(), new Set(["a", "gone"]), "gone")]).toEqual([]);
   });
 });

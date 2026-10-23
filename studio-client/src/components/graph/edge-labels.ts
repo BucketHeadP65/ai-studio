@@ -9,6 +9,8 @@ const EDGE_LABEL_SIZE = 9;
 const EDGE_LABEL_COLOR = "#94a3b8";
 const EDGE_LABEL_FONT = `${EDGE_LABEL_SIZE}px sans-serif`;
 
+type Graph = ReturnType<Sigma["getGraph"]>;
+
 /** A node as drawn on screen: its center and its radius, in viewport pixels. */
 export interface Disc {
   x: number;
@@ -57,14 +59,48 @@ export function edgeLabelPlacement(source: Disc, target: Disc): EdgeLabelPlaceme
 }
 
 /**
- * Draws the edge labels sigma would show onto a 2D canvas the size of the graph.
+ * Lists the edges whose labels show: both nodes show their labels, or one node is `focused`.
  *
- * An edge is labelled when both its nodes show their labels or one of them is `focused`.
- * A label that does not fit between the node rims is left out.
+ * Only the edges of those nodes are visited, never the whole graph.
+ *
+ * Args:
+ *   graph: The graph the edges belong to.
+ *   labelled: The nodes whose labels are drawn.
+ *   focused: The hovered or selected node, or null.
+ *
+ * Returns:
+ *   The edge keys, each once.
+ */
+export function labelledEdges(
+  graph: Graph,
+  labelled: ReadonlySet<string>,
+  focused: string | null,
+): Set<string> {
+  const edges = new Set<string>();
+  if (focused !== null && graph.hasNode(focused)) {
+    graph.forEachEdge(focused, (edge) => {
+      edges.add(edge);
+    });
+  }
+  for (const node of labelled) {
+    if (!graph.hasNode(node)) continue;
+    graph.forEachEdge(node, (edge, _attributes, source, target) => {
+      if (labelled.has(source === node ? target : source)) edges.add(edge);
+    });
+  }
+  return edges;
+}
+
+/**
+ * Draws the labels of the edges `labelledEdges` lists onto a 2D canvas the size of the graph.
+ *
+ * The canvas is resized to the render size when it differs, then cleared. An edge that is
+ * hidden, has an empty label or a hidden label, or has a hidden node, is skipped. So is a
+ * label that does not fit between the node rims.
  *
  * Args:
  *   sigma: The renderer whose graph, display data and camera the labels follow.
- *   context: The canvas to draw on. It is cleared first.
+ *   context: The canvas to draw on.
  *   focused: The hovered or selected node, or null.
  */
 export function drawEdgeLabels(
@@ -85,27 +121,25 @@ export function drawEdgeLabels(
   context.font = EDGE_LABEL_FONT;
   context.fillStyle = EDGE_LABEL_COLOR;
 
-  const labelled = sigma.getNodeDisplayedLabels();
-  sigma.getGraph().forEachEdge((edge, _attributes, source, target) => {
-    const anchored =
-      source === focused || target === focused || (labelled.has(source) && labelled.has(target));
-    if (!anchored) return;
+  const graph = sigma.getGraph();
+  for (const edge of labelledEdges(graph, sigma.getNodeDisplayedLabels(), focused)) {
     const data = sigma.getEdgeDisplayData(edge);
-    if (!data?.label || data.visibility === "hidden" || data.labelVisibility === "hidden") return;
+    if (!data?.label || data.visibility === "hidden" || data.labelVisibility === "hidden") continue;
+    const [source, target] = graph.extremities(edge);
     const sourceDisc = onScreen(sigma, source);
     const targetDisc = onScreen(sigma, target);
-    if (sourceDisc === null || targetDisc === null) return;
+    if (sourceDisc === null || targetDisc === null) continue;
     const placement = edgeLabelPlacement(sourceDisc, targetDisc);
-    if (placement === null) return;
+    if (placement === null) continue;
     const textWidth = context.measureText(data.label).width;
-    if (textWidth > placement.length) return;
+    if (textWidth > placement.length) continue;
     context.save();
     context.translate(placement.x, placement.y);
     context.rotate(placement.angle);
     // Just under the line, clear of the edge's own stroke.
     context.fillText(data.label, -textWidth / 2, data.size / 2 + EDGE_LABEL_SIZE);
     context.restore();
-  });
+  }
 }
 
 function onScreen(sigma: Sigma, node: string): Disc | null {
