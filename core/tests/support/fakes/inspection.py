@@ -10,7 +10,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
+    RetryInfo,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -30,6 +30,8 @@ from core.cqrs.contracts import Enqueued
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from uuid import UUID
+
+    from pydantic_ai.messages import ToolRetryCause
 
     from core.ai.history.contracts import EventAtPositionRow
     from core.ai.inspection.domain.leads import Lead
@@ -61,8 +63,26 @@ def result(
     )
 
 
-def refusal(tool_call_id: str, content: str = "name must be a string", *, tool_name: str = "lookup_city") -> ModelRequest:
-    return ModelRequest(parts=[RetryPromptPart(content=content, tool_name=tool_name, tool_call_id=tool_call_id, timestamp=AT)])
+def retried(
+    tool_call_id: str,
+    content: str = "name must be a string",
+    *,
+    cause: ToolRetryCause | None = "validation_error",
+    tool_name: str = "lookup_city",
+) -> ModelRequest:
+    """The call's answer asking for it again: the schema rejected it by default, `cause="model_retry"` when the tool refused it."""
+    return ModelRequest(
+        parts=[
+            ToolReturnPart(
+                tool_name=tool_name,
+                content=content,
+                tool_call_id=tool_call_id,
+                timestamp=AT,
+                outcome="retried",
+                retry=None if cause is None else RetryInfo(cause=cause),
+            )
+        ]
+    )
 
 
 def answer(text: str = "It is sunny in Paris.", *, finish_reason: Literal["stop", "length"] = "stop") -> ModelResponse:

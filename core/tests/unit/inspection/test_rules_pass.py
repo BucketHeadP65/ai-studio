@@ -7,11 +7,11 @@ from core.ai.inspection.domain.facts import ToolFacts
 from core.ai.inspection.rules import RULES
 from core.ai.inspection.rules_pass import RulesPass
 from core.ai.transcripts.contracts import TranscriptLoaders
-from tests.support.fakes.inspection import Opens, RuleThatRaises, call, question, refusal, result, transcript
+from tests.support.fakes.inspection import Opens, RuleThatRaises, call, question, result, retried, transcript
 
 
 def two_runs() -> TranscriptLoaders:
-    refused = transcript(question(), call("c1"), refusal("c1"), source="test:refused")
+    refused = transcript(question(), call("c1"), retried("c1"), source="test:refused")
     clean = transcript(question(), call("c1"), result("c1"), source="test:clean")
     return TranscriptLoaders(by_key={"test": Opens(refused=refused, clean=clean)})
 

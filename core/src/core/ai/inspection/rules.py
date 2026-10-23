@@ -12,17 +12,7 @@ from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import TYPE_CHECKING, Final
 
-from pydantic_ai.messages import (
-    CompactionPart,
-    ModelMessage,
-    ModelRequestPart,
-    ModelResponse,
-    ModelResponsePart,
-    RetryPromptPart,
-    TextPart,
-    ToolCallPart,
-    ToolReturnPart,
-)
+from pydantic_ai.messages import CompactionPart, ModelMessage, ModelRequestPart, ModelResponse, ModelResponsePart, TextPart, ToolCallPart
 from pydantic_evals.evaluators import Evaluator
 
 from core.ai.inspection.detectors import Inspected, InspectionContext, Rules, record_lead
@@ -32,7 +22,10 @@ from core.ai.transcripts.contracts import Call, Span, Transcript
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
+    from pydantic_ai.messages import ToolRetryCause
+
 SCHEMA_REJECTED_ARGUMENTS: Final = TAXONOMY.symptom("schema_rejected_arguments")
+TOOL_REFUSED_CALL: Final = TAXONOMY.symptom("tool_refused_call")
 RETRIED_AFTER_CLEAR_ERROR: Final = TAXONOMY.symptom("retried_after_clear_error")
 DENIED_ACTION_REPEATED: Final = TAXONOMY.symptom("denied_action_repeated")
 DUPLICATE_CALL: Final = TAXONOMY.symptom("duplicate_call")
@@ -53,12 +46,18 @@ def call_key(call: ToolCallPart) -> str:
 
 
 def _failed(call: Call) -> bool:
-    """Whether the answer was a failed return or a schema refusal."""
-    return isinstance(call.answer, RetryPromptPart) or (isinstance(call.answer, ToolReturnPart) and call.answer.outcome == "failed")
+    """Whether the answer was a failed return or a retried one."""
+    return call.answer is not None and call.answer.outcome in ("failed", "retried")
 
 
 def _succeeded(call: Call) -> bool:
-    return isinstance(call.answer, ToolReturnPart) and call.answer.outcome == "success"
+    return call.answer is not None and call.answer.outcome == "success"
+
+
+def _retried_because(call: Call, cause: ToolRetryCause) -> bool:
+    """Whether the answer asks for the call again for this cause."""
+    answer = call.answer
+    return answer is not None and answer.outcome == "retried" and answer.retry is not None and answer.retry.cause == cause
 
 
 def _before(a: Span, b: Span) -> bool:
@@ -92,10 +91,10 @@ def _count(ctx: InspectionContext, symptom: Symptom, pairs: list[tuple[Span, ...
 
 @dataclass
 class SchemaRejectedArguments(Evaluator[str, Inspected, None]):
-    """The schema refused the call before the tool ran: its answer is a retry prompt."""
+    """The schema rejected the call before the tool ran: its answer is a retried return caused by a validation error."""
 
     def evaluate(self, ctx: InspectionContext) -> dict[str, int]:
-        """One lead per call the schema refused, at the retry prompt that carries the refusal text.
+        """One lead per call the schema rejected, at the retried return that carries the validation errors.
 
         Args:
             ctx: The rule's context, whose output receives the leads.
@@ -103,8 +102,27 @@ class SchemaRejectedArguments(Evaluator[str, Inspected, None]):
         Returns:
             The number of leads recorded, by symptom name.
         """
-        hits = [(_answered_or_called(call),) for call in ctx.output.transcript.calls() if isinstance(call.answer, RetryPromptPart)]
+        calls = ctx.output.transcript.calls()
+        hits = [(_answered_or_called(call),) for call in calls if _retried_because(call, "validation_error")]
         return _count(ctx, SCHEMA_REJECTED_ARGUMENTS, hits, found_by="schema_rejected_arguments")
+
+
+@dataclass
+class ToolRefusedCall(Evaluator[str, Inspected, None]):
+    """The tool ran and refused the call: its answer is a retried return the tool asked for."""
+
+    def evaluate(self, ctx: InspectionContext) -> dict[str, int]:
+        """One lead per call the tool refused, at the retried return that carries the tool's reason.
+
+        Args:
+            ctx: The rule's context, whose output receives the leads.
+
+        Returns:
+            The number of leads recorded, by symptom name.
+        """
+        calls = ctx.output.transcript.calls()
+        hits = [(_answered_or_called(call),) for call in calls if _retried_because(call, "model_retry")]
+        return _count(ctx, TOOL_REFUSED_CALL, hits, found_by="tool_refused_call")
 
 
 @dataclass
@@ -143,7 +161,7 @@ class DeniedActionRepeated(Evaluator[str, Inspected, None]):
         keyed = _keyed(ctx.output.transcript)
         hits: list[tuple[Span, ...]] = []
         for index, (denied, key) in enumerate(keyed):
-            if not (isinstance(denied.answer, ToolReturnPart) and denied.answer.outcome == "denied"):
+            if denied.answer is None or denied.answer.outcome != "denied":
                 continue
             repeat = next((later for later, other in keyed[index + 1 :] if other == key), None)
             if repeat is not None:
@@ -209,7 +227,8 @@ class ResultOverflowedContext(Evaluator[str, Inspected, None]):
             (call.answered_at,)
             for call in transcript.calls()
             if call.answered_at is not None
-            and isinstance(call.answer, ToolReturnPart)
+            and call.answer is not None
+            and call.answer.outcome != "retried"
             and len(call.answer.model_response_str()) > self.cap_chars
             and (_compaction_after(transcript, call.answered_at) or _a_step_shrank(transcript, call.answered_at))
         ]
@@ -263,6 +282,7 @@ def _a_step_shrank(transcript: Transcript, span: Span) -> bool:
 RULES: Final = Rules(
     by_key={
         "schema_rejected_arguments": lambda _facts: SchemaRejectedArguments(),
+        "tool_refused_call": lambda _facts: ToolRefusedCall(),
         "retried_after_clear_error": lambda _facts: RetriedAfterError(),
         "denied_action_repeated": lambda _facts: DeniedActionRepeated(),
         "duplicate_call": lambda facts: DuplicateCall(world_changing=facts.world_changing),

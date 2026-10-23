@@ -1,4 +1,13 @@
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolAvailabilityDeltaPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    RetryFeedbackPart,
+    RetryInfo,
+    TextPart,
+    ToolAvailabilityDeltaPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 
 from core.ai.history.message_key import message_key
 from tests.unit.history.conftest import AT, turn_messages
@@ -48,3 +57,9 @@ class TestMessageKey:
         two = ModelRequest(parts=[ToolAvailabilityDeltaPart(tools_added=["other_tool"])])
 
         assert message_key(one) != message_key(two)
+
+    def test_retry_feedback_is_named_by_its_timestamp(self):
+        original = ModelRequest(parts=[RetryFeedbackPart(content="Please return text.", retry=RetryInfo(cause="no_output"), timestamp=AT)])
+        rewritten = ModelRequest(parts=[RetryFeedbackPart(content="cleared", retry=RetryInfo(cause="no_output"), timestamp=AT)])
+
+        assert message_key(original) == message_key(rewritten)

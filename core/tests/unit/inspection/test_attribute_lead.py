@@ -7,7 +7,7 @@ import pytest
 from pydantic import JsonValue
 from pydantic_ai import Agent, capture_run_messages
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -136,8 +136,9 @@ async def test_taxonomy_rejections_are_recorded_and_neither_invalid_answer_is_ac
 
     parts = [part for message in messages for part in message.parts]
     outputs = [part for part in parts if isinstance(part, ToolCallPart) and part.tool_name.startswith("final_result")]
-    accepted = [part for part in parts if isinstance(part, ToolReturnPart) and part.tool_name.startswith("final_result")]
-    retries = [part for part in parts if isinstance(part, RetryPromptPart)]
+    returns = [part for part in parts if isinstance(part, ToolReturnPart) and part.tool_name.startswith("final_result")]
+    accepted = [part for part in returns if part.outcome == "success"]
+    retries = [part for part in returns if part.outcome == "retried"]
     assert store.leads[0].resolution == "invalid"
     assert len(outputs) == 2
     assert len(retries) == 1

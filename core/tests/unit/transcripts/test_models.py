@@ -11,7 +11,8 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
+    RetryFeedbackPart,
+    RetryInfo,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -132,15 +133,33 @@ class TestCalls:
         assert found.answer.content == RESULT
         assert found.duration_ms == 250
 
-    def test_a_retry_prompt_is_the_answer_of_a_call_the_schema_refused(self) -> None:
-        refused = ModelRequest(
-            parts=[RetryPromptPart(content="name must be a string", tool_name="lookup_city", tool_call_id="call_1", timestamp=AT)]
+    def test_a_retried_return_is_the_answer_of_a_call_that_has_to_be_made_again(self) -> None:
+        retried = ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="lookup_city",
+                    content="name must be a string",
+                    tool_call_id="call_1",
+                    timestamp=AT,
+                    outcome="retried",
+                    retry=RetryInfo(cause="validation_error"),
+                )
+            ]
         )
-        transcript = Transcript(source="test:run", steps=(step(question(), call(), refused),))
+        transcript = Transcript(source="test:run", steps=(step(question(), call(), retried),))
 
         (found,) = transcript.calls()
 
-        assert isinstance(found.answer, RetryPromptPart)
+        assert found.answer is not None
+        assert (found.answer.outcome, found.answer.retry) == ("retried", RetryInfo(cause="validation_error"))
+
+    def test_retry_feedback_answers_no_call(self) -> None:
+        feedback = ModelRequest(parts=[RetryFeedbackPart(content="Please return text.", retry=RetryInfo(cause="no_output"), timestamp=AT)])
+        transcript = Transcript(source="test:run", steps=(step(question(), call(), feedback),))
+
+        (found,) = transcript.calls()
+
+        assert found.answer is None
 
     def test_a_call_nothing_answered_has_no_answer_and_no_duration(self) -> None:
         transcript = Transcript(source="test:run", steps=(step(question(), call()),))

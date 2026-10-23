@@ -8,7 +8,7 @@ import pytest
 
 from pydantic_ai import capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionDef, FunctionModel
 
 from core.ai.inspection.domain.leads import Lead
@@ -83,8 +83,8 @@ async def test_invalid_scan_spans_are_recorded_as_refused_outputs() -> None:
 
     parts = [part for message in messages for part in message.parts]
     assert len([part for part in parts if isinstance(part, ToolCallPart) and part.tool_name.startswith("final_result")]) == 2
-    assert len([part for part in parts if isinstance(part, RetryPromptPart)]) == 1
-    assert not [part for part in parts if isinstance(part, ToolReturnPart) and part.tool_name.startswith("final_result")]
+    returns = [part for part in parts if isinstance(part, ToolReturnPart) and part.tool_name.startswith("final_result")]
+    assert [part.outcome for part in returns] == ["retried"]
 
 
 async def test_a_scan_cannot_insert_a_finding_for_an_already_dismissed_lead() -> None:

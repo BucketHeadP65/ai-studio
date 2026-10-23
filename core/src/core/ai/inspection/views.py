@@ -20,7 +20,7 @@ from pydantic_ai.messages import (
     ModelRequestPart,
     ModelResponse,
     ModelResponsePart,
-    RetryPromptPart,
+    RetryFeedbackPart,
     SystemPromptPart,
     TextPart,
     ThinkingPart,
@@ -69,6 +69,15 @@ _PARAMETER_FIELDS: Final = TypeAdapter(dict[str, JsonValue])
 
 _ENDED: Final[Mapping[str, str]] = {"success": "answered", "failed": "raised", "denied": "denied", "interrupted": "interrupted"}
 """How a tool return's outcome reads in an outline."""
+_RETRIED: Final[Mapping[str, str]] = {
+    "validation_error": "rejected by the schema",
+    "model_retry": "refused by the tool",
+    "unknown_tool": "an unknown tool",
+    "unavailable_tool": "not available yet",
+}
+"""Why a retried return asks for its call again, by the retry's cause."""
+_RETRIED_UNKNOWN: Final = "asked again"
+"""How a retried return reads when it does not say why."""
 
 
 def text_of(part: ModelRequestPart | ModelResponsePart) -> str:
@@ -82,9 +91,28 @@ def text_of(part: ModelRequestPart | ModelResponsePart) -> str:
     """
     if isinstance(part, ToolCallPart):
         return str(part.args_as_dict())
-    if isinstance(part, TextPart | SystemPromptPart | ThinkingPart | RetryPromptPart | ToolReturnPart | UserPromptPart | CompactionPart):
+    if isinstance(part, TextPart | SystemPromptPart | ThinkingPart | RetryFeedbackPart | ToolReturnPart | UserPromptPart | CompactionPart):
         return str(part.content)
     return ""
+
+
+def kind_of(part: ModelRequestPart | ModelResponsePart) -> str:
+    """A part's kind as a reader sees it: the pydantic-ai part kind, and for a retried return why it asks for its call again.
+
+    Args:
+        part: The message part.
+
+    Returns:
+        The kind, such as `tool-call` or `tool-return, rejected by the schema`.
+    """
+    if isinstance(part, ToolReturnPart) and part.outcome == "retried":
+        return f"{part.part_kind}, {_retried(part)}"
+    return part.part_kind
+
+
+def _retried(part: ToolReturnPart) -> str:
+    """Why a retried return asks for its call again, in the words an outline uses."""
+    return _RETRIED_UNKNOWN if part.retry is None else _RETRIED.get(part.retry.cause, part.retry.cause)
 
 
 _WRITER_OF: Final[Mapping[type, str]] = {
@@ -117,9 +145,9 @@ def _writer_of(part: ModelRequestPart | ModelResponsePart) -> str:
     if isinstance(part, ToolCallPart):
         return f"the model's call to {part.tool_name}"
     if isinstance(part, ToolReturnPart):
-        return f"the return of {part.tool_name}"
-    if isinstance(part, RetryPromptPart):
-        return f"the retry asked of {part.tool_name}" if part.tool_name else "a retry prompt"
+        return f"the retry asked of {part.tool_name}" if part.outcome == "retried" else f"the return of {part.tool_name}"
+    if isinstance(part, RetryFeedbackPart):
+        return "the retry feedback"
     return part.part_kind
 
 
@@ -163,7 +191,7 @@ def _value_of(part: ModelRequestPart | ModelResponsePart) -> JsonValue:
         if isinstance(part.content, str):
             return part.content
         return "\n".join(item if isinstance(item, str) else f"[{type(item).__name__}]" for item in part.content)
-    if isinstance(part, ToolReturnPart | RetryPromptPart):
+    if isinstance(part, ToolReturnPart | RetryFeedbackPart):
         return _as_json(part.content)
     if isinstance(part, TextPart | ThinkingPart | SystemPromptPart):
         return part.content
@@ -269,7 +297,7 @@ def rendered(messages: Sequence[ModelMessage], *, part_chars: int = PART_CHARS) 
         label = "model" if isinstance(message, ModelResponse) else "request"
         if isinstance(message, ModelRequest) and message.instructions:
             lines.append(f"[instructions] {message.instructions[:part_chars]}")
-        lines.extend(f"[{label} {part.part_kind}] {text_of(part)[:part_chars]}" for part in message.parts)
+        lines.extend(f"[{label} {kind_of(part)}] {text_of(part)[:part_chars]}" for part in message.parts)
     return "\n".join(lines)
 
 
@@ -447,7 +475,7 @@ def _read_content(index: int, step: Step, start: int, end: int, resource: ReadRe
             )
         else:
             lines.extend(
-                f"{index}.{message_index}.{part_index} [{part.part_kind}] {text_of(part)}" for part_index, part in enumerate(message.parts)
+                f"{index}.{message_index}.{part_index} [{kind_of(part)}] {text_of(part)}" for part_index, part in enumerate(message.parts)
             )
     empty = (
         f"step {index} holds no message in [{start}, {end})"
@@ -488,7 +516,7 @@ def _search_units(transcript: Transcript) -> Iterator[_SearchUnit]:
         before = 0
         for part_index, part in enumerate(message.parts):
             label = f"{span.step}.{span.message}.{part_index}"
-            prefix = f"{label} [{part.part_kind}] "
+            prefix = f"{label} [{kind_of(part)}] "
             body = text_of(part)
             yield _SearchUnit(label=label, text=body, arguments=arguments, before=before + len(prefix))
             before += len(prefix) + len(body) + 1
@@ -774,12 +802,12 @@ def _outline_part(part: ModelRequestPart | ModelResponsePart, at: Span, ended: M
 
 
 def _ended(call: Call) -> str:
-    """How a call ended: answered, refused by the schema, raised, denied, interrupted, or never answered."""
-    if isinstance(call.answer, RetryPromptPart):
-        return "refused"
-    if isinstance(call.answer, ToolReturnPart):
-        return _ENDED.get(call.answer.outcome, call.answer.outcome)
-    return "unanswered"
+    """How a call ended: answered, raised, denied, interrupted, asked again and why, or never answered."""
+    if call.answer is None:
+        return "unanswered"
+    if call.answer.outcome == "retried":
+        return _retried(call.answer)
+    return _ENDED.get(call.answer.outcome, call.answer.outcome)
 
 
 def _cut(text: str) -> str:

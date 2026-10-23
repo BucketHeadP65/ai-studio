@@ -80,9 +80,10 @@ def test_the_registry_builds_the_fact_rules_from_the_facts() -> None:
     assert isinstance(RULES.select("budget_exhausted_unfinished")(facts), BudgetExhaustedUnfinished)
 
 
-def test_the_registry_holds_the_six_rules_this_deployment_ships() -> None:
+def test_the_registry_holds_the_seven_rules_this_deployment_ships() -> None:
     assert set(RULES.by_key) == {
         "schema_rejected_arguments",
+        "tool_refused_call",
         "retried_after_clear_error",
         "denied_action_repeated",
         "duplicate_call",

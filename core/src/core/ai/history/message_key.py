@@ -15,7 +15,7 @@ from pydantic_ai.messages import (
     ModelRequestPart,
     ModelResponse,
     ModelResponsePart,
-    RetryPromptPart,
+    RetryFeedbackPart,
     SpeechPart,
     SystemPromptPart,
     TextPart,
@@ -60,11 +60,11 @@ def message_key(message: ModelMessage) -> str:
 
 def _part_name(part: ModelRequestPart | ModelResponsePart) -> str | None:
     """The one field that names `part`: its tool call id, else its timestamp, else its part id, else nothing."""
-    if isinstance(part, BaseToolCallPart | BaseToolReturnPart | RetryPromptPart | ToolAvailabilityDeltaPart):
+    if isinstance(part, BaseToolCallPart | BaseToolReturnPart | ToolAvailabilityDeltaPart):
         tool_call_id = part.tool_call_id
         if tool_call_id:
             return tool_call_id
-    if isinstance(part, SystemPromptPart | UserPromptPart | BaseToolReturnPart | RetryPromptPart):
+    if isinstance(part, SystemPromptPart | UserPromptPart | BaseToolReturnPart | RetryFeedbackPart):
         return part.timestamp.isoformat()
     if isinstance(part, BaseToolCallPart | TextPart | ThinkingPart | CompactionPart | FilePart | SpeechPart):
         return part.id or None

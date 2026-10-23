@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.ai.transcripts.contracts import Span
 
-ShowsIn = Literal["tool-call", "tool-return", "retry-prompt", "text", "thinking"]
+ShowsIn = Literal["tool-call", "tool-return", "text", "thinking"]
 CaughtBy = Literal["rule", "model", "rule_then_model"]
 FoundBy = Literal["rule", "inspector"]
 Horizon = Literal["moment", "run", "conversation"]
@@ -52,8 +52,8 @@ class Symptom(BaseModel):
 
     name: Name
     shows_in: ShowsIn = Field(
-        description="The pydantic-ai part kind a detector points at for it: the tool call the agent wrote, the tool's return, "
-        "the retry prompt that told the model its arguments were refused, a text part, or a thinking part."
+        description="The pydantic-ai part kind a detector points at for it: the tool call the agent wrote, the tool's return "
+        "(a retry that answers a call is that call's return), a text part, or a thinking part."
     )
     what_you_see: str = Field(min_length=1, description="The symptom as it appears in a transcript. The sentence an inspector matches on.")
     caught_by: CaughtBy = Field(

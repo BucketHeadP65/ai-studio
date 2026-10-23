@@ -240,6 +240,8 @@ words it replaces. The inventory holds every other term.
 | Spend log | The append-only file of what each run spent. | The spend log shows the digest run cost two dollars. | `SpendLog`, `SpendLogQueries`, `FileSpendLog` | spend ledger. |
 | Tick | One pass of a background loop: the scheduler, the refresh ticker, the inspection dispatch and sweep. | The scheduler's tick fired two schedules. | `tick` | once, tick_once. |
 | Question type | What the inspector was asked: to attribute one lead, or to scan one whole run. | The question type of that question is scan. | `QuestionType` (the `questions.kind` column stays) | QuestionKind. |
+| Schema rejection | A tool's schema rejecting a call's arguments before the tool runs (pydantic-ai's validation error). The call's answer is a retried return. | The schema rejection said the format field is required. | symptom `schema_rejected_arguments`, `SchemaRejectedArguments`, retry cause `validation_error` | retry prompt (when a schema's rejection is meant). |
+| Tool refusal | A tool that ran and answered a call by asking the model to call it again with something changed (pydantic-ai's `ModelRetry`). The call's answer is a retried return. A schema rejection is not a tool refusal. | The tool refusal said no knowledge base is named orders. | symptom `tool_refused_call`, `ToolRefusedCall`, retry cause `model_retry` | retry prompt (when a tool's own refusal is meant). |
 | Collaborators | Collaborators are the services one entry hands down whole, so a launcher takes one parameter. | The run's collaborators carry its records, its topics and its run settings. | `RunCollaborators`, `SessionCollaborators`, `PilotCollaborators` | `PilotJourney`. |
 
 ### 4.6 Sessions

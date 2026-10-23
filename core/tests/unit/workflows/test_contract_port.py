@@ -26,7 +26,7 @@ import yaml
 from pydantic import TypeAdapter
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelRetry
-from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
@@ -286,8 +286,8 @@ class Script:
 def _last_feedback(messages: list[ModelMessage]) -> str:
     for message in reversed(messages):
         for part in reversed(message.parts):
-            if isinstance(part, RetryPromptPart):
-                return f"RETRY {part.model_response()}"
+            if isinstance(part, ToolReturnPart) and part.outcome == "retried":
+                return f"RETRY {part.model_response_str()}"
             if isinstance(part, ToolReturnPart):
                 return f"RETURN {part.model_response_str()}"
     return "nothing came back"

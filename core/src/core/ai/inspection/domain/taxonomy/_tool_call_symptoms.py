@@ -1,9 +1,10 @@
 """The symptoms of tool use.
 
 In reading order: choosing whether and which tool, calling it, reacting to what came back, doing all of that economically,
-and the tool's own faults. Most show in the tool call or in its return. One shows in the retry prompt (the schema refused the
-arguments) and one in text (giving up on an error the agent could have recovered from). The health of a tool or its host is
-not here: that is a number in a span, not a relationship between what the agent was told and what it did.
+and the tool's own faults. Most show in the tool call or in its return, a retry included: the schema rejecting the arguments
+and the tool refusing the call both answer the call with a retried return. One shows in text (giving up on an error the
+agent could have recovered from). The health of a tool or its host is not here: that is a number in a span, not a
+relationship between what the agent was told and what it did.
 """
 
 from __future__ import annotations
@@ -74,11 +75,22 @@ DENIED_ACTION_REPEATED = Symptom(
 
 SCHEMA_REJECTED_ARGUMENTS = Symptom(
     name="schema_rejected_arguments",
-    shows_in="retry-prompt",
+    shows_in="tool-return",
     what_you_see="The schema rejected the call before the tool ran.",
     caught_by="rule",
     horizon="moment",
     possible_root_causes=(TOOL_SCHEMA, TOOL_DESCRIPTION, MODEL_TIER),
+)
+TOOL_REFUSED_CALL = Symptom(
+    name="tool_refused_call",
+    shows_in="tool-return",
+    what_you_see=(
+        "The arguments passed the schema, the tool ran and refused the call, and asked the model to call it again with something "
+        "changed (an id that does not resolve, a name that is not registered, a value the tool cannot use)."
+    ),
+    caught_by="rule",
+    horizon="moment",
+    possible_root_causes=(TOOL_DESCRIPTION, INSTRUCTIONS_SAY_NOTHING, INSTRUCTIONS_SAY_WRONG, AGENT_REASONING, MODEL_TIER),
 )
 VALID_BUT_WRONG_ARGUMENTS = Symptom(
     name="valid_but_wrong_arguments",
@@ -226,6 +238,7 @@ TOOL_CALL_SYMPTOMS: Final = (
     CALL_FOR_KNOWN_FACT,
     DENIED_ACTION_REPEATED,
     SCHEMA_REJECTED_ARGUMENTS,
+    TOOL_REFUSED_CALL,
     VALID_BUT_WRONG_ARGUMENTS,
     CALLED_BEFORE_PRECONDITION,
     STALE_REFERENCE_USED,
