@@ -104,9 +104,18 @@ async def test_projection_failure_still_raises_but_authority_holds() -> None:
 async def test_search_without_hits_falls_back_to_inner_lexical() -> None:
     memory, _ = store()
     await memory.write(PATH, NOTE, expected_version=None)
-    result = await memory.search(SCOPE + "/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
+    result = await memory.search(SCOPE + "/world/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
     assert result.matches
     assert result.matches[0].path.endswith("postgres-port.md")
+
+
+async def test_the_inner_lexical_search_reads_only_the_files_directly_under_the_prefix() -> None:
+    memory, _ = store()
+    await memory.write(PATH, NOTE, expected_version=None)
+
+    result = await memory.search(SCOPE + "/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
+
+    assert result.matches == []
 
 
 async def test_search_with_wired_hits_passes_the_prefix_through_and_maps_matches() -> None:

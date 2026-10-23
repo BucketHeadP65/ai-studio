@@ -19,7 +19,7 @@ from core.ai.retrieval.contracts import (
     SearchHit,
     SearchResult,
 )
-from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, RetryInfo, ToolCallPart, ToolReturnPart
 
 from engram.evals.harness.seen_units import seen_units
 
@@ -111,6 +111,25 @@ def test_in_code_mode_an_ellipsis_alone_never_matches_a_printed_snippet():
     seen = seen_units(_run_code({"output": f"{cut}\n"}, ("search", search)), collection="notes")
 
     assert seen == ("note.alpha",)
+
+
+def test_in_code_mode_what_a_program_that_raised_printed_never_counts():
+    snippet = "The vote count moved to the end of the month, after the second recount."
+    hit = SearchHit(id="note.alpha", hit_level="card", snippet=snippet, score=1.0)
+    quiet = _run_code({"output": ""}, ("search", SearchResult(hits=(hit,), next_steps=_NEXT)))
+    raised = ModelRequest(
+        parts=[
+            ToolReturnPart(
+                tool_name="run_code",
+                content=f"{snippet}\nTraceback (most recent call last):\nValueError: no such column",
+                tool_call_id="run-code-2",
+                outcome="retried",
+                retry=RetryInfo(cause="model_retry"),
+            )
+        ]
+    )
+
+    assert seen_units([*quiet, raised], collection="notes") == ()
 
 
 def test_in_code_mode_a_printed_folded_snippet_counts_for_its_unit():

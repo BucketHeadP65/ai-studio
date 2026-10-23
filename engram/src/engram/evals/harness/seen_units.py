@@ -7,8 +7,9 @@ snippet, a folded unit's snippet, a fetched body, a leveled fetch's content, a c
 `quote`, `snippet` or `body`, and a claim counts only with its text. A text holding only whitespace and the ellipsis
 that ends a cut snippet is no text. In code mode
 a unit any program tool call of the case returned counts when a `run_code` output carries the first 60 characters of its
-text, or, once every returned text the output carries is cut out, its id, ref or page id as a word. Any other result
-names no unit, and a tool return of any shape is read without raising.
+text, or, once every returned text the output carries is cut out, its id, ref or page id as a word. A retried return,
+such as a program that raised, is no result and names no unit. Any other result names no unit, and a tool return of any
+shape is read without raising.
 """
 
 from __future__ import annotations
@@ -114,10 +115,10 @@ def bare_unit_id(ref: str, *, collection: str) -> str:
 
 
 def _tool_returns(messages: Sequence[ModelMessage]) -> Iterator[ToolReturnPart]:
-    """Every tool return the run received, in order."""
+    """Every tool return the run received that is not a retry, in order."""
     for message in messages:
         if isinstance(message, ModelRequest):
-            yield from (part for part in message.parts if isinstance(part, ToolReturnPart))
+            yield from (part for part in message.parts if isinstance(part, ToolReturnPart) and part.outcome != "retried")
 
 
 def _program_returns(part: ToolReturnPart) -> Iterator[ToolReturnPart]:

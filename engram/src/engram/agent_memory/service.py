@@ -183,9 +183,10 @@ class EngramMemoryStore:
     ) -> MemorySearchResult:
         """Search the notes under a prefix the application resolved and trusts.
 
-        With `search_hits` wired it ranks pages in the agent-memory knowledge base. Without it the inner store's own
-        search answers, or an empty result when the inner store cannot search. A ranked hit with an empty snippet
-        is returned with its path alone.
+        With `search_hits` wired it ranks pages in the agent-memory knowledge base, at any depth under the prefix.
+        Without it the inner store's own search answers, which reads only the files directly under the prefix, so
+        search a category folder to find its notes. An inner store that cannot search answers an empty result. A
+        ranked hit with an empty snippet is returned with its path alone.
 
         Args:
             prefix: The store path prefix to search under.
