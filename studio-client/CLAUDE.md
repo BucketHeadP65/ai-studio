@@ -74,15 +74,22 @@ folder.
 `onUnhandledFrame: "error"`, and a handler exception failing its test), then adds the jsdom shims React Flow needs.
 Tests take `server` from `@/shared/test-support/msw/server` and `render` from `@/shared/test-support/render`.
 
-## Node and held dependencies
+## Node, TypeScript and the graph renderer
 
 **Node 22.22.2 or later.** jsdom 30.1 declares `^22.22.2 || ^24.15.0 || >=26.0.0` in its `engines` field, and its
 undici 8.12 needs 22.19 or later.
 
-**TypeScript stays on 5.9.** `openapi-typescript` 7.13, which `npm run gen:types` runs, declares the peer
-`typescript ^5.x`. `src/shared/boundary.test.ts` reads imports through the TypeScript 5 programmatic API
-(`ts.preProcessFile`), which the TypeScript 7 package does not export. Move to TypeScript 7 once an
-`openapi-typescript` release accepts it and the boundary test reads imports without that API.
+**TypeScript 7.** `npm run typecheck` and the type check in `next build` both run the TypeScript 7 `tsc` (Next.js
+calls the command line, its `experimental.useTypeScriptCli` default). The TypeScript 7 package has no programmatic
+API, so no code here imports `typescript`. Vitest, Biome and Playwright do not need it. `src/shared/boundary.test.ts`
+reads imports with the oxc parser that `vite` exports as `parseSync`. In VS Code, the "TypeScript 7" extension
+(`TypeScriptTeam.native-preview`, a workspace recommendation) runs the TypeScript 7 language server.
+
+**`npm run gen:types` brings its own TypeScript 5.9.** `openapi-typescript` 7.13, the latest release, builds its output
+through the TypeScript 5 programmatic API and declares the peer `typescript ^5.x`. npm installs a peer next to the
+package that asks for it, so a project on TypeScript 7 cannot give it a copy of its own. The script runs it through
+`npm exec` with `openapi-typescript@7.13.0` and `typescript@5.9.3` pinned, and it is not a devDependency. Make it one
+again once a release supports TypeScript 7 (openapi-typescript issue 2841).
 
 **The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
 drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and

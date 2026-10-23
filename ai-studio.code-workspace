@@ -96,7 +96,8 @@
             "tamasfe.even-better-toml",
             "alexkrechik.cucumberautocomplete",
             "vitest.explorer",
-            "biomejs.biome"
+            "biomejs.biome",
+            "TypeScriptTeam.native-preview"
         ]
     }
 }
