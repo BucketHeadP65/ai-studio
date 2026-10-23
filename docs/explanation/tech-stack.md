@@ -199,9 +199,9 @@ Trade-offs / Revisit-when rather than smoothed over.
   are FastAPI. Class-based routers. wireup's FastAPI integration.
 - **Why (inferred, confirm):** the whole stack is pydantic-first (settings,
   domain models, agent I/O), and FastAPI makes pydantic the request/response
-  contract and generates the OpenAPI the TS client codegens against. The
-  `studio-client` type client is literally built from
-  `/openapi.json`. Async-native, matching the async SQLAlchemy/httpx stack.
+  contract and serves it as OpenAPI at `/openapi.json`. The `studio-client`
+  checks each response with its own zod schemas instead of generating types
+  from it. Async-native, matching the async SQLAlchemy/httpx stack.
 - **Alternatives (inferred):** Litestar (closest peer, also pydantic/async,
   smaller ecosystem). Flask/Django (sync-first, no native OpenAPI).
 - **Trade-offs:** FastAPI's DI (`Depends`) is bypassed in favour of wireup, so

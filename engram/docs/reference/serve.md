@@ -498,8 +498,8 @@ studio serve-http --port 8100
 - DI seams + fakes over mocks, handlers/gateway are constructor-injected. `create_app`
   and `create_mcp_server` take a pre-built container / gateway.
   See `../../../docs/explanation/design-patterns.md#di-seams-and-fakes-over-mocks`.
-- Zod-at-the-boundary (studio-client), AI Factory Studio's type client is generated from
-  `/openapi.json`. See `../../../docs/explanation/design-patterns.md#zod-at-the-boundary`,
+- Zod-at-the-boundary (studio-client), AI Factory Studio checks each response with its own zod
+  schemas. See `../../../docs/explanation/design-patterns.md#zod-at-the-boundary`,
   ADR `../../../docs/adr/0021-frontend-shared-code-lives-in-the-spa.md`.
 - Immutable mirror, the `api` schema is read-only. The reader role cannot write.
   See `../../../docs/explanation/design-patterns.md#immutable-mirror`,
