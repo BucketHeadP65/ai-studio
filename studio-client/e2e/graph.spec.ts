@@ -9,8 +9,17 @@ import { type Page, type Route, expect, test } from "@playwright/test";
 const PAPER_BLUE: Rgb = [0x25, 0x63, 0xeb];
 const CONCEPT_PURPLE: Rgb = [0x93, 0x33, 0xea];
 const EDGE_GREY: Rgb = [0xd7, 0xde, 0xe8];
+const NODE_LABEL_SLATE: Rgb = [0x33, 0x41, 0x55];
 
 type Rgb = [number, number, number];
+
+// A box in CSS pixels, measured from the canvas center.
+interface Band {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
 
 // Twice the pixel density, so the 9px edge labels in the saved screenshots stay legible.
 test.use({ deviceScaleFactor: 2 });
@@ -80,11 +89,17 @@ async function mockApi(page: Page, graph: { nodes: unknown[]; edges: unknown[] }
   await page.route("**/api/runs**", (route) => json(route, { runs: [] }));
 }
 
-// How many canvas pixels sit within `tolerance` of each colour, on every channel.
-async function countColours(page: Page, colours: Rgb[], tolerance: number): Promise<number[]> {
+// How many canvas pixels sit within `tolerance` of each colour, on every channel, in the whole
+// canvas or in `band`.
+async function countColours(
+  page: Page,
+  colours: Rgb[],
+  tolerance: number,
+  band?: Band,
+): Promise<number[]> {
   const png = await page.locator(".sigma-container").screenshot();
   return page.evaluate(
-    async ({ data, wanted, slack }) => {
+    async ({ data, wanted, slack, box }) => {
       const image = new Image();
       image.src = `data:image/png;base64,${data}`;
       await image.decode();
@@ -96,7 +111,16 @@ async function countColours(page: Page, colours: Rgb[], tolerance: number): Prom
       context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
       const counts = wanted.map(() => 0);
+      const scale = window.devicePixelRatio;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
       for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (box !== null) {
+          const x = ((offset / 4) % canvas.width) - centerX;
+          const y = Math.floor(offset / 4 / canvas.width) - centerY;
+          if (x < box.left * scale || x > box.right * scale) continue;
+          if (y < box.top * scale || y > box.bottom * scale) continue;
+        }
         wanted.forEach(([red, green, blue], index) => {
           if (
             Math.abs(pixels[offset] - red) <= slack &&
@@ -109,8 +133,57 @@ async function countColours(page: Page, colours: Rgb[], tolerance: number): Prom
       }
       return counts;
     },
-    { data: png.toString("base64"), wanted: colours, slack: tolerance },
+    { data: png.toString("base64"), wanted: colours, slack: tolerance, box: band ?? null },
   );
+}
+
+// Where a node of `colour` sits on the page: the middle of the first patch of that colour.
+async function nodeOnPage(page: Page, colour: Rgb): Promise<{ x: number; y: number }> {
+  const container = page.locator(".sigma-container");
+  const png = await container.screenshot();
+  const box = await container.boundingBox();
+  if (box === null) throw new Error("no graph container");
+  const middle = await page.evaluate(
+    async ({ data, wanted }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d");
+      if (context === null) throw new Error("no 2d context");
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const matches: Array<[number, number]> = [];
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (wanted.every((channel, index) => Math.abs(pixels[offset + index] - channel) <= 8)) {
+          matches.push([(offset / 4) % canvas.width, Math.floor(offset / 4 / canvas.width)]);
+        }
+      }
+      if (matches.length === 0) throw new Error("no pixel of that colour");
+      const [firstX, firstY] = matches[0];
+      const patch = matches.filter(([x, y]) => Math.hypot(x - firstX, y - firstY) < 30);
+      const sum = patch.reduce(([sumX, sumY], [x, y]) => [sumX + x, sumY + y], [0, 0]);
+      return {
+        x: sum[0] / patch.length / window.devicePixelRatio,
+        y: sum[1] / patch.length / window.devicePixelRatio,
+      };
+    },
+    { data: png.toString("base64"), wanted: colour },
+  );
+  return { x: box.x + middle.x, y: box.y + middle.y };
+}
+
+// Dark label pixels just right of the canvas center once the camera has landed a node of
+// `colour` there, which is where sigma draws the selected node's label. Zero until it lands.
+async function selectedLabelPixels(page: Page, colour: Rgb): Promise<number> {
+  const center = { left: -6, right: 6, top: -6, bottom: 6 };
+  const [atCenter] = await countColours(page, [colour], 24, center);
+  if (atCenter < 20) return 0;
+  const band = { left: 4, right: 160, top: -14, bottom: 14 };
+  const [pixels] = await countColours(page, [NODE_LABEL_SLATE], 24, band);
+  return pixels;
 }
 
 // How many pixels the edge label layer painted.
@@ -167,4 +240,40 @@ test("the graph tab draws the nodes in their type colours, the edges and their l
   expect(await edgeLabelPixels(page)).toBe(0);
 
   expect(withEdges).toBeGreaterThan(withoutEdges + 100);
+});
+
+// The selected node is ringed and its label must read above the ring, however it was selected.
+test("the selected node's label reads above its ring, after a click and after Find a page", async ({
+  page,
+}) => {
+  await mockApi(page, { nodes: NODES, edges: EDGES });
+  await openGraph(page);
+  await expect
+    .poll(async () => Math.min(...(await countColours(page, [PAPER_BLUE, CONCEPT_PURPLE], 24))), {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(20);
+
+  // A click on Paper A: the camera flies to it, and the pointer then leaves the canvas.
+  const paper = await nodeOnPage(page, PAPER_BLUE);
+  await page.mouse.click(paper.x, paper.y);
+  await page.mouse.move(0, 0);
+  await expect(page.getByText("Paper A").last()).toBeVisible();
+  await expect
+    .poll(() => selectedLabelPixels(page, PAPER_BLUE), { timeout: 10_000 })
+    .toBeGreaterThan(40);
+  await page
+    .locator(".sigma-container")
+    .screenshot({ path: test.info().outputPath("selected-by-click.png") });
+
+  // Concept C through the search box.
+  await page.getByRole("combobox", { name: "Find a page" }).fill("Concept C");
+  await page.getByRole("option", { name: /Concept C/ }).click();
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() => selectedLabelPixels(page, CONCEPT_PURPLE), { timeout: 10_000 })
+    .toBeGreaterThan(40);
+  await page
+    .locator(".sigma-container")
+    .screenshot({ path: test.info().outputPath("selected-by-search.png") });
 });

@@ -62,7 +62,9 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
     // Focus, in one reducer pair. Hovering a node keeps it and its neighbourhood
     // in full colour and fades the rest, the standard way to read a hairball one
     // ego-network at a time, and the selected node is ringed and always labelled
-    // so the reader can find what they searched for.
+    // so the reader can find what they searched for. A node raised to the top
+    // layer raises its label too: sigma draws the ring by depth and the label by
+    // labelDepth, so a label left below would sit under its own ring.
     nodeReducer: (node, _data, _attributes, _state, _graphState, graph) => {
       const { hovered, selectedId } = focus.current;
       const center = hovered ?? selectedId;
@@ -72,11 +74,12 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
               backdropVisibility: "visible" as const,
               labelVisibility: "visible" as const,
               depth: "topNodes",
+              labelDepth: "topNodes",
             }
           : {};
       if (center === null) return ringed;
       if (node === center || graph.areNeighbors(node, center))
-        return { depth: "topNodes", ...ringed };
+        return { depth: "topNodes", labelDepth: "topNodes", ...ringed };
       return { ...ringed, color: MUTED, label: "" };
     },
     edgeReducer: (edge, _data, _attributes, _state, _graphState, graph) => {
