@@ -168,8 +168,8 @@ decision records in the ADRs.
   boundaries.
 - **Advantages:** drift detection at the seam. Parsed types flow inward with
   no casts.
-- **Disadvantages:** schema duplication against the server's OpenAPI (the
-  clients mitigate with generated `schema.d.ts` + zod on top). A parse
+- **Disadvantages:** schema duplication against the server's models, kept
+  in step by hand. A parse
   cost per response.
 - **See also:** root `CLAUDE.md` section API response validation,
   [ADR 0021](../adr/0021-frontend-shared-code-lives-in-the-spa.md).

@@ -436,9 +436,8 @@ Glossary: [engram/CONTEXT.md](../../engram/CONTEXT.md).
 - **studio-client/**, user-visibly **AI Factory Studio**:
   `/search`, `/chat`, `/graph` (sigma.js + graphology), `/studio` (the workflow
   studio, React Flow over a dagre layout, talking to the agent half on :8770),
-  `/ops` (job triggers), `/evals`, `/settings`. Types generated from the running
-knowledge base API's `/openapi.json` (`npm run gen:types`). Every response zod-parsed
-in `src/api`. The brand lives in copy only, routes, ports, and
+  `/ops` (job triggers), `/evals`, `/settings`. Every response zod-parsed
+in `src/api`, against schemas that mirror the backends' models by hand. The brand lives in copy only, routes, ports, and
   `NEXT_PUBLIC_*` names are unchanged
   ([ADR 0009](../adr/0009-ai-factory-studio-consolidation.md), amended by [ADR 0010](../adr/0010-harness-extraction.md)).
 - **studio-client/src/shared/**, the app-agnostic code, which imports nothing

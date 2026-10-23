@@ -28,9 +28,6 @@ station, the knowledge-bases station's terminal, and the harness station, and `s
 
 ```bash
 npm run dev          # dev server (:3031)
-npm run gen:types    # regenerate the typed API client from the RUNNING HTTP server's
-                     # OpenAPI schema — start studio serve-http first
-                     # (studio-client → 127.0.0.1:8100)
 npm test             # vitest unit run
 npm run typecheck    # tsc --noEmit
 npm run lint         # biome check
@@ -49,7 +46,7 @@ npm run test:e2e -- e2e/search.spec.ts   # one Playwright spec
 
 ## Frontend API boundary (cross-stack)
 
-The SPA agrees a typed contract with each backend it talks to (`studio-client` to `studio serve-http`, and to the harness backend for the studio station). The discipline: every backend response is `.parse()`d against a `zod` schema before reaching components (the typed `createApiClient` from `src/shared/api/client` plus an app-local base-URL injection in `src/api/`), and the OpenAPI-derived types are regenerated with `npm run gen:types` against the running server. Never `as`-cast at the boundary. Backend drift (renamed field, new required, type change) should surface as a `ZodError` at the boundary instead of as `undefined.something` deep in a component. Datetime fields use `z.string().datetime({offset: true})` so a malformed timestamp surfaces as a `ZodError` rather than `NaN` downstream.
+The SPA agrees a typed contract with each backend it talks to (`studio-client` to `studio serve-http`, and to the harness backend for the studio station). The discipline: every backend response is `.parse()`d against a `zod` schema before reaching components (the typed `createApiClient` from `src/shared/api/client` plus an app-local base-URL injection in `src/api/`), and those schemas mirror the backends' models by hand. Never `as`-cast at the boundary. Backend drift (renamed field, new required, type change) should surface as a `ZodError` at the boundary instead of as `undefined.something` deep in a component. Datetime fields use `z.string().datetime({offset: true})` so a malformed timestamp surfaces as a `ZodError` rather than `NaN` downstream.
 
 ## Vendored components
 
@@ -74,15 +71,24 @@ folder.
 `onUnhandledFrame: "error"`, and a handler exception failing its test), then adds the jsdom shims React Flow needs.
 Tests take `server` from `@/shared/test-support/msw/server` and `render` from `@/shared/test-support/render`.
 
-## Node and held dependencies
+## Node, TypeScript and the graph renderer
 
 **Node 22.22.2 or later.** jsdom 30.1 declares `^22.22.2 || ^24.15.0 || >=26.0.0` in its `engines` field, and its
 undici 8.12 needs 22.19 or later.
 
-**TypeScript stays on 5.9.** `openapi-typescript` 7.13, which `npm run gen:types` runs, declares the peer
-`typescript ^5.x`. `src/shared/boundary.test.ts` reads imports through the TypeScript 5 programmatic API
-(`ts.preProcessFile`), which the TypeScript 7 package does not export. Move to TypeScript 7 once an
-`openapi-typescript` release accepts it and the boundary test reads imports without that API.
+**TypeScript 7.** `npm run typecheck` and the type check in `next build` both run the TypeScript 7 `tsc` (Next.js
+calls the command line, its `experimental.useTypeScriptCli` default). The TypeScript 7 package has no programmatic
+API, so no code here imports `typescript`. Vitest, Biome and Playwright do not need it. `src/shared/boundary.test.ts`
+reads imports with the oxc parser that `vite` exports as `parseSync`. In VS Code, the "TypeScript 7" extension
+(`TypeScriptTeam.native-preview`, a workspace recommendation) runs the TypeScript 7 language server.
 
-**sigma stays on 3 and `@react-sigma/core` on 5.** sigma 4 draws right-to-left edge labels upside down (sigma.js
-issue 1544). Move both once a sigma release keeps edge labels upright.
+**The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
+drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and
+`src/components/graph/edge-labels.ts` draws the labels upright on a 2D canvas. `edge-label-layer.ts` lays that canvas
+into sigma's render as a layer program at the `nodes` depth, after every edge and before every node, as sigma 3 drew
+them. Turn sigma's labels back on and delete both files once a sigma release keeps them upright. `e2e/graph.spec.ts`
+checks that nodes, edges and edge labels are drawn, and that a selected node's label reads above its ring.
+
+**sigma 4 logs WebGL warnings on every render.** The browser console fills with `GL_INVALID_OPERATION:
+glDrawArraysInstanced: Active draw buffers with missing fragment shader outputs` (about a hundred in a short session).
+It is sigma's label picking pass (sigma.js issue 1562, fix in open PR 1563), not the app. Hover and click still work.

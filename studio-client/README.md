@@ -48,7 +48,6 @@ point elsewhere, as [`.env.example`](.env.example) shows.
 | `npm run lint`, `npm run check` | Biome lint, and Biome check with fixes written. |
 | `npm test` | The Vitest suite. `npm test -- <file filter>` or `npm test -- -t "<name>"` runs part of it. |
 | `npm run test:e2e` | The Playwright suite in [`e2e/`](e2e/), on port 3031 unless `PLAYWRIGHT_PORT` names another. |
-| `npm run gen:types` | Regenerates `src/api/schema.d.ts` from the running knowledge base API's `/openapi.json`. |
 
 ## How it is built
 
@@ -68,7 +67,7 @@ point elsewhere, as [`.env.example`](.env.example) shows.
 ```text
 src/
   app/            the routes, one folder per page
-  api/            the zod-checked clients for both backends, and the generated schema.d.ts
+  api/            the zod-checked clients for both backends
   components/     the components of each page, plus the vendored ui/ and ai-elements/
   lib/            the app's helpers
   shared/         the app-agnostic code, which imports nothing from the app: the fetch client, UI primitives,
