@@ -76,10 +76,12 @@ from engram.retrieval.contracts import (
     switch_source,
 )
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
+from engram.retrieval.infrastructure.embedded import slug_only_stamp
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, create_mcp_server
 from engram.sources.contracts import ScanReport, ScanWatchList, SyncMirrors, SyncReport, WatchEntry, WatchListFile
 from pydantic import ValidationError
 from sqlalchemy import NullPool, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from studio.knowledge_base.cli_decisions import decisions_app
@@ -101,6 +103,7 @@ from studio.knowledge_base.cli_support import (
     announce_db,
     announce_identity,
     announce_knowledge_base,
+    is_permission_refusal,
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
     read_feedback,
@@ -142,7 +145,7 @@ from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from core.ai.retrieval.contracts import FeedbackCategory, FeedbackSink, KnowledgeBaseStamp, SqlGateway
     from core.cqrs.contracts import JobObserver, JobsAndQueries, Wake
@@ -361,7 +364,7 @@ def _read_surfaces(
     active_schema: KnowledgeBaseSchema,
     settings_path: Path,
     reader_gateway: ReadOnlySqlGateway,
-    admin_gateway: SqlGateway,
+    admin_gateway: SqlGateway | None,
     embedder: BatchEmbedder,
     *,
     active_hybrid: bool,
@@ -432,23 +435,32 @@ def _registered_schema(name: str, root: Path, *, notes: list[str]) -> KnowledgeB
         return None
 
 
+def _index_stamp(
+    admin_gateway: SqlGateway, reader: FilesystemKnowledgeBaseReader, *, slug: str, collection: str
+) -> Callable[[], Awaitable[KnowledgeBaseStamp]]:
+    """A stamp that reads the last index and the files moved since it through the admin gateway, on every answer."""
+
+    async def stamp() -> KnowledgeBaseStamp:
+        return await read_stamp(admin_gateway, reader, slug=slug, collection=collection)
+
+    return stamp
+
+
 def _read_surface(
     root: Path,
     schema: KnowledgeBaseSchema,
     reader_gateway: ReadOnlySqlGateway,
-    admin_gateway: SqlGateway,
+    admin_gateway: SqlGateway | None,
     embedder: BatchEmbedder,
     *,
     hybrid: bool,
     rerank: Reranking | None,
 ) -> ReadSurface:
-    """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
+    """One knowledge base's read route, its stamp naming the slug alone when there is no admin gateway to read freshness through."""
     collection = schema.retrieval.collection
     gateway = reader_gateway.for_collection(collection)
     reader = FilesystemKnowledgeBaseReader(root, note_folders=schema.note_folders, note_files=schema.note_files)
-
-    async def stamp() -> KnowledgeBaseStamp:
-        return await read_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)
+    stamp = slug_only_stamp(schema.slug) if admin_gateway is None else _index_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)
 
     return ReadSurface(
         name=schema.slug,
@@ -500,8 +512,9 @@ async def _build_mcp_server(
     doc_authoring: bool = False,
     settings_path: Path = _DEFAULT_SETTINGS_PATH,
     logging_settings: LoggingSettings | None = None,
+    read_only: bool = False,
 ) -> MCPServer:
-    """Resolve everything the MCP server needs on this loop and build it, for the caller to run over stdio."""
+    """Resolve everything the MCP server needs on this loop and build it, its answers stamped by slug alone when `read_only`."""
     configure_logging(logging_settings)
     reader_gateway = await container.get(ReaderSqlGateway)
     describe_handler = await container.get(DescribeSchemaHandler)
@@ -539,14 +552,15 @@ async def _build_mcp_server(
 
     # One read route per knowledge base this server may reach: the one it serves, then every registered
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
-    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call.
+    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call. A read-only
+    # server has no such gateway, so its stamps name the knowledge base alone.
     read_notes: list[str] = []
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,
         settings_path,
         reader_gateway,
-        await container.get(AdminSqlGateway),
+        None if read_only else await container.get(AdminSqlGateway),
         await container.get(BatchEmbedder),
         active_hybrid=profile.search_hybrid is not False,
         notes=read_notes,
@@ -637,12 +651,22 @@ async def _build_mcp_server(
 async def _mcp_server_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, *, collection: str, authoring: bool, doc_authoring: bool = False
 ) -> MCPServer:
-    """Announce the identity, then build the MCP server on the same loop, even when the database is unreachable."""
+    """Announce the identity, then build the MCP server on the same loop, even on an unreachable database or a read-only role."""
     announce_knowledge_base(settings_knowledge_base_path(settings), err=True)
-    identity = await announce_db(container, settings, collection=collection, err=True)
-    if identity is None:
-        typer.echo("serving anyway, every call fails until the database is reachable.", err=True)
-    return await _build_mcp_server(container, authoring=authoring, doc_authoring=doc_authoring, logging_settings=settings.application.logging)
+    read_only = False
+    try:
+        identity = await announce_db(container, settings, collection=collection, err=True)
+    except DBAPIError as error:
+        if not is_permission_refusal(error):
+            raise
+        typer.echo("database: this role may not read the index state, so it is not shown. Serving read-only.", err=True)
+        read_only = True
+    else:
+        if identity is None:
+            typer.echo("serving anyway, every call fails until the database is reachable.", err=True)
+    return await _build_mcp_server(
+        container, authoring=authoring, doc_authoring=doc_authoring, logging_settings=settings.application.logging, read_only=read_only
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1306,7 +1330,9 @@ def mcp_cmd(
     `--knowledge-base .` serves the knowledge base in the current directory, which is how a plugin runs
     it. No `application_settings.json` is needed, and the database URL and dialect come from the
     environment. The tools served follow the knowledge base's `retrieval.profile` in
-    `knowledge-base-schema.json`, for example `code-mode` adds `run_code`.
+    `knowledge-base-schema.json`, for example `code-mode` adds `run_code`. Everything it prints before
+    serving, a refusal included, goes to stderr, since stdout carries the protocol. A database role that
+    may not read the index state, such as the reader role, serves read-only.
 
     `--authoring` also serves the write tools: `propose_eval_seeds` and `submit_eval_cases` to write
     evaluation cases, `diagnose`, `evaluate_policy` and `submit_tuning` to tune a retrieval policy by
@@ -1321,14 +1347,16 @@ def mcp_cmd(
     and `api.about` lists them. A knowledge base whose schema sets
     `retrieval.doc_authoring` gets these tools without the flag.
     """
-    settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
-    container = _build_container(ctx, settings)
-    schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    server = asyncio.run(
-        _mcp_server_after_identity(
-            container, settings, collection=schema.retrieval.collection, authoring=authoring, doc_authoring=doc_authoring
+    # The client reads stdout as JSON-RPC, so everything said before serving, a refusal included, goes to stderr.
+    with contextlib.redirect_stdout(sys.stderr):
+        settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
+        container = _build_container(ctx, settings)
+        schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
+        server = asyncio.run(
+            _mcp_server_after_identity(
+                container, settings, collection=schema.retrieval.collection, authoring=authoring, doc_authoring=doc_authoring
+            )
         )
-    )
     server.run(transport="stdio")
 
 

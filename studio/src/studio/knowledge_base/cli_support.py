@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Literal, NoReturn
 
 import typer
 
-from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
+from asyncpg.exceptions import InsufficientPrivilegeError, InvalidCatalogNameError, InvalidPasswordError
 from core.ai.retrieval.contracts import FeedbackEntry
 from core.connection_failures import connection_failure_message
 from core.cqrs.contracts import ImmediateWake, JobQueries, MemoryJobs, MessageBus, Worker
@@ -181,6 +181,23 @@ def _mapped_reason(error: Exception) -> UnreachableReason | None:
     if isinstance(error, socket.gaierror):
         return "host not found"
     return None
+
+
+def is_permission_refusal(error: BaseException) -> bool:
+    """Whether `error` is, or was raised from, Postgres refusing the connected role a privilege it lacks.
+
+    Args:
+        error: The error a database read raised.
+
+    Returns:
+        True when the refusal is anywhere in the error's chain of causes.
+    """
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, InsufficientPrivilegeError):
+            return True
+        current = current.__cause__
+    return False
 
 
 def unreachable_reason(error: Exception) -> str:

@@ -552,6 +552,13 @@ is the one exception. A long-lived server has nothing to exit into, so it prints
 the database is reachable.` as a third line and still builds and serves its tool surface, every tool call failing cleanly
 once it actually reads the database, rather than the whole server dying at startup on a database that has not come up yet.
 
+`studio mcp` also serves when its role may not read the index state, as when the knowledge base reader role is in both
+database URLs (the harness launches it that way, naming the knowledge base with `--knowledge-base`). Postgres refuses
+the identity read there, so the server prints `database: this role may not read the index state, so it is not shown.
+Serving read-only.` in place of the database line, and every answer's stamp names its knowledge base with no freshness
+read. Every line `studio mcp` prints before it serves, a refusal such as `No knowledge base named` included, goes to
+stderr, because an MCP client reads the server's stdout as JSON-RPC.
+
 **A connection that fails later names its service.** A command that reports its failure as one line (`<command> failed:
 <error text>`, such as `evals score failed` or `search failed`) names the service when the failure came from a
 connection: the embedding endpoint or a model endpoint with its host, or the database with its redacted URL, before the
