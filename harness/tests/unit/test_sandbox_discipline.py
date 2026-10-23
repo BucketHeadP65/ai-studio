@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from pydantic_ai.exceptions import ModelRetry, ToolRetryError, UnexpectedModelBehavior
-from pydantic_ai.messages import RetryPromptPart, ToolCallPart
+from pydantic_ai.messages import RetryInfo, ToolCallPart, ToolReturnPart
 from pydantic_ai.tools import ToolDefinition
 
 from harness.domain.ports import SANDBOX
@@ -54,7 +54,7 @@ async def _wrapped(tool: str, error: Exception) -> Exception | object:
 
 def _retry(message: str) -> ToolRetryError:
     """The shape the tool manager hands the wrap hook: the tool's `ModelRetry`, counted and wrapped."""
-    return ToolRetryError(RetryPromptPart(content=message, tool_name=SANDBOX))
+    return ToolRetryError(ToolReturnPart(tool_name=SANDBOX, content=message, outcome="retried", retry=RetryInfo(cause="model_retry")))
 
 
 async def test_an_unknown_function_refusal_names_the_way_out() -> None:

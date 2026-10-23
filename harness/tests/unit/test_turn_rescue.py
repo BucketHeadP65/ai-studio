@@ -7,7 +7,16 @@ so the history that survives into the next turn is the one the agent actually li
 
 from __future__ import annotations
 
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    RetryFeedbackPart,
+    RetryInfo,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai_harness.step_persistence import is_provider_valid
 
 from harness.session import TURN_CUT_OFF, TURN_FAILED, rescue_history
@@ -61,7 +70,7 @@ def test_two_open_calls_on_one_response_are_both_closed_in_one_request_in_call_o
     assert is_provider_valid(rescued)
 
 
-def test_a_call_answered_by_a_return_and_one_answered_by_a_tool_bound_retry_are_left_alone() -> None:
+def test_a_call_answered_by_a_return_and_one_answered_by_a_retried_return_are_left_alone() -> None:
     history = [
         ModelResponse(
             parts=[
@@ -72,7 +81,13 @@ def test_a_call_answered_by_a_return_and_one_answered_by_a_tool_bound_retry_are_
         ModelRequest(
             parts=[
                 ToolReturnPart(tool_name="answered", content="ok", tool_call_id="call-1"),
-                RetryPromptPart(content="try again", tool_name="retried", tool_call_id="call-2"),
+                ToolReturnPart(
+                    tool_name="retried",
+                    content="try again",
+                    tool_call_id="call-2",
+                    outcome="retried",
+                    retry=RetryInfo(cause="model_retry"),
+                ),
             ]
         ),
     ]
@@ -87,7 +102,7 @@ def test_a_call_answered_by_a_return_and_one_answered_by_a_tool_bound_retry_are_
 def test_an_output_validation_retry_does_not_count_as_answering_an_open_call() -> None:
     history = [
         ModelResponse(parts=[ToolCallPart(tool_name="poke", args={}, tool_call_id="call-1")]),
-        ModelRequest(parts=[RetryPromptPart(content="bad json", tool_name=None)]),
+        ModelRequest(parts=[RetryFeedbackPart(content="bad json", retry=RetryInfo(cause="validation_error"))]),
     ]
 
     rescued = rescue_history(history, ended=TURN_CUT_OFF)

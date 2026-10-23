@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from core.ai.evaluation.contracts import EvaluationError, EvaluationInput, Provenance, TaskCase
-from core.ai.inspection.contracts import DiagnosticDataset, DiagnosticPrediction
+from core.ai.inspection.contracts import TAXONOMY, DiagnosticDataset, DiagnosticPrediction
 from core.ai.inspection.domain.evaluation import DiagnosticCase
 from core.ai.transcripts.contracts import Step, Transcript
 from pydantic import ValidationError
@@ -18,6 +18,7 @@ from typer.testing import CliRunner
 from harness.cli import app
 from harness.features.inspection.experiments import DiagnosticOutcomeGrader, OutcomeCriterion, run_comparison
 from harness.features.inspection.infrastructure.evaluation import CaseInput, InspectorPredictor, ObservedModel, evidence_transcript
+from harness.settings import CHECKOUT
 
 
 def test_inspection_evaluation_cli_explains_the_comparison_and_requires_repeated_trials() -> None:
@@ -252,3 +253,16 @@ async def test_failed_trials_do_not_become_supporting_learning_evidence(tmp_path
     assert report.comparison.verdict == "rejected"
     assert learning.evidence == ()
     assert len(learning.attempts) == 1
+
+
+def test_the_shipped_cases_hold_retries_in_the_shape_pydantic_ai_writes_them() -> None:
+    dataset = DiagnosticDataset.model_validate_json((CHECKOUT / "evals" / "inspection" / "evidence-access.json").read_text(encoding="utf-8"))
+    inputs = {case.case_id: CaseInput.model_validate_json(case.input) for case in dataset.cases}
+
+    rejected = inputs["schema-default-conflict"]
+    assert rejected.lead is not None
+    (span,) = rejected.lead.spans
+    part = rejected.transcript.part_at(span)
+    assert isinstance(part, ToolReturnPart)
+    assert part.part_kind == TAXONOMY.symptom(rejected.lead.symptom).shows_in
+    assert (part.outcome, part.retry.cause if part.retry else None) == ("retried", "validation_error")

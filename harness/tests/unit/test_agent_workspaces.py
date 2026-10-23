@@ -19,7 +19,7 @@ from core.ai.workflows.infrastructure.folder import FOLDER, folder_toolset
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import AbstractCapability, LocalWorkspace
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart, WorkspaceRef
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, WorkspaceRef
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import DynamicWorkflow
 from pydantic_ai_harness.pydantic_ai_docs import PydanticAIDocs
@@ -116,7 +116,7 @@ def _calls_then_reports(calls: Sequence[ToolCallPart]) -> FunctionModel:
         results: list[str] = []
         for message in messages:
             if isinstance(message, ModelRequest):
-                results.extend(str(part.content) for part in message.parts if isinstance(part, RetryPromptPart | ToolReturnPart))
+                results.extend(str(part.content) for part in message.parts if isinstance(part, ToolReturnPart))
         if len(results) < len(calls):
             call = calls[len(results)]
             return ModelResponse(parts=[ToolCallPart(call.tool_name, call.args, tool_call_id=f"call-{len(results)}")])
@@ -338,7 +338,7 @@ class TestDocsThroughFormatMaps:
                 for message in messages
                 if isinstance(message, ModelRequest)
                 for part in message.parts
-                if isinstance(part, ToolReturnPart | RetryPromptPart)
+                if isinstance(part, ToolReturnPart)
             ]
             seen[:] = returned
             if not returned:
@@ -382,7 +382,7 @@ def _scripts_parent(tmp_path: Path, workspace: Path, worker_model: Model, *, env
             for message in messages
             if isinstance(message, ModelRequest)
             for part in message.parts
-            if isinstance(part, ToolReturnPart | RetryPromptPart)
+            if isinstance(part, ToolReturnPart)
         ]
         if not returned:
             return ModelResponse(parts=[ToolCallPart("load_capability", {"id": "agent-scripts"})])

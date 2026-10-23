@@ -68,7 +68,7 @@ The separate reconciliation loop uses `sweep_seconds`. Live watches use `reconci
 
 A watch's `clean_run_sample_rate` defaults to `0.1`, within 0 through 1, and controls sampling when `inspector` is `when_a_rule_led`. `every_run` ignores this sampling rate. `reconcile_hours` defaults to 24 for live watches. `sweep_hours` is required exactly when `when` is `sweep`.
 
-The shipped watch selects every agent except the inspector itself, triggers at run end, and runs six rules: schema rejection, unchanged retry after error, repeated denied action, duplicate call, result overflow and unfinished budget exhaustion. A watch without rules must use `every_run`.
+The shipped watch selects every agent except the inspector itself, triggers at run end, and runs seven rules: schema rejection, tool refusal, unchanged retry after error, repeated denied action, duplicate call, result overflow and unfinished budget exhaustion. A watch without rules must use `every_run`.
 
 Runtime inspector calls retain the framework's request limit. The evaluation command uses separate explicit limits of 12 requests and 120 seconds per trial.
 

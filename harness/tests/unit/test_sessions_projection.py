@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, RetryInfo, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.usage import RequestUsage
 from pydantic_ai_harness.step_persistence import ContinuableSnapshot, RunRecord
 
@@ -105,7 +105,17 @@ async def test_a_second_turns_snapshot_that_dropped_two_old_messages_before_its_
 
     request_0 = ModelRequest(parts=[UserPromptPart(content="find the file")])
     tool_call = ModelResponse(parts=[ToolCallPart(tool_name="read_file", args={}, tool_call_id="call-1")])
-    retried = ModelRequest(parts=[RetryPromptPart(content="bad arguments", tool_name="read_file", tool_call_id="call-1")])
+    retried = ModelRequest(
+        parts=[
+            ToolReturnPart(
+                tool_name="read_file",
+                content="bad arguments",
+                tool_call_id="call-1",
+                outcome="retried",
+                retry=RetryInfo(cause="validation_error"),
+            )
+        ]
+    )
     tool_return = ModelRequest(parts=[ToolReturnPart(tool_name="read_file", content="file contents", tool_call_id="call-1")])
     response_0 = ModelResponse(parts=[TextPart(content="here is the file")])
     snapshot_1 = ContinuableSnapshot(run_id="run-1", step_index=0, messages=[request_0, tool_call, retried, tool_return, response_0])

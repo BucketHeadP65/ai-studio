@@ -16,7 +16,7 @@ def test_the_committed_defaults_watch_every_run_with_every_rule_and_the_inspecto
     assert watch.when == "run_end"
     assert watch.inspector == "when_a_rule_led"
     assert set(watch.rules) == set(RULES.by_key)
-    assert len(RULES.by_key) == 6
+    assert len(RULES.by_key) == 7
     assert watch.clean_run_sample_rate == 0.1
     assert watch.reconcile_hours == 24
     assert section.inspector_tiers == ("helper", "worker")

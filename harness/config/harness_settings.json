@@ -37,6 +37,7 @@
         "name": "every-run",
         "rules": [
           "schema_rejected_arguments",
+          "tool_refused_call",
           "retried_after_clear_error",
           "denied_action_repeated",
           "duplicate_call",

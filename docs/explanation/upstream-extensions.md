@@ -295,3 +295,18 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 - **Upstream candidate:** yes, as an issue rather than a patch: give `CodeMode` an option that keeps a program's calls
   on a usage of their own and off the run's `tool_calls_limit` (0.59.0 documents that they count, and offers no way out).
   The setting a caller compares runs under should mean the same thing with code mode on and off.
+
+### UE-23. `NoteMemory` (harness): memory notes in category folders, searched one folder at a time
+
+- **What:** pydantic-ai-harness's `Memory` keeps flat files directly in a scope. `NoteMemory` keeps each note at
+  `<category>/<slug>.md` inside its scope (categories world, project and reference, from `engram.agent_memory`), names a
+  note by `category` and `slug` or by that relative path, and links every note in the `MEMORY.md` it injects. Since 0.60.0
+  the bundled stores search only the files directly under the prefix they are given and skip a deeper folder as another
+  scope, so `search_memory` searches each category folder of the scope, ranks the matches by score and bounds them to the
+  capability's result count and characters.
+- **Where:** `harness/src/harness/features/projects/memory.py` (`NoteToolset`, `NoteMemory`, `memory_mounts`), tests in
+  `harness/tests/unit/features/projects/test_memory.py`.
+- **Since:** the category grammar since the memory mounts landed, the search by category folder since 2026-10-23.
+- **Upstream candidate:** later. A store protocol that tells a subfolder of one scope from a nested scope would let a
+  note grammar with folders search in one call.
+

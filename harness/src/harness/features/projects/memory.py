@@ -3,7 +3,8 @@
 Each mount's tools name a note by `category` and `slug`, or by the relative `path` a listing or a search already gave
 back, in the store's grammar `<category>/<slug>.md` (categories world, project and reference, see
 `engram.agent_memory`). They never write `MEMORY.md`, the store's derived index, and a store's grammar refusal reaches
-the model as a `ModelRetry`, a retry that teaches rather than an abort. A search answers each match at its real nested
+the model as a `ModelRetry`, a retry that teaches rather than an abort. A search reads each category folder of the scope,
+since a store searches only the files directly under the prefix it is given, and answers each match at its real nested
 path. Every tool name carries the mount's own prefix (`global_write_memory`, `project_read_memory`,
 `scratchpad_search_memory`), so three mounts on one agent register distinct tools and every guidance line and
 `ModelRetry` names a tool the model can call. The `MEMORY.md` each mount injects links every note as
@@ -12,6 +13,7 @@ path. Every tool name carries the mount's own prefix (`global_write_memory`, `pr
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -33,11 +35,11 @@ from pydantic_ai_harness.memory import InMemoryStore, Memory, MemoryConflictErro
 from harness.session import Runtime
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from pydantic_ai._instructions import AgentInstructions
     from pydantic_ai.capabilities import AbstractCapability
-    from pydantic_ai_harness.memory import MemoryMutation, MemorySearchResult, MemoryStore
+    from pydantic_ai_harness.memory import MemoryMutation, MemorySearchMatch, MemorySearchResult, MemoryStore
 
 Category = Literal["world", "project", "reference"]
 """Mirrors `engram.agent_memory.CATEGORIES`, spelled out for the tool schema. The assertion below keeps the two from
@@ -425,18 +427,43 @@ class NoteToolset(FunctionToolset[Runtime]):
         if not isinstance(store, SearchableMemoryStore):
             msg = f"{type(store).__name__} cannot search."
             raise ModelRetry(msg)
-        result = await store.search(
-            prefix,
-            query,
-            limit=self._capability.max_search_results,
-            max_files=self._capability.max_search_files,
-            max_chars=self._capability.max_search_result_chars,
-            max_file_chars=self._capability.max_memory_size,
+        limit, max_chars = self._capability.max_search_results, self._capability.max_search_result_chars
+        found = await asyncio.gather(
+            *(
+                store.search(
+                    f"{prefix}{category}/",
+                    query,
+                    limit=limit,
+                    max_files=self._capability.max_search_files,
+                    max_chars=max_chars,
+                    max_file_chars=self._capability.max_memory_size,
+                )
+                for category in CATEGORIES
+            )
         )
-        matches: list[NoteSearchMatch] = [
-            {"file": match.path.removeprefix(prefix), "snippet": match.snippet, "score": match.score} for match in result.matches
-        ]
-        return {"matches": matches, "scanned": result.scanned, "truncated": result.truncated}
+        ranked = sorted((match for result in found for match in result.matches), key=lambda match: match.score, reverse=True)
+        matches, cut = _bounded_matches(ranked, prefix, limit=limit, max_chars=max_chars)
+        scanned = sum(result.scanned for result in found)
+        return {"matches": matches, "scanned": scanned, "truncated": cut or any(result.truncated for result in found)}
+
+
+def _bounded_matches(
+    ranked: Sequence[MemorySearchMatch], prefix: str, *, limit: int, max_chars: int
+) -> tuple[list[NoteSearchMatch], bool]:
+    """The best `limit` matches as scope-relative paths with snippets, within `max_chars`, and whether any was cut."""
+    matches: list[NoteSearchMatch] = []
+    remaining = max_chars
+    for match in ranked[:limit]:
+        name = match.path.removeprefix(prefix)
+        available = remaining - len(name)
+        if available <= 0:
+            return matches, True
+        snippet = match.snippet[:available]
+        matches.append({"file": name, "snippet": snippet, "score": match.score})
+        remaining -= len(name) + len(snippet)
+        if len(snippet) < len(match.snippet):
+            return matches, True
+    return matches, len(ranked) > limit
 
 
 def _compose(
