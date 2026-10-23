@@ -38,7 +38,7 @@ dependencies = [
     # URL: the harness's artifact resolver, which a retained note's origin is fetched from.
     "httpx>=0.28.1",
     # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
-    "pydantic-ai>=2.57.0",
+    "pydantic-ai>=2.59.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.16.0",
     "sqlalchemy[asyncio]>=2.1.4",
