@@ -32,6 +32,7 @@ from engram.retrieval.contracts import (
     build_search_dialects,
     reranking,
     verify_reader_role,
+    verify_reader_role_on_connect,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 from wireup import injectable
@@ -51,12 +52,15 @@ from studio.knowledge_base.settings import (
     RetrievalSettings,
     SettingsFile,
 )
-from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderEngine, ReaderSqlGateway, SearchReranking
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderEngine, ReaderSqlGateway, SearchReranking
 
 
 @injectable
 async def reader_engine_provider(database: DatabaseSettings) -> ReaderEngine:
-    """Provide the read-only engine, with the pgvector codec registered before it is handed out.
+    """Provide the read-only engine, with its role checked and the pgvector codec registered before it is handed out.
+
+    When the database does not answer, the role is checked on every new connection instead, so the engine is
+    handed out and every read fails until the database answers with a role that may only read.
 
     Args:
         database: The database settings whose `reader_url` the engine connects to.
@@ -65,7 +69,10 @@ async def reader_engine_provider(database: DatabaseSettings) -> ReaderEngine:
         The read-only engine.
     """
     engine = build_reader_engine(database.reader_url)
-    await verify_reader_role(engine)
+    try:
+        await verify_reader_role(engine)
+    except UNREACHABLE_ERRORS:
+        verify_reader_role_on_connect(engine)
     await register_pgvector(engine)
     return ReaderEngine(engine)
 

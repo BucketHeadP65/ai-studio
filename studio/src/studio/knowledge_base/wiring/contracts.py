@@ -5,11 +5,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
 from engram.retrieval.contracts import ReadOnlySqlGateway, Reranking
 
 if TYPE_CHECKING:
     from engram.retrieval.contracts import SqlKnowledgeBase
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+# A dead port and an unknown host raise an `OSError` subtype (`ConnectionRefusedError`, `socket.gaierror`), a wrong
+# password and a wrong database name raise an asyncpg error. A query error is not one of them, so a missing schema
+# still reaches the preflight.
+UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (OSError, InvalidPasswordError, InvalidCatalogNameError)
+"""The errors a failed connection to Postgres raises."""
 
 
 class ReaderEngine:

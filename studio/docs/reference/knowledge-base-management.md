@@ -551,13 +551,17 @@ after printing this line, with no traceback and no `search failed` (or `index fa
 is the one exception. A long-lived server has nothing to exit into, so it prints `serving anyway, every call fails until
 the database is reachable.` as a third line and still builds and serves its tool surface, every tool call failing cleanly
 once it actually reads the database, rather than the whole server dying at startup on a database that has not come up yet.
+Its reader role is then checked on each new connection, so no read runs until the database answers with a role that may
+only read.
 
 `studio mcp` also serves when its role may not read the index state, as when the knowledge base reader role is in both
 database URLs (the harness launches it that way, naming the knowledge base with `--knowledge-base`). Postgres refuses
 the identity read there, so the server prints `database: this role may not read the index state, so it is not shown.
 Serving read-only.` in place of the database line, and every answer's stamp names its knowledge base with no freshness
-read. Every line `studio mcp` prints before it serves, a refusal such as `No knowledge base named` included, goes to
-stderr, because an MCP client reads the server's stdout as JSON-RPC.
+read. A read-only server also builds no authoring and no documentation-authoring tool, whatever opts in, and prints one
+stderr line naming what it left out. Every line `studio mcp` prints before it serves, a refusal such as `No knowledge base named` included, goes to
+stderr, because an MCP client reads the server's stdout as JSON-RPC. A missing knowledge base folder, a folder with no
+`knowledge-base-schema.json` and a schema that does not load are each refused in one line, with no traceback.
 
 **A connection that fails later names its service.** A command that reports its failure as one line (`<command> failed:
 <error text>`, such as `evals score failed` or `search failed`) names the service when the failure came from a

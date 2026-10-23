@@ -312,29 +312,33 @@ class TestDryRun:
 class WatchListContainer(FakeContainer):
     """A fake container that also serves the knowledge base's schema and folder, so the sync reaches its watch list."""
 
-    def __init__(self, handler: object, bus: MessageBus, root: Path) -> None:
+    def __init__(self, handler: object, bus: MessageBus, root: Path, scan: ScanWatchListHandler) -> None:
         super().__init__(handler, bus)
         self._root = root
+        self._scan = scan
 
     async def get(self, key: type) -> object:
         if key is KnowledgeBaseSchema:
             return research_spec()
         if key is KnowledgeBaseSettings:
             return KnowledgeBaseSettings(path=self._root)
+        if key is ScanWatchListHandler:
+            return self._scan
         return await super().get(key)
 
 
 class TestWatchListOnDryRun:
-    """The watch list of a knowledge base whose two rows an `x` scanner and an `xml` scanner read."""
+    """The watch list of a knowledge base whose rows an `x` scanner and an `xml` scanner read, and one a `podcast` scanner nobody built would."""
 
     def _container(self, root: Path, scanner: FakeScanner) -> WatchListContainer:
         watch_list = WatchListFile(root / WATCH_LIST_PATH)
         watch_list.add("x", "@someone", max_items=5)
         watch_list.add("xml", "https://example.org/feed.xml")
+        watch_list.add("podcast", "feed-1")
         queue = SourceQueue(root / "_meta" / "source-queue.yaml", connectors=())
         scan = ScanWatchListHandler(watch_list, {"x": scanner, "xml": scanner}, queue)
         sync = RecordingCommandHandler(result=SyncReport(dry_run=True))
-        return WatchListContainer(sync, MessageBus({SyncMirrors: sync, ScanWatchList: scan}, {}), root)
+        return WatchListContainer(sync, MessageBus({SyncMirrors: sync, ScanWatchList: scan}, {}), root, scan)
 
     def test_a_dry_run_lists_each_row_and_calls_no_scanner(self) -> None:
         root = Path.cwd()
@@ -348,7 +352,8 @@ class TestWatchListOnDryRun:
         assert result.exit_code == 0, result.stdout
         assert scanner.since == []
         assert "x @someone" in result.stdout
-        assert "xml https://example.org/feed.xml" in result.stdout
+        assert "xml https://example.org/feed.xml\n" in result.stdout
+        assert "podcast feed-1 (no scanner)" in result.stdout
         assert (root / WATCH_LIST_PATH).read_text(encoding="utf-8") == watch_list_text
         assert not (root / "_meta" / "source-queue.yaml").exists()
 

@@ -78,7 +78,7 @@ from engram.retrieval.contracts import (
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
 from engram.retrieval.infrastructure.embedded import slug_only_stamp
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, create_mcp_server
-from engram.sources.contracts import ScanReport, ScanWatchList, SyncMirrors, SyncReport, WatchEntry, WatchListFile
+from engram.sources.contracts import ScanReport, ScanWatchList, ScanWatchListHandler, SyncMirrors, SyncReport, WatchEntry, WatchListFile
 from pydantic import ValidationError
 from sqlalchemy import NullPool, text
 from sqlalchemy.exc import DBAPIError
@@ -91,7 +91,6 @@ from studio.knowledge_base.cli_init import init_app
 from studio.knowledge_base.cli_note import note_app
 from studio.knowledge_base.cli_source_queue import source_queue_app
 from studio.knowledge_base.cli_support import (
-    _UNREACHABLE_ERRORS,
     FEEDBACK_FILE,
     ActiveKnowledgeBase,
     KnowledgeBaseMissingError,
@@ -103,6 +102,7 @@ from studio.knowledge_base.cli_support import (
     announce_db,
     announce_identity,
     announce_knowledge_base,
+    first_reason,
     is_permission_refusal,
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
@@ -140,7 +140,7 @@ from studio.knowledge_base.settings import (
 )
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
-from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderSqlGateway, SearchReranking
 from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
@@ -217,28 +217,43 @@ def _resolve_settings(knowledge_base: str | None, *, cwd: Path) -> ActiveKnowled
     """The settings and the knowledge base that `knowledge_base` names, or the one `cwd` sits in."""
     try:
         root = resolve_knowledge_base_root(knowledge_base, cwd=cwd)
+        knowledge_base_settings = KnowledgeBaseSettings(path=root)
     except KnowledgeBaseMissingError as exc:
         _fail(str(exc))
-    return ActiveKnowledgeBase(application=fetch_application_settings(), knowledge_base=KnowledgeBaseSettings(path=root))
+    except ValidationError as exc:
+        _fail(first_reason(exc))
+    return ActiveKnowledgeBase(application=fetch_application_settings(), knowledge_base=knowledge_base_settings)
 
 
-async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | tuple[WatchEntry, ...] | None, SyncReport]:
+async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | _WatchListPlan | None, SyncReport]:
     """Scan the knowledge base's watch list when there is one, or read its rows on a dry run, then dispatch `command`."""
     bus = await container.get(MessageBus)
     watch_list = await _watch_list(container)
-    scan: ScanReport | tuple[WatchEntry, ...] | None = None
+    scan: ScanReport | _WatchListPlan | None = None
     if watch_list is not None:
         # A scan calls each row's scanner, and a scanner may call a paid model, so a dry run only reads the rows.
-        scan = tuple(watch_list.entries()) if command.dry_run else await _scan_watch_list(bus)
+        if command.dry_run:
+            served = (await container.get(ScanWatchListHandler)).served_scanners
+            scan = _WatchListPlan(rows=tuple(watch_list.entries()), served_scanners=served)
+        else:
+            scan = await _scan_watch_list(bus)
     report = await bus.handle(command)
     if not isinstance(report, SyncReport):  # pragma: no cover (the sync handler returns a SyncReport)
         _fail("sync produced no report.")
     return scan, report
 
 
+@dataclass(frozen=True, slots=True)
+class _WatchListPlan:
+    """The watch-list rows a real sync would scan, and the scanner names this host built."""
+
+    rows: tuple[WatchEntry, ...]
+    served_scanners: frozenset[str]
+
+
 async def _sync_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, command: SyncMirrors, *, collection: str
-) -> tuple[ScanReport | tuple[WatchEntry, ...] | None, SyncReport]:
+) -> tuple[ScanReport | _WatchListPlan | None, SyncReport]:
     """Announce the identity, then dispatch the sync, one event loop for both."""
     await announce_identity(container, settings, collection=collection)
     return await _dispatch_sync(container, command)
@@ -272,11 +287,12 @@ def _print_scan_report(report: ScanReport) -> None:
         typer.echo(f"  FAILED {label}: {reason}")
 
 
-def _print_watch_list_rows(rows: tuple[WatchEntry, ...]) -> None:
-    """Echo the watch-list rows a real sync would scan, each as its scanner and ref, printed before the sync summary."""
-    typer.echo(f"Would scan the watch list (dry run): {len(rows)}")
-    for row in rows:
-        typer.echo(f"  {row.scanner} {row.ref}")
+def _print_watch_list_rows(plan: _WatchListPlan) -> None:
+    """Echo the watch-list rows a real sync would scan, each as its scanner and ref, marking a row no built scanner serves."""
+    typer.echo(f"Would scan the watch list (dry run): {len(plan.rows)}")
+    for row in plan.rows:
+        unserved = "" if row.scanner in plan.served_scanners else " (no scanner)"
+        typer.echo(f"  {row.scanner} {row.ref}{unserved}")
 
 
 def _print_sync_report(report: SyncReport) -> None:
@@ -500,7 +516,7 @@ async def _stored_switches(surface: ReadSurface) -> RetrievalSwitches | None:
         return None
     try:
         return await surface.switch_source()
-    except _UNREACHABLE_ERRORS:
+    except UNREACHABLE_ERRORS:
         return RetrievalSwitches()
 
 
@@ -547,11 +563,12 @@ async def _build_mcp_server(
     profile, descriptions, policy_instructions = _apply_active_policy(profile, knowledge_base_settings.path)
 
     # The documentation-authoring tools are wired when either `--doc-authoring` or the schema's
-    # `retrieval.doc_authoring` opts in.
+    # `retrieval.doc_authoring` opts in. A read-only server wires no tool that writes.
+    authoring, wants_doc_authoring = _writing_tools(read_only=read_only, authoring=authoring, doc_authoring=doc_authoring or schema.retrieval.doc_authoring)
     doc_authoring_tools: AuthoringTools | None = None
     doc_engine: AsyncEngine | None = None
     registry_note: str | None = None
-    if doc_authoring or schema.retrieval.doc_authoring:
+    if wants_doc_authoring:
         doc_authoring_tools, doc_engine, registry_note = _build_doc_authoring(container, database, knowledge_base_settings, schema, settings_path)
 
     # One read route per knowledge base this server may reach: the one it serves, then every registered
@@ -643,13 +660,24 @@ async def _build_mcp_server(
         hits_per_document=surfaces[0].hits_per_document,
         database=redact_db(database.reader_url),
     )
-    # The admin engine pools connections and `stamp` reads through it. Disposing it before this loop closes
-    # makes the served loop open fresh connections instead of reusing ones bound to this loop.
+    # The admin engine pools connections and `stamp` reads through it, except on a read-only server, whose
+    # stamp reads nothing. Disposing it before this loop closes makes the served loop open fresh connections
+    # instead of reusing ones bound to this loop.
     engine = await container.get(AsyncEngine)
     await engine.dispose()
     if doc_engine is not None:
         await doc_engine.dispose()
     return server
+
+
+def _writing_tools(*, read_only: bool, authoring: bool, doc_authoring: bool) -> tuple[bool, bool]:
+    """The authoring and documentation-authoring opt-ins a server wires, none when read-only, which names what it left out on stderr."""
+    left_out = [name for name, wanted in (("the authoring tools", authoring), ("the documentation-authoring tools", doc_authoring)) if wanted]
+    if not read_only:
+        return authoring, doc_authoring
+    if left_out:
+        typer.echo(f"read-only: left out {' and '.join(left_out)}, since this role may not write.", err=True)
+    return False, False
 
 
 async def _mcp_server_after_identity(
@@ -975,7 +1003,7 @@ async def _index_after_identity(
         await asyncio.to_thread(assert_schema_at_head, settings.application.infrastructure.database.url)
     except SchemaRevisionError as exc:
         _fail(str(exc))
-    except _UNREACHABLE_ERRORS as exc:
+    except UNREACHABLE_ERRORS as exc:
         typer.echo(unreachable_line(redact_db(settings.application.infrastructure.database.url), exc))
         raise typer.Exit(code=1) from None
     identity = await announce_db(container, settings, collection=collection)
@@ -1336,7 +1364,7 @@ def mcp_cmd(
     environment. The tools served follow the knowledge base's `retrieval.profile` in
     `knowledge-base-schema.json`, for example `code-mode` adds `run_code`. Everything it prints before
     serving, a refusal included, goes to stderr, since stdout carries the protocol. A database role that
-    may not read the index state, such as the reader role, serves read-only.
+    may not read the index state, such as the reader role, serves read-only, with no authoring tool.
 
     `--authoring` also serves the write tools: `propose_eval_seeds` and `submit_eval_cases` to write
     evaluation cases, `diagnose`, `evaluate_policy` and `submit_tuning` to tune a retrieval policy by

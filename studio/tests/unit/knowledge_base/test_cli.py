@@ -655,3 +655,37 @@ class TestMcpSaysNothingOnStdoutBeforeServing:
         assert result.exit_code == 1
         assert result.stdout == ""
         assert "No knowledge base named" in result.stderr
+
+    def test_a_folder_with_no_schema_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        bare = tmp_path / "bare"
+        bare.mkdir()
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(bare)])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr == f"knowledge_base.path {bare} holds no knowledge-base-schema.json file\n"
+
+    def test_a_missing_folder_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        missing = tmp_path / "missing"
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(missing)])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr == f"knowledge_base.path is not an existing directory: {missing}\n"
+
+    def test_a_malformed_schema_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        (broken / "knowledge-base-schema.json").write_text("{not json", encoding="utf-8")
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(broken)], obj=lambda: _container(tmp_path))
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr.startswith(f"The knowledge base schema at {broken / 'knowledge-base-schema.json'} does not load: ")
+        assert len(result.stderr.splitlines()) == 1
