@@ -109,12 +109,9 @@ export function drawEdgeLabels(
   focused: string | null,
 ): void {
   const { width, height, pixelRatio } = sigma.getRenderParams();
-  const canvas = context.canvas;
-  if (canvas.width !== width * pixelRatio || canvas.height !== height * pixelRatio) {
-    canvas.width = width * pixelRatio;
-    canvas.height = height * pixelRatio;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+  if (fitCanvas(context.canvas, width, height, pixelRatio)) {
+    context.canvas.style.width = `${width}px`;
+    context.canvas.style.height = `${height}px`;
   }
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, width, height);
@@ -140,6 +137,33 @@ export function drawEdgeLabels(
     context.fillText(data.label, -textWidth / 2, data.size / 2 + EDGE_LABEL_SIZE);
     context.restore();
   }
+}
+
+/**
+ * Sizes a canvas's pixel buffer to a CSS size at a pixel ratio, when it differs.
+ *
+ * Args:
+ *   canvas: The canvas to size.
+ *   width: The width in CSS pixels.
+ *   height: The height in CSS pixels.
+ *   pixelRatio: Device pixels per CSS pixel.
+ *
+ * Returns:
+ *   Whether the canvas was resized, which also clears it.
+ */
+export function fitCanvas(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  pixelRatio: number,
+): boolean {
+  // Whole pixels: a canvas truncates a fraction, which would never compare equal again.
+  const pixelWidth = Math.round(width * pixelRatio);
+  const pixelHeight = Math.round(height * pixelRatio);
+  if (canvas.width === pixelWidth && canvas.height === pixelHeight) return false;
+  canvas.width = pixelWidth;
+  canvas.height = pixelHeight;
+  return true;
 }
 
 function onScreen(sigma: Sigma, node: string): Disc | null {

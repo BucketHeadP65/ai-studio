@@ -1,7 +1,7 @@
 import { MultiDirectedGraph } from "graphology";
 import { describe, expect, it } from "vitest";
 
-import { edgeLabelPlacement, labelledEdges } from "./edge-labels";
+import { edgeLabelPlacement, fitCanvas, labelledEdges } from "./edge-labels";
 
 // The label layer draws on a 2D canvas, which jsdom cannot paint, so these tests pin the
 // geometry it draws from. The canvas itself is covered by e2e/graph.spec.ts.
@@ -71,5 +71,21 @@ describe("labelledEdges", () => {
 
   it("ignores a focused or labelled node the graph no longer has", () => {
     expect([...labelledEdges(graph(), new Set(["a", "gone"]), "gone")]).toEqual([]);
+  });
+});
+
+describe("fitCanvas", () => {
+  it("sizes the canvas once and leaves it alone while the size holds, at a fractional ratio too", () => {
+    const canvas = document.createElement("canvas");
+    expect(fitCanvas(canvas, 101, 75, 1.5)).toBe(true);
+    expect(fitCanvas(canvas, 101, 75, 1.5)).toBe(false);
+    expect([canvas.width, canvas.height]).toEqual([152, 113]);
+  });
+
+  it("sizes the canvas again when the size changes", () => {
+    const canvas = document.createElement("canvas");
+    fitCanvas(canvas, 100, 50, 2);
+    expect(fitCanvas(canvas, 120, 50, 2)).toBe(true);
+    expect([canvas.width, canvas.height]).toEqual([240, 100]);
   });
 });
