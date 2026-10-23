@@ -125,7 +125,7 @@ def test_a_span_after_stop_tracing_reaches_a_closed_processor_once() -> None:
     )
 
     assert answered.returncode == 0, answered.stderr[-2000:]
-    assert int(answered.stdout) <= 1, "the processor's warning came back to it as another span"
+    assert int(answered.stdout) == 1, "the processor must see the span once, and never its own warning as another span"
 
 
 def test_stop_tracing_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
