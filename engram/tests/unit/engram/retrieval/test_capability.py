@@ -3,7 +3,7 @@
 Two claims are under test, and they are the reason the module exists.
 
 **No drift.** The capability's `run_sql` / `describe_schema` come from the SAME factories the
-FastMCP server registers. A second definition of the row cap or the read-only refusal is a
+MCP server registers. A second definition of the row cap or the read-only refusal is a
 second answer to what a query costs, so the tests pin the shared origin rather than re-asserting
 the behaviour in a second place.
 
@@ -23,7 +23,7 @@ from uuid import UUID
 
 import pytest
 
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
 from pydantic_ai.usage import RunUsage
@@ -301,7 +301,7 @@ class TestKnowledgeBaseSurface:
         assert sorted(tool.name for tool in tools) == sorted(DEFAULT_TOOL_NAMES)
         run_sql = next(tool for tool in tools if tool.name == "run_sql")
         assert run_sql.description == sql_tools.RUN_SQL_DESCRIPTION
-        assert "sql" in run_sql.inputSchema["properties"]
+        assert "sql" in run_sql.input_schema["properties"]
 
     async def test_filtered_admits_only_what_the_grant_named(self) -> None:
         capability = _knowledge_base()

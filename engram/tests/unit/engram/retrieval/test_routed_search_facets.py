@@ -17,8 +17,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import FunctionToolset, ModelRetry
 
 from engram.retrieval.capability import RetrievalKnowledgeBase
@@ -148,20 +148,19 @@ class TestRoutedTools:
 class TestRoutedMcpServer:
     async def test_the_served_routed_search_takes_facets_and_refuses_an_undeclared_key_as_a_tool_error(self):
         kitchen, wiki = FakeSearch(), FakeSearch()
-        server = FastMCP(name="routed")
+        server = MCPServer(name="routed")
         register_routed_mcp_tools(server, (_kitchen(kitchen), _wiki(wiki)), default_knowledge_base="kitchen")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             answered = await client.call_tool("search", {"query": "brine", "collection": "wiki", "facets": {"weight": ["heavy"]}})
             refused = await client.call_tool("search", {"query": "brine", "facets": {"weight": ["heavy"]}})
 
         [tool] = [published for published in listing.tools if published.name == "search"]
-        assert "facets" in tool.inputSchema["properties"]
+        assert "facets" in tool.input_schema["properties"]
         assert "'kitchen' (`shade`, `texture`), 'wiki' (`weight`)" in (tool.description or "")
-        assert answered.isError is False
-        assert refused.isError is True
+        assert answered.is_error is False
+        assert refused.is_error is True
         assert "The declared keys are `shade`, `texture`." in _text(refused)
         assert [message.facets for message in wiki.seen] == [{"weight": ["heavy"]}]
         assert kitchen.seen == []
@@ -188,11 +187,10 @@ class TestRoutedSandbox:
         )
         code = "found = await search(query='brine', collection='other', facets={'weight': ['heavy']})\nfound['status']\n"
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False, _text(result)
+        assert result.is_error is False, _text(result)
         assert json.loads(str(other.rows_calls[-1].params["facets"])) == {"weight": ["heavy"]}
         assert repo.rows_calls == []
 
@@ -288,4 +286,4 @@ class TestCapability:
         assert "'kitchen' (`shade`, `texture`), 'wiki' (`weight`)" in description
         assert ("every knowledge base it searches declares it" in description) is cross_search
         assert ("A call may use only the keys of the knowledge base it searches." in description) is not cross_search
-        assert "facets" in tool.inputSchema["properties"]
+        assert "facets" in tool.input_schema["properties"]

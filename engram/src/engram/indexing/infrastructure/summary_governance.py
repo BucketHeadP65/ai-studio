@@ -32,7 +32,7 @@ class SummaryGovernance:
         self._engine = engine
 
     @staticmethod
-    def pending_statement(collection: str) -> Select[tuple[str, str, str, str, str, datetime]]:
+    def pending_statement(collection: str) -> Select[str, str, str, str, str, datetime]:
         """Select `collection`'s pending rows, oldest first.
 
         Args:

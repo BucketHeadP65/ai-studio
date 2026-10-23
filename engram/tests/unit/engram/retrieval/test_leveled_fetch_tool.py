@@ -19,7 +19,7 @@ import json
 from typing import TYPE_CHECKING
 
 from core.ai.retrieval.contracts import KnowledgeBaseStamp
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 
 from engram.retrieval.domain import ColumnInfo, ObjectInfo, SchemaDescription, SqlResult
 from engram.retrieval.envelope import EnvelopeHandler
@@ -32,7 +32,7 @@ from engram.testing.fakes.gateway import FakeSqlGateway
 if TYPE_CHECKING:
     from core.ai.disclosure.contracts import DisclosureMode
     from core.ai.retrieval.contracts import StampSource
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from mcp.types import CallToolResult
 
 
@@ -67,7 +67,7 @@ def _server(
     stamp: StampSource | None = None,
     flat_result: SqlResult | None = None,
     only: frozenset[str] | None = None,
-) -> FastMCP:
+) -> MCPServer:
     """A server with the full single-source bundle wired, plus an envelope handler when scripted.
 
     `flat_result` scripts the shared gateway's default (unrouted) read, the one the flat legacy
@@ -100,9 +100,8 @@ def _text(result: CallToolResult) -> str:
     return block.text
 
 
-async def _tool(server: FastMCP, name: str) -> str:
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+async def _tool(server: MCPServer, name: str) -> str:
+    async with Client(server) as client:
         listing = await client.list_tools()
     by_name = {tool.name: tool.description or "" for tool in listing.tools}
     return by_name[name]
@@ -149,8 +148,7 @@ class TestDescriptionUnderAGraphOnlyProfile:
     async def test_no_search_tool_registered_at_all(self):
         server = _server(SqlResult(rows=(), columns=()), collection="workdocs", only=frozenset({"fetch", "graph_expand", "find_paths"}))
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "search" not in {tool.name for tool in listing.tools}
@@ -177,11 +175,10 @@ class TestLeveledCall:
         rows = ({"id": "mu.x", "page_type": "memory-unit", "title": "X", "summary": "Indexed summary of X."},)
         server = _server(SqlResult(rows=rows, columns=("id", "page_type", "title", "summary")), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {})
 
-        assert result.isError is False
+        assert result.is_error is False
         envelope = json.loads(_text(result))
         assert envelope["ref"] == "collection:workdocs"
         assert envelope["children"] == [{"ref": "page:workdocs/mu.x", "kind": "memory-unit", "title": "X", "summary": "Indexed summary of X."}]
@@ -193,8 +190,7 @@ class TestLeveledCall:
         )
         server = _server(SqlResult(rows=rows, columns=()), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "mu.x"})
 
         envelope = json.loads(_text(result))
@@ -205,8 +201,7 @@ class TestLeveledCall:
         row = {"id": "mu.x#s1", "title": "S1", "summary": "Sec1.", "body": "Full text."}
         server = _server(SqlResult(rows=(row,), columns=tuple(row)), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "section:mu.x#s1"})
 
         envelope = json.loads(_text(result))
@@ -216,12 +211,11 @@ class TestLeveledCall:
     async def test_an_unknown_id_fails_the_call_and_leaves_the_session_usable(self):
         server = _server(SqlResult(rows=(), columns=()), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "mu.does-not-exist"})
             listing = await client.list_tools()
 
-        assert failed.isError is True
+        assert failed.is_error is True
         assert "mu.does-not-exist" in _text(failed)
         assert FETCH in {tool.name for tool in listing.tools}
 
@@ -239,11 +233,10 @@ class TestCrossCollectionFetch:
     async def test_a_foreign_collection_ref_refuses_with_the_teaching_message(self):
         server = _server(SqlResult(rows=(), columns=()), collection="field-notes")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "collection:repo-docs"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "field-notes" in message
         assert "repo-docs" in message
@@ -254,8 +247,7 @@ class TestCrossCollectionFetch:
     async def test_the_session_survives_a_refused_cross_collection_fetch(self):
         server = _server(SqlResult(rows=(), columns=()), collection="field-notes")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(FETCH, {"unit_id": "collection:repo-docs"})
             listing = await client.list_tools()
 
@@ -269,11 +261,10 @@ class TestCrossCollectionFetch:
             flat_result=SqlResult(rows=(flat_row,), columns=tuple(flat_row)),
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "unit:repo-docs/paper.x#c1"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "repo-docs" in message
         assert "research" in message
@@ -293,11 +284,10 @@ class TestFetchRefusalsUnderAGraphOnlyProfile:
     async def test_a_foreign_collection_ref_refuses_without_naming_search(self):
         server = _server(SqlResult(rows=(), columns=()), collection="field-notes", only=self._GRAPH_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "collection:repo-docs"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "field-notes" in message
         assert "repo-docs" in message
@@ -309,11 +299,10 @@ class TestFetchRefusalsUnderAGraphOnlyProfile:
         """A `unit:` ref bypasses the leveled surface outright, straight to the legacy flat read."""
         server = _server(SqlResult(rows=(), columns=()), collection="workdocs", only=self._GRAPH_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "unit:workdocs/no-such-claim"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "no-such-claim" in message
         assert "supplied with the task" in message
@@ -327,8 +316,7 @@ class TestNextSteps:
         rows = ({"id": "mu.x", "page_type": "memory-unit", "title": "X", "summary": "Indexed summary of X."},)
         server = _server(SqlResult(rows=rows, columns=("id", "page_type", "title", "summary")), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {})
 
         envelope = json.loads(_text(result))
@@ -344,8 +332,7 @@ class TestNextSteps:
         )
         server = _server(SqlResult(rows=rows, columns=()), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "mu.x"})
 
         envelope = json.loads(_text(result))
@@ -358,8 +345,7 @@ class TestNextSteps:
         row = {"id": "mu.x#s1", "title": "S1", "summary": "Sec1.", "body": "Full text."}
         server = _server(SqlResult(rows=(row,), columns=tuple(row)), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "section:mu.x#s1"})
 
         envelope = json.loads(_text(result))
@@ -372,8 +358,7 @@ class TestNextSteps:
         rows = ({"row_type": "page", "id": "mu.x", "page_type": "memory-unit", "title": "X", "summary": "Sum."},)
         server = _server(SqlResult(rows=rows, columns=()), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "mu.x"})
 
         envelope = json.loads(_text(result))
@@ -384,8 +369,7 @@ class TestNextSteps:
     async def test_an_unknown_id_message_still_names_the_fix(self):
         server = _server(SqlResult(rows=(), columns=()), collection="workdocs")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "mu.does-not-exist"})
 
         message = _text(failed)
@@ -406,11 +390,10 @@ class TestUnknownGroupFetch:
     async def test_an_unknown_group_ref_refuses_with_its_own_message(self):
         server = _server(SqlResult(rows=(), columns=()), collection="field-notes")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "group:field-notes/no-such-page_type"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "no-such-page_type" in message
         assert "field-notes" in message
@@ -430,8 +413,7 @@ class TestStamp:
         rows = ({"id": "mu.x", "page_type": "memory-unit", "title": "X", "summary": "Indexed summary of X."},)
         server = _server(SqlResult(rows=rows, columns=("id", "page_type", "title", "summary")), collection="workdocs", stamp=source)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {})
 
         envelope = json.loads(_text(result))
@@ -452,8 +434,7 @@ class TestStamp:
             flat_result=SqlResult(rows=(flat_row,), columns=tuple(flat_row)),
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "paper.lightrag-2025#c1"})
 
         unit = json.loads(_text(result))
@@ -473,8 +454,7 @@ class TestStamp:
             flat_result=SqlResult(rows=(flat_row,), columns=tuple(flat_row)),
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FETCH, {"unit_id": "unit:research/paper.x#c1"})
 
         unit = json.loads(_text(result))
@@ -492,9 +472,8 @@ class TestStamp:
 
         server = _server(SqlResult(rows=(), columns=()), collection="workdocs", stamp=source)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool(FETCH, {"unit_id": "mu.does-not-exist"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         assert calls == 0

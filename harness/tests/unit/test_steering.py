@@ -53,9 +53,9 @@ async def test_a_waiting_steer_is_delivered_into_the_turns_next_model_request() 
     result = await agent.run("start", deps=session)
 
     assert result.output == "done"
-    assert not any("also check the tests" in text for text in requests[0]), "the first request was already being built"
-    assert any("also check the tests" in text for text in requests[1])
-    assert any(STEER_PREAMBLE in text for text in requests[1]), "the model is told it arrived mid-turn"
+    assert any("also check the tests" in text for text in requests[0]), "a steer waiting before a request goes into that request"
+    assert any(STEER_PREAMBLE in text for text in requests[0]), "the model is told it arrived mid-turn"
+    assert sum("also check the tests" in text for text in requests[1]) == 1, "the second request carries it once, as history"
     assert session.steer_inbox == []
 
 

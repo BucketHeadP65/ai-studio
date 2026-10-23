@@ -1,7 +1,7 @@
 """Unit tests for the generic retrieval toolset builder (`core.ai.retrieval.toolset`).
 
 The builder defines the four retrieval tools once and registers them into a pydantic-ai
-`FunctionToolset` or a FastMCP server. These specs pin the generic contract with hand-written fake
+`FunctionToolset` or an MCP server. These specs pin the generic contract with hand-written fake
 handlers: the builder registers the expected tool names, applies the caller's description strings,
 threads the tool args into the constructed search message, and honours `search_type` so a caller's
 `Search` subclass (a facet extension) is the message the search handler receives, which is what makes
@@ -15,8 +15,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import ModelRetry
 
 from core.ai.retrieval.contracts import (
@@ -281,27 +281,37 @@ class TestFindPathsTool:
 
 class TestRegisterMcpTools:
     async def test_registers_the_four_tools_on_the_server(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), descriptions=_DESCRIPTIONS)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert {SEARCH, FETCH, GRAPH_EXPAND, FIND_PATHS} <= {tool.name for tool in listing.tools}
 
     async def test_find_paths_returns_the_paths_result_directly_not_an_untyped_dict(self):
         path = GraphPath(nodes=(), edges=(), score=0.5)
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(find_paths=FakePaths(result=_paths_result(path))), descriptions=_DESCRIPTIONS)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(FIND_PATHS, {"from_id": "a", "to_id": "b"})
 
-        assert result.structuredContent is not None
-        assert result.structuredContent["paths"] == [path.model_dump(mode="json")]
-        assert result.structuredContent["window"] == ResultWindow(returned_items=1).model_dump(mode="json")
+        assert result.structured_content is not None
+        assert result.structured_content["paths"] == [path.model_dump(mode="json")]
+        assert result.structured_content["window"] == ResultWindow(returned_items=1).model_dump(mode="json")
+
+    async def test_a_fetch_of_an_unknown_id_answers_its_refusal_to_the_client(self):
+        server = MCPServer(name="t")
+        register_mcp_tools(server, _handlers(fetch=FakeFetch(result=SqlResult())), descriptions=_DESCRIPTIONS)
+
+        async with Client(server) as client:
+            result = await client.call_tool(FETCH, {"unit_id": "page.missing"})
+
+        block = result.content[0]
+        assert result.is_error
+        assert block.type == "text"
+        assert "No unit found with id 'page.missing'" in block.text
 
 
 class TestTheRetryBudget:
@@ -313,11 +323,10 @@ class TestTheRetryBudget:
         assert {name: tool.max_retries for name, tool in toolset.tools.items()} == dict.fromkeys(TOOL_NAMES, TOOL_MAX_RETRIES)
 
     async def test_the_mcp_server_registers_the_same_four_names(self):
-        server = FastMCP(name="t")
+        server = MCPServer(name="t")
         register_mcp_tools(server, _handlers(), descriptions=_DESCRIPTIONS)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert {tool.name for tool in listing.tools} == set(TOOL_NAMES)

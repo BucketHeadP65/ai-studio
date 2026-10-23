@@ -155,6 +155,16 @@ through unchanged, `xhigh` included. OpenRouter's own reasoning field tops out a
 and built through OpenRouter runs at OpenRouter's `high`, the closest level that route offers. The stored value never
 changes to reflect this. Only the request each route sends does.
 
+## Anthropic models
+
+The model factory builds every tier on the OpenAI wire (an Azure OpenAI deployment, the gateway's OpenAI provider, or
+OpenRouter), so no tier's request goes through the anthropic SDK, an Anthropic model on OpenRouter included. Only a
+model built as pydantic-ai's `AnthropicModel` would. That SDK is at 2.x, which sends API version `2026-10-21` (the 1.x
+SDK sent `2023-06-01`), and that version refuses a request that carries `temperature`, `top_p` or `top_k`. pydantic-ai
+sends those only when a model's settings name them, and nothing here sets them. The provider-native compaction strategy
+(`AnthropicCompaction`, see [sessions](sessions.md)) only adds an Anthropic request setting, which only an
+`AnthropicModel` reads.
+
 ## The hosts OpenRouter may use
 
 OpenRouter sends a request to any host that serves the model, except the hosts `_OPENROUTER_IGNORED_HOSTS` in

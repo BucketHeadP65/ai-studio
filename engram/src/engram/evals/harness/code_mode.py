@@ -24,8 +24,8 @@ class ModelCallsCodeMode(CodeMode[AgentDepsT]):
 
     The run's count, which `UsageLimits.tool_calls_limit` is checked against, then holds only the calls the model asks
     for itself, each `run_code` call among them, counted the way pydantic-ai counts calls without code mode. A program's
-    own calls are still bounded by `max_tool_calls` per `run_code` call. Calls a program starts while the model is still
-    writing it, under `eager` or `speculate`, still count.
+    own calls are never checked against `tool_calls_limit` either. They are still bounded by `max_tool_calls` per
+    `run_code` call. Calls a program starts while the model is still writing it, under `eager` or `speculate`, still count.
     """
 
     def get_wrapper_toolset(self, toolset: AbstractToolset[AgentDepsT]) -> AbstractToolset[AgentDepsT] | None:
@@ -43,12 +43,13 @@ class ModelCallsCodeMode(CodeMode[AgentDepsT]):
 
 @dataclass
 class _ProgramUsageApart(WrapperToolset[AgentDepsT]):
-    """Runs each `run_code` call with a usage of its own, which its program's tool calls are recorded on."""
+    """Runs each `run_code` call with a usage of its own and no tool-call limit, so its program's calls count apart."""
 
     async def call_tool(
         self, name: str, tool_args: dict[str, object], ctx: RunContext[AgentDepsT], tool: ToolsetTool[AgentDepsT]
     ) -> object:
-        """Pass the call on, giving a `run_code` call a fresh usage in place of the run's."""
+        """Pass the call on, giving a `run_code` call a fresh usage and the run's limits without `tool_calls_limit`."""
         if name == _RUN_CODE:
-            ctx = replace(ctx, usage=RunUsage())
+            limits = ctx.usage_limits
+            ctx = replace(ctx, usage=RunUsage(), usage_limits=None if limits is None else replace(limits, tool_calls_limit=None))
         return await self.wrapped.call_tool(name, tool_args, ctx, tool)

@@ -18,6 +18,7 @@ The deliverable these tests pin down:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
@@ -35,7 +36,10 @@ from engram.evals.rca.contracts import (
 from engram.evals.rca.domain.rca_report import RcaReport
 
 if TYPE_CHECKING:
-    from logfire.experimental.query_client import RowQueryResults
+    from logfire.query_client import RowQueryResults
+
+
+_NOW = datetime(2026, 10, 20, tzinfo=UTC)
 
 
 class _FakeQueryClient:
@@ -48,9 +52,11 @@ class _FakeQueryClient:
     def __init__(self, results: dict[str, list[dict[str, object]]]) -> None:
         self.results = results
         self.calls: list[str] = []
+        self.windows: list[datetime] = []
 
-    def query_json_rows(self, sql: str) -> RowQueryResults:
+    def query_json_rows(self, sql: str, *, min_timestamp: datetime) -> RowQueryResults:
         self.calls.append(sql)
+        self.windows.append(min_timestamp)
         rows = self.results.get(sql, [])
         return {"columns": [], "rows": rows}
 
@@ -147,7 +153,7 @@ def test_build_rca_report_surfaces_rows_per_query() -> None:
         {"SELECT 1": [{"span_name": "search_tool", "p95_ms": 812.0}], "SELECT 2": [{"case_name": "paper-a-0", "recall_at_5": 0.0}]}
     )
 
-    report = build_rca_report(client, queries, query_names=["slowest_tool_spans", "lowest_recall_cases"])
+    report = build_rca_report(client, queries, now=_NOW, query_names=["slowest_tool_spans", "lowest_recall_cases"])
 
     assert isinstance(report, RcaReport)
     assert [section.name for section in report.sections] == ["slowest_tool_spans", "lowest_recall_cases"]
@@ -158,12 +164,14 @@ def test_build_rca_report_surfaces_rows_per_query() -> None:
     assert by_name["lowest_recall_cases"].rows == [{"case_name": "paper-a-0", "recall_at_5": 0.0}]
     # The scaffold ran exactly the SQL behind the requested names, in order.
     assert client.calls == ["SELECT 1", "SELECT 2"]
+    # Each query reads the seven days before now.
+    assert client.windows == [datetime(2026, 10, 13, tzinfo=UTC)] * 2
 
 
 def test_build_rca_report_tolerates_a_missing_query_name() -> None:
     client = _FakeQueryClient({"SELECT 1": [{"x": 1}]})
 
-    report = build_rca_report(client, {"present": "SELECT 1"}, query_names=["present", "absent"])
+    report = build_rca_report(client, {"present": "SELECT 1"}, now=_NOW, query_names=["present", "absent"])
 
     by_name = {section.name: section for section in report.sections}
     assert by_name["present"].rows == [{"x": 1}]
@@ -178,14 +186,14 @@ def test_build_rca_report_tolerates_a_missing_query_name() -> None:
 def test_build_rca_report_defaults_to_all_loaded_queries() -> None:
     client = _FakeQueryClient({"SELECT 1": [{"a": 1}], "SELECT 2": [{"b": 2}]})
 
-    report = build_rca_report(client, {"one": "SELECT 1", "two": "SELECT 2"})
+    report = build_rca_report(client, {"one": "SELECT 1", "two": "SELECT 2"}, now=_NOW)
 
     assert {section.name for section in report.sections} == {"one", "two"}
 
 
 def test_render_rca_report_markdown_includes_query_names_and_row_counts() -> None:
     client = _FakeQueryClient({"SELECT 1": [{"span_name": "fetch_tool", "p95_ms": 410.0}]})
-    report = build_rca_report(client, {"slowest_tool_spans": "SELECT 1"})
+    report = build_rca_report(client, {"slowest_tool_spans": "SELECT 1"}, now=_NOW)
 
     markdown = render_rca_report_markdown(report)
 
@@ -196,7 +204,7 @@ def test_render_rca_report_markdown_includes_query_names_and_row_counts() -> Non
 
 def test_render_rca_report_markdown_notes_an_empty_or_errored_section() -> None:
     client = _FakeQueryClient({})
-    report = build_rca_report(client, {"present": "SELECT nothing"}, query_names=["present", "missing"])
+    report = build_rca_report(client, {"present": "SELECT nothing"}, now=_NOW, query_names=["present", "missing"])
 
     markdown = render_rca_report_markdown(report)
 

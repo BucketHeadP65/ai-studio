@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from logfire.experimental.query_client import RowQueryResults
+    from datetime import datetime
+
+    from logfire.query_client import RowQueryResults
 
     from engram.evals.rca.domain.diagnosis import Diagnosis
     from engram.evals.rca.domain.reflection import DraftReflection
@@ -17,11 +19,12 @@ class SupportsLogfireQuery(Protocol):
     Its return is logfire's `RowQueryResults`, a `{"columns", "rows"}` `TypedDict`.
     """
 
-    def query_json_rows(self, sql: str) -> RowQueryResults:
+    def query_json_rows(self, sql: str, *, min_timestamp: datetime) -> RowQueryResults:
         """Run `sql` against the Logfire Query API and return the `{"columns", "rows"}` envelope.
 
         Args:
             sql: The SQL statement to run.
+            min_timestamp: The earliest span time the query reads.
 
         Returns:
             The column names and the rows the query returned.

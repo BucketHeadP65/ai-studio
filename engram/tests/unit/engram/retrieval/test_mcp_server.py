@@ -1,12 +1,12 @@
 r"""Unit specs for the serve-slice MCP server factory (`src/engram/retrieval/infrastructure/mcp_server.py`).
 
-These pin the FastMCP wiring **without** a transport or a database: the factory is
+These pin the MCPServer wiring **without** a transport or a database: the factory is
 DI-friendly (its tools close over the injected gateway + describe handler — no
 container/env reads inside), so a unit test can build a server from a
 :class:`FakeSqlGateway` + a real :class:`DescribeSchemaHandler` over a fake, then
-drive the tools through the SDK's in-memory client↔server session
-(:func:`mcp.shared.memory.create_connected_server_and_client_session`, which accepts a
-:class:`~mcp.server.fastmcp.FastMCP` directly). They fix the binding contract:
+drive the tools through the SDK's in-memory client
+(:class:`mcp.client.Client`, which accepts a
+:class:`~mcp.server.mcpserver.MCPServer` directly). They fix the binding contract:
 
 * the server registers **exactly two** tools — `describe_schema` and `run_sql` —
   with non-empty descriptions that orient the agent (the query surfaces and a cheapest-first
@@ -33,8 +33,8 @@ import pytest
 
 from core.ai.retrieval.contracts import KnowledgeBaseStamp
 from core.ai.retrieval.strategy import resolve_strategy
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from sqlalchemy.exc import DBAPIError
 
 from engram.authoring.contracts import AuthoringKnowledgeBase, AuthoringTools
@@ -142,7 +142,7 @@ def _no_reach(gateway: FakeSqlGateway) -> FakeSqlGateway:
     return gateway
 
 
-def _graph_server(gateway: FakeSqlGateway) -> FastMCP:
+def _graph_server(gateway: FakeSqlGateway) -> MCPServer:
     """A server wired with both graph tools' handlers plus `fetch`, but no `search`.
 
     The `graph-only` strategy's own shape (`resolve_strategy("graph-only").tools`): a traversal an
@@ -178,7 +178,7 @@ def _full_server(
     envelope_handler: EnvelopeHandler | None = None,
     stamp: StampSource | None = None,
     switches: RetrievalSwitches | None = None,
-) -> FastMCP:
+) -> MCPServer:
     """A server wired with the whole retrieval surface: search/fetch (single source) + graph.
 
     The single-source `search` / `fetch` tools (`engram.retrieval.tools`) are exposed only when their
@@ -216,8 +216,7 @@ class TestToolRegistration:
     async def test_registers_exactly_describe_schema_and_run_sql(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert {tool.name for tool in listing.tools} == {"describe_schema", "run_sql"}
@@ -225,8 +224,7 @@ class TestToolRegistration:
     async def test_tool_descriptions_orient_the_agent(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -253,8 +251,7 @@ class TestFeedback:
     async def test_submit_feedback_is_absent_without_a_sink(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "submit_feedback" not in {tool.name for tool in listing.tools}
@@ -264,8 +261,7 @@ class TestFeedback:
             FakeSqlGateway(), _describe_handler(_schema()), feedback_sink=_RecordingFeedbackSink(), collection=_COLLECTION
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "submit_feedback" in {tool.name for tool in listing.tools}
@@ -274,8 +270,7 @@ class TestFeedback:
         sink = _RecordingFeedbackSink()
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), feedback_sink=sink, collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(
                 "submit_feedback", {"message": "the search description is unclear", "category": "usage", "tool": "search"}
             )
@@ -287,11 +282,10 @@ class TestDescribeSchemaTool:
     async def test_no_arguments_returns_the_compact_catalog(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("describe_schema", {})
 
-        assert result.isError is False
+        assert result.is_error is False
         text = _text(result)
         assert "api.cards" in text
         assert "L1 card scan" in text
@@ -300,11 +294,10 @@ class TestDescribeSchemaTool:
     async def test_named_objects_return_the_full_column_detail(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("describe_schema", {"objects": ["api.cards"]})
 
-        assert result.isError is False
+        assert result.is_error is False
         text = _text(result)
         assert "api.cards" in text
         assert "Page id." in text
@@ -313,22 +306,21 @@ class TestDescribeSchemaTool:
         """Start with no arguments, then request named objects — `objects` must never be required."""
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = {tool.name: tool for tool in (await client.list_tools()).tools}
 
-        schema = listing["describe_schema"].inputSchema
+        schema = listing["describe_schema"].input_schema
         assert "objects" in (schema.get("properties") or {})  # the argument exists …
         assert "objects" not in (schema.get("required") or [])  # … and is never required
 
     async def test_too_many_named_objects_fails_the_call(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("describe_schema", {"objects": [f"api.obj{i}" for i in range(9)]})
 
-        assert result.isError
+        assert result.is_error
+        assert "names at a time, not 9." in _text(result)
 
 
 class TestRunSqlTool:
@@ -336,8 +328,7 @@ class TestRunSqlTool:
         gateway = FakeSqlGateway(result=_ABOUT_RESULT)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("run_sql", {"sql": "SELECT * FROM api.about", "row_limit": 999})
 
         assert gateway.last.cap == 50  # the hard cap
@@ -347,8 +338,7 @@ class TestRunSqlTool:
         gateway = FakeSqlGateway(result=_ABOUT_RESULT)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("run_sql", {"sql": "SELECT * FROM api.about"})
 
         assert gateway.last.cap == 50
@@ -357,8 +347,7 @@ class TestRunSqlTool:
         gateway = FakeSqlGateway(result=_ABOUT_RESULT)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("run_sql", {"sql": "SELECT * FROM api.cards", "row_limit": 5})
 
         assert gateway.last.cap == 5
@@ -371,22 +360,21 @@ class TestRunSqlTool:
         against a rendered table.
 
         An OBJECT rather than a bare list of rows, because MCP requires `structuredContent` to be an
-        object: a `-> list` return is wrapped by FastMCP as `{"result": [...]}`, which publishes a
+        object: a `-> list` return is wrapped by MCPServer as `{"result": [...]}`, which publishes a
         schema disagreeing with what clients deliver.
         """
         gateway = FakeSqlGateway(result=_ABOUT_RESULT)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "SELECT * FROM api.about"})
             listing = {tool.name: tool for tool in (await client.list_tools()).tools}
 
-        assert result.isError is False
-        assert result.structuredContent == {"rows": [{"body": "Welcome to the memory."}], "note": None}
-        declared = listing["run_sql"].outputSchema or {}
+        assert result.is_error is False
+        assert result.structured_content == {"rows": [{"body": "Welcome to the memory."}], "note": None}
+        declared = listing["run_sql"].output_schema or {}
         assert declared.get("type") == "object"
-        # A scalar or list return would appear here as FastMCP's `{"result": ...}` wrapper instead.
+        # A scalar or list return would appear here as MCPServer's `{"result": ...}` wrapper instead.
         assert "result" not in (declared.get("properties") or {})
 
     async def test_a_date_cell_comes_back_as_a_json_string(self):
@@ -399,20 +387,18 @@ class TestRunSqlTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=("id", "updated")))
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "SELECT id, updated FROM api.cards"})
 
-        assert result.isError is False
-        assert result.structuredContent == {"rows": [{"id": "p1", "updated": "2026-09-01"}], "note": None}
+        assert result.is_error is False
+        assert result.structured_content == {"rows": [{"id": "p1", "updated": "2026-09-01"}], "note": None}
 
     async def test_appends_the_truncation_message(self):
         truncated = SqlResult(rows=({"id": "p1"},), columns=("id",), truncated_message="50+ more rows — narrow your filters")
         gateway = FakeSqlGateway(result=truncated)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "SELECT id FROM api.cards"})
 
         assert "50+ more rows — narrow your filters" in _text(result)
@@ -428,11 +414,10 @@ class TestRunSqlTool:
         gateway = _RaisingGateway()
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "INSERT INTO kb.pages VALUES (1)"})
 
-        assert result.isError  # the call FAILED; it did not succeed with an apology
+        assert result.is_error  # the call FAILED, it did not succeed with an apology
         text = _text(result)
         assert "read-only" in text  # the role is read-only
         assert "api." in text  # points the agent back at the api.* surface
@@ -447,8 +432,7 @@ class TestRunSqlVectorQuery:
         embedder = FakeEmbedding()
         server = create_mcp_server(gateway, _describe_handler(_schema()), _embed_query(embedder), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(
                 "run_sql", {"sql": "SELECT * FROM api.search('graph rag', vector_query => 'a richer description of the intent', k => 8)"}
             )
@@ -465,8 +449,7 @@ class TestRunSqlVectorQuery:
         embedder = FakeEmbedding()
         server = create_mcp_server(gateway, _describe_handler(_schema()), _embed_query(embedder), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("run_sql", {"sql": "SELECT * FROM api.about"})
 
         assert embedder.texts == []  # no vector_query → the embedder is never touched
@@ -481,8 +464,7 @@ class TestRunSqlVectorQuery:
 
         server = create_mcp_server(gateway, _describe_handler(_schema()), _boom, collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "SELECT * FROM api.search('graph rag', vector_query => 'intent', k => 8)"})
 
         assert "vector_query" not in gateway.last.sql
@@ -495,8 +477,7 @@ class TestRunSqlVectorQuery:
         gateway = FakeSqlGateway(result=_ABOUT_RESULT)
         server = create_mcp_server(gateway, _describe_handler(_schema()), collection=_COLLECTION)  # no embed_query: a BM25-only deployment
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_sql", {"sql": "SELECT * FROM api.search('graph rag', vector_query => 'intent')"})
 
         assert "query_vec => NULL" in gateway.last.sql
@@ -509,8 +490,7 @@ class TestGraphToolRegistration:
     async def test_graph_tools_register_when_their_handlers_are_provided(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -519,8 +499,7 @@ class TestGraphToolRegistration:
     async def test_graph_tool_descriptions_are_non_empty(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -530,8 +509,7 @@ class TestGraphToolRegistration:
     async def test_graph_tools_absent_without_their_handlers(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -553,8 +531,7 @@ class TestGraphToolDescriptions:
     async def test_graph_expand_grounds_ids_from_the_task_not_search(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -572,8 +549,7 @@ class TestGraphToolDescriptions:
     async def test_graph_expand_documents_rel_types_and_k(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "graph_expand")
@@ -584,8 +560,7 @@ class TestGraphToolDescriptions:
     async def test_find_paths_grounds_ids_from_the_task_not_search(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -602,8 +577,7 @@ class TestGraphToolDescriptions:
     async def test_find_paths_documents_max_hops_rel_types_and_k(self):
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "find_paths")
@@ -616,8 +590,7 @@ class TestGraphToolDescriptions:
         """The `tools.py` text this server now serves already carries the empty-result guidance."""
         server = _graph_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "find_paths")
@@ -630,8 +603,7 @@ class TestGraphExpandTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(
                 "graph_expand", {"seed_ids": ["paper.graph", "ent.bm25"], "hops": 3, "rel_types": ["cites", "evaluates"], "k": 15}
             )
@@ -657,16 +629,15 @@ class TestGraphExpandTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             empty = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"], "rel_types": []})
             bound_empty = gateway.last.params["rel_types"]
             omitted = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
         assert bound_empty is None, "an empty list reaches the traversal as the unset argument"
         assert gateway.last.params["rel_types"] is None
-        empty_nodes = [node["id"] for node in (empty.structuredContent or {})["nodes"]]
-        omitted_nodes = [node["id"] for node in (omitted.structuredContent or {})["nodes"]]
+        empty_nodes = [node["id"] for node in (empty.structured_content or {})["nodes"]]
+        omitted_nodes = [node["id"] for node in (omitted.structured_content or {})["nodes"]]
         assert empty_nodes == omitted_nodes == ["paper.graph", "ent.graphrag"]
 
     async def test_returns_subgraph_json_with_nodes_edges_and_provenance(self):
@@ -677,11 +648,10 @@ class TestGraphExpandTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert {node["id"] for node in payload["nodes"]} == {"paper.graph", "ent.graphrag"}
         (edge,) = payload["edges"]
@@ -705,7 +675,7 @@ class TestGraphHandlesAreFetchable:
         "body": "GraphRAG beats BM25 on multi-hop.",
     }
 
-    def _server(self) -> FastMCP:
+    def _server(self) -> MCPServer:
         """The full single-source surface with every handler on THIS server's own collection."""
         gateway = FakeSqlGateway(
             routed={
@@ -731,8 +701,7 @@ class TestGraphHandlesAreFetchable:
         )
 
     async def test_an_edges_provenance_ref_fetches_the_claim_that_asserts_it(self):
-        async with connect_in_memory(self._server()) as client:
-            await client.initialize()
+        async with Client(self._server()) as client:
             expanded = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
             payload = json.loads(_text(expanded))
             assert {node["ref"] for node in payload["nodes"]} == {f"page:{_COLLECTION}/paper.graph", f"page:{_COLLECTION}/ent.graphrag"}
@@ -741,7 +710,7 @@ class TestGraphHandlesAreFetchable:
 
             fetched = await client.call_tool("fetch", {"unit_id": edge["provenance_ref"]})
 
-        assert not fetched.isError, fetched.content
+        assert not fetched.is_error, fetched.content
         claim = json.loads(_text(fetched))
         assert claim["id"] == "paper.graph#c1"
         assert claim["body"] == self._CLAIM["body"]
@@ -752,8 +721,7 @@ class TestFindPathsTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(
                 "find_paths", {"from_id": "paper.graph", "to_id": "ent.bm25", "max_hops": 5, "rel_types": ["cites"], "k": 7}
             )
@@ -778,11 +746,10 @@ class TestFindPathsTool:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("find_paths", {"from_id": "paper.graph", "to_id": "ent.bm25"})
 
-        assert result.isError is False
+        assert result.is_error is False
         paths = json.loads(_text(result))["paths"]
         assert len(paths) == 2  # two path_rank groups
         assert [node["id"] for node in paths[0]["nodes"]] == ["paper.graph", "ent.bm25"]
@@ -804,8 +771,7 @@ class TestSingleSourceRetrievalTools:
     async def test_search_and_fetch_register_when_their_handlers_are_provided(self):
         server = _full_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -814,8 +780,7 @@ class TestSingleSourceRetrievalTools:
     async def test_search_and_fetch_descriptions_are_non_empty(self):
         server = _full_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -825,8 +790,7 @@ class TestSingleSourceRetrievalTools:
     async def test_search_and_fetch_absent_without_their_handlers(self):
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -837,15 +801,14 @@ class TestSingleSourceRetrievalTools:
         gateway = FakeSqlGateway()
         server = _full_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: tool for tool in listing.tools}
         assert {"describe_schema", "run_sql", "graph_expand", "find_paths"} <= set(by_name)
         # The single source also defines graph tools, but first-wins keeps the server's richer ones:
         # their arg surface still carries rel_types / k (the single-source versions lack them).
-        expand_args = set(by_name["graph_expand"].inputSchema.get("properties", {}))
+        expand_args = set(by_name["graph_expand"].input_schema.get("properties", {}))
         assert {"rel_types", "k"} <= expand_args  # the rich graph_expand, not the single-source one
 
     async def test_search_routes_through_the_search_handler_and_returns_hits(self):
@@ -854,11 +817,10 @@ class TestSingleSourceRetrievalTools:
         embedder = FakeEmbedding()
         server = _full_server(gateway, embedder)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag", "k": 8})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert "api.search" in gateway.last.sql  # routed through SearchHandler
         assert gateway.last.params["k"] == 8
         assert gateway.last.cap == 8  # k rides the row cap
@@ -872,8 +834,7 @@ class TestSingleSourceRetrievalTools:
         embedder = FakeEmbedding()
         server = _full_server(gateway, embedder)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("search", {"query": "graph rag", "bm25_only": True})
 
         assert embedder.texts == []  # bm25_only → no embedding
@@ -883,11 +844,10 @@ class TestSingleSourceRetrievalTools:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _full_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool("search", {"query": "graph rag", "collection": "repo-docs"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         assert repr(_COLLECTION) in _text(failed)
         assert all("api.search" not in call.sql for call in gateway.rows_calls)
 
@@ -895,8 +855,7 @@ class TestSingleSourceRetrievalTools:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _full_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("search", {"query": "graph rag"})
 
         assert gateway.last.params["collection"] == _COLLECTION  # the collection this server was built over
@@ -906,11 +865,10 @@ class TestSingleSourceRetrievalTools:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _full_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("fetch", {"unit_id": "paper.lightrag-2025#s2"})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert "api.fetch" in gateway.last.sql  # routed through FetchHandler
         assert gateway.last.params["unit_id"] == "paper.lightrag-2025#s2"
         unit = json.loads(_text(result))
@@ -922,18 +880,17 @@ class TestSingleSourceRetrievalTools:
 
         Returning `{"error": ...}` as a successful call would hand back an object shaped like a
         result but meaning failure — which the in-process form of this same tool never does (it
-        raises `ModelRetry`). `ToolError` fails this one call while FastMCP keeps the session, which
+        raises `ModelRetry`). `ToolError` fails this one call while MCPServer keeps the session, which
         the second call below proves.
         """
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))  # no row → unknown id
         server = _full_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("fetch", {"unit_id": "paper.does-not-exist"})
             survived = await client.list_tools()  # the session is still usable after the failure
 
-        assert result.isError  # the call FAILED; it did not succeed with an error-shaped object
+        assert result.is_error  # the call FAILED, it did not succeed with an error-shaped object
         assert "paper.does-not-exist" in _text(result)  # names the id so the agent re-grounds it
         assert "search" in {tool.name for tool in survived.tools}
 
@@ -953,13 +910,12 @@ class TestStamp:
 
         server = _full_server(gateway, FakeEmbedding(), stamp=source)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag"})
 
-        assert result.isError is False
-        assert result.structuredContent is not None
-        assert result.structuredContent["knowledge_base"]["slug"] == "repo-docs"
+        assert result.is_error is False
+        assert result.structured_content is not None
+        assert result.structured_content["knowledge_base"]["slug"] == "repo-docs"
 
     async def test_a_sandboxed_search_answer_carries_the_stamp(self):
         rows = ({"id": "paper.lightrag-2025", "hit_level": "card", "page_id": "paper.lightrag-2025", "snippet": "LightRAG", "score": 0.91},)
@@ -972,11 +928,10 @@ class TestStamp:
         server = _full_server(gateway, only=self._CODE_MODE_ONLY, stamp=source)
 
         code = "result = await search(query='graph rag', k=3)\nresult['knowledge_base']\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["slug"] == "repo-docs"
 
@@ -992,23 +947,21 @@ class TestHostOwnedSearchCap:
     async def test_the_served_search_takes_no_k(self):
         server = _full_server(FakeSqlGateway(), k_source=lambda: 7)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         [search] = [tool for tool in listing.tools if tool.name == "search"]
-        assert "query" in search.inputSchema["properties"]
-        assert "k" not in search.inputSchema["properties"]
+        assert "query" in search.input_schema["properties"]
+        assert "k" not in search.input_schema["properties"]
 
     async def test_the_resolved_cap_reaches_the_search_handler(self):
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _full_server(gateway, k_source=lambda: 7)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag"})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert gateway.last.params["k"] == 7
         assert gateway.last.cap == 7
 
@@ -1017,8 +970,7 @@ class TestHostOwnedSearchCap:
         cap = {"k": 9}
         server = _full_server(gateway, k_source=lambda: cap["k"])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("search", {"query": "graph rag"})
             cap["k"] = 3
             await client.call_tool("search", {"query": "graph rag"})
@@ -1028,8 +980,7 @@ class TestHostOwnedSearchCap:
     async def test_the_served_description_never_mentions_k(self):
         server = _full_server(FakeSqlGateway(), k_source=lambda: 7)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         [search] = [tool for tool in listing.tools if tool.name == "search"]
@@ -1038,12 +989,11 @@ class TestHostOwnedSearchCap:
     async def test_without_a_cap_the_served_search_is_unchanged(self):
         server = _full_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         [search] = [tool for tool in listing.tools if tool.name == "search"]
-        assert search.inputSchema["properties"]["k"]["default"] == 12
+        assert search.input_schema["properties"]["k"]["default"] == 12
 
 
 class TestDescriptionsOverride:
@@ -1058,8 +1008,7 @@ class TestDescriptionsOverride:
     async def test_descriptions_override_search_and_graph_expand_by_name(self):
         server = _full_server(FakeSqlGateway(), descriptions={"search": "TUNED SEARCH", "graph_expand": "TUNED EXPAND"})
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -1069,8 +1018,7 @@ class TestDescriptionsOverride:
     async def test_descriptions_override_fetch_and_find_paths_by_name(self):
         server = _full_server(FakeSqlGateway(), descriptions={"fetch": "TUNED FETCH", "find_paths": "TUNED PATHS"})
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -1080,8 +1028,7 @@ class TestDescriptionsOverride:
     async def test_unnamed_tools_keep_their_shipped_descriptions(self):
         server = _full_server(FakeSqlGateway(), descriptions={"search": "ONLY SEARCH"})
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -1094,11 +1041,9 @@ class TestDescriptionsOverride:
         overridden = _full_server(FakeSqlGateway(), descriptions=None)
         defaults = _full_server(FakeSqlGateway())
 
-        async with connect_in_memory(overridden) as client:
-            await client.initialize()
+        async with Client(overridden) as client:
             overridden_by_name = {tool.name: tool.description for tool in (await client.list_tools()).tools}
-        async with connect_in_memory(defaults) as client:
-            await client.initialize()
+        async with Client(defaults) as client:
             defaults_by_name = {tool.name: tool.description for tool in (await client.list_tools()).tools}
 
         assert overridden_by_name == defaults_by_name
@@ -1130,7 +1075,7 @@ class TestProfileGating:
         fetch, graph_expand, find_paths = FetchHandler(gw, "research"), GraphExpandHandler(_no_reach(gw), "research"), GraphPathsHandler(gw, "research")
         return gw, SearchHandler(gw, FakeEmbedding()), fetch, graph_expand, find_paths
 
-    def _server_with_profile(self, only: frozenset[str] | None) -> FastMCP:
+    def _server_with_profile(self, only: frozenset[str] | None) -> MCPServer:
         _, sh, fh, geh, fph = self._all_handlers()
         return create_mcp_server(
             FakeSqlGateway(),
@@ -1143,9 +1088,8 @@ class TestProfileGating:
             collection=_COLLECTION,
         )
 
-    async def _tool_names(self, server: FastMCP) -> frozenset[str]:
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+    async def _tool_names(self, server: MCPServer) -> frozenset[str]:
+        async with Client(server) as client:
             listing = await client.list_tools()
         return frozenset(tool.name for tool in listing.tools)
 
@@ -1205,9 +1149,8 @@ class TestSwitchesGateTheServedGraphTools:
     _FULL = frozenset({"search", "fetch", "graph_expand", "find_paths"})
     _CODE_MODE = _FULL | {"run_code"}
 
-    async def _listing(self, server: FastMCP) -> dict[str, str]:
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+    async def _listing(self, server: MCPServer) -> dict[str, str]:
+        async with Client(server) as client:
             listing = await client.list_tools()
         return {tool.name: tool.description or "" for tool in listing.tools}
 
@@ -1285,7 +1228,7 @@ class TestGraphOnlyStrategyIsUsable:
     graph tools, never `search`, and every served description and next move must agree.
     """
 
-    def _server(self, gw: FakeSqlGateway) -> FastMCP:
+    def _server(self, gw: FakeSqlGateway) -> MCPServer:
         profile = resolve_strategy("graph-only")
         return create_mcp_server(
             FakeSqlGateway(),
@@ -1301,8 +1244,7 @@ class TestGraphOnlyStrategyIsUsable:
     async def test_the_server_registers_fetch_and_the_graph_tools_never_search(self):
         server = self._server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -1312,8 +1254,7 @@ class TestGraphOnlyStrategyIsUsable:
     async def test_every_served_description_grounds_ids_from_the_task_not_search(self):
         server = self._server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -1326,8 +1267,7 @@ class TestGraphOnlyStrategyIsUsable:
         gateway = FakeSqlGateway(result=SqlResult(rows=_graph_rows(1), columns=()))
         server = self._server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
         options = " ".join(json.loads(_text(result))["next_steps"]["options"])
@@ -1343,7 +1283,7 @@ class TestRoutedGraphOnlyStrategyIsTruthful:
     the single-source one: no mention of `search`, which this registration never serves.
     """
 
-    def _server(self, gw: FakeSqlGateway, *, profile_name: str) -> FastMCP:
+    def _server(self, gw: FakeSqlGateway, *, profile_name: str) -> MCPServer:
         """A server for `profile_name`, reachable through the SAME routed surface it registers."""
         profile = resolve_strategy(profile_name)
         surface = _routed_surface("research", gw, stamp=_fresh("research"))
@@ -1364,8 +1304,7 @@ class TestRoutedGraphOnlyStrategyIsTruthful:
     async def test_graph_only_registers_fetch_and_the_graph_tools_never_search(self):
         server = self._server(_research_gateway(), profile_name="graph-only")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -1375,8 +1314,7 @@ class TestRoutedGraphOnlyStrategyIsTruthful:
     async def test_graph_only_routed_fetch_description_never_names_search(self):
         server = self._server(_research_gateway(), profile_name="graph-only")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         fetch_description = next(tool.description or "" for tool in listing.tools if tool.name == "fetch")
@@ -1386,11 +1324,10 @@ class TestRoutedGraphOnlyStrategyIsTruthful:
     async def test_graph_only_routed_fetch_refuses_a_malformed_ref_without_naming_search(self):
         server = self._server(_research_gateway(), profile_name="graph-only")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool("fetch", {"unit_id": "page:"})
 
-        assert failed.isError
+        assert failed.is_error
         message = _text(failed)
         assert "search" not in message
         assert "supplied with the task" in message
@@ -1398,8 +1335,7 @@ class TestRoutedGraphOnlyStrategyIsTruthful:
     async def test_full_profile_routed_fetch_description_still_teaches_search(self):
         server = self._server(_research_gateway(), profile_name="full")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         fetch_description = next(tool.description or "" for tool in listing.tools if tool.name == "fetch")
@@ -1418,8 +1354,7 @@ class TestCodeModeRegistration:
     async def test_run_code_registers_when_named_in_only_and_handlers_present(self):
         server = _full_server(FakeSqlGateway(), only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "run_code" in {tool.name for tool in listing.tools}
@@ -1428,8 +1363,7 @@ class TestCodeModeRegistration:
         # The fully-open surface (only=None) is run_code-free — opt-in is preserved.
         server = _full_server(FakeSqlGateway())
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "run_code" not in {tool.name for tool in listing.tools}
@@ -1438,8 +1372,7 @@ class TestCodeModeRegistration:
         # Even when named in `only`, run_code needs the retrieval handlers to build its sandbox.
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), only=self._CODE_MODE_ONLY, collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         assert "run_code" not in {tool.name for tool in listing.tools}
@@ -1447,8 +1380,7 @@ class TestCodeModeRegistration:
     async def test_run_code_description_lists_the_callable_functions(self):
         server = _full_server(FakeSqlGateway(), only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "run_code")
@@ -1459,8 +1391,7 @@ class TestCodeModeRegistration:
     async def test_run_code_description_documents_the_structured_return_shape(self):
         server = _full_server(FakeSqlGateway(), only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "run_code")
@@ -1472,8 +1403,7 @@ class TestCodeModeRegistration:
         """The catalogue line must model the signature the sandbox actually binds — keyword-only, no `task`."""
         server = _full_server(FakeSqlGateway(), only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "run_code")
@@ -1487,8 +1417,7 @@ class TestCodeModeRegistration:
     async def test_run_code_description_drops_k_when_the_host_owns_the_cap(self):
         server = _full_server(FakeSqlGateway(), only=self._CODE_MODE_ONLY, k_source=lambda: 7)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         description = next(tool.description or "" for tool in listing.tools if tool.name == "run_code")
@@ -1511,11 +1440,10 @@ class TestCodeModeExecution:
         # models), so the model indexes a hit with ['id'] — the ergonomics the description teaches.
         # `search` returns {"hits": [...], "next_steps": {...}}, so the code reads `result['hits']`.
         code = "result = await search(query='graph rag', k=3)\n[h['id'] for h in result['hits']]\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert "api.search" in gateway.last.sql  # the sandboxed search routed through the real handler
         payload = json.loads(_text(result))
         assert payload == ["paper.lightrag-2025"]  # the last expression's value, serialized to JSON
@@ -1527,11 +1455,10 @@ class TestCodeModeExecution:
         # In the sandbox run_sql yields list[dict] (not the rendered text table), so code indexes a
         # row by column — uniform with search/fetch &co. Here the last expression returns the rows.
         code = "rows = await run_sql(sql='SELECT body FROM api.about')\nrows\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert gateway.last.sql == "SELECT * FROM (SELECT body FROM api.about) AS q LIMIT 51"  # run_sql is callable inside the sandbox
         assert gateway.last.cap == 50  # the same hard cap applies inside the sandbox
         rows = json.loads(_text(result))
@@ -1543,11 +1470,10 @@ class TestCodeModeExecution:
 
         # The point of structured rows: code can pull a cell out by name in the same round-trip.
         code = "rows = await run_sql(sql='SELECT body FROM api.about')\nrows[0]['body']\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert json.loads(_text(result)) == "Welcome to the memory."
 
     async def test_sandbox_run_sql_embeds_a_vector_query(self):
@@ -1557,8 +1483,7 @@ class TestCodeModeExecution:
         server = _full_server(gateway, embedder, only=self._CODE_MODE_ONLY)
 
         code = "await run_sql(sql=\"SELECT * FROM api.search('graph rag', vector_query => 'richer intent', k => 8)\")\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("run_code", {"code": code})
 
         assert embedder.texts == ["richer intent"]  # embedded server-side, inside the sandbox call
@@ -1572,8 +1497,7 @@ class TestCodeModeExecution:
         server = _full_server(_RaisingGateway(), only=self._CODE_MODE_ONLY)
 
         code = "await run_sql(sql='INSERT INTO kb.pages VALUES (1)')\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
         assert "read-only" in _text(result)  # carries the actionable read-only hint through the sandbox
@@ -1586,11 +1510,10 @@ class TestCodeModeExecution:
 
         # The whole point: N retrieval calls collapse into one MCP round-trip via asyncio.gather.
         code = "import asyncio\nresults = await asyncio.gather(search(query='a'), search(query='b'), search(query='c'))\nlen(results)\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert json.loads(_text(result)) == 3
 
     async def test_sandbox_run_sql_delivers_driver_values_as_json_scalars(self):
@@ -1599,11 +1522,10 @@ class TestCodeModeExecution:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=("id", "updated", "weight", "run")))
         server = _full_server(gateway, only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": "await run_sql(sql='SELECT * FROM api.cards')\n"})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert json.loads(_text(result)) == [
             {"id": "p1", "updated": "2026-09-01", "weight": "1.50", "run": "00000000-0000-4000-8000-000000000001"}
         ]
@@ -1618,14 +1540,13 @@ class TestCodeModeExecution:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=("id", "value", *wide_row)))
         server = _full_server(gateway, only=self._CODE_MODE_ONLY)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             top_level = await client.call_tool("run_sql", {"sql": "SELECT * FROM api.cards"})
             sandboxed = await client.call_tool("run_code", {"code": "await run_sql(sql='SELECT * FROM api.cards')\n"})
 
-        assert top_level.isError is False
-        assert sandboxed.isError is False
-        top_rows = (top_level.structuredContent or {})["rows"]
+        assert top_level.is_error is False
+        assert sandboxed.is_error is False
+        top_rows = (top_level.structured_content or {})["rows"]
         sandbox_rows = json.loads(_text(sandboxed))
         assert sandbox_rows == top_rows  # identical bounded rows, even though the sandbox carries no note
 
@@ -1656,11 +1577,10 @@ class TestCodeModeLeveledFetch:
         server = _full_server(gateway, only=self._CODE_MODE_ONLY, envelope_handler=envelope_handler)
 
         code = "env = await fetch()\nenv\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["ref"] == f"collection:{_COLLECTION}"
         assert "children" in payload  # the leveled envelope shape, not the flat {id, level, title, body}
@@ -1675,11 +1595,10 @@ class TestCodeModeLeveledFetch:
         server = _full_server(gateway, only=self._CODE_MODE_ONLY, envelope_handler=envelope_handler)
 
         code = "env = await fetch(unit_id='mu.x')\nenv\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["ref"] == "page:workdocs/mu.x"
         assert set(payload) == {"ref", "kind", "title", "summary", "content", "children", "mode", "next_steps", "knowledge_base"}
@@ -1690,11 +1609,10 @@ class TestCodeModeLeveledFetch:
         server = _full_server(gateway, only=self._CODE_MODE_ONLY)  # no envelope_handler
 
         code = "unit = await fetch(unit_id='mu.x')\nunit\n"
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert set(payload) == {"id", "level", "title", "body", "knowledge_base", "ref"}  # the flat shape, with the knowledge base stamp slot every fetch answer carries
 
@@ -1752,7 +1670,7 @@ class TestCodeModeStandaloneDriveContract:
         assert result.return_value == {"echo": "hi"}, "ToolReturn.return_value must carry the last expression's value"
 
 
-def _doc_authoring_server(tmp_path: Path) -> tuple[FastMCP, FakeReindex]:
+def _doc_authoring_server(tmp_path: Path) -> tuple[MCPServer, FakeReindex]:
     """A server with the documentation-authoring bundle mounted over one real `AuthoringTools` knowledge_base."""
     folder = tmp_path / "Wiki" / "Flags"
     folder.mkdir(parents=True)
@@ -1783,20 +1701,18 @@ class TestDocAuthoringMount:
         door = _RecordingWriteNoteDoor()
         server = create_mcp_server(FakeSqlGateway(), _describe_handler(_schema()), doc_authoring_tools=door, collection=_COLLECTION)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(
                 "write_note", {"knowledge_base": "research", "payload": {"id": "x"}, "path": "docs/initiatives/2026-09-01-x/design.md"}
             )
 
-        assert result.isError is False
+        assert result.is_error is False
         assert door.write_note_calls == [("research", {"id": "x"}, "docs/initiatives/2026-09-01-x/design.md")]
 
     async def test_the_six_tools_are_mounted(self, tmp_path: Path):
         server, _ = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         expected = {"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"}
@@ -1805,24 +1721,22 @@ class TestDocAuthoringMount:
     async def test_read_page_forwards_the_call_and_answers_the_refusal(self, tmp_path: Path):
         server, reindex = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("read_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders"})
 
-        assert result.isError
+        assert result.is_error
         assert "no indexed page 'flag.try-planning-reminders' in knowledge base 'research'" in _text(result)
         assert reindex.knowledge_bases == []
 
     async def test_decide_page_forwards_the_call_and_reindexes(self, tmp_path: Path):
         server, reindex = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(
                 "decide_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "status": "dismissed"}
             )
 
-        assert result.isError is False
+        assert result.is_error is False
         assert "flag.try-planning-reminders (flag) is now dismissed in research" in _text(result)
         assert "status: dismissed" in (tmp_path / "Wiki" / "Flags" / "try-planning-reminders.md").read_text(encoding="utf-8")
         assert [knowledge_base.name for knowledge_base in reindex.knowledge_bases] == ["research"]
@@ -1830,19 +1744,18 @@ class TestDocAuthoringMount:
     async def test_decide_page_with_no_status_writes_the_links_and_keeps_the_status(self, tmp_path: Path):
         server, _ = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             result = await client.call_tool(
                 "decide_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "links": {"resolved_by": ["q.planning"]}}
             )
 
         decide = next(tool for tool in listing.tools if tool.name == "decide_page")
-        assert "status" not in decide.inputSchema.get("required", [])
+        assert "status" not in decide.input_schema.get("required", [])
         assert "empty status keeps the page's current status" in (decide.description or "")
-        assert "add" in decide.inputSchema["properties"]
-        assert "add" not in decide.inputSchema.get("required", [])
-        assert result.isError is False
+        assert "add" in decide.input_schema["properties"]
+        assert "add" not in decide.input_schema.get("required", [])
+        assert result.is_error is False
         assert "flag.try-planning-reminders (flag) stays pending in research" in _text(result)
         text = (tmp_path / "Wiki" / "Flags" / "try-planning-reminders.md").read_text(encoding="utf-8")
         assert "status: pending" in text
@@ -1852,39 +1765,36 @@ class TestDocAuthoringMount:
         server, _ = _doc_authoring_server(tmp_path)
         page = tmp_path / "Wiki" / "Flags" / "try-planning-reminders.md"
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("decide_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "links": {"resolved_by": ["q.old"]}})
             result = await client.call_tool(
                 "decide_page",
                 {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "links": {"resolved_by": ["q.new"]}, "add": True},
             )
 
-        assert result.isError is False
+        assert result.is_error is False
         assert 'resolved_by: ["[[q.old]]", "[[q.new]]"]' in page.read_text(encoding="utf-8")
 
     async def test_decide_page_of_an_unknown_knowledge_base_names_the_known_ones(self, tmp_path: Path):
         server, _ = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(
                 "decide_page", {"knowledge_base": "not-a-real-knowledge_base", "page_id": "flag.try-planning-reminders", "status": "accepted"}
             )
 
-        assert result.isError
+        assert result.is_error
         assert "research" in _text(result)  # the valid knowledge base names, so the agent can retry correctly
 
     async def test_resolve_entities_forwards_the_names_and_answers_the_refusal(self, tmp_path: Path):
         server, reindex = _doc_authoring_server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(
                 "resolve_entities", {"knowledge_base": "research", "entities": [{"name": "Kestrel Labs", "entity_type": "tool", "aliases": ["Kestrel"]}]}
             )
 
-        assert result.isError
+        assert result.is_error
         assert "research keeps no entity pages" in _text(result)
         assert reindex.knowledge_bases == []
 
@@ -1987,27 +1897,27 @@ def _routed_surface(name: str, gateway: FakeSqlGateway, *, stamp: StampSource) -
 def _opened(result: CallToolResult) -> FetchEnvelope:
     """One leveled `fetch` answer, read off the wire and validated against the shape it promises.
 
-    `fetch` returns either shape, so FastMCP nests its `structuredContent` under `result`; the text
+    `fetch` returns either shape, so MCPServer nests its `structuredContent` under `result`. The text
     block carries the same payload unnested, and that is what the two `_opened`/`_fetched` readers
     parse.
     """
-    assert not result.isError, result.content
+    assert not result.is_error, result.content
     payload = json.loads(_text(result))
-    assert result.structuredContent == {"result": payload}
+    assert result.structured_content == {"result": payload}
     return FetchEnvelope.model_validate(payload)
 
 
 def _fetched(result: CallToolResult) -> FetchUnit:
     """One flat `fetch` answer, read off the wire the same way `_opened` reads a leveled one."""
-    assert not result.isError, result.content
+    assert not result.is_error, result.content
     return FetchUnit.model_validate(json.loads(_text(result)))
 
 
 def _ranked(result: CallToolResult) -> SearchResult:
-    """One `search` answer: a single model, so FastMCP publishes it as `structuredContent` unnested."""
-    assert not result.isError, result.content
+    """One `search` answer: a single model, so MCPServer publishes it as `structuredContent` unnested."""
+    assert not result.is_error, result.content
     payload = json.loads(_text(result))
-    assert result.structuredContent == payload
+    assert result.structured_content == payload
     return SearchResult.model_validate(payload)
 
 
@@ -2029,8 +1939,8 @@ class TestRoutedReadsKeepEveryHandle:
     server was never given.
     """
 
-    def _server(self, research: FakeSqlGateway, repo: FakeSqlGateway, remote: FakeSqlGateway) -> FastMCP:
-        server = FastMCP("routed-reads")
+    def _server(self, research: FakeSqlGateway, repo: FakeSqlGateway, remote: FakeSqlGateway) -> MCPServer:
+        server = MCPServer("routed-reads")
         register_routed_mcp_tools(
             server,
             (
@@ -2045,7 +1955,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_a_search_hits_ref_reads_the_page_then_its_section_verbatim(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             searched = _ranked(await client.call_tool("search", {"query": "graph evidence", "collection": "research"}))
             hit_ref = searched.hits[0].ref
             assert hit_ref == _RESEARCH_PAGE_REF
@@ -2071,7 +1981,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_a_flat_units_ref_comes_back_as_itself_with_its_own_stamp(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             searched = _ranked(await client.call_tool("search", {"query": "graph evidence", "collection": "research"}))
             claim_ref = searched.hits[1].ref
             assert claim_ref == _RESEARCH_CLAIM_REF
@@ -2086,7 +1996,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_the_map_descends_group_by_group_without_ever_losing_its_collection(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             stamp = KnowledgeBaseStamp(slug="research", changed_since=0)
             root = _opened(await client.call_tool("fetch", {"unit_id": "collection:research"}))
             assert root.ref == "collection:research"
@@ -2115,7 +2025,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_a_legacy_local_ref_comes_back_under_the_default_base(self):
         research, repo, remote = _research_gateway(), _research_gateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             page = _opened(await client.call_tool("fetch", {"unit_id": "page:paper.graph"}))
             assert page.ref == "page:repo-docs/paper.graph"
             assert page.children[0].ref == "section:repo-docs/paper.graph#findings"
@@ -2128,7 +2038,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_a_source_with_no_measurable_freshness_says_so_rather_than_guessing(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             searched = _ranked(await client.call_tool("search", {"query": "anything", "collection": "remote"}))
 
         assert searched.knowledge_base == KnowledgeBaseStamp(slug="remote", changed_since=None)
@@ -2136,14 +2046,14 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_an_unregistered_collection_is_refused_naming_the_registered_ones(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             refused = await client.call_tool("search", {"query": "graph", "collection": "unregistered"})
             rejected_read = await client.call_tool("fetch", {"unit_id": "page:unregistered/paper.graph"})
 
-        assert refused.isError
+        assert refused.is_error
         for registered in ("repo-docs", "research", "remote"):
             assert registered in _text(refused)
-        assert rejected_read.isError
+        assert rejected_read.is_error
         assert "unregistered" in _text(rejected_read)
         assert research.rows_calls == []
         assert repo.rows_calls == []
@@ -2152,7 +2062,7 @@ class TestRoutedReadsKeepEveryHandle:
     async def test_the_tool_listing_teaches_the_collection_argument_and_the_returned_ref(self):
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
 
-        async with connect_in_memory(self._server(research, repo, remote)) as client:
+        async with Client(self._server(research, repo, remote)) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: tool for tool in listing.tools}
@@ -2161,12 +2071,12 @@ class TestRoutedReadsKeepEveryHandle:
         assert "one of: repo-docs, research, remote" in search_description
         assert "`ref` to `fetch` exactly as returned" in search_description, "a bare id no longer says which base to open it in"
         assert "api.about" not in search_description, "a collection this server does not serve is not on offer"
-        assert "collection" in by_name["search"].inputSchema["properties"]
-        assert by_name["search"].inputSchema["properties"]["k"]["default"] == 12
+        assert "collection" in by_name["search"].input_schema["properties"]
+        assert by_name["search"].input_schema["properties"]["k"]["default"] == 12
         fetch_description_text = by_name["fetch"].description or ""
         assert "repo-docs, research, remote" in fetch_description_text
         assert "map" in fetch_description_text, "the leveled read still advertises the served base's map"
-        assert by_name["fetch"].inputSchema["properties"]["unit_id"]["default"] == "collection:repo-docs"
+        assert by_name["fetch"].input_schema["properties"]["unit_id"]["default"] == "collection:repo-docs"
 
     async def test_a_tuned_description_still_names_the_registered_set_and_the_ref(self):
         """An operator's own wording replaces the shipped text; it cannot replace what routing changed.
@@ -2176,7 +2086,7 @@ class TestRoutedReadsKeepEveryHandle:
         server's own base and quietly answers from the wrong one.
         """
         research, repo, remote = _research_gateway(), FakeSqlGateway(), FakeSqlGateway()
-        server = FastMCP("tuned-routed-reads")
+        server = MCPServer("tuned-routed-reads")
         register_routed_mcp_tools(
             server,
             (
@@ -2188,7 +2098,7 @@ class TestRoutedReadsKeepEveryHandle:
             descriptions={"search": "TUNED SEARCH", "fetch": "TUNED FETCH"},
         )
 
-        async with connect_in_memory(server) as client:
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -2205,7 +2115,7 @@ class TestRoutedReadsKeepEveryHandle:
         No shipped strategy drops `fetch` today, so this pins the gate rather than a live profile: a
         server whose profile excludes a tool must not serve it anyway.
         """
-        server = FastMCP("search-only-routed-reads")
+        server = MCPServer("search-only-routed-reads")
         register_routed_mcp_tools(
             server,
             (_routed_surface("research", _research_gateway(), stamp=_fresh("research")),),
@@ -2213,7 +2123,7 @@ class TestRoutedReadsKeepEveryHandle:
             only=frozenset({"search"}),
         )
 
-        async with connect_in_memory(server) as client:
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -2221,7 +2131,7 @@ class TestRoutedReadsKeepEveryHandle:
 
     async def test_two_surfaces_claiming_one_collection_are_refused_outright(self):
         """A ref names a collection, so a second claimant on it could only ever be shadowed."""
-        server = FastMCP("colliding-reads")
+        server = MCPServer("colliding-reads")
 
         with pytest.raises(ValueError, match="research"):
             register_routed_mcp_tools(
@@ -2245,7 +2155,7 @@ class TestRoutedReadsReachInsideTheSandbox:
 
     _CODE_MODE_ONLY = frozenset({"search", "fetch", "graph_expand", "find_paths", "run_code"})
 
-    def _server(self, repo: FakeSqlGateway, research: FakeSqlGateway) -> FastMCP:
+    def _server(self, repo: FakeSqlGateway, research: FakeSqlGateway) -> MCPServer:
         """A repo-docs server that also reads research, with the code-mode profile on."""
         return create_mcp_server(
             repo,
@@ -2275,11 +2185,10 @@ class TestRoutedReadsReachInsideTheSandbox:
             "{'ref': ref, 'searched': found['knowledge_base'], 'read': unit}\n"
         )
 
-        async with connect_in_memory(self._server(repo, research)) as client:
-            await client.initialize()
+        async with Client(self._server(repo, research)) as client:
             result = await client.call_tool("run_code", {"code": code})
 
-        assert not result.isError, _text(result)
+        assert not result.is_error, _text(result)
         assert _text(result).startswith("{"), _text(result)
         payload = json.loads(_text(result))
         assert payload["ref"] == _RESEARCH_PAGE_REF
@@ -2293,8 +2202,7 @@ class TestRoutedReadsReachInsideTheSandbox:
         repo, research = FakeSqlGateway(), _research_gateway()
         code = "await search(query='graph', collection='unregistered')\n"
 
-        async with connect_in_memory(self._server(repo, research)) as client:
-            await client.initialize()
+        async with Client(self._server(repo, research)) as client:
             result = await client.call_tool("run_code", {"code": code})
 
         assert "unregistered" in _text(result)
@@ -2386,7 +2294,7 @@ def _route_rows(count: int, *, title: str = "T") -> tuple[dict[str, object], ...
     return tuple(rows)
 
 
-def _stamped_graph_server(gateway: FakeSqlGateway, *, only: frozenset[str] | None = None) -> FastMCP:
+def _stamped_graph_server(gateway: FakeSqlGateway, *, only: frozenset[str] | None = None) -> MCPServer:
     """The graph surface with the freshness stamp of the knowledge base that serves it."""
     return create_mcp_server(
         FakeSqlGateway(),
@@ -2404,8 +2312,7 @@ class TestGraphAnswersCarryTheRouteThatServedThem:
         gateway = FakeSqlGateway(result=SqlResult(rows=_graph_rows(1), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
         payload = json.loads(_text(result))
@@ -2417,8 +2324,7 @@ class TestGraphAnswersCarryTheRouteThatServedThem:
         gateway = FakeSqlGateway(result=SqlResult(rows=_route_rows(1), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("find_paths", {"from_id": "paper.graph", "to_id": "ent.n001"})
 
         payload = json.loads(_text(result))
@@ -2431,22 +2337,20 @@ class TestGraphAnswersCarryTheRouteThatServedThem:
         gateway = FakeSqlGateway(result=SqlResult(rows=_route_rows(1), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             result = await client.call_tool("find_paths", {"from_id": "paper.graph", "to_id": "ent.n001"})
 
-        schema = next(tool.outputSchema for tool in listing.tools if tool.name == "find_paths")
+        schema = next(tool.output_schema for tool in listing.tools if tool.name == "find_paths")
         assert schema is not None
-        assert result.structuredContent is not None
-        assert set(result.structuredContent) == {"paths", "next_steps", "knowledge_base", "window", "reach"}
+        assert result.structured_content is not None
+        assert set(result.structured_content) == {"paths", "next_steps", "knowledge_base", "window", "reach"}
 
     async def test_the_currency_opt_in_reaches_the_traversal(self):
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"], "include_superseded": True})
             expansion = gateway.last.params
             await client.call_tool("find_paths", {"from_id": "a", "to_id": "b", "include_superseded": True})
@@ -2459,8 +2363,7 @@ class TestGraphNextStepsNameOnlyWhatTheProfileExposes:
     async def test_an_empty_expansion_on_the_full_profile_offers_search(self):
         server = _full_server(FakeSqlGateway(routed={"api.graph_expand": SqlResult(rows=(), columns=())}), FakeEmbedding(), stamp=_fresh("research"))
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.gone"]})
 
         options = " ".join(json.loads(_text(result))["next_steps"]["options"])
@@ -2471,8 +2374,7 @@ class TestGraphNextStepsNameOnlyWhatTheProfileExposes:
         gateway = FakeSqlGateway(result=SqlResult(rows=(), columns=()))
         server = _stamped_graph_server(gateway, only=frozenset({"graph_expand", "find_paths"}))
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.gone"]})
 
@@ -2485,8 +2387,7 @@ class TestGraphNextStepsNameOnlyWhatTheProfileExposes:
         gateway = FakeSqlGateway(result=SqlResult(rows=_graph_rows(1), columns=()))
         server = _stamped_graph_server(gateway, only=frozenset({"graph_expand", "find_paths"}))
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
         assert "fetch(" not in " ".join(json.loads(_text(result))["next_steps"]["options"])
@@ -2497,12 +2398,11 @@ class TestGraphAnswersStayInsideTheirBudget:
         gateway = FakeSqlGateway(result=SqlResult(rows=_graph_rows(40, title="T" * 400), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"], "k": 50})
 
         payload = json.loads(_text(result))
-        # The wire text is the indented rendering FastMCP writes; the budget is measured over the
+        # The wire text is the indented rendering MCPServer writes. The budget is measured over the
         # model itself, which is what the contract caps.
         assert len(GraphResult.model_validate(payload).model_dump_json()) <= GRAPH_RESULT_CHARS
         assert payload["window"]["truncated"] is True
@@ -2514,8 +2414,7 @@ class TestGraphAnswersStayInsideTheirBudget:
         gateway = FakeSqlGateway(result=SqlResult(rows=_route_rows(50, title="T" * 400), columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("find_paths", {"from_id": "paper.graph", "to_id": "ent.n050", "k": 50})
 
         payload = json.loads(_text(result))
@@ -2528,8 +2427,7 @@ class TestGraphAnswersStayInsideTheirBudget:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": ["paper.graph"]})
 
         (node,) = json.loads(_text(result))["nodes"]
@@ -2547,8 +2445,7 @@ class TestAGraphRefusalStaysARefusal:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("graph_expand", {"seed_ids": [giant]})
 
         payload = json.loads(_text(result))
@@ -2566,8 +2463,7 @@ class TestAGraphRefusalStaysARefusal:
         gateway = FakeSqlGateway(result=SqlResult(rows=rows, columns=()))
         server = _stamped_graph_server(gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("find_paths", {"from_id": giant, "to_id": "ent.b"})
 
         payload = json.loads(_text(result))

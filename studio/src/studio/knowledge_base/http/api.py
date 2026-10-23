@@ -144,7 +144,14 @@ def create_app(
                 await channel.stop()
             await dispose_engines(resolved_container)
 
-    app = FastAPI(title="AI Factory Studio knowledge base API", description="The registry of knowledge bases: their notes, refreshes, source queues and watch lists, and the change stream.", lifespan=lifespan)
+    # With FastAPI's own telemetry on, every request is traced, metered and logged into the process's providers, the
+    # change stream and the client's polls included.
+    app = FastAPI(
+        title="AI Factory Studio knowledge base API",
+        description="The registry of knowledge bases: their notes, refreshes, source queues and watch lists, and the change stream.",
+        lifespan=lifespan,
+        telemetry={"tracing": False, "metrics": False, "logs": False},
+    )
     app.state.resolver = resolver
     app.add_middleware(CORSMiddleware, allow_origins=list(_AI_FACTORY_STUDIO_ORIGINS), allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=list(_ALLOWED_HOSTS))

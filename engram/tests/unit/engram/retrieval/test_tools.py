@@ -3,7 +3,7 @@ r"""Unit specs for the single-source retrieval toolset (`src/engram/retrieval/to
 engram's four retrieval tool functions are defined **once** (the core
 `_search` / `_fetch` / `_graph_expand` / `_find_paths` helpers wrapping the CQRS
 handlers) and registered into **both** a pydantic-ai :class:`~pydantic_ai.FunctionToolset`
-(the eval agent-under-test) and a :class:`~mcp.server.fastmcp.FastMCP` server (the real MCP
+(the eval agent-under-test) and a :class:`~mcp.server.mcpserver.MCPServer` server (the real MCP
 surface) via thin adapters. These specs pin that single-source contract without a database:
 
 * the core helpers project the handlers' :class:`SqlResult` / graph results into the exact
@@ -12,7 +12,7 @@ surface) via thin adapters. These specs pin that single-source contract without 
 * :func:`build_retrieval_toolset` yields a :class:`FunctionToolset` exposing the four tools
   under their canonical names, each delegating to its core helper (asserted by calling the
   tools through the toolset and checking the handlers were driven with the right message);
-* :func:`register_mcp_tools` registers the **same** four tools on a FastMCP server (asserted
+* :func:`register_mcp_tools` registers the **same** four tools on an MCP server (asserted
   by listing the server's tools over the SDK's in-memory client session and calling them).
 
 Fakes over mocks: :class:`FakeRetrievalHandlers` bundles four scriptable handler stubs that

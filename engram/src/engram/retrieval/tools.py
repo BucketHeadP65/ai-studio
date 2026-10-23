@@ -6,7 +6,7 @@ re-exported here, so callers reach the whole toolset through this one module.
 This module adds the tool descriptions, the `next_steps` block every `search` and leveled `fetch`
 result carries, and the builders that register the tools with engram's `Search` as the message
 type. `build_retrieval_toolset` builds a pydantic-ai toolset, `register_mcp_tools` registers on a
-FastMCP server, and `register_routed_mcp_tools` and `add_routed_read_tools` serve several
+MCP server, and `register_routed_mcp_tools` and `add_routed_read_tools` serve several
 registered knowledge bases, routing each read by its collection.
 
 `search_hits`, `search_result_status` and `bound_search_result` assemble a `search` answer. The
@@ -47,7 +47,7 @@ from core.ai.retrieval.contracts import (
 )
 from core.ai.retrieval.contracts import build_retrieval_toolset as _build_retrieval_toolset
 from core.ai.retrieval.contracts import register_mcp_tools as _register_mcp_tools
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, create_model
 from pydantic_ai.exceptions import ModelRetry
 
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable, Mapping
 
     from core.ai.retrieval.contracts import StampSource
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from pydantic_ai.tools import RunContext, ToolDefinition
 
     from engram.indexing.contracts import RetrievalSwitches
@@ -146,7 +146,7 @@ def _hit_level_clause(levels: tuple[str, ...]) -> str:
 _HIT_LEVEL_CLAUSE = _hit_level_clause(_hit_levels())
 """The `hit_level` values the search surfaces produce, each with its phrase, as the search descriptions state them."""
 
-# Tool descriptions are the agent's orientation, pydantic-ai and FastMCP both surface them to
+# Tool descriptions are the agent's orientation, pydantic-ai and MCPServer both surface them to
 # the model, so each names how to ground its ids and what its result carries.
 _COLLECTION_CLAUSE = (
     "This database is shared across more than one collection. Set `collection` to search a "
@@ -1284,7 +1284,7 @@ def _without_collection(_ctx: RunContext[object], tool_def: ToolDefinition) -> T
 
 
 def _add_search_mcp_tool(
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers[Search],
     *,
     k_source: Callable[[], int] | None,
@@ -1297,7 +1297,7 @@ def _add_search_mcp_tool(
     browsable: bool = True,
     can_fetch: bool = True,
 ) -> None:
-    """Register engram's own `search` on the FastMCP `server`, refusing through `ToolError` (see `_build_search_fn`)."""
+    """Register engram's own `search` on the MCP `server`, refusing through `ToolError` (see `_build_search_fn`)."""
     search = _build_search_fn(
         handlers,
         k_source=k_source,
@@ -1717,7 +1717,7 @@ def build_retrieval_toolset(
 
 
 def register_mcp_tools(
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers[Search],
     *,
     only: frozenset[str] | None = None,
@@ -1731,12 +1731,12 @@ def register_mcp_tools(
     facet_keys: tuple[str, ...] = (),
     hits_per_document: int = 0,
 ) -> None:
-    """Register engram's four retrieval tools on a FastMCP `server`.
+    """Register engram's four retrieval tools on an MCP `server`.
 
     The tools and descriptions match what `build_retrieval_toolset` builds.
 
     Args:
-        server: The `FastMCP` instance to register the tools on.
+        server: The `MCPServer` instance to register the tools on.
         handlers: The retrieval handlers the tools wrap.
         only: When given, register only the named tools, a subset of `{"search", "fetch",
             "graph_expand", "find_paths"}`. `None` (the default) registers all four.
@@ -1820,7 +1820,7 @@ def register_mcp_tools(
 
 
 def register_routed_mcp_tools(
-    server: FastMCP,
+    server: MCPServer,
     surfaces: tuple[ReadSurface, ...],
     *,
     default_knowledge_base: str,
@@ -1841,7 +1841,7 @@ def register_routed_mcp_tools(
     description names every surface's keys.
 
     Args:
-        server: The `FastMCP` instance to register the tools on.
+        server: The `MCPServer` instance to register the tools on.
         surfaces: The knowledge bases this server may read, in the order a caller sees them listed.
         default_knowledge_base: The `name` of the surface an omitted `collection` (and an
             unqualified `unit_id`) reads. Must be one of `surfaces`.

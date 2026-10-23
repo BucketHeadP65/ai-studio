@@ -47,7 +47,7 @@ from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.specs import research_spec
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from typer.testing import CliRunner
@@ -604,13 +604,30 @@ class TestBuildMcpServerStamp:
 
         server = await _build_mcp_server(container, authoring=False)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag"})
 
-        assert result.isError is False
-        assert result.structuredContent is not None
-        assert result.structuredContent["knowledge_base"]["slug"] == "research"
+        assert result.is_error is False
+        assert result.structured_content is not None
+        assert result.structured_content["knowledge_base"]["slug"] == "research"
+
+
+class TestBuildMcpServerConnectionFailures:
+    """The served server names the reader database, without its password, when a tool's connection to it fails."""
+
+    async def test_a_search_whose_database_refuses_the_connection_names_the_redacted_reader_database(self, tmp_path: Path):
+        container = _McpServerContainer(knowledge_base=_make_knowledge_base(tmp_path), gateway=_UnreachableReaderGateway())
+
+        server = await _build_mcp_server(container, authoring=False)
+        async with Client(server) as client:
+            result = await client.call_tool("search", {"query": "graph rag"})
+
+        block = result.content[0]
+        reader = redact_db("postgresql+asyncpg://r:p@h:5433/knowledge_bases")
+        assert result.is_error
+        assert block.type == "text"
+        assert block.text == f"Error executing tool search: database {reader}: [Errno 61] Connect call failed ('127.0.0.1', 5434)"
+        assert "r:p@" not in block.text
 
 
 def _make_auto_knowledge_base(tmp_path: Path) -> KnowledgeBaseSettings:
@@ -644,8 +661,7 @@ class TestBuildMcpServerSwitches:
 
     async def _served(self, container: _McpServerContainer, tmp_path: Path) -> set[str]:
         server = await _build_mcp_server(container, settings_path=tmp_path / "no-registry.json")
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
         return {tool.name for tool in listing.tools}
 
@@ -690,11 +706,10 @@ class TestBuildMcpServerSwitches:
         container = _McpServerContainer(knowledge_base=_make_auto_knowledge_base(tmp_path), gateway=FakeSqlGateway(routed=routed), embedder=embedder)
         server = await _build_mcp_server(container, settings_path=tmp_path / "no-registry.json")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag"})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert embedder.texts == []
 
     async def test_an_embeddings_switch_that_is_on_runs_the_vector_leg(self, tmp_path: Path):
@@ -703,9 +718,8 @@ class TestBuildMcpServerSwitches:
         container = _McpServerContainer(knowledge_base=_make_auto_knowledge_base(tmp_path), gateway=FakeSqlGateway(routed=routed), embedder=embedder)
         server = await _build_mcp_server(container, settings_path=tmp_path / "no-registry.json")
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph rag"})
 
-        assert result.isError is False
+        assert result.is_error is False
         assert embedder.texts == ["graph rag"]

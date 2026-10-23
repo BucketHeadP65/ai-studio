@@ -279,17 +279,19 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 - **What:** pydantic-ai-harness's `CodeMode` runs a program's tool calls through a nested `ToolManager` built on the
   `run_code` call's `RunContext`, so every one that succeeds is recorded on the run's `RunUsage.tool_calls`. pydantic-ai
   checks `UsageLimits.tool_calls_limit` against that count before the model's next tool calls, so a run whose limit holds
-  without code mode fails with code mode as soon as one program loops over a few tools. Nothing documents this, and the
-  harness already bounds a program's calls with its own `max_tool_calls` (100 per `run_code` call). Our subclass wraps
-  code mode's toolset and hands each `run_code` call a fresh `RunUsage`, so the run's count and its limit hold each
-  `run_code` call and each direct call once, the way they count calls without code mode. Calls a program starts while
-  the model is still writing it (`eager`, `speculate`) still count. Found when a code-mode evaluation variant failed
-  83 of 400 cases on a limit of 20 that its twin without code mode failed 20 times.
+  without code mode fails with code mode as soon as one program loops over a few tools. Since 0.59.0 the harness also
+  checks each of a program's calls against the run's `tool_calls_limit` before it runs, and documents that a program's
+  calls count toward it. The harness already bounds a program's calls with its own `max_tool_calls` (100 per `run_code`
+  call). Our subclass wraps code mode's toolset and hands each `run_code` call a fresh `RunUsage` and the run's
+  `UsageLimits` without `tool_calls_limit`, so the run's count and its limit hold each `run_code` call and each direct
+  call once, the way they count calls without code mode. Calls a program starts while the model is still writing it
+  (`eager`, `speculate`) still count. Found when a code-mode evaluation variant failed 83 of 400 cases on a limit of 20
+  that its twin without code mode failed 20 times.
 - **Where:** `engram/src/engram/evals/harness/code_mode.py`, mounted by `build_agent` in
   `engram/src/engram/evals/harness/agent.py` on every code-mode evaluation run, tests in
   `engram/tests/unit/engram/evals/test_runner.py` (`TestCodeModeToolCallBudget`). It lives in engram, which installs the
   `pydantic-ai-harness[code-mode]` extra, and `core` does not.
 - **Since:** 2026-10-16.
-- **Upstream candidate:** yes, as an issue rather than a patch: either document that a program's calls count against
-  the run's `tool_calls_limit`, or give `CodeMode` an option that keeps them on a usage of their own. The setting a
-  caller compares runs under should mean the same thing with code mode on and off.
+- **Upstream candidate:** yes, as an issue rather than a patch: give `CodeMode` an option that keeps a program's calls
+  on a usage of their own and off the run's `tool_calls_limit` (0.59.0 documents that they count, and offers no way out).
+  The setting a caller compares runs under should mean the same thing with code mode on and off.

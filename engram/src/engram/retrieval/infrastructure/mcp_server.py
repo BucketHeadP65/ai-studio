@@ -1,10 +1,11 @@
-r"""The FastMCP stdio server over the retrieval read side.
+r"""The MCP stdio server over the retrieval read side.
 
 `create_mcp_server` builds the server from injected dependencies and reads no container and no
 environment. `describe_schema` and `run_sql` are always registered. `run_sql` caps rows at
 `min(row_limit, 50)` and answers a read-only violation with a message rather than a crash. The read
 tools, `run_code` and the opt-in authoring, tuning and recommendation tools register only when their
-dependencies are wired. Importing this module imports `engram.evals`.
+dependencies are wired. A tool whose connection to the database or to an endpoint failed answers with the
+service it reached and the error's text. Importing this module imports `engram.evals`.
 """
 
 from __future__ import annotations
@@ -12,12 +13,14 @@ from __future__ import annotations
 import json
 import re
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-# `GraphPathsResult` and `GraphResult` must be imported at runtime: FastMCP evaluates tool annotations to publish `outputSchema`.
+# `GraphPathsResult` and `GraphResult` must be imported at runtime: MCPServer evaluates tool annotations to publish `outputSchema`.
 from core.ai.retrieval.contracts import RUN_CODE, TOOL_NAMES, GraphPathsResult
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
+from core.connection_failures import connection_failure_message
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ModelRetry
@@ -26,7 +29,7 @@ from pydantic_ai.models import Model
 from pydantic_ai.tool_manager import ToolManager
 from pydantic_ai.usage import RunUsage
 
-from engram.authoring.contracts import EntityName  # noqa: TC001 (FastMCP evaluates tool annotations at registration)
+from engram.authoring.contracts import EntityName  # noqa: TC001 (MCPServer evaluates tool annotations at registration)
 from engram.evals.generation.contracts import (
     AuthoredCase,
     SeedCaseDraft,
@@ -69,11 +72,13 @@ from engram.retrieval.tools import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Generator, Mapping
     from pathlib import Path
 
     from core.ai.embedding import QueryEmbedder
     from core.ai.retrieval.contracts import StampSource
+    from mcp.server.mcpserver import Context
+    from mcp.types import CallToolResult, InputRequiredResult
     from pydantic_ai import FunctionToolset
     from pydantic_ai.messages import ModelMessage, ModelResponse
     from pydantic_ai.models import ModelRequestParameters
@@ -98,6 +103,28 @@ if TYPE_CHECKING:
 
 # The most seeds one `propose_eval_seeds` call draws, whatever `count` asks for.
 _MAX_SEED_COUNT = 50
+
+
+class _NamingServer(MCPServer[object]):
+    """An `MCPServer` that answers a tool's failed connection to the database or an endpoint as a `ToolError` naming it."""
+
+    def __init__(self, *, instructions: str, database: str | None) -> None:
+        super().__init__("engram", instructions=instructions)
+        self._database = database
+
+    async def call_tool(
+        self, name: str, arguments: dict[str, object], context: Context[object, object] | None = None
+    ) -> CallToolResult | InputRequiredResult:
+        """Call the tool, raising its failed connection to a service again as a `ToolError` that names the service."""
+        try:
+            return await super().call_tool(name, arguments, context)
+        except UnexpectedToolError as error:
+            failure = error.__cause__
+            message = None if failure is None else connection_failure_message(failure, database=self._database)
+            if message is None:
+                raise
+            named = f"{error}: {message}"
+            raise ToolError(named) from error
 
 
 # The MCP graph tools extend the shared descriptions with their extra arguments. Each anchor sits in a
@@ -335,8 +362,9 @@ def create_mcp_server(
     read_surfaces: tuple[ReadSurface, ...] | None = None,
     facet_keys: tuple[str, ...] = (),
     hits_per_document: int = 0,
-) -> FastMCP:
-    """Build the FastMCP server with its tools closing over the injected dependencies.
+    database: str | None = None,
+) -> MCPServer:
+    """Build the MCP server with its tools closing over the injected dependencies.
 
     It reads no container and no environment. `describe_schema` and `run_sql` are always registered.
     Every other tool registers only when its dependencies are wired, as each argument says.
@@ -405,6 +433,9 @@ def create_mcp_server(
         hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the
             single-base `search` description states, inside `run_code` too. 0 (the default) keeps every hit and
             states nothing about documents. Unread with `read_surfaces`, each of which carries its own.
+        database: The database URL with its password redacted, which a tool's failed database connection names.
+            None (the default) names no database, so such a failure answers as a bare tool error. A failed endpoint
+            connection is named either way.
 
     Returns:
         The server. The host runs it with `.run(transport="stdio")`.
@@ -425,7 +456,7 @@ def create_mcp_server(
     )
     library_paragraph = _library_paragraph(collection, read_surfaces, available)
     combined_instructions = f"{library_paragraph}\n\n{instructions}" if instructions else library_paragraph
-    server = FastMCP(name="engram", instructions=combined_instructions)
+    server = _NamingServer(instructions=combined_instructions, database=database)
 
     # The same callables serve the code-mode sandbox below.
     describe_schema = make_describe_schema(describe_handler)
@@ -500,7 +531,7 @@ def create_mcp_server(
 
 
 def _register_read_tools(
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers[Search] | None,
     *,
     available: frozenset[str],
@@ -585,7 +616,7 @@ def _full_retrieval_handlers(
     return RetrievalHandlers(search=search_handler, fetch=fetch_handler, graph_expand=graph_expand_handler, find_paths=find_paths_handler)
 
 
-def _add_feedback(server: FastMCP, feedback_sink: FeedbackSink) -> None:
+def _add_feedback(server: MCPServer, feedback_sink: FeedbackSink) -> None:
     """Register `submit_feedback`, recording through the injected sink."""
 
     async def submit_feedback(message: str, category: FeedbackCategory = "other", tool: str | None = None) -> str:
@@ -596,7 +627,7 @@ def _add_feedback(server: FastMCP, feedback_sink: FeedbackSink) -> None:
 
 
 def _add_eval_authoring(
-    server: FastMCP,
+    server: MCPServer,
     seed_repo_factory: SeedRepositoryFactory,
     datasets_dir: Path,
     thresholds: DifficultyThresholds,
@@ -657,28 +688,43 @@ def _authored_from_case(case: EvaluationCase) -> AuthoredCase:
     return AuthoredCase(question=case.inputs, expected=expected, meta=case.metadata)
 
 
-def _add_doc_authoring(server: FastMCP, doc_authoring_tools: AuthoringTools) -> None:
-    """Register the opt-in documentation authoring tools, each forwarding to `doc_authoring_tools`."""
+@contextmanager
+def _refusal_as_tool_error() -> Generator[None]:
+    """Raise an authoring tool's `ModelRetry` refusal again as a `ToolError`, so the MCP client reads its text."""
+    try:
+        yield
+    except ModelRetry as exc:
+        raise ToolError(exc.message) from exc
+
+
+def _add_doc_authoring(server: MCPServer, doc_authoring_tools: AuthoringTools) -> None:
+    """Register the opt-in documentation authoring tools, each forwarding to `doc_authoring_tools` and answering a refusal as a `ToolError`."""
 
     async def knowledge_base_profile(knowledge_base: str) -> dict[str, object]:
-        return await doc_authoring_tools.knowledge_base_profile(knowledge_base)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.knowledge_base_profile(knowledge_base)
 
     async def skeleton(knowledge_base: str, page_type: str) -> dict[str, object]:
-        return await doc_authoring_tools.skeleton(knowledge_base, page_type)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.skeleton(knowledge_base, page_type)
 
     async def write_note(knowledge_base: str, payload: dict[str, object], path: str = "") -> str:
-        return await doc_authoring_tools.write_note(knowledge_base, payload, path)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.write_note(knowledge_base, payload, path)
 
     async def decide_page(
         knowledge_base: str, page_id: str, status: str = "", links: dict[str, list[str]] | None = None, reason: str = "", *, add: bool = False
     ) -> str:
-        return await doc_authoring_tools.decide_page(knowledge_base, page_id, status, links, reason, add=add)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.decide_page(knowledge_base, page_id, status, links, reason, add=add)
 
     async def resolve_entities(knowledge_base: str, entities: list[EntityName]) -> str:
-        return await doc_authoring_tools.resolve_entities(knowledge_base, entities)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.resolve_entities(knowledge_base, entities)
 
     async def read_page(knowledge_base: str, page_id: str) -> dict[str, JsonValue]:
-        return await doc_authoring_tools.read_page(knowledge_base, page_id)
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.read_page(knowledge_base, page_id)
 
     server.add_tool(knowledge_base_profile, name="knowledge_base_profile", description=_KNOWLEDGE_BASE_PROFILE_DESCRIPTION)
     server.add_tool(skeleton, name="skeleton", description=_SKELETON_DESCRIPTION)
@@ -689,7 +735,7 @@ def _add_doc_authoring(server: FastMCP, doc_authoring_tools: AuthoringTools) -> 
 
 
 def _register_single_source_tools(
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers,
     *,
     only: frozenset[str] | None = None,
@@ -745,7 +791,7 @@ def _available_read_tools(
 
 
 def _add_flat_fetch(
-    server: FastMCP,
+    server: MCPServer,
     handler: FetchHandler,
     *,
     collection: str,
@@ -760,7 +806,7 @@ def _add_flat_fetch(
 
 
 def _add_graph_expand(
-    server: FastMCP,
+    server: MCPServer,
     handler: GraphExpandHandler,
     *,
     descriptions: Mapping[str, str] | None = None,
@@ -795,7 +841,7 @@ def _add_graph_expand(
 
 
 def _add_find_paths(
-    server: FastMCP,
+    server: MCPServer,
     handler: GraphPathsHandler,
     *,
     descriptions: Mapping[str, str] | None = None,
@@ -832,7 +878,7 @@ def _add_find_paths(
 
 
 def _add_run_code(
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers,
     *,
     gateway: SqlGateway,

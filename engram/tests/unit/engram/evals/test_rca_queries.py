@@ -67,8 +67,8 @@ def test_each_mandatory_query_maps_to_non_empty_sql() -> None:
 
 
 def test_each_mandatory_query_carries_a_time_predicate() -> None:
-    # Every saved query must self-window: rca.py runs them single-arg via query_json_rows(sql)
-    # and Logfire deprecates a query with no time window. The schema's time column is start_timestamp.
+    # Every saved query must self-window over the same seven days the report passes as min_timestamp.
+    # The schema's time column is start_timestamp.
     queries = load_named_queries(_queries_path())
 
     for name in _MANDATORY_QUERY_NAMES:

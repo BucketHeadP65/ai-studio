@@ -1,7 +1,7 @@
 <!-- GENERATED from architecture.md by scripts/docs/split_doc.py --dir engram/docs/architecture — do not edit here; edit the master and re-run the script. -->
 
 ## 2. Container & component overview (C4 L2)
-> **TL;DR:** `engram/src/` holds exactly one package, the `engram` library. The application over it is `studio.knowledge_base`, a separate project whose three entry points (the Typer CLI, the FastAPI Studio API on :8100, the FastMCP stdio server) drive engram. Write-side intents (index, sync, export) flow through a CQRS bus to slice handlers, while the read path (search/fetch/graph) bypasses the bus and goes straight through query handlers + a read-only SQL gateway to Postgres. Azure OpenAI supplies embeddings.
+> **TL;DR:** `engram/src/` holds exactly one package, the `engram` library. The application over it is `studio.knowledge_base`, a separate project whose three entry points (the Typer CLI, the FastAPI Studio API on :8100, the MCP stdio server) drive engram. Write-side intents (index, sync, export) flow through a CQRS bus to slice handlers, while the read path (search/fetch/graph) bypasses the bus and goes straight through query handlers + a read-only SQL gateway to Postgres. Azure OpenAI supplies embeddings.
 <!-- load-when: containers, components, C4 L2, entry points, CQRS bus, data flow, overview, how it fits together, package layout, engram library vs studio application, library, application -->
 
 `engram/src/` holds **exactly one package**: `engram`, the library (`kb`, `db`, `config`, `indexing`, `retrieval`, `evals`,
@@ -12,7 +12,7 @@ reaches the library through its public surface like any other consumer, and cons
 
 engram's runtime is **three entry points over one composition root**, all owned by `studio.knowledge_base`. The Typer CLI
 (`studio/src/studio/knowledge_base/cli.py`, mounting `cli_evals`, `cli_note`, `cli_init`) owns the top-level `studio` commands. The
-FastAPI app (`studio/src/studio/knowledge_base/http/api.py`) serves the Studio over loopback :8100. The FastMCP stdio server it builds
+FastAPI app (`studio/src/studio/knowledge_base/http/api.py`) serves the Studio over loopback :8100. The MCP stdio server it builds
 from the library's `engram/src/engram/retrieval/infrastructure/mcp_server.py` exposes the retrieval surface to MCP clients. All three are wired
 from the single wireup composition root (`studio/src/studio/knowledge_base/container.py`).
 
@@ -35,7 +35,7 @@ C4Container
     System_Boundary(engram, "studio.knowledge_base (application) over the engram library") {
         Container(cli, "Typer CLI", "studio/src/studio/knowledge_base/cli.py (+ cli_evals/cli_note/cli_init)", "index, status, search, fetch, sync, export okf, serve-http, mcp, evals/note/init groups")
         Container(http, "Studio API", "studio/src/studio/knowledge_base/http/api.py, FastAPI :8100", "Knowledge base registry, graph, refresh jobs and events, studio-client backend")
-        Container(mcp, "FastMCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
+        Container(mcp, "MCP server", "engram/src/engram/retrieval/infrastructure/mcp_server.py, stdio", "Retrieval tools for MCP clients")
 
         Container(container, "Composition root", "studio/src/studio/knowledge_base/container.py, wireup", "Wires every slice, owns cross-slice routing")
         Container(bus, "CQRS bus", "core.cqrs.bus", "Command to one handler, events to the outbox, a worker delivers")

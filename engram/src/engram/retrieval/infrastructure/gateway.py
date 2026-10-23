@@ -315,7 +315,7 @@ class ReadOnlySqlGateway:
         return SchemaDescription(objects=tuple(relations + functions))
 
 
-async def _describe_relation(conn: AsyncConnection, relation: SaRow[tuple[str, str, str | None]]) -> ObjectInfo:
+async def _describe_relation(conn: AsyncConnection, relation: SaRow[str, str, str | None]) -> ObjectInfo:
     """Build an `ObjectInfo` for one view/table, fetching its ordered columns."""
     column_rows = (await conn.execute(text(_COLUMNS_SQL).bindparams(bindparam("relname", relation.name)))).all()
     columns = tuple(ColumnInfo(name=c.name, data_type=c.data_type, comment=c.comment) for c in column_rows)
@@ -323,19 +323,19 @@ async def _describe_relation(conn: AsyncConnection, relation: SaRow[tuple[str, s
     return ObjectInfo(name=f"api.{relation.name}", kind=kind, comment=relation.comment, columns=columns)
 
 
-def _describe_function(function: SaRow[tuple[str, str, str | None]]) -> ObjectInfo:
+def _describe_function(function: SaRow[str, str, str | None]) -> ObjectInfo:
     """Build an `ObjectInfo` for one function, its argument list as the single column line."""
     signature = ColumnInfo(name=f"({function.args})", data_type="", comment=None)
     return ObjectInfo(name=f"api.{function.name}", kind="function", comment=function.comment, columns=(signature,))
 
 
-def _apply_cap(fetched: Sequence[SaRow[tuple[object, ...]]], cap: int) -> tuple[Sequence[SaRow[tuple[object, ...]]], str | None]:
+def _apply_cap(fetched: Sequence[SaRow[*tuple[object, ...]]], cap: int) -> tuple[Sequence[SaRow[*tuple[object, ...]]], str | None]:
     """Trim to `cap` rows, return the contract's truncation message when more existed."""
     if len(fetched) > cap:
         return fetched[:cap], f"{cap}+ more rows: narrow your filters"
     return fetched, None
 
 
-def _mapping(row: SaRow[tuple[object, ...]]) -> dict[str, object]:
+def _mapping(row: SaRow[*tuple[object, ...]]) -> dict[str, object]:
     """One result row as a plain dict (the `Row` shape)."""
     return dict(row._mapping)  # noqa: SLF001 (Row._mapping is the public-by-convention accessor)

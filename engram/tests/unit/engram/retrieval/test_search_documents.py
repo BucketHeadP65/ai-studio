@@ -19,8 +19,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.disclosure.contracts import DisclosureEnvelope
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import FunctionToolset
 from sqlalchemy.exc import OperationalError
 
@@ -200,7 +200,7 @@ class TestEveryDescriptionStatesTheConfiguredCap:
 
     @_CAPS
     async def test_the_single_base_mcp_server(self, cap: int):
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_mcp_tools(server, _handlers(), collection="workdocs", hits_per_document=cap)
 
         _says(_description(await server.list_tools()), cap)
@@ -476,18 +476,17 @@ class TestEveryFetchOpensAFoldedUnitByItsRef:
     @pytest.mark.parametrize("leveled", [False, True], ids=["flat", "leveled"])
     async def test_the_single_base_mcp_server(self, leveled: bool):
         handlers = RetrievalHandlers(search=_fetched_search(), fetch=FakeFlatFetch(units=_UNITS), graph_expand=_NeverWalks(), find_paths=_NeverWalks())
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_mcp_tools(server, handlers, collection="workdocs", envelope=_envelope("workdocs") if leveled else None)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             searched = await client.call_tool("search", {"query": "alpha"})
             units = _folded(SearchResult.model_validate(json.loads(_text(searched))))
             fetched = [(unit, await client.call_tool("fetch", {"unit_id": unit.ref})) for unit in units]
 
         assert len(fetched) == 4
         for unit, answer in fetched:
-            assert not answer.isError, _text(answer)
+            assert not answer.is_error, _text(answer)
             assert _opens_payload(json.loads(_text(answer)), unit), unit
 
     async def test_the_routed_search_and_fetch(self):
@@ -503,20 +502,19 @@ class TestEveryFetchOpensAFoldedUnitByItsRef:
             assert _opens(await _call(toolset, "fetch", {"unit_id": unit.ref}), unit), unit
 
     async def test_the_routed_mcp_server(self):
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_routed_mcp_tools(
             server, (_surface("workdocs", "workdocs", WORKDOCS), _surface_over_units("research", RESEARCH)), default_knowledge_base="workdocs"
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             searched = await client.call_tool("search", {"query": "alpha", "collection": "research"})
             units = _folded(SearchResult.model_validate(json.loads(_text(searched))))
             fetched = [(unit, await client.call_tool("fetch", {"unit_id": unit.ref})) for unit in units]
 
         assert len(fetched) == 4
         for unit, answer in fetched:
-            assert not answer.isError, _text(answer)
+            assert not answer.is_error, _text(answer)
             assert _opens_payload(json.loads(_text(answer)), unit), unit
 
     @pytest.mark.parametrize("fetch_dial", ["leveled", "flat"])
@@ -543,7 +541,7 @@ class TestASurfaceWithoutFetchIsNotSentToFetch:
         assert "`fetch` one directly" not in description
 
     async def test_the_routed_mcp_server(self):
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_routed_mcp_tools(server, (_capped("workdocs", WORKDOCS, 1),), default_knowledge_base="workdocs", only=frozenset({"search"}))
 
         description = _description(await server.list_tools())
@@ -575,13 +573,13 @@ class TestASearchOnlySurfaceNeverTellsTheModelToFetch:
 
     @_LEGS
     async def test_the_single_base_mcp_server(self, search_hybrid: bool | None):
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_mcp_tools(server, _handlers(), collection="workdocs", only=frozenset({"search"}), search_hybrid=search_hybrid, hits_per_document=1)
 
         assert "fetch" not in _description(await server.list_tools()).lower()
 
     async def test_the_routed_mcp_server(self):
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         surfaces = (_capped("workdocs", WORKDOCS, 1), _capped("research", RESEARCH, 1))
         register_routed_mcp_tools(server, surfaces, default_knowledge_base="workdocs", only=frozenset({"search"}))
 
@@ -642,11 +640,10 @@ class TestASearchAnswerOffersFetchOnlyWhereItIsServed:
     @pytest.mark.parametrize("served", [False, True], ids=["search_only", "with_fetch"])
     async def test_the_single_base_mcp_server(self, answer: str, served: bool):
         only = frozenset({"search", "fetch"}) if served else frozenset({"search"})
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         register_mcp_tools(server, _handlers(search=_answering(answer)), collection="workdocs", only=only, envelope=_envelope("workdocs"))
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             searched = await client.call_tool("search", {"query": "alpha"})
 
         assert ("fetch" in _steps(SearchResult.model_validate(json.loads(_text(searched))))) is served
@@ -655,12 +652,11 @@ class TestASearchAnswerOffersFetchOnlyWhereItIsServed:
     @pytest.mark.parametrize("served", [False, True], ids=["search_only", "with_fetch"])
     async def test_the_routed_mcp_server(self, answer: str, served: bool):
         only = frozenset({"search", "fetch"}) if served else frozenset({"search"})
-        server = FastMCP("documents")
+        server = MCPServer("documents")
         surfaces = (_surface("workdocs", "workdocs", WORKDOCS, search=_answering(answer)), _surface("research", "research", RESEARCH))
         register_routed_mcp_tools(server, surfaces, default_knowledge_base="workdocs", only=only)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             searched = await client.call_tool("search", {"query": "alpha"})
 
         assert ("fetch" in _steps(SearchResult.model_validate(json.loads(_text(searched))))) is served

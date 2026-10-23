@@ -17,7 +17,7 @@ so the default surface stays read-only:
   of what the client sends.
 
 The tests pin the contract DI-friendly and transport-free, mirroring `test_mcp_tuning.py`: build
-an in-memory `FastMCP`, register the recommendation tools against fake gateway / evaluator factories, and
+an in-memory `MCPServer`, register the recommendation tools against fake gateway / evaluator factories, and
 drive the tools through the SDK's in-memory client to server session. The gate is the headline: an
 invalid recommendation JSON, an op that fails `apply_op`, and an unsafe name are each rejected without a
 write.
@@ -32,8 +32,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 
 from engram.config import RecommendationSettings
 from engram.evals.generation.contracts import AuthoredCase, build_dataset, save_dataset
@@ -250,9 +250,9 @@ def _knowledge_base(tmp_path: Path) -> Path:
     return root
 
 
-def _server(tmp_path: Path, *, gateway: RecommendationKnowledgeBaseGateway | None = None, factory: _FakeEvaluatorFactory | None = None) -> FastMCP:
+def _server(tmp_path: Path, *, gateway: RecommendationKnowledgeBaseGateway | None = None, factory: _FakeEvaluatorFactory | None = None) -> MCPServer:
     """An in-memory server with only the three recommendation tools registered over `tmp_path` dirs."""
-    server = FastMCP(name="recommendation-test")
+    server = MCPServer(name="recommendation-test")
     register_recommendation_tools(
         server,
         gateway_factory=_gateway_factory(gateway or _FakeGateway()),
@@ -323,8 +323,7 @@ class TestRegistration:
     async def test_registers_the_three_recommendation_tools(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         names = {tool.name for tool in listing.tools}
@@ -333,8 +332,7 @@ class TestRegistration:
     async def test_descriptions_orient_the_diagnose_probe_submit_loop(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -350,6 +348,15 @@ class TestRegistration:
 
 
 class TestDiagnoseStructure:
+    async def test_a_dataset_with_no_file_is_answered_by_name(self, tmp_path: Path):
+        server = _server(tmp_path)
+
+        async with Client(server) as client:
+            result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "missing"})
+
+        assert result.is_error is False
+        assert json.loads(_text(result)) == {"error": "no dataset named 'missing': name a dataset that exists"}
+
     async def test_returns_a_valid_structural_diagnosis_over_fakes(self, tmp_path: Path):
         _dataset(tmp_path)
         gateway = _FakeGateway(
@@ -361,11 +368,10 @@ class TestDiagnoseStructure:
         )
         server = _server(tmp_path, gateway=gateway)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "golden"})
 
-        assert result.isError is False
+        assert result.is_error is False
         diagnosis = StructuralDiagnosis.model_validate_json(_text(result))
         # The section-split signal fired over the over-budget gold sections, remapped to dataset names.
         assert diagnosis.section_splits
@@ -377,8 +383,7 @@ class TestDiagnoseStructure:
         factory = _FakeEvaluatorFactory(_FakeEvaluator(_report()))
         server = _server(tmp_path, factory=factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "golden"})
 
         diagnosis = StructuralDiagnosis.model_validate_json(_text(result))
@@ -390,8 +395,7 @@ class TestDiagnoseStructure:
         server = _server(tmp_path)
         policy_json = RetrievalPolicy(instructions="Be precise.", strategy="search-hybrid", tool_descriptions={}).model_dump_json()
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "golden", "policy_json": policy_json})
 
         diagnosis = StructuralDiagnosis.model_validate_json(_text(result))
@@ -403,8 +407,7 @@ class TestDiagnoseStructure:
         server = _server(tmp_path, factory=factory)
         invalid = json.dumps({"instructions": "x", "strategy": "code-mode", "tool_descriptions": {}})
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "golden", "policy_json": invalid})
 
         payload = json.loads(_text(result))
@@ -415,11 +418,10 @@ class TestDiagnoseStructure:
         factory = _FakeEvaluatorFactory(_FakeEvaluator(_report()))
         server = _server(tmp_path, factory=factory)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(DIAGNOSE_STRUCTURE, {"dataset": "../evil"})
 
-        assert result.isError is False  # a bad name is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad name is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert factory.evaluator.evaluate_calls == []  # the guard fired before any evaluation
@@ -435,11 +437,10 @@ class TestWhatIfEdges:
         edges = json.dumps([{"src_id": "paper.a", "dst_id": "paper.b", "rel": "extends"}])
         pairs = json.dumps([["paper.a", "paper.b"], ["paper.a", "paper.c"]])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(WHAT_IF_EDGES, {"edges_json": edges, "pairs_json": pairs, "max_hops": 3})
 
-        assert result.isError is False
+        assert result.is_error is False
         counterfactual = CounterfactualResult.model_validate_json(_text(result))
         assert counterfactual.n_pairs == 2
         assert counterfactual.reachable_before == 0
@@ -452,11 +453,10 @@ class TestWhatIfEdges:
     async def test_malformed_edges_json_is_returned_as_an_actionable_error(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(WHAT_IF_EDGES, {"edges_json": "{not json", "pairs_json": "[]", "max_hops": 3})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
 
@@ -464,8 +464,7 @@ class TestWhatIfEdges:
         server = _server(tmp_path)
         edges = json.dumps([{"src_id": "a", "dst_id": "b", "rel": "r"}])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(WHAT_IF_EDGES, {"edges_json": edges, "pairs_json": "{not a list", "max_hops": 3})
 
         payload = json.loads(_text(result))
@@ -479,11 +478,10 @@ class TestSubmitRecommendation:
     async def test_writes_a_round_trippable_recommendation_and_a_draft_adr_sibling(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_RECOMMENDATION, {"recommendation_json": _valid_recommendation_json(), "name": "winner"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         recommendation_path = tmp_path / "recommendations" / "winner.yaml"
         adr_path = tmp_path / "recommendations" / "winner.adr.md"
@@ -499,11 +497,10 @@ class TestSubmitRecommendation:
     async def test_invalid_recommendation_json_is_rejected_without_writing(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_RECOMMENDATION, {"recommendation_json": "{not valid recommendation", "name": "winner"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not (tmp_path / "recommendations" / "winner.yaml").exists()
@@ -511,11 +508,10 @@ class TestSubmitRecommendation:
     async def test_fabricated_op_is_rejected_by_the_gate_without_writing(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_RECOMMENDATION, {"recommendation_json": _fabricated_op_recommendation_json(), "name": "winner"})
 
-        assert result.isError is False  # a bad op is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad op is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         # The op re-validation dropped the whole recommendation (unknown page-type kind), nothing was written.
@@ -524,11 +520,10 @@ class TestSubmitRecommendation:
     async def test_traversal_name_is_rejected_without_writing_outside_the_dir(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_RECOMMENDATION, {"recommendation_json": _valid_recommendation_json(), "name": "../evil"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not (tmp_path / "recommendations").exists() or not any((tmp_path / "recommendations").iterdir())
@@ -537,8 +532,7 @@ class TestSubmitRecommendation:
     async def test_path_separator_name_is_rejected(self, tmp_path: Path):
         server = _server(tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_RECOMMENDATION, {"recommendation_json": _valid_recommendation_json(), "name": "nested/evil"})
 
         payload = json.loads(_text(result))

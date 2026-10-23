@@ -104,7 +104,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Upstream state:** by design, still present in 2.51.0: a `PromptedOutput` validation retry carries `tool_name=None` and
   `OpenAIChatModel._map_user_message` renders it as `role="user"` (reproduced 2026-09-27). An output-validation retry and a
   tool-shaped retry share one part type, and a provider mapping tells them apart only by `tool_name`. The ask would be a way to render a validator's own retry as coming from the
-  validator, not the person, when `tool_name` is `None`.
+  validator, not the person, when `tool_name` is `None`. pydantic-ai 2.60.0 answers it (upstream issue 6404): a retry that
+  answers no tool call is a `RetryFeedbackPart`, which each model renders as feedback from the application. We hold
+  pydantic-ai below 2.60 for now (see the `RetryPromptPart` entry below).
 - **Issue:** not filed.
 
 ## UB-5. A join behind another join fires in the same idle pass as the inner join, when the inner join was registered first
@@ -238,3 +240,30 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `<snake_name:6 hex>`, new every run, carried on `ToolDefinition.capability_id` for the tools it contributes and never sent
   to a model. Tests that compare a turn's tool surface across runs compare what the provider receives, with that handle
   dropped (`c1240682`).
+- **`ctx.enqueue` called from `before_model_request` lands in the request that hook ran ahead of** (pydantic-ai 2.58.0). It
+  used to wait for the next request. A steer waiting before a model request now reaches the model in that request.
+  `SteerDelivery` and `StepSteerDelivery` needed no change. Their tests and the step chat reference now say so (`7fe680c`).
+- **A `run_code` program's tool calls are checked against the run's `tool_calls_limit`** (pydantic-ai-harness 0.59.0).
+  Each call a program makes counts toward the limit together with its `run_code` call, and is checked before it runs. One
+  that would cross the limit ends the run with `UsageLimitExceeded` in the middle of the program, and catching it inside
+  the program does not help. Before 0.59 a program's calls were only counted, and checked before the model's next tool
+  calls. `ModelCallsCodeMode` now also hands each `run_code` call the run's limits without `tool_calls_limit`, so an
+  evaluation's budget still holds only the calls the model asks for (UE-22, `4a884bf`). Harness workflow steps take the
+  new counting as it is (the owner's ruling, 2026-10-23): a step's `tool_calls` budget counts a program's calls, and the
+  three template steps that search inside code mode carry doubled budgets, `check_adrs` 24, `draft_decision_brief` 28 and
+  `review_decision_brief` 20.
+- **`RetryPromptPart` is replaced by a retried `ToolReturnPart` and a `RetryFeedbackPart`** (pydantic-ai 2.60.0, upstream
+  issue 6404). The agent loop no longer builds a `RetryPromptPart`, and a stored `'retry-prompt'` part loads as one of the
+  two new parts. Not adapted yet: `core` holds pydantic-ai below 2.60 and pydantic-ai-harness below 0.60 (`c440a0f`). Taking
+  it needs `core.ai.transcripts` (the answer to a call), `core.ai.inspection` (the rules, the views and the taxonomy's
+  `retry-prompt` surface, which the inspection API serves), `core.ai.history.message_key` (a `RetryFeedbackPart` has no
+  branch, and a stored retry loads as a new part kind, so its key changes), `harness.session`,
+  `harness.features.authoring.pending_calls`, `harness.features.inspection.api_models` and every test that builds a
+  `RetryPromptPart` moved to the new parts. It also needs a ruling on whether a retry a tool asks for still counts as a
+  schema refusal, since 2.60 tells them apart by `RetryInfo.cause` and a stored retry with text content loads with no
+  cause. A trial on 2.60 and 0.60 failed on three more changes, each still to be told apart as a bug (a UB entry) or an
+  intended change: the memory toolset's search returns no match (`test_memory.py`, `TestAdaptedToolset`), the file
+  tools' refusal of a note sidecar surfaces as a raised `PermissionError` (`test_agent_mounts.py`,
+  `TestFilesDoorDeniesTheNoteSidecar`), and capability instructions arrive wrapped in `<context id="capability:...">`
+  (`test_agent_mounts.py`, `TestInstructionOrder`). That trial ran before `c440a0f`'s logging fix, so its other failures
+  were the shutdown loop, and the follow-up runs it again.

@@ -529,13 +529,13 @@ class TestNamingTheKnowledgeBaseIsMandatory:
         """Prevention before correction: the model cannot emit a nameless call in the first place."""
         tool = await self._tool(self._knowledge_base(), "search")
 
-        assert "knowledge_base" in tool.inputSchema["required"]
+        assert "knowledge_base" in tool.input_schema["required"]
 
     async def test_fetch_accepts_a_qualified_ref_without_repeating_the_base(self):
         """A ref already names its base, so requiring the argument beside it would only invite a contradiction."""
         tool = await self._tool(self._knowledge_base(), "fetch")
 
-        assert "knowledge_base" not in tool.inputSchema.get("required", [])
+        assert "knowledge_base" not in tool.input_schema.get("required", [])
 
     async def test_a_qualified_ref_alone_opens_the_base_it_names(self):
         kimchi = _envelope("page:wiki/ferment.kimchi")
@@ -628,7 +628,7 @@ class TestNamingTheKnowledgeBaseIsMandatory:
         knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface("kitchen", "kitchen", WORKDOCS, search=FakeSearch(rows=(_hit("mu.brine", 0.9),))),))
         tool = await self._tool(knowledge_base, "search")
 
-        assert "knowledge_base" not in tool.inputSchema["properties"]
+        assert "knowledge_base" not in tool.input_schema["properties"]
 
         result = await knowledge_base.direct_call_tool("search", {"query": "brine"})
         assert isinstance(result, SearchResult)

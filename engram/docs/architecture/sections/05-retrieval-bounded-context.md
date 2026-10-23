@@ -7,7 +7,7 @@
 The **Retrieval** context is the single `engram/retrieval` slice, and it is the
 only read path. Its core is the **shared retrieval toolset**
 (`engram/retrieval/tools.py`): `search`, `fetch`, `graph_expand`, and `find_paths`,
-defined once and registered into both the FastMCP server and the evals agent's
+defined once and registered into both the MCP server and the evals agent's
 `FunctionToolset` ([ADR-0011](../../adr/0011-single-source-retrieval-toolset.md)).
 Lexical retrieval goes through a **dialect seam**, a `SearchDialect` strategy
 registry emitting backend-specific BM25 SQL so one codebase serves both the
@@ -36,7 +36,7 @@ contract lives in [serve.md](../../reference/serve.md).
 `engram/retrieval` is the whole Retrieval context: a **read-only** hybrid-retrieval
 surface (`search` / `fetch` / `graph_expand` / `find_paths`, plus
 `describe_schema` / `run_sql` / `submit_feedback`) exposed identically over the
-Typer CLI and the Studio API (both `studio.knowledge_base`) and the FastMCP stdio
+Typer CLI and the Studio API (both `studio.knowledge_base`) and the MCP stdio
 server it builds itself. The read path
 **bypasses the CQRS bus**: the shared toolset (`tools.py`) calls query handlers
 (`queries.py`) directly, each holding a `SqlGateway` port, and every read hits only
@@ -67,7 +67,7 @@ C4Component
     ContainerDb_Ext(pg, "Postgres, api schema only", "api.search / fetch / cards / edges / graph_expand / graph_paths / graph_reach", "kb_reader role: read-only, 10s statement_timeout, 5s lock_timeout")
 
     Component_Boundary(serve, "engram/retrieval, the library surface") {
-        Component(mcp, "FastMCP stdio server", "mcp_server.py, create_mcp_server", "register_mcp_tools + run_sql/describe_schema/run_code/submit_feedback")
+        Component(mcp, "MCP stdio server", "mcp_server.py, create_mcp_server", "register_mcp_tools + run_sql/describe_schema/run_code/submit_feedback")
         Component(tools, "shared toolset", "tools.py", "build_retrieval_toolset / register_mcp_tools over a RetrievalHandlers set (ADR-0011)")
         Component(queries, "query handlers", "queries.py", "Search/Fetch/LookupValue/DescribeSchema/Graph/GraphExpand/GraphPaths/Status, one per read message")
         Component(reader_gw, "ReaderSqlGateway", "gateway.py + studio/src/studio/knowledge_base/wiring/contracts.py", "Capped reads + api introspection over the reader engine (NullPool), one REPEATABLE READ snapshot per tool call, a private collection through its own role")

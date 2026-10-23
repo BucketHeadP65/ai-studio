@@ -237,9 +237,9 @@ started at plus the chunks it has seen. A step chat opened mid-step therefore sh
 first token whenever the buffer still holds it. A steer is accepted only while the line is executing (409 otherwise,
 404 for a line that never opened, which is what a temporal-engine run answers). It is appended to the line's inbox
 and echoed onto the stream at once as a `data-steer` chunk (`{"message", "at"}`) so every viewer sees the person's
-words, and the step's own delivery capability folds it into a following model request the way the chat's mid-turn
-steer does, inside the run's loop, never as a concurrent write to its history (upstream delivers one request boundary
-after the drain, or redirects a run that was about to end into one more request). A steer spends inside the step's
+words, and the step's own delivery capability folds it into the step's next model request the way the chat's mid-turn
+steer does, inside the run's loop, never as a concurrent write to its history (upstream delivers it into the request
+the drain ran ahead of, or redirects a run that was about to end into one more request). A steer spends inside the step's
 stated request budget. A step that overruns because of one fails as any overrun does.
 
 Live streaming and steering need the in-process engine (the default): on the temporal
@@ -348,7 +348,11 @@ class Decision(BaseModel):
 Approve ignores `feedback` outright. It is read only on a rejection. A reject-with-feedback never itself approves the
 retry, and the revised value comes back to the same gate for a person to read, unless automode is on for that run. A
 step file may also carry `budget` (`requests`, optional `tool_calls`). The run enforces it, and the step reads the
-number in its own first turn. A step file may also carry `skills` (names from the skills registry,
+number in its own first turn. In a code-mode step, `tool_calls` counts every call a `run_code` program makes as well as
+the `run_code` call itself (pydantic-ai-harness 0.59.0 and later). A program's call that would cross it ends the step
+with `UsageLimitExceeded` in the middle of the program, and catching that inside the program does not help. The
+shipped template steps that search inside code mode carry doubled budgets for this: `check_adrs` 24, `draft_decision_brief`
+28 and `review_decision_brief` 20. A step file may also carry `skills` (names from the skills registry,
 [ADR 0013](../adr/0013-skills-registry.md)), mounted on that one step alone.
 
 ### What a rejection carries into the rerun

@@ -24,7 +24,7 @@ import json
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 
 from engram.config import RecommendationSettings
 from engram.evals.recommendation.infrastructure.mcp_recommendation import DIAGNOSE_STRUCTURE, SUBMIT_RECOMMENDATION, WHAT_IF_EDGES
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from mcp.types import CallToolResult
 
     from engram.evals.generation.contracts import EvaluationDataset, SupportsSeeding
@@ -194,7 +194,7 @@ def _seed_repo_factory(seeder: SupportsSeeding):
 _AUTHORING_ONLY = frozenset({"search", "fetch", PROPOSE_SEEDS, SUBMIT_CASES})
 
 
-def _authoring_server(seeder: SupportsSeeding, datasets_dir: Path, *, only: frozenset[str] | None = _AUTHORING_ONLY) -> FastMCP:
+def _authoring_server(seeder: SupportsSeeding, datasets_dir: Path, *, only: frozenset[str] | None = _AUTHORING_ONLY) -> MCPServer:
     """A server wired with the authoring deps and a profile that opts the authoring tools in."""
     return create_mcp_server(
         FakeSqlGateway(), _describe_handler(), seed_repo_factory=_seed_repo_factory(seeder), datasets_dir=datasets_dir, only=only,
@@ -241,9 +241,8 @@ def _case_payload(
     return {"seed": _pinpoint_seed().model_dump(mode="json"), "question": question, "answer": answer, "support_quotes": [quote]}
 
 
-async def _tool_names(server: FastMCP) -> frozenset[str]:
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+async def _tool_names(server: MCPServer) -> frozenset[str]:
+    async with Client(server) as client:
         listing = await client.list_tools()
     return frozenset(tool.name for tool in listing.tools)
 
@@ -292,8 +291,7 @@ class TestAuthoringToolsOptIn:
     async def test_descriptions_orient_the_propose_draft_submit_flow(self, tmp_path: Path):
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
 
         by_name = {tool.name: (tool.description or "") for tool in listing.tools}
@@ -309,11 +307,10 @@ class TestProposeEvalSeeds:
         seeder = _FakeSeeder([_pinpoint_seed()])
         server = _authoring_server(seeder, tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(PROPOSE_SEEDS, {"archetype": "pinpoint", "count": 3})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["archetype"] == "pinpoint"
         assert payload["instructions"]  # the per-archetype drafting prompt rides along
@@ -327,8 +324,7 @@ class TestProposeEvalSeeds:
         seeder = _FakeSeeder([_pinpoint_seed()])
         server = _authoring_server(seeder, tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(PROPOSE_SEEDS, {"archetype": "pinpoint", "count": 2, "collection": "cooking"})
 
         assert seeder.calls == [("cooking", (), 2)]
@@ -336,11 +332,10 @@ class TestProposeEvalSeeds:
     async def test_unknown_archetype_returns_an_actionable_error_not_a_crash(self, tmp_path: Path):
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(PROPOSE_SEEDS, {"archetype": "bogus", "count": 1})
 
-        assert result.isError is False  # an unknown name is an actionable answer, not a torn-down session
+        assert result.is_error is False  # an unknown name is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert "bogus" in payload["error"]  # names the bad value so the client re-grounds it
@@ -353,11 +348,10 @@ class TestSubmitEvalCases:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["accepted"] == 1
         assert payload["rejected"] == 0
@@ -375,11 +369,10 @@ class TestSubmitEvalCases:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="a phrase that is nowhere in any source body")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert payload["accepted"] == 0
         assert payload["rejected"] == 1  # the quote check dropped the fabricated quote
@@ -393,8 +386,7 @@ class TestSubmitEvalCases:
             ]
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json})
 
         payload = json.loads(_text(result))
@@ -405,8 +397,7 @@ class TestSubmitEvalCases:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json, "dataset": "manual"})
 
         assert (tmp_path / "manual.yaml").exists()
@@ -419,8 +410,7 @@ class TestSubmitEvalCases:
         first = json.dumps([_case_payload(quote="substantial token cost", question="First?", answer="A1")])
         second = json.dumps([_case_payload(quote="entity and relation extraction", question="Second?", answer="A2")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(SUBMIT_CASES, {"cases_json": first})
             await client.call_tool(SUBMIT_CASES, {"cases_json": second})
 
@@ -432,11 +422,10 @@ class TestSubmitEvalCases:
     async def test_malformed_payload_returns_an_actionable_error_not_a_crash(self, tmp_path: Path):
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": "{not valid json"})
 
-        assert result.isError is False  # a bad payload is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad payload is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
 
@@ -445,11 +434,10 @@ class TestSubmitEvalCases:
         # Valid JSON, but each item is missing question/answer/support_quotes — a pydantic ValidationError.
         cases_json = json.dumps([{"seed": _pinpoint_seed().model_dump(mode="json")}])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
 
@@ -462,11 +450,10 @@ class TestSubmitEvalCasesDatasetGuard:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json, "dataset": "../evil"})
 
-        assert result.isError is False  # a bad name is an actionable answer, not a torn-down session
+        assert result.is_error is False  # a bad name is an actionable answer, not a torn-down session
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not (tmp_path.parent / "evil.yaml").exists()  # nothing escaped datasets_dir
@@ -475,11 +462,10 @@ class TestSubmitEvalCasesDatasetGuard:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json, "dataset": "nested/evil"})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not (tmp_path / "nested").exists()  # no nested directory was created
@@ -489,11 +475,10 @@ class TestSubmitEvalCasesDatasetGuard:
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
         escape_target = tmp_path.parent / "abs-evil"
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json, "dataset": str(escape_target)})
 
-        assert result.isError is False
+        assert result.is_error is False
         payload = json.loads(_text(result))
         assert "error" in payload
         assert not escape_target.with_suffix(".yaml").exists()
@@ -502,8 +487,7 @@ class TestSubmitEvalCasesDatasetGuard:
         server = _authoring_server(_FakeSeeder([_pinpoint_seed()]), tmp_path)
         cases_json = json.dumps([_case_payload(quote="substantial token cost")])
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(SUBMIT_CASES, {"cases_json": cases_json, "dataset": "authored"})
 
         payload = json.loads(_text(result))
@@ -518,11 +502,10 @@ class TestProposeEvalSeedsCountClamp:
         seeder = _FakeSeeder([_pinpoint_seed()])
         server = _authoring_server(seeder, tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             result = await client.call_tool(PROPOSE_SEEDS, {"archetype": "pinpoint", "count": 10_000})
 
-        assert result.isError is False
+        assert result.is_error is False
         (_collection, _page_ids, limit) = seeder.calls[0]
         assert limit == _MAX_SEED_COUNT  # the LIMIT the seeder saw is bounded, not the 10_000 the client asked for
 
@@ -530,8 +513,7 @@ class TestProposeEvalSeedsCountClamp:
         seeder = _FakeSeeder([_pinpoint_seed()])
         server = _authoring_server(seeder, tmp_path)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             await client.call_tool(PROPOSE_SEEDS, {"archetype": "pinpoint", "count": 3})
 
         assert seeder.calls[0][2] == 3  # a count under the ceiling is not touched by the clamp

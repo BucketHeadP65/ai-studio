@@ -163,13 +163,11 @@ def test_steer_chunk_is_one_data_frame_matching_the_wire_shape() -> None:
     assert payload == {"type": "data-steer", "data": {"message": "hi", "at": "2026-08-31T10:00:00+00:00"}}
 
 
-async def test_a_steer_waiting_before_the_run_reaches_the_second_request_then_empties() -> None:
-    """`ctx.enqueue` delivers one graph-node-boundary later than the call, as a redirect past the run's own end.
+async def test_a_steer_waiting_before_the_run_reaches_the_first_request_then_empties() -> None:
+    """`ctx.enqueue` called from `before_model_request` delivers into the request that hook ran ahead of.
 
-    The same mechanism the chat's `SteerDelivery` rides: what a capability enqueues never lands
-    inside the very request the drain ran ahead of. So a line's inbox, seeded before the run
-    starts, first drains on request one and reaches the model on request two, once request one's
-    own answer would otherwise have ended the run.
+    The same mechanism the chat's `SteerDelivery` rides. So a line's inbox, seeded before the run
+    starts, drains on request one and reaches the model in it, and the run needs no second request.
     """
     line = StepConversation(step=_probe_task(), output_type=str)
     line.steer_inbox.append("check the budget before you answer")
@@ -184,9 +182,8 @@ async def test_a_steer_waiting_before_the_run_reaches_the_second_request_then_em
 
     await run_relayed(worker, line, "go", usage_limits=_BUDGET)
 
-    assert len(requests) == 2, "request one answers, finds the steer still pending, and is redirected into request two"
-    second = requests[1]
-    prompts = [part.content for message in second for part in message.parts if isinstance(part, UserPromptPart)]
+    assert len(requests) == 1, "request one carries the steer, so its answer ends the run"
+    prompts = [part.content for message in requests[0] for part in message.parts if isinstance(part, UserPromptPart)]
     assert any(isinstance(prompt, str) and STEP_STEER_PREAMBLE in prompt for prompt in prompts), prompts
     assert any(isinstance(prompt, str) and "check the budget before you answer" in prompt for prompt in prompts), prompts
     assert line.steer_inbox == [], "the inbox is empty once its message reached the model"

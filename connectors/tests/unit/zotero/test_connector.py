@@ -19,6 +19,8 @@ import pytest
 
 from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import SourceType
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from engram_connectors.zotero.contracts import LibrarySettings, SqliteZoteroConnector
 from engram_connectors.zotero.infrastructure import connector as connector_module
@@ -123,6 +125,13 @@ async def test_list_items_with_pdf_excludes_linked_url(connector: SqliteZoteroCo
     keys = {item.provider_key for item in await connector.list_items_with_pdf()}
 
     assert seeded.linked_url_key not in keys
+
+
+async def test_the_connection_to_the_copy_refuses_a_write(connector: SqliteZoteroConnector):
+    async with connector._connect() as connection:
+        await connection.execute(text("SELECT count(*) FROM items"))
+        with pytest.raises(OperationalError, match="readonly database"):
+            await connection.execute(text("CREATE TABLE written (x INTEGER)"))
 
 
 def test_pdf_path_does_not_raise_for_attachments_when_base_dir_is_none(seeded: SeededZotero):

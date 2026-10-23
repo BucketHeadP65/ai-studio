@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from sqlalchemy.dialects.postgresql import Insert
 
 
-def _compiles(statement: Insert | Select[tuple[str, list[int]]]) -> str:
+def _compiles(statement: Insert | Select[str, list[int]]) -> str:
     return str(statement.compile(dialect=postgresql.dialect()))
 
 

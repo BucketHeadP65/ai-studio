@@ -328,10 +328,16 @@ def stop_tracing() -> None:
     """Flush every span and record still buffered, then close the exporters. Call it once on the way out.
 
     A process that exits normally flushes on its own. A server stopped from its lifespan calls this so a signal
-    loses nothing. It never raises.
+    loses nothing. Log records stop going to Logfire first, so a record logged afterwards reaches only the root
+    logger's other handlers. It never raises.
     """
     import logfire  # noqa: PLC0415 (the one place that names the backend, loaded only when tracing stops)
 
+    # A closed span processor logs a warning for every span it is handed, and Logfire's handler would turn that
+    # warning into another span for the same processor, without end.
+    root = logging.getLogger()
+    for handler in [handler for handler in root.handlers if isinstance(handler, logfire.LogfireLoggingHandler)]:
+        root.removeHandler(handler)
     try:
         logfire.shutdown()
     except Exception as exc:  # noqa: BLE001 (shutting telemetry down must never fail the process that is stopping)

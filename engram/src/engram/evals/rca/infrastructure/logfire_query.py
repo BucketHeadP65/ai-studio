@@ -33,7 +33,7 @@ def build_logfire_query_client(settings: LogfireSettings, *, transport: httpx.Ba
         msg = "Logfire RCA requires infrastructure.logfire.read_token. It is empty (set APP_INFRASTRUCTURE__LOGFIRE__READ_TOKEN)."
         raise ValueError(msg)
 
-    from logfire.experimental.query_client import LogfireQueryClient  # noqa: PLC0415 (lazy: logfire loads only on an RCA query)
+    from logfire.query_client import LogfireQueryClient  # noqa: PLC0415 (lazy: logfire loads only on an RCA query)
 
     # `transport` reaches logfire's `httpx.Client` through its extra client keyword arguments.
     return LogfireQueryClient(read_token=settings.read_token, base_url=settings.base_url or None, transport=transport)

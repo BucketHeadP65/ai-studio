@@ -4,7 +4,8 @@ r"""The three MCP recommendation tools, which let an MCP client run the recommen
 `what_if_edges` measures how many gold pairs candidate edges would connect, an upper bound on an add-relation edit.
 `submit_recommendation` checks every proposal's edit against the current schema, then saves the recommendation
 as `<name>.yaml` beside its draft ADR `<name>.adr.md`, which `evals apply-spec` later reads.
-An unsafe name or a malformed or invalid payload is answered with a JSON `{error}` object, never an exception.
+An unsafe name, a dataset name with no file, or a malformed or invalid payload is answered with a JSON `{error}`
+object, never an exception.
 A dataset or recommendation name must be one segment of letters, digits, `_` or `-`, so no tool reads or writes outside its folder.
 """
 
@@ -31,7 +32,7 @@ from engram.kb.contracts import load_knowledge_base_schema
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     from engram.config import RecommendationSettings
     from engram.evals.commands import KnowledgeBaseGatewayFactory, PolicyEvaluatorFactory
@@ -113,7 +114,7 @@ class _RecommendationToolDeps:
 
 
 def register_recommendation_tools(  # noqa: PLR0913 (each arg is a distinct injected dep, bundling them would obscure the call contract)
-    server: FastMCP,
+    server: MCPServer,
     *,
     gateway_factory: KnowledgeBaseGatewayFactory,
     evaluator_factory: PolicyEvaluatorFactory,
@@ -124,11 +125,12 @@ def register_recommendation_tools(  # noqa: PLR0913 (each arg is a distinct inje
 ) -> None:
     """Register the three opt-in MCP recommendation tools, closing over the injected dependencies.
 
-    Each tool returns JSON and answers a bad input (an unsafe name, a malformed payload, an edit the schema
-    refuses) with an error object, never an exception. It reads no container and no environment.
+    Each tool returns JSON and answers a bad input (an unsafe name, a dataset name with no file, a malformed
+    payload, an edit the schema refuses) with an error object, never an exception. It reads no container and no
+    environment.
 
     Args:
-        server: The FastMCP server to register the three recommendation tools on.
+        server: The MCP server to register the three recommendation tools on.
         gateway_factory: Opens a fresh recommendation knowledge base gateway, one owner session, for each call.
         evaluator_factory: Builds a `PolicyEvaluator` for the `model` a call names. `diagnose_structure` scores
             the baseline run with it.
@@ -173,9 +175,9 @@ def register_recommendation_tools(  # noqa: PLR0913 (each arg is a distinct inje
 
 async def _run_diagnose_structure(deps: _RecommendationToolDeps, *, dataset: str, policy_json: str, model: str, collection: str) -> str:
     """Diagnose the dataset's run and answer the `StructuralDiagnosis`, its cases named by dataset case name, as JSON."""
-    dataset_path = _resolve_named(dataset, deps.datasets_dir)
-    if dataset_path is None:
-        return _name_error(dataset)
+    dataset_path = _dataset_file(dataset, deps.datasets_dir)
+    if isinstance(dataset_path, str):
+        return dataset_path
     resolved = _resolve_policy(policy_json)
     if resolved is None:
         return _policy_error()
@@ -288,10 +290,25 @@ def _resolve_named(name: str, directory: Path) -> Path | None:
     return directory / f"{name}.yaml"
 
 
+def _dataset_file(name: str, datasets_dir: Path) -> Path | str:
+    """The file a dataset name names, or the JSON error for a name that is unsafe or has no file."""
+    path = _resolve_named(name, datasets_dir)
+    if path is None:
+        return _name_error(name)
+    if not path.is_file():
+        return _missing_dataset_error(name)
+    return path
+
+
 def _name_error(name: str) -> str:
     """The actionable JSON error for an unsafe dataset / recommendation name (names the value and the rule)."""
     reason = f"invalid name {name!r}: must match {_SAFE_NAME.pattern} (one segment of letters, digits, _ or -)"
     return json.dumps({"error": reason})
+
+
+def _missing_dataset_error(name: str) -> str:
+    """The actionable JSON error for a safe dataset name with no file behind it."""
+    return json.dumps({"error": f"no dataset named {name!r}: name a dataset that exists"})
 
 
 def _policy_error() -> str:

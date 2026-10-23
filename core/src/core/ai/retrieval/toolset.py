@@ -1,8 +1,8 @@
-"""The retrieval toolset builder: four tools defined once, registered on a pydantic-ai toolset or a FastMCP server.
+"""The retrieval toolset builder: four tools defined once, registered on a pydantic-ai toolset or an MCP server.
 
 `search` finds candidate units, `fetch` reads one unit's full text, and `graph_expand` and `find_paths` walk the
 knowledge graph. `build_retrieval_toolset` registers them on a `FunctionToolset` an agent binds, and `register_mcp_tools`
-registers them on a FastMCP server. Both surfaces call the handlers the caller passes and return the shared result models
+registers them on an MCP server. Both surfaces call the handlers the caller passes and return the shared result models
 (`list[SearchHit]`, `FetchResult`, `GraphResult`, `GraphPathsResult`) as structured values, never as a JSON string.
 A caller passes its own `Search` subclass as `search_type` to add facets, and passes every tool description, keyed by
 tool name. This module does no database or file I/O.
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import TypeAdapter
 from pydantic_ai import FunctionToolset, ModelRetry
 
@@ -22,7 +22,7 @@ from .names import FETCH, FIND_PATHS, GRAPH_EXPAND, SEARCH, TOOL_MAX_RETRIES, TO
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     from .internal_contracts import RetrievalHandlers, StampSource, SupportsFetch
 
@@ -180,11 +180,11 @@ def _register_search_tool[S: Search](
     toolset.add_function(search_forced, takes_ctx=False, name=SEARCH, description=descriptions[SEARCH], retries=TOOL_MAX_RETRIES)
 
 
-# -- adapter 2: the FastMCP server -------------------------------------------
+# -- adapter 2: the MCP server -----------------------------------------------
 
 
 def register_mcp_tools[S: Search](
-    server: FastMCP,
+    server: MCPServer,
     handlers: RetrievalHandlers[S],
     *,
     available: frozenset[str] | None = None,
@@ -194,15 +194,15 @@ def register_mcp_tools[S: Search](
     search_type: type[S] = Search,
     stamp: StampSource | None = None,
 ) -> None:
-    """Register the same four retrieval tools on a FastMCP `server`.
+    """Register the same four retrieval tools on an MCP `server`.
 
-    The tools return the same structured values the `FunctionToolset` returns, and FastMCP delivers each
+    The tools return the same structured values the `FunctionToolset` returns, and the server delivers each
     as `structuredContent` under its `outputSchema`. `search` wraps its hits in an object under a `"hits"`
     key. A `fetch` of an unknown id raises `ToolError`. These tools carry no retry cap, so the MCP client
     decides whether to retry, and `TOOL_MAX_RETRIES` applies only to the pydantic-ai toolset.
 
     Args:
-        server: The `FastMCP` instance to register the tools on.
+        server: The `MCPServer` instance to register the tools on.
         handlers: The retrieval handlers the tools call.
         available: The tool names the finished server serves, when the caller registers some of them
             itself rather than through this function. The graph answers' next moves name these and no
@@ -244,7 +244,7 @@ def register_mcp_tools[S: Search](
 
 
 def _add_search_mcp_tool[S: Search](
-    server: FastMCP, handlers: RetrievalHandlers[S], *, search_hybrid: bool | None, descriptions: Mapping[str, str], search_type: type[S]
+    server: MCPServer, handlers: RetrievalHandlers[S], *, search_hybrid: bool | None, descriptions: Mapping[str, str], search_type: type[S]
 ) -> None:
     """Add the `search` tool to `server`, agent-controlled when `search_hybrid` is None and with a fixed leg otherwise."""
     if search_hybrid is None:

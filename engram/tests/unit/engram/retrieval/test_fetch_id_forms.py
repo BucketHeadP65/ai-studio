@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.disclosure.contracts import DisclosureEnvelope
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
+from mcp.server.mcpserver import MCPServer
 from pydantic_ai import FunctionToolset, ModelRetry
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
@@ -316,29 +316,27 @@ class TestTheFlatMcpFetchReadsWhatSearchNames:
 
     @pytest.mark.parametrize(("hit_level", "unit_id"), _LEVELS)
     async def test_the_exact_ref_the_next_step_names_reads_the_hit(self, hit_level: str, unit_id: str):
-        server = FastMCP("fetch-forms")
+        server = MCPServer("fetch-forms")
         register_mcp_tools(server, _handlers(_gateway(), FakeOneHitSearch(hit_level, unit_id)), collection=_HOME)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             found = json.loads(_text(await client.call_tool("search", {"query": "alpha"})))
             named = _named_fetch(tuple(found["next_steps"]["options"]))
             unit = await client.call_tool("fetch", {"unit_id": named})
             bare = await client.call_tool("fetch", {"unit_id": unit_id})
 
-        assert unit.isError is False
+        assert unit.is_error is False
         assert json.loads(_text(unit))["id"] == unit_id
         assert json.loads(_text(bare))["id"] == unit_id
 
     async def test_an_unknown_id_fails_the_call_naming_the_forms(self):
-        server = FastMCP("fetch-forms")
+        server = MCPServer("fetch-forms")
         register_mcp_tools(server, _handlers(_gateway()), collection=_HOME)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool("fetch", {"unit_id": "note.missing"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         assert "No unit found with id 'note.missing'" in _text(failed)
         _assert_names_the_forms(_text(failed), _HOME)
 
@@ -346,7 +344,7 @@ class TestTheFlatMcpFetchReadsWhatSearchNames:
 class TestTheGraphOnlyMcpFetchReadsWhatTheGraphNames:
     """A server wired with no search handler serves the flat fetch beside the graph tools."""
 
-    def _server(self) -> FastMCP:
+    def _server(self) -> MCPServer:
         gateway = _gateway()
         return create_mcp_server(
             gateway,
@@ -358,8 +356,7 @@ class TestTheGraphOnlyMcpFetchReadsWhatTheGraphNames:
         )
 
     async def test_every_ref_a_graph_answer_names_reads_its_unit(self):
-        async with connect_in_memory(self._server()) as client:
-            await client.initialize()
+        async with Client(self._server()) as client:
             reached = json.loads(_text(await client.call_tool("graph_expand", {"seed_ids": [_PAGE]})))
             joined = " ".join(reached["next_steps"]["options"])
             named = [ast.literal_eval(match) for match in re.findall(r"fetch\(unit_id=('[^']*')\)", joined)]
@@ -369,11 +366,10 @@ class TestTheGraphOnlyMcpFetchReadsWhatTheGraphNames:
         assert [unit["id"] for unit in units] == [_PAGE, _CLAIM]
 
     async def test_an_unknown_id_fails_the_call_naming_the_forms_without_search(self):
-        async with connect_in_memory(self._server()) as client:
-            await client.initialize()
+        async with Client(self._server()) as client:
             failed = await client.call_tool("fetch", {"unit_id": f"unit:{_HOME}/note.missing#c9"})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         message = _text(failed)
         assert "No unit found with id 'note.missing#c9'" in message
         _assert_names_the_forms(message, _HOME)
@@ -610,14 +606,13 @@ class TestASingleSourceSearchReadsOnlyItsOwnCollection:
         assert found.hits[0].ref == f"page:{_HOME}/{_PAGE}"
 
     async def test_the_mcp_search_fails_the_call_naming_the_one_it_serves(self):
-        server = FastMCP("fetch-forms")
+        server = MCPServer("fetch-forms")
         register_mcp_tools(server, _handlers(_gateway()), collection=_HOME)
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             failed = await client.call_tool("search", {"query": "alpha", "collection": _OTHER})
 
-        assert failed.isError is True
+        assert failed.is_error is True
         assert f"{_HOME!r}" in _text(failed)
 
     async def test_the_description_offers_no_other_collection(self):
@@ -694,8 +689,7 @@ class TestRefusalsNameOnlyTheGraphToolsServed:
             only=frozenset({"fetch", "graph_expand", "find_paths"}),
         )
 
-        async with connect_in_memory(server) as client:
-            await client.initialize()
+        async with Client(server) as client:
             listing = await client.list_tools()
             failed = await client.call_tool("fetch", {"unit_id": f"unit:{_HOME}/note.missing"})
 

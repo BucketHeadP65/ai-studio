@@ -36,7 +36,7 @@ newest hint to refetch is the one that matters."""
 class Executes(Protocol):
     """What `publish_in` needs from a transaction: a session or a connection that executes a statement."""
 
-    async def execute(self, statement: TextClause, parameters: Mapping[str, object] | None = None, /) -> Result[tuple[object, ...]]:
+    async def execute(self, statement: TextClause, parameters: Mapping[str, object] | None = None, /) -> Result[*tuple[object, ...]]:
         """Run `statement` with `parameters` inside the caller's transaction.
 
         Args:

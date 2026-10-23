@@ -29,7 +29,7 @@ from engram.retrieval.domain import SearchResult
 from engram.retrieval.tools import FetchEnvelope
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.knowledge_base_builder import KnowledgeBaseBuilder
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from pathlib import Path
 
-    from mcp import ClientSession
     from mcp.types import CallToolResult
 
 # One page over the disclosure row cap, so the ungrouped app bucket degrades to its page-type
@@ -92,10 +91,10 @@ async def _index(root: Path, spec: KnowledgeBaseSchema, url: str) -> None:
         await engine.dispose()
 
 
-async def _read(client: ClientSession, ref: str) -> FetchEnvelope:
+async def _read(client: Client, ref: str) -> FetchEnvelope:
     """Fetch `ref` and assert it came back as itself, from research, with research-qualified children."""
     result = await client.call_tool("fetch", {"unit_id": ref})
-    assert not result.isError, result.content
+    assert not result.is_error, result.content
     opened = FetchEnvelope.model_validate(json.loads(_text(result)))
     assert opened.ref == ref
     assert opened.knowledge_base is not None
@@ -142,9 +141,9 @@ class TestTheNormalServerHandsOffToASecondKnowledgeBase:
         resolver, registry = served
         server = await _build_mcp_server(resolver, settings_path=registry)
 
-        async with connect_in_memory(server) as client:
+        async with Client(server) as client:
             result = await client.call_tool("search", {"query": "graph evidence assessment", "collection": "research"})
-            assert not result.isError, result.content
+            assert not result.is_error, result.content
             searched = SearchResult.model_validate(json.loads(_text(result)))
             assert searched.knowledge_base is not None
             assert searched.knowledge_base.slug == "research"
@@ -166,7 +165,7 @@ class TestTheNormalServerHandsOffToASecondKnowledgeBase:
         resolver, registry = served
         server = await _build_mcp_server(resolver, settings_path=registry)
 
-        async with connect_in_memory(server) as client:
+        async with Client(server) as client:
             root = await _read(client, "collection:research")
             group_ref = next(child.ref for child in root.children if child.ref == "group:research/")
 
@@ -184,9 +183,9 @@ class TestTheNormalServerHandsOffToASecondKnowledgeBase:
         resolver, registry = served
         server = await _build_mcp_server(resolver, settings_path=registry)
 
-        async with connect_in_memory(server) as client:
+        async with Client(server) as client:
             searched = await client.call_tool("search", {"query": "graph", "collection": "unregistered"})
             fetched = await client.call_tool("fetch", {"unit_id": "page:unregistered/paper.graph"})
 
-        assert searched.isError
-        assert fetched.isError
+        assert searched.is_error
+        assert fetched.is_error

@@ -21,7 +21,7 @@ from engram.retrieval.queries import DescribeSchemaHandler, FetchHandler, GraphE
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.specs import research_spec
-from mcp.shared.memory import create_connected_server_and_client_session as connect_in_memory
+from mcp.client import Client
 from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -32,7 +32,7 @@ from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGat
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
 _DOC_AUTHORING_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"})
 
@@ -116,10 +116,9 @@ class _McpContainer:
         return service
 
 
-async def _tool_names(server: FastMCP) -> frozenset[str]:
+async def _tool_names(server: MCPServer) -> frozenset[str]:
     """The names of the tools the built server registered (over the SDK's in-memory session)."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         listing = await client.list_tools()
     return frozenset(tool.name for tool in listing.tools)
 
@@ -171,12 +170,11 @@ def _write_shareable_knowledge_base(root: Path, *, slug: str) -> None:
     (root / "knowledge-base-schema.json").write_text(json.dumps(spec), encoding="utf-8")
 
 
-async def _unknown_knowledge_base_error_text(server: FastMCP) -> str:
+async def _unknown_knowledge_base_error_text(server: MCPServer) -> str:
     """Call `skeleton` with a knowledge base name no target carries; `AuthoringTools._target` answers with the valid names."""
-    async with connect_in_memory(server) as client:
-        await client.initialize()
+    async with Client(server) as client:
         result = await client.call_tool("skeleton", {"knowledge_base": "not-a-real-knowledge-base", "page_type": "note"})
-    assert result.isError
+    assert result.is_error
     block = result.content[0]
     assert block.type == "text"
     return block.text

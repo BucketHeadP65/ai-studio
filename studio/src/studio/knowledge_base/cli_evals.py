@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 import typer
 
-from core.cqrs.contracts import MessageBus
+from core.cqrs.contracts import MessageBus, utcnow
 from core.thinking import Thinking  # noqa: TC002 (typer reads the --thinking option's annotation at runtime)
 from engram.evals.commands import (
     CheckFreshness,
@@ -1679,7 +1679,7 @@ async def _run_rca(
         return
 
     client = build_logfire_query_client(logfire_settings)
-    report = build_rca_report(client, queries, query_names=names)
+    report = build_rca_report(client, queries, now=utcnow(), query_names=names)
     typer.echo(render_rca_report_markdown(report))
 
 

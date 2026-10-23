@@ -57,7 +57,7 @@ class SqlAlchemyCutPlans:
         return insert(CutPlanORM).values(list(rows)).on_conflict_do_nothing(index_elements=["collection", "text_hash", "planner"])
 
     @staticmethod
-    def select_statement(collection: str, planner: str, text_hashes: Collection[str]) -> Select[tuple[str, list[int]]]:
+    def select_statement(collection: str, planner: str, text_hashes: Collection[str]) -> Select[str, list[int]]:
         """`SELECT text_hash, starts FROM kb.cut_plans` for one knowledge base, one chunk planner and the hashes asked.
 
         The hashes bind as one array parameter however many there are.
@@ -105,4 +105,4 @@ class SqlAlchemyCutPlans:
             return {}
         async with self._engine.connect() as connection:
             rows = await connection.execute(self.select_statement(collection, planner, text_hashes))
-            return {text_hash: tuple(starts) for text_hash, starts in rows.tuples()}
+            return {text_hash: tuple(starts) for text_hash, starts in rows}
