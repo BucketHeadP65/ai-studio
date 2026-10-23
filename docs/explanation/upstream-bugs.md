@@ -105,8 +105,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `OpenAIChatModel._map_user_message` renders it as `role="user"` (reproduced 2026-09-27). An output-validation retry and a
   tool-shaped retry share one part type, and a provider mapping tells them apart only by `tool_name`. The ask would be a way to render a validator's own retry as coming from the
   validator, not the person, when `tool_name` is `None`. pydantic-ai 2.60.0 answers it (upstream issue 6404): a retry that
-  answers no tool call is a `RetryFeedbackPart`, which each model renders as feedback from the application. We hold
-  pydantic-ai below 2.60 for now (see the `RetryPromptPart` entry below).
+  answers no tool call is a `RetryFeedbackPart`, which each model renders as feedback from the application, fenced in
+  the user voice behind a line saying the application is speaking. Fixed for us since we took 2.60 (see the
+  `RetryPromptPart` entry below).
 - **Issue:** not filed.
 
 ## UB-5. A join behind another join fires in the same idle pass as the inner join, when the inner join was registered first
@@ -253,17 +254,37 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   three template steps that search inside code mode carry doubled budgets, `check_adrs` 24, `draft_decision_brief` 28 and
   `review_decision_brief` 20.
 - **`RetryPromptPart` is replaced by a retried `ToolReturnPart` and a `RetryFeedbackPart`** (pydantic-ai 2.60.0, upstream
-  issue 6404). The agent loop no longer builds a `RetryPromptPart`, and a stored `'retry-prompt'` part loads as one of the
-  two new parts. Not adapted yet: `core` holds pydantic-ai below 2.60 and pydantic-ai-harness below 0.60 (`c440a0f`). Taking
-  it needs `core.ai.transcripts` (the answer to a call), `core.ai.inspection` (the rules, the views and the taxonomy's
-  `retry-prompt` surface, which the inspection API serves), `core.ai.history.message_key` (a `RetryFeedbackPart` has no
-  branch, and a stored retry loads as a new part kind, so its key changes), `harness.session`,
-  `harness.features.authoring.pending_calls`, `harness.features.inspection.api_models` and every test that builds a
-  `RetryPromptPart` moved to the new parts. It also needs a ruling on whether a retry a tool asks for still counts as a
-  schema refusal, since 2.60 tells them apart by `RetryInfo.cause` and a stored retry with text content loads with no
-  cause. A trial on 2.60 and 0.60 failed on three more changes, each still to be told apart as a bug (a UB entry) or an
-  intended change: the memory toolset's search returns no match (`test_memory.py`, `TestAdaptedToolset`), the file
-  tools' refusal of a note sidecar surfaces as a raised `PermissionError` (`test_agent_mounts.py`,
-  `TestFilesDoorDeniesTheNoteSidecar`), and capability instructions arrive wrapped in `<context id="capability:...">`
-  (`test_agent_mounts.py`, `TestInstructionOrder`). That trial ran before `c440a0f`'s logging fix, so its other failures
-  were the shutdown loop, and the follow-up runs it again.
+  issue 6404). The agent loop no longer builds a `RetryPromptPart`. A retry that answers a call is that call's
+  `ToolReturnPart` with `outcome='retried'` and a `RetryInfo` whose `cause` says why: `validation_error` (the schema
+  rejected the arguments), `model_retry` (the tool, its argument validator or a hook raised `ModelRetry`),
+  `unknown_tool` or `unavailable_tool`. A retry that answers no call is a `RetryFeedbackPart` (`validation_error`,
+  `no_output` or `model_retry`). A stored `'retry-prompt'` part still loads as one of the two, with no cause when its
+  content is text. Taken on 2026-10-23: every reader moved to the two parts (`core.ai.transcripts`, where a call's answer is
+  now always its return, the inspection's rules, views and taxonomy, `core.ai.history.message_key`, the harness session
+  rescue and pending calls, the inspection API's evidence kinds, the SPA's inspector trace and turn inspector), and
+  engram's seen recall skips a retried return, which 2.60 would otherwise read as a tool result. By the owner's ruling
+  `schema_rejected_arguments` counts only a `validation_error`, and a tool that ran and asked for a retry is the new
+  `tool_refused_call` symptom. Both show in the tool return, and `unknown_tool`, `unavailable_tool` and a retry with no
+  cause count as neither. Stored retries were moved forward by a one-off script (the record's forms, keys and
+  checkpoint digests, the session projection, the run archive), not read by a compatibility branch.
+- **A dumped `ToolReturnPart` carries a `retry` field** (pydantic-ai 2.60.0). Every tool return now dumps `"retry": null`,
+  so a step's checkpoint digest, which digests the dumped messages, differs under 2.60 from the one 2.59 stored, and a
+  durable run's next turn would refuse the checkpoint. The same one-off script readdresses every completed continuation
+  attempt whose digest changed. The record also stores a tool return re-sent under 2.60 as a new form of its message,
+  which costs space, never correctness.
+- **The bundled memory stores search only the files directly under a prefix** (pydantic-ai-harness 0.60.0). A deeper
+  folder is skipped as another scope, so a search over a scope found none of the harness's notes, which sit in category
+  folders. The harness's `NoteMemory` searches each category
+  folder of its scope and merges the matches (UE-23). The agent-memory store's ranked search, which the global and
+  project mounts use, was never affected.
+- **A framework capability's dynamic instructions are framed as a `<context id="...">` element** (pydantic-ai 2.60.0).
+  Built-in and harness capabilities now default a computed instruction block to `on_change='append'`, so a later change
+  is appended as an `InstructionDeltaPart` instead of rewriting the cached prefix, and the prefix renders each such block
+  inside `<context id="capability:<id>">` with one sentence after the last saying a later block with the same id
+  replaces it. The studio identity (`ManagedPrompt`), the shell and the files sentences arrive that way. No code of ours
+  reads that text. The prefix's text changes once at the upgrade, so each conversation's first request on 2.60 misses
+  the prompt cache once, and a changed block no longer breaks the cached prefix afterwards. The instruction order tests
+  read the text inside the element.
+- **The files plugin's refusal of a note sidecar** reached the model as a retry in 2.59 and still does in 2.60, now as
+  a retried return with the cause `model_retry`. The 2.60 trial saw a raised `PermissionError` only because the test's
+  model never recognised the new retry part, kept calling, and spent the tool's one retry.
