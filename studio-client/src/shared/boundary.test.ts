@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import ts from "typescript";
+import { parseSync } from "vite";
 import { expect, test } from "vitest";
 
 // src/shared/ is app-agnostic: it imports packages and its own files, never the rest of
@@ -20,6 +20,27 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+// Every module a file names: static imports, re-exports, and dynamic imports of a plain string.
+function importedModules(file: string): string[] {
+  const source = readFileSync(file, "utf8");
+  const { module, errors } = parseSync(file, source);
+  // A file the parser cannot read would hide its imports.
+  if (errors.length > 0) throw new Error(`${file} does not parse: ${errors[0].message}`);
+  const dynamic = module.dynamicImports.flatMap(({ moduleRequest }) => {
+    const literal = /^(["'`])([^"'`$]*)\1$/.exec(
+      source.slice(moduleRequest.start, moduleRequest.end),
+    );
+    return literal ? [literal[2]] : [];
+  });
+  return [
+    ...module.staticImports.map((imported) => imported.moduleRequest.value),
+    ...module.staticExports.flatMap((exported) =>
+      exported.entries.flatMap((entry) => (entry.moduleRequest ? [entry.moduleRequest.value] : [])),
+    ),
+    ...dynamic,
+  ];
+}
+
 function leavesShared(file: string, specifier: string): boolean {
   if (specifier.startsWith("@/")) {
     return specifier !== "@/shared" && !specifier.startsWith("@/shared/");
@@ -33,9 +54,7 @@ function leavesShared(file: string, specifier: string): boolean {
 
 test("code under src/shared imports nothing from the rest of studio-client", () => {
   const offenders = sourceFiles(SHARED).flatMap((file) =>
-    ts
-      .preProcessFile(readFileSync(file, "utf8"), true, true)
-      .importedFiles.map((imported) => imported.fileName)
+    importedModules(file)
       .filter((specifier) => leavesShared(file, specifier))
       .map((specifier) => `${relative(SRC, file)} imports ${specifier}`),
   );
