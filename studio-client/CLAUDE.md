@@ -93,6 +93,11 @@ again once a release supports TypeScript 7 (openapi-typescript issue 2841).
 
 **The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
 drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and
-`src/components/graph/edge-labels.ts` draws the labels upright on a 2D canvas layer under the WebGL stage. Turn sigma's
-labels back on and delete the layer once a sigma release keeps them upright. `e2e/graph.spec.ts` checks that nodes,
-edges and edge labels are drawn.
+`src/components/graph/edge-labels.ts` draws the labels upright on a 2D canvas. `edge-label-layer.ts` lays that canvas
+into sigma's render as a layer program at the `nodes` depth, after every edge and before every node, as sigma 3 drew
+them. Turn sigma's labels back on and delete both files once a sigma release keeps them upright. `e2e/graph.spec.ts`
+checks that nodes, edges and edge labels are drawn, and that a selected node's label reads above its ring.
+
+**sigma 4 logs WebGL warnings on every render.** The browser console fills with `GL_INVALID_OPERATION:
+glDrawArraysInstanced: Active draw buffers with missing fragment shader outputs` (about a hundred in a short session).
+It is sigma's label picking pass (sigma.js issue 1562, fix in open PR 1563), not the app. Hover and click still work.

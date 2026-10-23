@@ -9,7 +9,7 @@ import { DEFAULT_STYLES, type SigmaOptions } from "sigma/types";
 import type { GraphEdge, GraphNode, GraphResult } from "@/api/types";
 import { graphSignature, toGraphology } from "@/lib/graph-model";
 
-import { drawEdgeLabels } from "./edge-labels";
+import { edgeLabelLayer } from "./edge-label-layer";
 
 // The knowledge base graph's canvas, on sigma.js v4 + graphology, the stack built for
 // exactly this (WebGL network rendering, Gephi lineage) instead of the manual
@@ -164,25 +164,16 @@ function GraphSync({
 const EDGE_LABEL_LAYER = "edge-labels";
 
 // The edge labels, upright in place of sigma 4's own (sigma.js issue 1544, see
-// edge-labels.ts). A 2D canvas under the WebGL stage, redrawn after every render,
-// so nodes stay on top of the labels as they did on sigma 3.
+// edge-labels.ts), drawn inside sigma's render between the edges and the nodes
+// (edge-label-layer.ts), as sigma 3 drew them.
 function UprightEdgeLabels({ focus }: { focus: RefObject<Focus> }) {
   const sigma = useSigma();
 
   useEffect(() => {
-    const canvas = sigma.createCanvas(EDGE_LABEL_LAYER, { beforeLayer: "stage" });
-    const context = canvas.getContext("2d");
-    const draw = () => {
-      if (context === null) return;
-      const { hovered, selectedId } = focus.current;
-      drawEdgeLabels(sigma, context, hovered ?? selectedId);
-    };
-    sigma.on("afterRender", draw);
-    sigma.scheduleRender();
+    const focused = () => focus.current.hovered ?? focus.current.selectedId;
+    sigma.addCustomLayerProgram(EDGE_LABEL_LAYER, "nodes", edgeLabelLayer(sigma, focused));
     return () => {
-      sigma.off("afterRender", draw);
-      // A killed renderer has already emptied its container, layer included.
-      if (canvas.isConnected) sigma.killLayer(EDGE_LABEL_LAYER);
+      sigma.removeCustomLayerProgram(EDGE_LABEL_LAYER);
     };
   }, [sigma, focus]);
 

@@ -1,9 +1,11 @@
 import type Sigma from "sigma";
+import type { RenderParams } from "sigma/types";
 
 // Edge labels drawn upright on a 2D canvas. sigma 4 lays an edge label along its edge
 // from source to target, so the label of an edge drawn right to left comes out upside
 // down (sigma.js issue 1544, open on sigma 4.0.3). The graph turns sigma's own edge
 // labels off and draws them with this module instead, the way sigma 3 did.
+// edge-label-layer.ts puts the drawing into sigma's render, between the edges and the nodes.
 
 const EDGE_LABEL_SIZE = 9;
 const EDGE_LABEL_COLOR = "#94a3b8";
@@ -102,17 +104,16 @@ export function labelledEdges(
  *   sigma: The renderer whose graph, display data and camera the labels follow.
  *   context: The canvas to draw on.
  *   focused: The hovered or selected node, or null.
+ *   params: The frame's size in CSS pixels and its pixel ratio.
  */
 export function drawEdgeLabels(
   sigma: Sigma,
   context: CanvasRenderingContext2D,
   focused: string | null,
+  params: Pick<RenderParams, "width" | "height" | "pixelRatio">,
 ): void {
-  const { width, height, pixelRatio } = sigma.getRenderParams();
-  if (fitCanvas(context.canvas, width, height, pixelRatio)) {
-    context.canvas.style.width = `${width}px`;
-    context.canvas.style.height = `${height}px`;
-  }
+  const { width, height, pixelRatio } = params;
+  fitCanvas(context.canvas, width, height, pixelRatio);
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   context.clearRect(0, 0, width, height);
   context.font = EDGE_LABEL_FONT;

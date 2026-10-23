@@ -3,13 +3,13 @@ import { type Page, type Route, expect, test } from "@playwright/test";
 // The knowledge base graph drawn for real: sigma renders on WebGL, which jsdom cannot run, so this
 // is the one check that the canvas paints nodes, edges and edge labels. Every endpoint the detail
 // page fetches is mocked, the graph included. The canvas is measured from a screenshot decoded in
-// the page, because a WebGL canvas cannot be read back once it has been shown. The edge labels sit
-// on their own 2D canvas, which can be read back directly.
+// the page, because a WebGL canvas cannot be read back once it has been shown.
 
 const PAPER_BLUE: Rgb = [0x25, 0x63, 0xeb];
 const CONCEPT_PURPLE: Rgb = [0x93, 0x33, 0xea];
 const EDGE_GREY: Rgb = [0xd7, 0xde, 0xe8];
 const NODE_LABEL_SLATE: Rgb = [0x33, 0x41, 0x55];
+const EDGE_LABEL_SLATE: Rgb = [0x94, 0xa3, 0xb8];
 
 type Rgb = [number, number, number];
 
@@ -186,18 +186,11 @@ async function selectedLabelPixels(page: Page, colour: Rgb): Promise<number> {
   return pixels;
 }
 
-// How many pixels the edge label layer painted.
+// Edge label pixels. Nothing else is painted in that colour while no node is hovered or selected:
+// the edges are lighter, and a node label's anti-aliasing passes it on a different blue.
 async function edgeLabelPixels(page: Page): Promise<number> {
-  return page.locator("canvas.sigma-edge-labels").evaluate((canvas: HTMLCanvasElement) => {
-    const context = canvas.getContext("2d");
-    if (context === null) throw new Error("no 2d context");
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let painted = 0;
-    for (let offset = 3; offset < pixels.length; offset += 4) {
-      if (pixels[offset] > 0) painted += 1;
-    }
-    return painted;
-  });
+  const [pixels] = await countColours(page, [EDGE_LABEL_SLATE], 10);
+  return pixels;
 }
 
 async function openGraph(page: Page) {
