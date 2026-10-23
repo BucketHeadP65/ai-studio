@@ -80,7 +80,9 @@ Tests take `server` from `@/shared/test-support/msw/server` and `render` from `@
 undici 8.12 needs 22.19 or later.
 
 **TypeScript stays on 5.9.** `openapi-typescript` 7.13, which `npm run gen:types` runs, declares the peer
-`typescript ^5.x`. Move to TypeScript 7 once an `openapi-typescript` release accepts it.
+`typescript ^5.x`. `src/shared/boundary.test.ts` reads imports through the TypeScript 5 programmatic API
+(`ts.preProcessFile`), which the TypeScript 7 package does not export. Move to TypeScript 7 once an
+`openapi-typescript` release accepts it and the boundary test reads imports without that API.
 
 **sigma stays on 3 and `@react-sigma/core` on 5.** sigma 4 draws right-to-left edge labels upside down (sigma.js
 issue 1544). Move both once a sigma release keeps edge labels upright.

@@ -70,8 +70,10 @@ src/
   app/            the routes, one folder per page
   api/            the zod-checked clients for both backends, and the generated schema.d.ts
   components/     the components of each page, plus the vendored ui/ and ai-elements/
-  lib/            shared helpers
-  test-support/   the MSW server and test factories
+  lib/            the app's helpers
+  shared/         the app-agnostic code, which imports nothing from the app: the fetch client, UI primitives,
+                  utilities, the test lifecycle and the one MSW server (shared/test-support/msw/server.ts)
+  test-support/   the Vitest setup file and the test factories
 e2e/              the Playwright specs
 ```
 

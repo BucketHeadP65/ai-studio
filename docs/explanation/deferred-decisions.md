@@ -140,10 +140,9 @@ Entry shape: what was not adopted, what we do instead, why not, what would make 
 
 - **Not adopted:** a uv workspace over the Python projects.
 - **Instead:** every project keeps its own in-project venv and lockfile and names the shared code as a path source
-  (`studio/pyproject.toml:47-49`, `engram/pyproject.toml:63-64`, `harness/pyproject.toml:76-79`). The frontend is one
+  (`studio/pyproject.toml:51-53`, `engram/pyproject.toml:63`, `harness/pyproject.toml:79-81`). The frontend is one
   npm package, `studio-client`, whose shared code lives in `src/shared/` (root ADR 0021), so no npm workspace is needed.
-- **Why not:** independent lockfiles per project, and a consumer free to sit on an older copy of the shared library while it catches
-  up.
+- **Why not:** a workspace puts every project on one shared lockfile, and each project here keeps its own.
 - **Look again when:** keeping the separate lockfiles in step costs more than the independence they buy.
 - **Where:** root `CLAUDE.md` (Package Management).
 
