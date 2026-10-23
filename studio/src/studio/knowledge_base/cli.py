@@ -77,7 +77,7 @@ from engram.retrieval.contracts import (
 )
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, create_mcp_server
-from engram.sources.contracts import ScanReport, ScanWatchList, SyncMirrors, SyncReport
+from engram.sources.contracts import ScanReport, ScanWatchList, SyncMirrors, SyncReport, WatchEntry, WatchListFile
 from pydantic import ValidationError
 from sqlalchemy import NullPool, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -219,10 +219,14 @@ def _resolve_settings(knowledge_base: str | None, *, cwd: Path) -> ActiveKnowled
     return ActiveKnowledgeBase(application=fetch_application_settings(), knowledge_base=KnowledgeBaseSettings(path=root))
 
 
-async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | None, SyncReport]:
-    """Scan the knowledge base's watch list when there is one, then dispatch `command` through the message bus."""
+async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | tuple[WatchEntry, ...] | None, SyncReport]:
+    """Scan the knowledge base's watch list when there is one, or read its rows on a dry run, then dispatch `command`."""
     bus = await container.get(MessageBus)
-    scan = await _maybe_scan_watch_list(container, bus)
+    watch_list = await _watch_list(container)
+    scan: ScanReport | tuple[WatchEntry, ...] | None = None
+    if watch_list is not None:
+        # A scan calls each row's scanner, and a scanner may call a paid model, so a dry run only reads the rows.
+        scan = tuple(watch_list.entries()) if command.dry_run else await _scan_watch_list(bus)
     report = await bus.handle(command)
     if not isinstance(report, SyncReport):  # pragma: no cover (the sync handler returns a SyncReport)
         _fail("sync produced no report.")
@@ -231,21 +235,27 @@ async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[Sca
 
 async def _sync_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, command: SyncMirrors, *, collection: str
-) -> tuple[ScanReport | None, SyncReport]:
+) -> tuple[ScanReport | tuple[WatchEntry, ...] | None, SyncReport]:
     """Announce the identity, then dispatch the sync, one event loop for both."""
     await announce_identity(container, settings, collection=collection)
     return await _dispatch_sync(container, command)
 
 
-async def _maybe_scan_watch_list(container: Resolver, bus: MessageBus) -> ScanReport | None:
-    """Scan the knowledge base's watch list, or return `None` when there is no knowledge base, source layer or watch list."""
+async def _watch_list(container: Resolver) -> WatchListFile | None:
+    """The knowledge base's watch list, or `None` when there is no knowledge base, source layer or watch list."""
     try:
         schema = await container.get(KnowledgeBaseSchema)
         knowledge_base = await container.get(KnowledgeBaseSettings)
     except Exception:  # noqa: BLE001 (a resolver with no knowledge base context has nothing to scan)
         return None
-    if not (schema.sources.enabled and (knowledge_base.path / WATCH_LIST_PATH).is_file()):
+    path = knowledge_base.path / WATCH_LIST_PATH
+    if not (schema.sources.enabled and path.is_file()):
         return None
+    return WatchListFile(path)
+
+
+async def _scan_watch_list(bus: MessageBus) -> ScanReport:
+    """Scan every row of the knowledge base's watch list through the message bus."""
     scan = await bus.handle(ScanWatchList())
     if not isinstance(scan, ScanReport):  # pragma: no cover (the scan handler always returns a ScanReport)
         _fail("scan produced no report.")
@@ -257,6 +267,13 @@ def _print_scan_report(report: ScanReport) -> None:
     typer.echo(f"Scanned the watch list: {report.found} found, {report.requested} requested, {len(report.failed)} failed")
     for label, reason in report.failed:
         typer.echo(f"  FAILED {label}: {reason}")
+
+
+def _print_watch_list_rows(rows: tuple[WatchEntry, ...]) -> None:
+    """Echo the watch-list rows a real sync would scan, each as its scanner and ref, printed before the sync summary."""
+    typer.echo(f"Would scan the watch list (dry run): {len(rows)}")
+    for row in rows:
+        typer.echo(f"  {row.scanner} {row.ref}")
 
 
 def _print_sync_report(report: SyncReport) -> None:
@@ -1324,17 +1341,20 @@ def sync_cmd(
     ),
     dry_run: bool = typer.Option(
         default=False,
-        help="Plan only: print each item's action without writing mirrors or converting. On a connector-backed knowledge base "
-        "(e.g. youtube), the listing phase itself still fetches each item over the network and updates the source queue "
-        "before the plan is even computed. Only the mirror write and the conversion are skipped.",
+        help="Plan only: list each watch-list row a real run would scan (its scanner and ref) without scanning it, then print "
+        "each item's action without writing mirrors or converting. On a connector-backed knowledge base (e.g. youtube), the "
+        "listing phase itself still fetches each item over the network and updates the source queue before the plan is even "
+        "computed, and resolving a requested source-queue row may call its model. Only the scan, the mirror write and the "
+        "conversion are skipped.",
     ),
     limit: int | None = typer.Option(default=None, help="Process at most N items. A limited run never archives orphans."),
 ) -> None:
     """Bring the knowledge base's `Sources/` mirrors in line with its connector: convert changed PDFs, refresh metadata, archive orphans.
 
     It first scans the knowledge base's watch list, when it has one, and adds what is new to the source
-    queue. Then it syncs the mirrors and prints both reports. Exits 1 when any item failed. Items whose
-    PDF could not be read are listed apart and do not fail the run. A dry run never fails.
+    queue. Then it syncs the mirrors and prints both reports. A dry run lists the watch list's rows
+    instead of scanning them. Exits 1 when any item failed. Items whose PDF could not be read are listed
+    apart and do not fail the run. A dry run never fails.
     """
     settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     configure_logging(settings.application.logging)
@@ -1345,8 +1365,10 @@ def sync_cmd(
         on_error="sync failed",
         database=settings.database,
     )
-    if scan is not None:
+    if isinstance(scan, ScanReport):
         _print_scan_report(scan)
+    elif scan is not None:
+        _print_watch_list_rows(scan)
     _print_sync_report(report)
     if report.errors:
         raise typer.Exit(code=1)

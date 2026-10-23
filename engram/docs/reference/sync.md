@@ -40,7 +40,8 @@ Both surfaces dispatch `SyncMirrors` on the knowledge base's `MessageBus`. `buil
 (`studio/src/studio/knowledge_base/container.py`) binds it to the handler `sync_handler_provider`
 (`studio/src/studio/knowledge_base/wiring/sync.py`) provides, a `MultiConnectorSync` over one
 `SyncMirrorsHandler` per declared connector. The CLI scans the watch list, dispatches inline and
-prints a report. The HTTP route queues a `kb.refresh` job, and `studio worker` runs it as
+prints a report. A CLI dry run (`--dry-run`) scans nothing, since a scanner may call a paid model: it
+prints each watch-list row's scanner and ref, then the sync's plan. The HTTP route queues a `kb.refresh` job, and `studio worker` runs it as
 `RefreshKnowledgeBaseJob`: when the schema turns sources on, it scans the watch list if there is one
 and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](indexing.md) describes.
 
@@ -113,7 +114,8 @@ appends a DELETE row per orphaned mirror only when unlimited.
 ## Examples
 
 ```bash
-# Preview the plan without writing or converting (never exits non-zero)
+# Preview the plan: the watch-list rows a real run would scan, then each item's action,
+# with no scan, no mirror write and no conversion (never exits non-zero)
 studio sync --dry-run
 
 # Partial backfill of at most 25 items; skips orphan archiving
@@ -124,8 +126,8 @@ studio sync
 ```
 
 ```bash
-# Trigger a sync job over HTTP (returns a Job to poll at /api/jobs/{id})
-curl -X POST localhost:8100/api/jobs/sync -d '{"dry_run": true}'
+# Queue a refresh job over HTTP, which scans, syncs and indexes (poll the returned id at /api/jobs/{id})
+curl -X POST localhost:8100/api/knowledge-bases/research/refresh
 ```
 
 ## Patterns used

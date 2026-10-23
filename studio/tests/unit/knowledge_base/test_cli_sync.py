@@ -14,14 +14,26 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
 from engram.indexing.contracts import KnowledgeBaseReader
+from engram.kb.contracts import KnowledgeBaseSchema
 from engram.retrieval.domain import SqlResult
-from engram.sources.contracts import ConversionError, MirrorStatus, SyncMirrors, SyncMirrorsHandler, SyncReport
+from engram.sources.contracts import (
+    ConversionError,
+    MirrorStatus,
+    ScanWatchList,
+    ScanWatchListHandler,
+    SourceQueue,
+    SyncMirrors,
+    SyncMirrorsHandler,
+    SyncReport,
+    WatchListFile,
+)
 from engram.sources.service.sync import pdf_sha256
 from engram.testing.factories.mirror import MirrorFileFactory
 from engram.testing.factories.source_item import SourceItemFactory
@@ -31,15 +43,16 @@ from engram.testing.fakes.conversion import FakeDocumentConverter
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.fakes.mirror import FakeMirrorStore
+from engram.testing.fakes.watch_list import FakeScanner
 from engram.testing.specs import research_spec
 from typer.testing import CliRunner
 
 from studio.knowledge_base.cli import app
+from studio.knowledge_base.settings import KnowledgeBaseSettings
+from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from engram.sources.contracts import SourceItem
 
 runner = CliRunner()
@@ -279,6 +292,62 @@ class TestDryRun:
         assert "unavailable" in result.stdout.lower()
         assert "ITEM0001" in result.stdout
         assert "create" in result.stdout.lower()
+
+
+class WatchListContainer(FakeContainer):
+    """A fake container that also serves the knowledge base's schema and folder, so the sync reaches its watch list."""
+
+    def __init__(self, handler: object, bus: MessageBus, root: Path) -> None:
+        super().__init__(handler, bus)
+        self._root = root
+
+    async def get(self, key: type) -> object:
+        if key is KnowledgeBaseSchema:
+            return research_spec()
+        if key is KnowledgeBaseSettings:
+            return KnowledgeBaseSettings(path=self._root)
+        return await super().get(key)
+
+
+class TestWatchListOnDryRun:
+    """The watch list of a knowledge base whose two rows an `x` scanner and an `xml` scanner read."""
+
+    def _container(self, root: Path, scanner: FakeScanner) -> WatchListContainer:
+        watch_list = WatchListFile(root / WATCH_LIST_PATH)
+        watch_list.add("x", "@someone", max_items=5)
+        watch_list.add("xml", "https://example.org/feed.xml")
+        queue = SourceQueue(root / "_meta" / "source-queue.yaml", connectors=())
+        scan = ScanWatchListHandler(watch_list, {"x": scanner, "xml": scanner}, queue)
+        sync = RecordingCommandHandler(result=SyncReport(dry_run=True))
+        return WatchListContainer(sync, MessageBus({SyncMirrors: sync, ScanWatchList: scan}, {}), root)
+
+    def test_a_dry_run_lists_each_row_and_calls_no_scanner(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        scanner = FakeScanner()
+        container = self._container(root, scanner)
+        watch_list_text = (root / WATCH_LIST_PATH).read_text(encoding="utf-8")
+
+        result = runner.invoke(app, ["sync", "--dry-run"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert scanner.since == []
+        assert "x @someone" in result.stdout
+        assert "xml https://example.org/feed.xml" in result.stdout
+        assert (root / WATCH_LIST_PATH).read_text(encoding="utf-8") == watch_list_text
+        assert not (root / "_meta" / "source-queue.yaml").exists()
+
+    def test_a_real_sync_scans_each_row(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        scanner = FakeScanner()
+        container = self._container(root, scanner)
+
+        result = runner.invoke(app, ["sync"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert len(scanner.since) == 2
+        assert "Scanned the watch list" in result.stdout
 
 
 class TestDispatch:
