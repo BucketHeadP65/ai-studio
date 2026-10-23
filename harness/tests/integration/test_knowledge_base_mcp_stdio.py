@@ -40,8 +40,9 @@ if TYPE_CHECKING:
 
 _NAME = "served"
 
-# The studio refuses to start without these sections, and an empty one takes every default. Exported here, they win
-# over any settings file the studio checkout holds, so the subprocess reads no machine's own retrieval or sources.
+# The studio refuses to start without these sections, and an empty one takes every default. A settings file in the
+# studio checkout still merges in under them, its registry included, so there the server also reads every live
+# knowledge base it registers.
 _STUDIO_SECTIONS = ("APP_RETRIEVAL", "APP_INGESTION", "APP_SOURCES", "APP_EVALS")
 
 # The server builds its embedding model as it starts, so it needs an endpoint. Keyword search never calls it.
