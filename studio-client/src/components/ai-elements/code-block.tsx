@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/lib/cn";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import type { CSSProperties, ComponentProps, HTMLAttributes } from "react";
 import {

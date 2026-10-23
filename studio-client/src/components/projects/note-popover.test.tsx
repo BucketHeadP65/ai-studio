@@ -1,10 +1,10 @@
 import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ApiError } from "client-core/api/client";
+import { ApiError } from "@/shared/api/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { projectsApi } from "@/api/projects";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { AddNoteButton, NotePopover, anchorFor } from "./note-popover";
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { Textarea } from "client-core/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Textarea } from "@/shared/ui/textarea";
 import { Pencil } from "lucide-react";
 import type { ReactElement } from "react";
 import { useState } from "react";

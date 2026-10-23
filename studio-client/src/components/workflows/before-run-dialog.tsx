@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
-import { Modal, ModalDescription, ModalTitle } from "client-core/ui/modal";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalDescription, ModalTitle } from "@/shared/ui/modal";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
 

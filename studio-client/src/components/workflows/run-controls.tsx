@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
+import { Button } from "@/shared/ui/button";
 import type { ReactElement } from "react";
 import { useState } from "react";
 

@@ -7,8 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PluginsListing } from "@/api/harness-types";
 import type { RunView, SessionSummary } from "@/api/sessions-types";
 import type { GateMode, RunState } from "@/api/studio-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { SessionStatusline } from "./session-statusline";
 

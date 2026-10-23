@@ -3,7 +3,7 @@ import { act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Outcome, RunEnvelope } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { OutcomeStrip, RESULT_STATUS, ResultSummary } from "./outcome-strip";
 

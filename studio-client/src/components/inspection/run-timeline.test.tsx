@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { StepOutline } from "@/api/inspection";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { RunTimeline } from "./run-timeline";
 

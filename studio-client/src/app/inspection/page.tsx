@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Select } from "client-core/ui/select";
+import { Select } from "@/shared/ui/select";
 import { type ReactElement, useId, useState } from "react";
 
 import { inspectionApi } from "@/api/inspection";

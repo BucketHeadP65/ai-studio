@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ArtifactRef } from "@/api/studio-types";
 import type { NoteDraft } from "@/api/types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { SaveArtifactNote } from "./save-artifact-note";
 

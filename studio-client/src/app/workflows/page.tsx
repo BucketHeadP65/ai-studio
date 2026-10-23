@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
+import { Button } from "@/shared/ui/button";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactElement, useMemo } from "react";

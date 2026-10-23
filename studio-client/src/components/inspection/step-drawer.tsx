@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
-import { Drawer } from "client-core/ui/drawer";
+import { Drawer } from "@/shared/ui/drawer";
 
 import { inspectionApi } from "@/api/inspection";
 import { inspectionKeys } from "@/api/query-keys";

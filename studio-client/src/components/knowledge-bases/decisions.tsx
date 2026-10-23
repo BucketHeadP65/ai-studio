@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { Card } from "client-core/ui/card";
-import { Input } from "client-core/ui/input";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
 import { useState } from "react";
 
 import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";

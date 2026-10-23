@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge, GraphNode, WorkflowGraph } from "@/api/studio-types";
 import type { GlyphFill } from "@/components/marks/node-glyph";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { MiniGraph } from "./mini-graph";
 

@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Card } from "client-core/ui/card";
-import { Input } from "client-core/ui/input";
+import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
 import { type KeyboardEvent, useEffect, useId, useState } from "react";
 
 import { harnessApi } from "@/api/harness";

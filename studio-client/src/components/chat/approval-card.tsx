@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "client-core/ui/button";
-import { Textarea } from "client-core/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useState } from "react";
 

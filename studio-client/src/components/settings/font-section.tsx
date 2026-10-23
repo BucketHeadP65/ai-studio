@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 

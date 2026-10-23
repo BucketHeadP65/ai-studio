@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ArtifactRef, OwnerReview, WorkflowDetail } from "@/api/studio-types";
 import { provenance } from "@/components/marks/provenance-chip";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { RunEvidencePanel } from "./run-evidence-panel";
 

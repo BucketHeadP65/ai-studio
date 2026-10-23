@@ -1,7 +1,7 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
 import { ChevronDown, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Textarea } from "client-core/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 import { MessageSquarePlus } from "lucide-react";
 import { DismissableLayer } from "radix-ui/internal";
 import { useState } from "react";

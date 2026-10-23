@@ -24,7 +24,7 @@ import {
   useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   Bot,
   Braces,

@@ -3,7 +3,7 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { Button } from "client-core/ui/button";
+import { Button } from "@/shared/ui/button";
 import { basicSetup } from "codemirror";
 import type { KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";

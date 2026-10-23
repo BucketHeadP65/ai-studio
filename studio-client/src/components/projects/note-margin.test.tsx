@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { type NoteListingEntry, projectsApi } from "@/api/projects";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { NoteMargin } from "./note-margin";
 

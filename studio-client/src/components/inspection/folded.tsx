@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { type ReactElement, useState } from "react";
 
 // A block of text that folds past a line count, once, no animation (the owner's Reduce Motion

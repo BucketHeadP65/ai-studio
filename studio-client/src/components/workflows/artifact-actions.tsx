@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "client-core/ui/button";
+import { Button } from "@/shared/ui/button";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
 import { studioApi, studioErrorMessage } from "@/api/studio";

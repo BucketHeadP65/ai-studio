@@ -9,7 +9,7 @@ import {
   isTextUIPart,
   isToolUIPart,
 } from "ai";
-import { Drawer } from "client-core/ui/drawer";
+import { Drawer } from "@/shared/ui/drawer";
 import { Wrench } from "lucide-react";
 import { type ReactElement, useState } from "react";
 

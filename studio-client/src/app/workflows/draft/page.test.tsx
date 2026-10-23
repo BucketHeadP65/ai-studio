@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftProvider } from "@/api/draft-store";
 import type { ChatReply, RunHistoryRecord } from "@/api/studio-types";
 import { FollowMeProvider } from "@/components/follow-me/provider";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import DraftWorkflowPage from "./page";
 

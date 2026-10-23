@@ -2,7 +2,7 @@ import { screen } from "@testing-library/dom";
 import { describe, expect, it } from "vitest";
 
 import type { RunView } from "@/api/sessions-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { RunTurn } from "./run-turn";
 

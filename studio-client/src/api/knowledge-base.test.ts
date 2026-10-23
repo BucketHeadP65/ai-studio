@@ -2,7 +2,7 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
 import { graphResultFactory } from "@/test-support/factories/graph";
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { ApiError, knowledgeBaseApi, knowledgeBaseErrorMessage } from "./knowledge-base";
 

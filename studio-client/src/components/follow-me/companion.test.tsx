@@ -5,8 +5,8 @@ import { type ReactElement, useRef } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionSummary } from "@/api/sessions-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { Companion } from "./companion";
 import type { Placement } from "./placement";

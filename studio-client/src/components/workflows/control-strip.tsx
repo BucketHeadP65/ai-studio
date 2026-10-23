@@ -1,7 +1,7 @@
 "use client";
 
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import type { ReactElement } from "react";
 import { useState } from "react";
 

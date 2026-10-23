@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { StepNotSteerableError, stepChatApi, stepConversationToUiMessages, useStepStream } from "./step-chat";
 

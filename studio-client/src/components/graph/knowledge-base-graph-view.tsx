@@ -1,9 +1,9 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Card } from "client-core/ui/card";
-import { Input } from "client-core/ui/input";
+import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
 import { Search } from "lucide-react";
 import dynamic from "next/dynamic";
 import { type KeyboardEvent, useMemo, useState } from "react";

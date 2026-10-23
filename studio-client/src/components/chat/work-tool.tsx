@@ -1,7 +1,7 @@
 "use client";
 
 import { getToolName } from "ai";
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { CheckCircle2, ChevronDown, Clock, XCircle } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
 

@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from "client-core/api/client";
+import { ApiError, createApiClient } from "@/shared/api/client";
 import { z } from "zod";
 
 import { KNOWLEDGE_BASE_API_URL } from "./config";
@@ -82,7 +82,7 @@ function refreshConflictJobId(error: unknown): number | null {
 // Knowledge-bases detail page's Graph tab), plus the Knowledge-bases station's registry
 // surface (list, create, read one schema). The generic
 // request/parse/error plumbing (request<T>, ApiError, the 401/204 boundary) lives in
-// client-core; this module injects the one app-local concern — the base URL — and
+// `@/shared/api/client`. This module injects the one app-local concern, the base URL, and
 // builds the typed `knowledgeBaseApi` object on top. The surface is UNAUTHENTICATED: no
 // getToken, no onUnauthorized; the client is local-only.
 //

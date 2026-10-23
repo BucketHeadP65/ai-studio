@@ -2,7 +2,7 @@ import { HttpResponse, http } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { server } from "@/test-support/test-server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { ApiError, createApiClient, VoidSchema } from "./client";
 

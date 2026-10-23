@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { ChevronDown } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useState } from "react";

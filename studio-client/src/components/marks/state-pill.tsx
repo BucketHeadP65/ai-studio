@@ -1,4 +1,4 @@
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
 
 // A state is a shape plus a word, never a color alone. Tone picks the wash,

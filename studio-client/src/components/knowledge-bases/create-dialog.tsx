@@ -1,10 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
-import { Modal, ModalTitle } from "client-core/ui/modal";
-import { Textarea } from "client-core/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
+import { Textarea } from "@/shared/ui/textarea";
 import { useEffect, useId, useState } from "react";
 import { z } from "zod";
 

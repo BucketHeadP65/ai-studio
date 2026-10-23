@@ -2,7 +2,7 @@
 
 import type { ReactElement } from "react";
 
-import { formatRelative } from "client-core/lib/format-relative";
+import { formatRelative } from "@/shared/lib/format-relative";
 
 import type { OwnerReview, WorkflowDetail } from "@/api/studio-types";
 import {

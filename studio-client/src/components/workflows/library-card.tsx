@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { formatRelative } from "client-core/lib/format-relative";
-import { Button } from "client-core/ui/button";
+import { cn } from "@/shared/lib/cn";
+import { formatRelative } from "@/shared/lib/format-relative";
+import { Button } from "@/shared/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";

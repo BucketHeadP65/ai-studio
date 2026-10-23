@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Drawer } from "client-core/ui/drawer";
+import { Drawer } from "@/shared/ui/drawer";
 import { isTextUIPart } from "ai";
 import { type ReactElement, useMemo, useState } from "react";
 

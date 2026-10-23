@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { EmptyState } from "client-core/ui/empty-state";
-import { Input } from "client-core/ui/input";
-import { Modal, ModalTitle } from "client-core/ui/modal";
-import { Select } from "client-core/ui/select";
+import { cn } from "@/shared/lib/cn";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
+import { Select } from "@/shared/ui/select";
 import { Sparkles } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 

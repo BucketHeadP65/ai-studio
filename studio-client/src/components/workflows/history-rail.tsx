@@ -1,7 +1,7 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { formatRelative } from "client-core/lib/format-relative";
+import { cn } from "@/shared/lib/cn";
+import { formatRelative } from "@/shared/lib/format-relative";
 import { Star, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 

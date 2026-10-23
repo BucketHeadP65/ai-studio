@@ -1,4 +1,4 @@
-import { ApiError, VoidSchema, createApiClient } from "client-core/api/client";
+import { ApiError, VoidSchema, createApiClient } from "@/shared/api/client";
 import { z } from "zod";
 
 import { STUDIO_API_URL } from "./studio-config";

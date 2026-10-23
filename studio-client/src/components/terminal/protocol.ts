@@ -18,7 +18,7 @@ export function resizeMessage(cols: number, rows: number): string {
 }
 
 // `baseHttpUrl` is the agent server's own base (e.g. STUDIO_API_URL, :8770) — the terminal
-// speaks raw WS on that same host, never client-core's fetch client.
+// speaks raw WS on that same host, never the shared fetch client.
 export function terminalWsUrl(baseHttpUrl: string, cwd: string): string {
   const wsBase = baseHttpUrl.replace(/^http/, "ws");
   return `${wsBase}/api/terminal/ws?cwd=${encodeURIComponent(cwd)}`;

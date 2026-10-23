@@ -1,7 +1,22 @@
 {
-  "//": "Extends the shared base THROUGH the copy-installed package (in-root path — Turbopack's build refuses an extends that resolves outside the project root, and widening turbopack.root is forbidden). client-core ships tsconfig.base.json in its `files` since 0.0.3; after changing the base there, refresh with `npm install ../client-core`.",
-  "extends": "./node_modules/client-core/tsconfig.base.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
     "plugins": [
       {
         "name": "next"

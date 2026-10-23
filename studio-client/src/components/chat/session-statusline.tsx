@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
+import { cn } from "@/shared/lib/cn";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import Link from "next/link";
 import { type ReactElement, type Ref, useState } from "react";
 

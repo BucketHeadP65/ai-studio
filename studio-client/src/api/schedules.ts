@@ -1,4 +1,4 @@
-import { createApiClient } from "client-core/api/client";
+import { createApiClient } from "@/shared/api/client";
 
 import { z } from "zod";
 
@@ -8,8 +8,8 @@ import { type GateMode, GateModeSchema, type JsonValue, JsonValueSchema } from "
 // The schedules surface over the studio agent backend (`studio.agent`, :8770): CRUD over a standing,
 // cadence-driven intent to run one workflow again and again, the ticker's own tick log
 // (last_run_at/last_outcome/next_run_at), firing one by hand, and a cadence preview.
-// Same shape as `studioApi`: client-core supplies request/parse/error, this module injects the
-// base URL and builds the endpoint object.
+// Same shape as `studioApi`: the shared API client supplies request/parse/error, this module
+// injects the base URL and builds the endpoint object.
 
 const { request } = createApiClient({ baseUrl: STUDIO_API_URL });
 

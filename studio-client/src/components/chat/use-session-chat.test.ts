@@ -4,7 +4,7 @@ import { http, HttpResponse } from "msw";
 import { type ReactNode, StrictMode, createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { stepUsages } from "./step-usage";
 import { buildChatBody, useSessionChat } from "./use-session-chat";

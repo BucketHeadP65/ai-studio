@@ -1,7 +1,7 @@
 "use client";
 
 import { type UIMessage, getToolName, isDynamicToolUIPart, isTextUIPart, isToolUIPart } from "ai";
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { Fragment, type ReactElement } from "react";
 
 import type { RunView, TranscriptMessage } from "@/api/sessions-types";

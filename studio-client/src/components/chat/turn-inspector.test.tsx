@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { sessionKeys } from "@/api/query-keys";
 import type { TranscriptMessage } from "@/api/sessions-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { TurnInspector } from "./turn-inspector";
 

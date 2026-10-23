@@ -1,9 +1,9 @@
-import { ApiError } from "client-core/api/client";
+import { ApiError } from "@/shared/api/client";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { projectKeys, projectsApi } from "./projects";
 import { studioErrorMessage } from "./studio";

@@ -1,8 +1,8 @@
 "use client";
 
-import { Input } from "client-core/ui/input";
-import { Select } from "client-core/ui/select";
-import { Textarea } from "client-core/ui/textarea";
+import { Input } from "@/shared/ui/input";
+import { Select } from "@/shared/ui/select";
+import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useId } from "react";
 

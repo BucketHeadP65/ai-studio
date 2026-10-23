@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { Card } from "client-core/ui/card";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { EmptyState } from "client-core/ui/empty-state";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { PackageOpen } from "lucide-react";
 import { useState } from "react";
 

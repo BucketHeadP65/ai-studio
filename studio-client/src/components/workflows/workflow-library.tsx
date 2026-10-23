@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { EmptyState } from "client-core/ui/empty-state";
-import { Input } from "client-core/ui/input";
+import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Input } from "@/shared/ui/input";
 import { LayoutGrid, Search } from "lucide-react";
 import Link from "next/link";
 import { type ReactElement, useMemo, useState } from "react";

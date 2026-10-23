@@ -1,4 +1,4 @@
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { Fragment, type ReactElement } from "react";
 
 import type { GraphEdge, GraphNode, WorkflowGraph } from "@/api/studio-types";

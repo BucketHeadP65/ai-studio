@@ -1,6 +1,6 @@
 "use client";
 
-import { Textarea } from "client-core/ui/textarea";
+import { Textarea } from "@/shared/ui/textarea";
 import { ArrowUp, Square } from "lucide-react";
 import {
   type KeyboardEvent,

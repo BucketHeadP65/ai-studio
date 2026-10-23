@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 
 import type { GraphEdge, GraphNode, GraphResult } from "@/api/types";
 import { nodeColor } from "@/lib/graph-model";

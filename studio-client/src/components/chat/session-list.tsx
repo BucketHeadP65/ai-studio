@@ -1,11 +1,11 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { EmptyState } from "client-core/ui/empty-state";
-import { Input } from "client-core/ui/input";
-import { cn } from "client-core/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Input } from "@/shared/ui/input";
+import { cn } from "@/shared/lib/cn";
 import { Archive, MessageSquare, Plus, Search, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";

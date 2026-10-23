@@ -1,7 +1,7 @@
 "use client";
 
-import { Drawer } from "client-core/ui/drawer";
-import { Input } from "client-core/ui/input";
+import { Drawer } from "@/shared/ui/drawer";
+import { Input } from "@/shared/ui/input";
 import { useState } from "react";
 
 import type { HarnessArtifact, HarnessKind } from "@/api/harness-types";

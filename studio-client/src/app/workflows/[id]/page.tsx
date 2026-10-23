@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { ChevronDown } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { type ReactElement, Suspense, useMemo, useState } from "react";

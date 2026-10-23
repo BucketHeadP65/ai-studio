@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
 import type { ReactElement } from "react";
 import { useState } from "react";
 

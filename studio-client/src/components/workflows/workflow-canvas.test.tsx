@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/dom";
 import { describe, expect, it, vi } from "vitest";
 
 import type { WorkflowGraph } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { WorkflowCanvas } from "./workflow-canvas";
 

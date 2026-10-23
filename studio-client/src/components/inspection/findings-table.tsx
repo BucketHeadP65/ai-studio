@@ -1,6 +1,6 @@
 "use client";
 
-import { EmptyState } from "client-core/ui/empty-state";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { ScanSearch } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";

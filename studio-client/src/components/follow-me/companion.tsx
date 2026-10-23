@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import {
   AppWindow,
   Bot,

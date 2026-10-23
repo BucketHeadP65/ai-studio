@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { formatRelative } from "client-core/lib/format-relative";
-import { Button } from "client-core/ui/button";
+import { cn } from "@/shared/lib/cn";
+import { formatRelative } from "@/shared/lib/format-relative";
+import { Button } from "@/shared/ui/button";
 import { CheckCircle2, MinusCircle, Trash2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -42,7 +42,7 @@ export function cadenceWords(cadence: string): string {
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
-// A future instant in words ("in 5 minutes", "in 2 hours") -- `formatRelative` (client-core)
+// A future instant in words ("in 5 minutes", "in 2 hours") -- `formatRelative` (shared/lib)
 // only ever reads a past instant correctly, so this is its future-facing sibling. `now` is a
 // parameter, not `Date.now()` read inline, so a test can pin it.
 export function formatNextRun(iso: string | null, now: number = Date.now()): string {

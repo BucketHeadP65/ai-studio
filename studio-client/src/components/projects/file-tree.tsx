@@ -1,11 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { Input } from "client-core/ui/input";
-import { StatusDot } from "client-core/ui/status-dot";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Input } from "@/shared/ui/input";
+import { StatusDot } from "@/shared/ui/status-dot";
 import {
   ChevronDown,
   ChevronRight,

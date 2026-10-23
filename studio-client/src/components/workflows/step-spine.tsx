@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "client-core/ui/badge";
+import { Badge } from "@/shared/ui/badge";
 import type { ReactElement, ReactNode } from "react";
 
 import type { GraphNode, MapTurn, WorkflowGraph } from "@/api/studio-types";

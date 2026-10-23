@@ -1,4 +1,4 @@
-import { createApiClient } from "client-core/api/client";
+import { createApiClient } from "@/shared/api/client";
 
 import {
   type HarnessAction,

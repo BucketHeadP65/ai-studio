@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { CompanionShell } from "./companion-shell";
 import type { Placement } from "./placement";

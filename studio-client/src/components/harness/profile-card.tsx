@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card } from "client-core/ui/card";
-import { Select } from "client-core/ui/select";
+import { Card } from "@/shared/ui/card";
+import { Select } from "@/shared/ui/select";
 import { useState } from "react";
 
 import { harnessApi } from "@/api/harness";

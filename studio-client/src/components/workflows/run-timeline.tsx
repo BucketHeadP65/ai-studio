@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import type { CSSProperties, ReactElement } from "react";
 
 import type { GraphNode, SpendView, StepEvent } from "@/api/studio-types";

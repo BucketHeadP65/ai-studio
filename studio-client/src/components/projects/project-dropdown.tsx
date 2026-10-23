@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Badge } from "client-core/ui/badge";
+import { cn } from "@/shared/lib/cn";
+import { Badge } from "@/shared/ui/badge";
 import { ChevronDown, FolderPlus } from "lucide-react";
 import { useState } from "react";
 

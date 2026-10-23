@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
 
 import type { StepOutline } from "@/api/inspection";

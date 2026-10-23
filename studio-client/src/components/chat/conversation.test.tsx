@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RunView, TranscriptMessage } from "@/api/sessions-types";
 import type { ChatReply, PendingGate } from "@/api/studio-types";
 import { ConversationScrollButton } from "@/components/ai-elements/conversation";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { Conversation } from "./conversation";
 

@@ -1,4 +1,4 @@
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import type { ReactElement } from "react";
 
 // The small mark that opens every node card's header (and every fleet-row mini

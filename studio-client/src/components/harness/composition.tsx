@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Card } from "client-core/ui/card";
+import { Card } from "@/shared/ui/card";
 
 import { harnessApi } from "@/api/harness";
 import { studioErrorMessage } from "@/api/studio";

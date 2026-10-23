@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { Textarea } from "client-core/ui/textarea";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 

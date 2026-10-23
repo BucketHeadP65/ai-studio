@@ -1,4 +1,4 @@
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
 
 // Who or what caused a run to move, said as a sentence a person can read

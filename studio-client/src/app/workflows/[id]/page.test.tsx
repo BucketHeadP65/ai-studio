@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionSummary } from "@/api/sessions-types";
 import type { RunHistoryRecord, RunState, RunValues, WorkflowDetail } from "@/api/studio-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 // The page owns four things a run's history changes: what the outcome strip and the gate
 // trail report, what the canvas draws, what the timeline shows below it, and what a clicked

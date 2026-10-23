@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
+import { cn } from "@/shared/lib/cn";
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useRef } from "react";
 
 import { useStoredNumber } from "@/lib/use-stored";

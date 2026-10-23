@@ -1,6 +1,6 @@
 "use client";
 
-import { Drawer } from "client-core/ui/drawer";
+import { Drawer } from "@/shared/ui/drawer";
 import type { ReactElement } from "react";
 
 import { SessionChat } from "@/components/chat/session-chat";

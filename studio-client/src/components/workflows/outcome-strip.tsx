@@ -1,6 +1,6 @@
 "use client";
 
-import { formatRelative } from "client-core/lib/format-relative";
+import { formatRelative } from "@/shared/lib/format-relative";
 import type { ReactElement, ReactNode } from "react";
 
 import type { RunView } from "@/api/sessions-types";

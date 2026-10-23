@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, getToolName } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError } from "client-core/api/client";
+import { ApiError } from "@/shared/api/client";
 
 import type { PageContext, ToolResult } from "@/api/page-context";
 import { sessionsApi } from "@/api/sessions";

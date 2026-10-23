@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Modal, ModalDescription, ModalTitle } from "client-core/ui/modal";
-import { Textarea } from "client-core/ui/textarea";
+import { Button } from "@/shared/ui/button";
+import { Modal, ModalDescription, ModalTitle } from "@/shared/ui/modal";
+import { Textarea } from "@/shared/ui/textarea";
 import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 import { useEffect, useId, useState } from "react";

@@ -32,7 +32,6 @@
     "@xyflow/react": "^12.12.0",
     "ai": "^7.0.142",
     "class-variance-authority": "^0.7.1",
-    "client-core": "file:../client-core",
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "diff": "^9.0.0",
