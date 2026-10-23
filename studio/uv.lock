@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [[package]]
@@ -2476,6 +2476,7 @@ wheels = [
 name = "studio"
 version = "0.0.1"
 source = { editable = "." }
+default-groups = ["dev", "test"]
 dependencies = [
     { name = "core" },
     { name = "engram" },
