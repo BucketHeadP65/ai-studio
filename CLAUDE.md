@@ -49,8 +49,8 @@ applications are kept clean of:
   templates/<slug>/workflows` imports its workflows. Nothing outside `templates/` imports or reads a
   template except the `studio init --template` resolver and `engram.testing.specs`, held by an
   import-boundary test in each Python project.
-- **`pydantic-ai-harness`** comes from PyPI (`>=0.59.0,<0.60`), released from the pydantic-ai repository
-  (`src/pydantic_ai_harness`). It versions with pydantic-ai (0.59 goes with 2.59). Our additions over it live in our own code: `core.ai.format_maps`,
+- **`pydantic-ai-harness`** comes from PyPI (`>=0.60.0`), released from the pydantic-ai repository
+  (`src/pydantic_ai_harness`). It versions with pydantic-ai (0.60 goes with 2.60). Our additions over it live in our own code: `core.ai.format_maps`,
   `core.ai.filesystem`, `core.ai.tool_output_limits`, `harness.adapters.acp_client` and `engram.evals.harness.code_mode`. Upstream
   contributions are filed as ISSUES on `pydantic/pydantic-ai`, never PRs. Two records feed those issues
   and are updated in the same change that lands the fix or the feature: a bug found in pydantic-ai or
