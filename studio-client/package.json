@@ -15,8 +15,7 @@
     "test:unit": "vitest run src",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:debug": "playwright test --debug",
-    "gen:types": "npm exec --yes --package=openapi-typescript@7.13.0 --package=typescript@5.9.3 -- openapi-typescript http://127.0.0.1:8100/openapi.json -o src/api/schema.d.ts"
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.154",

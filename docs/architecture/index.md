@@ -22,7 +22,7 @@ live in the apps' `docs/reference/` docs. Decision rationale lives in the ADRs
 and [explanation docs](../explanation/tech-stack.md). The entry point to
 everything is [CONTEXT-MAP.md](../../CONTEXT-MAP.md).
 
-Sections: 7 · whole document ≈ 6,607 tokens.
+Sections: 7 · whole document ≈ 6,603 tokens.
 
 ### 01 — System context
 [sections/01-system-context.md](sections/01-system-context.md) · ~444 tokens
@@ -45,7 +45,7 @@ Sections: 7 · whole document ≈ 6,607 tokens.
 - **Load when:** engram, knowledge base, memory, compile, indexing, serve, sync, retrieval, knowledge base pipeline, note grammar, mcp, Studio backend, bounded contexts
 
 ### 05 — Frontends
-[sections/05-frontends.md](sections/05-frontends.md) · ~222 tokens
+[sections/05-frontends.md](sections/05-frontends.md) · ~218 tokens
 - **TL;DR:** One Next.js 16/React 19 SPA, studio-client (:3031), local and no-auth, branded "AI Factory Studio", with its app-agnostic code in `src/shared/`: a typed zod fetch factory, UI primitives, and a Vitest/MSW test harness.
 - **Load when:** frontend, studio-client, src/shared, AI Factory Studio, the Studio, dashboard, react, next.js, ui, SPA
 

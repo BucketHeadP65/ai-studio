@@ -28,9 +28,6 @@ station, the knowledge-bases station's terminal, and the harness station, and `s
 
 ```bash
 npm run dev          # dev server (:3031)
-npm run gen:types    # regenerate the typed API client from the RUNNING HTTP server's
-                     # OpenAPI schema — start studio serve-http first
-                     # (studio-client → 127.0.0.1:8100)
 npm test             # vitest unit run
 npm run typecheck    # tsc --noEmit
 npm run lint         # biome check
@@ -49,7 +46,7 @@ npm run test:e2e -- e2e/search.spec.ts   # one Playwright spec
 
 ## Frontend API boundary (cross-stack)
 
-The SPA agrees a typed contract with each backend it talks to (`studio-client` to `studio serve-http`, and to the harness backend for the studio station). The discipline: every backend response is `.parse()`d against a `zod` schema before reaching components (the typed `createApiClient` from `src/shared/api/client` plus an app-local base-URL injection in `src/api/`), and the OpenAPI-derived types are regenerated with `npm run gen:types` against the running server. Never `as`-cast at the boundary. Backend drift (renamed field, new required, type change) should surface as a `ZodError` at the boundary instead of as `undefined.something` deep in a component. Datetime fields use `z.string().datetime({offset: true})` so a malformed timestamp surfaces as a `ZodError` rather than `NaN` downstream.
+The SPA agrees a typed contract with each backend it talks to (`studio-client` to `studio serve-http`, and to the harness backend for the studio station). The discipline: every backend response is `.parse()`d against a `zod` schema before reaching components (the typed `createApiClient` from `src/shared/api/client` plus an app-local base-URL injection in `src/api/`), and those schemas mirror the backends' models by hand. Never `as`-cast at the boundary. Backend drift (renamed field, new required, type change) should surface as a `ZodError` at the boundary instead of as `undefined.something` deep in a component. Datetime fields use `z.string().datetime({offset: true})` so a malformed timestamp surfaces as a `ZodError` rather than `NaN` downstream.
 
 ## Vendored components
 
@@ -84,12 +81,6 @@ calls the command line, its `experimental.useTypeScriptCli` default). The TypeSc
 API, so no code here imports `typescript`. Vitest, Biome and Playwright do not need it. `src/shared/boundary.test.ts`
 reads imports with the oxc parser that `vite` exports as `parseSync`. In VS Code, the "TypeScript 7" extension
 (`TypeScriptTeam.native-preview`, a workspace recommendation) runs the TypeScript 7 language server.
-
-**`npm run gen:types` brings its own TypeScript 5.9.** `openapi-typescript` 7.13, the latest release, builds its output
-through the TypeScript 5 programmatic API and declares the peer `typescript ^5.x`. npm installs a peer next to the
-package that asks for it, so a project on TypeScript 7 cannot give it a copy of its own. The script runs it through
-`npm exec` with `openapi-typescript@7.13.0` and `typescript@5.9.3` pinned, and it is not a devDependency. Make it one
-again once a release supports TypeScript 7 (openapi-typescript issue 2841).
 
 **The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
 drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and
