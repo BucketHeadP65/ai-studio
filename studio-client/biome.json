@@ -52,7 +52,7 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "**/*.test.tsx", "src/shared/test-support/**"],
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "src/shared/test-support/render.tsx"],
       "linter": {
         "rules": {
           "correctness": {
