@@ -230,32 +230,40 @@ def knowledge_base_env() -> Mapping[str, str]:
     }
 
 
-def _engram_mcp(env: Mapping[str, str]) -> StdioTransport:
+def _engram_mcp(env: Mapping[str, str], knowledge_base: Path) -> StdioTransport:
     merged = {key: value for key, value in {**os.environ, **env}.items() if isinstance(value, str)}
-    return StdioTransport(command="uv", args=["run", "studio", "mcp"], cwd=str(STUDIO_REPO), env=merged)
+    args = ["run", "studio", "mcp", "--knowledge-base", str(knowledge_base)]
+    return StdioTransport(command="uv", args=args, cwd=str(STUDIO_REPO), env=merged)
 
 
-def knowledge_base_stdio_transport() -> StdioTransport:
-    """`studio mcp` over stdio, pointed at this deployment's knowledge base database, for a client in another process.
+def knowledge_base_stdio_transport(*, knowledge_base: Path) -> StdioTransport:
+    """`studio mcp` over stdio, serving one knowledge base read-only from this deployment's database, for another process.
 
-    It serves a client that speaks JSON-RPC from its own process, such as an editor. This app opens the knowledge bases
-    in-process through `knowledge_base_capability` instead.
+    It serves a client that speaks JSON-RPC from its own process, such as an editor. You must name the knowledge base
+    the server serves. Every other registered knowledge base that shares stays reachable through its tools'
+    `knowledge_base` argument. This app opens the knowledge bases in-process through `knowledge_base_capability` instead.
+
+    Args:
+        knowledge_base: The folder of the knowledge base to serve, the one holding its `knowledge-base-schema.json`.
 
     Returns:
-        The transport, which runs `studio mcp` from the studio checkout.
+        The transport, which runs `studio mcp --knowledge-base <folder>` from the studio checkout.
     """
-    return _engram_mcp(knowledge_base_env())
+    return _engram_mcp(knowledge_base_env(), knowledge_base)
 
 
-def knowledge_base_mcp_toolset() -> MCPToolset[object]:
+def knowledge_base_mcp_toolset(*, knowledge_base: Path) -> MCPToolset[object]:
     """The same knowledge bases as an MCP toolset over `knowledge_base_stdio_transport`, for a client in another process.
 
     This app reads through `knowledge_base_capability` instead.
 
+    Args:
+        knowledge_base: The folder of the knowledge base to serve, the one holding its `knowledge-base-schema.json`.
+
     Returns:
         The toolset.
     """
-    return MCPToolset(FastMCPClient(knowledge_base_stdio_transport()))
+    return MCPToolset(FastMCPClient(knowledge_base_stdio_transport(knowledge_base=knowledge_base)))
 
 
 class _LazyQueryEmbedder:
