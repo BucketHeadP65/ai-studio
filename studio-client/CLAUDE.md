@@ -74,6 +74,13 @@ folder.
 `onUnhandledFrame: "error"`, and a handler exception failing its test), then adds the jsdom shims React Flow needs.
 Tests take `server` from `@/shared/test-support/msw/server` and `render` from `@/shared/test-support/render`.
 
-## Pinned test dependencies
+## Node and held dependencies
 
-**jsdom pin and undici override.** `jsdom` is pinned to `~30.0.1`, and `overrides` holds jsdom's `undici` at `~8.11.2`. undici 8.12 calls `zlib.createZstdDecompress` when it loads, which the Node 22.14 this stack runs lacks, so no test file starts. jsdom 30.1.3 requires undici 8.12, and without the override any jsdom 30 resolves to it. Both go once Node is at 22.19.0 or later, the floor in undici's `engines` field: drop the override and take the current jsdom.
+**Node 22.22.2 or later.** jsdom 30.1 declares `^22.22.2 || ^24.15.0 || >=26.0.0` in its `engines` field, and its
+undici 8.12 needs 22.19 or later.
+
+**TypeScript stays on 5.9.** `openapi-typescript` 7.13, which `npm run gen:types` runs, declares the peer
+`typescript ^5.x`. Move to TypeScript 7 once an `openapi-typescript` release accepts it.
+
+**sigma stays on 3 and `@react-sigma/core` on 5.** sigma 4 draws right-to-left edge labels upside down (sigma.js
+issue 1544). Move both once a sigma release keeps edge labels upright.
