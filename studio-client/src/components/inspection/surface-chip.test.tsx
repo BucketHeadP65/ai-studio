@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/dom";
 import { describe, expect, it } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { SurfaceChip } from "./surface-chip";
 

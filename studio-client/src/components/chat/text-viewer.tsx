@@ -1,10 +1,10 @@
 "use client";
 
-import { Drawer } from "client-core/ui/drawer";
 import type { ReactElement } from "react";
 
 import { MessagePayloadSchema } from "@/api/sessions-types";
 import { AgentMarkdown } from "@/components/conversation/markdown";
+import { Drawer } from "@/shared/ui/drawer";
 
 // A long string (a tool return, a spec, a skill body) viewed on its own, past
 // the point a chat bubble or a JsonTree row can show it inline. Markdown by

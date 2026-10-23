@@ -1,14 +1,14 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
 import { studioApi, studioErrorMessage } from "@/api/studio";
 import type { Approved, Trust } from "@/api/studio-types";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
 
 // The level a saved artifact has earned, and the one act that raises it: a person's own
 // approval. Shared by the library card and the workflow header, so the shape a chooser reads

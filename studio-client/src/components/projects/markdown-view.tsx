@@ -192,6 +192,7 @@ function readStringProperty(properties: HastProperties, name: string): string | 
 type AnchorProps = JSX.IntrinsicElements["a"] & ExtraProps;
 
 function makeAnchorRenderer(resolveWikilink: ((target: string) => string | null) | undefined) {
+  // biome-ignore lint/correctness/noComponentHookFactories: MarkdownView builds this once per resolveWikilink in a useMemo, never per render.
   return function WikilinkAwareAnchor({ node, href, children, ...rest }: AnchorProps): JSX.Element {
     const target = node ? readStringProperty(node.properties, WIKILINK_TARGET_ATTRIBUTE) : null;
     if (target === null) {

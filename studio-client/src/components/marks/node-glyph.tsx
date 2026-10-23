@@ -1,5 +1,6 @@
-import { cn } from "client-core/lib/cn";
 import type { ReactElement } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // The small mark that opens every node card's header (and every fleet-row mini
 // graph): shape says what kind of node this is, fill says whether it ran, an

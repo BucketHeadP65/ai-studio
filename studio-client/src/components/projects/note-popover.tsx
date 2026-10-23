@@ -1,14 +1,14 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Textarea } from "client-core/ui/textarea";
 import { MessageSquarePlus } from "lucide-react";
 import { DismissableLayer } from "radix-ui/internal";
 import { useState } from "react";
 
 import { type NoteAnchor, type NoteListingEntry, projectsApi } from "@/api/projects";
 import { studioErrorMessage } from "@/api/studio";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 
 import { NoteThread } from "./note-thread";
 

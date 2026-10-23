@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 // The mechanism: a probe reads `useFollowMe()` on every render and this file drives navigation by
 // reassigning the mocked `next/navigation` values and re-rendering, the way `chat/page.test.tsx`

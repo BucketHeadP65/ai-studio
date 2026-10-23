@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { studioApi } from "@/api/studio";
 import type { WorkflowDetail } from "@/api/studio-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { WorkflowHeader } from "./workflow-header";
 

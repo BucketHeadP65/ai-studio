@@ -9,11 +9,6 @@
    components (and shiki's dual-theme tokens) key their dark styles on it. */
 @custom-variant dark (&:where([data-theme="factory"], [data-theme="factory"] *, [data-theme="graphite"], [data-theme="graphite"] *));
 
-/* client-core ships raw TSX into node_modules (copy-install, ADR-0004). Tailwind v4
-   skips node_modules during auto-detection, so its UI primitives' classes (e.g. the
-   Button's `bg-accent text-ground`) get purged and render unstyled. Register it
-   explicitly so those classes are generated. */
-@source "../../node_modules/client-core/src/**/*.{ts,tsx}";
 /* streamdown (the chat's markdown renderer) ships Tailwind classes in its dist bundle;
    node_modules is skipped by auto-detection, so register it or its blocks render bare. */
 @source "../../node_modules/streamdown/dist/*.js";

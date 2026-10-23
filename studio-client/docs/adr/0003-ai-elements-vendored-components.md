@@ -24,7 +24,7 @@ server-authoritative state (which ruled out assistant-ui's runtime, and ACP as a
 
 - **Vendor Vercel AI Elements** (Apache-2.0) the shadcn way: copied source under `src/components/ui/` (badge, button,
   collapsible, select) and `src/components/ai-elements/` (tool, code-block), installed by `npx ai-elements add`, configured by
-  `components.json`. `src/lib/utils.ts` re-exports client-core's `cn` so the vendored imports resolve to the app's own merge.
+  `components.json`. Its `utils` alias points at `@/shared/lib/cn`, so the vendored imports resolve to the app's own merge.
 - **Theme by aliasing, never by editing.** shadcn's token names are registered in `globals.css` `@theme inline` as aliases onto
   the existing tier-1 variables, and Tailwind's `dark:` variant is rebound to the app's `data-theme` choice. The vendored files
   stay as shipped (repo formatting aside) so upstream re-pulls stay cheap.

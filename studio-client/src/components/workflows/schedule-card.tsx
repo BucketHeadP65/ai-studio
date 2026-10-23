@@ -1,8 +1,5 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { formatRelative } from "client-core/lib/format-relative";
-import { Button } from "client-core/ui/button";
 import { CheckCircle2, MinusCircle, Trash2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -14,6 +11,9 @@ import { RUN_STATE_PILL } from "@/components/marks/run-state";
 import { type PillTone, StatePill } from "@/components/marks/state-pill";
 import { OpenRunLink } from "@/components/workflows/open-run-link";
 import { spendText } from "@/lib/cost-text";
+import { cn } from "@/shared/lib/cn";
+import { formatRelative } from "@/shared/lib/format-relative";
+import { Button } from "@/shared/ui/button";
 
 // One card on the schedules station: a workflow's standing, cadence-driven trigger, with the
 // acts an owner has over it inline (enable/disable, run it now, delete it) and the state a
@@ -42,8 +42,8 @@ export function cadenceWords(cadence: string): string {
 
 const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
-// A future instant in words ("in 5 minutes", "in 2 hours") -- `formatRelative` (client-core)
-// only ever reads a past instant correctly, so this is its future-facing sibling. `now` is a
+// A future instant in words ("in 5 minutes", "in 2 hours"). `formatRelative` (shared/lib) only
+// ever reads a past instant correctly, so this is its future-facing sibling. `now` is a
 // parameter, not `Date.now()` read inline, so a test can pin it.
 export function formatNextRun(iso: string | null, now: number = Date.now()): string {
   if (iso === null) return "not scheduled";

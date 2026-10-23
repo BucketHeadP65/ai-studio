@@ -1,4 +1,4 @@
-import { ApiError, VoidSchema, createApiClient } from "client-core/api/client";
+import { ApiError, VoidSchema, createApiClient } from "@/shared/api/client";
 
 import type { UIMessage } from "ai";
 import { z } from "zod";
@@ -43,8 +43,8 @@ import {
 
 // The sessions station's typed API surface, over the studio agent backend
 // (`studio.agent`, :8770) — the same origin the workflow studio talks to.
-// Same shape as `studioApi`/`harnessApi`: client-core supplies request/parse/
-// error, this module injects the base URL and builds the endpoint object.
+// Same shape as `studioApi`/`harnessApi`: the shared API client supplies
+// request/parse/error, this module injects the base URL and builds the endpoint object.
 
 const { request } = createApiClient({ baseUrl: STUDIO_API_URL });
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactElement, Suspense, useEffect, useRef } from "react";
@@ -30,6 +29,7 @@ import { CollapsibleCard } from "@/components/workflows/collapsible-card";
 import { InspectorPage } from "@/components/workflows/inspector-page";
 import { ReadinessNotice } from "@/components/workflows/readiness-findings";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
+import { Button } from "@/shared/ui/button";
 
 // The draft on the canvas, full page. With `?session=` on the URL this reads
 // THAT session's own draft off `GET /api/sessions/{id}/conversation`, so a

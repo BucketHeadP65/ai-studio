@@ -24,7 +24,6 @@ import {
   useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { cn } from "client-core/lib/cn";
 import {
   Bot,
   Braces,
@@ -46,6 +45,7 @@ import type { GraphEdge, GraphNode, WorkflowGraph } from "@/api/studio-types";
 import { type GlyphFill, type GlyphKind, NodeGlyph } from "@/components/marks/node-glyph";
 import type { LaidGraph, LayoutDirection, RejectionArc } from "@/lib/studio-layout";
 import { aspectRatioOf, chooseDirection, drawnWires, layoutWorkflow } from "@/lib/studio-layout";
+import { cn } from "@/shared/lib/cn";
 
 import "./workflow-canvas.css";
 

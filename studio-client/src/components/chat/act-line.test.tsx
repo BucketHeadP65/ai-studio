@@ -2,7 +2,7 @@ import { screen } from "@testing-library/dom";
 import type { ToolUIPart } from "ai";
 import { describe, expect, it } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { ActLine } from "./act-line";
 

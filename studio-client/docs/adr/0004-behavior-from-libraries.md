@@ -15,16 +15,15 @@ direction: libraries own interaction mechanics, the app owns every pixel and all
 
 ## Context
 
-The dashboard hand-rolled its overlay behavior: client-core's `ConfirmDialog`/`Drawer` and six app surfaces each carried an
+The dashboard hand-rolled its overlay behavior: the shared `ConfirmDialog`/`Drawer` and six app surfaces each carried an
 Escape listener, a backdrop button, and (for the popover) DOM-containment outside-click detection — with no focus trap,
 scroll lock, or return-focus anywhere. Chat prose went through react-markdown, which renders half-streamed syntax as
 literal markers. There was no toast outlet.
 
 ## Decision
 
-- **Overlays: radix behavior under our markup.** client-core's `ui/modal` (`Modal`, `ModalTitle`, `ModalDescription`) is
-  the one centered-dialog primitive, built on `Dialog` from the consolidated `radix-ui` package (a client-core dependency;
-  the consumer pins the same major): the panel is the dialog surface itself, so a backdrop press lands outside it and
+- **Overlays: radix behavior under our markup.** `src/shared/ui/modal` (`Modal`, `ModalTitle`, `ModalDescription`) is
+  the one centered-dialog primitive, built on `Dialog` from the consolidated `radix-ui` package: the panel is the dialog surface itself, so a backdrop press lands outside it and
   dismisses. `ConfirmDialog` and every app modal build on it. `Drawer` is the side panel on the same Dialog and takes
   `modal`: a non-modal drawer leaves the page live and dismisses on an outside pointer or focus, so anything it nests
   renders inside its own tree (the chat turn inspector, whose payload viewer is a modal drawer within it; a non-modal
@@ -49,12 +48,12 @@ literal markers. There was no toast outlet.
 - An open modal now traps focus, locks scroll, hides the rest of the page from assistive tech, and pointer-locks the body.
   Tests interact with the page behind a dialog only through the dialog; radix arms its outside-pointer listener one tick
   after open and dismisses on the click after the pointerdown.
-- New deps: `radix-ui` (client-core), `streamdown`, `sonner` (studio-client). highlight.js and react-markdown remain for
+- New deps: `radix-ui`, `streamdown`, `sonner`. highlight.js and react-markdown remain for
   `MarkdownView` only. `radix-ui/internal` is an internal entry point: re-check the two note surfaces on every radix
   upgrade.
 - A modal hides the page behind it from assistive tech, so a failure that must be read from the page (the project rail's
   unregister alert) closes its confirm first.
-- streamdown's dist ships Tailwind classes and is registered as an `@source` in `globals.css`, like client-core's copy;
-  its `sidebar` token is aliased onto `well` next to the other shadcn names.
+- streamdown's dist ships Tailwind classes and is registered as an `@source` in `globals.css`.
+  Its `sidebar` token is aliased onto `well` next to the other shadcn names.
 - A ref on an element inside a radix portal is still null in the effect of the commit that opens it: read such elements
   through callback-ref state and put that state in the effect's deps (the terminal pane).

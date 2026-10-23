@@ -2,7 +2,7 @@ import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { FileEntry, ProjectListingEntry } from "@/api/projects";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 vi.mock("@/api/projects", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/projects")>();

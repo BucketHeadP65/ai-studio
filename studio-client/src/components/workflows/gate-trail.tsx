@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import type { ReactElement } from "react";
 
 import type { GraphNode, PendingGate, RunEnvelope, StepEvent } from "@/api/studio-types";
@@ -9,6 +8,7 @@ import { type GlyphFill, type GlyphKind, NodeGlyph } from "@/components/marks/no
 import { provenance } from "@/components/marks/provenance-chip";
 import { StatePill } from "@/components/marks/state-pill";
 import { formatElapsedMs, useNowTick } from "@/components/workflows/elapsed";
+import { cn } from "@/shared/lib/cn";
 
 // The gate trail as a spine of decisions, read top to bottom like a log: one row per decision
 // this run made, in the order it made them, the open gate last among them, and a gate the run

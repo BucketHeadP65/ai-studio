@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
 import type { ReactElement } from "react";
 
 import { runKeys } from "@/api/query-keys";
@@ -11,6 +10,7 @@ import type { ChatReply, GateMode } from "@/api/studio-types";
 import { StatePill } from "@/components/marks/state-pill";
 import { MiniGraph } from "@/components/workflows/mini-graph";
 import { ReadinessNotice } from "@/components/workflows/readiness-findings";
+import { Button } from "@/shared/ui/button";
 
 // The moment a reply carries a drafted graph, it gets its own turn: the shape it will run, drawn
 // with nothing run yet, whether it is ready, and the two acts open on it here, saving it into

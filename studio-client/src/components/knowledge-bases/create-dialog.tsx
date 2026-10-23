@@ -1,14 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
-import { Modal, ModalTitle } from "client-core/ui/modal";
-import { Textarea } from "client-core/ui/textarea";
 import { useEffect, useId, useState } from "react";
 import { z } from "zod";
 
 import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
+import { Textarea } from "@/shared/ui/textarea";
 
 // The "Minimal" starting point: a PARTIAL KnowledgeBaseSchema — only what a fresh knowledge base
 // needs beyond the backend's own defaults (engram.kb.domain.schema.KnowledgeBaseSchema field defaults

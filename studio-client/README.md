@@ -54,9 +54,8 @@ point elsewhere, as [`.env.example`](.env.example) shows.
 
 - Next.js 16 App Router, React 19 and TypeScript in strict mode.
 - Tailwind CSS v4, TanStack Query and Biome.
-- [`client-core`](../client-core/README.md), installed as a copy from `file:../client-core`, for the typed fetch
-  client, the UI primitives and the Vitest and MSW test setup. After changing `client-core`, run
-  `npm install ../client-core` here to refresh the copy.
+- [`src/shared/`](src/shared/) holds the typed fetch client, the UI primitives and the Vitest and MSW test setup. It
+  imports nothing from the rest of the app.
 - Every backend response is parsed with a zod schema before a component sees it, so a changed backend fails loudly at
   the boundary.
 - The chat runs on the Vercel AI SDK. The workflow maps use `@xyflow/react` laid out by `elkjs`, and the knowledge base
@@ -71,8 +70,10 @@ src/
   app/            the routes, one folder per page
   api/            the zod-checked clients for both backends, and the generated schema.d.ts
   components/     the components of each page, plus the vendored ui/ and ai-elements/
-  lib/            shared helpers
-  test-support/   the MSW server and test factories
+  lib/            the app's helpers
+  shared/         the app-agnostic code, which imports nothing from the app: the fetch client, UI primitives,
+                  utilities, the test lifecycle and the one MSW server (shared/test-support/msw/server.ts)
+  test-support/   the Vitest setup file and the test factories
 e2e/              the Playwright specs
 ```
 

@@ -1,31 +1,6 @@
-// The jest-dom matcher import stays here (not only inside client-core's setup)
-// so its `declare module "vitest"` augmentation is visible to studio-client's own
-// `tsc`. This file lives in studio-client's tsconfig include, client-core's does
-// not. Runtime-wise it is idempotent (installTestLifecycle imports it too).
-import "@testing-library/jest-dom/vitest";
-
-import { installTestLifecycle } from "client-core/test-support/setup";
-import { afterEach } from "vitest";
-
-import { server } from "./msw/server";
-
-// The shared lifecycle (jest-dom matchers, scrollIntoView stub, MSW
-// listen/reset/close with onUnhandledFrame:"error") lives in client-core. The
-// MSW server instance + its handlers stay app-local.
-installTestLifecycle(server);
-
-// MSW answers 500 when a handler throws, so an `expect` inside a handler would fail only the request,
-// never the test. Every exception a handler raises fails the test it ran in.
-const handlerExceptions: unknown[] = [];
-server.events.on("unhandledException", ({ error }) => {
-  handlerExceptions.push(error);
-});
-afterEach(() => {
-  const raised = handlerExceptions.splice(0);
-  if (raised.length > 0) {
-    throw raised[0];
-  }
-});
+// The vitest setup file: the shared lifecycle (jest-dom, the one MSW server, handler
+// exceptions failing their test), then the browser shims this app's components need.
+import "@/shared/test-support/setup";
 
 // React Flow (@xyflow/react) needs a handful of browser APIs jsdom lacks —
 // this is xyflow's own documented test shim. ResizeObserver fires its callback

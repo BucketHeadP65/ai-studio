@@ -500,7 +500,7 @@ studio serve-http --port 8100
   See `../../../docs/explanation/design-patterns.md#di-seams-and-fakes-over-mocks`.
 - Zod-at-the-boundary (studio-client), AI Factory Studio's type client is generated from
   `/openapi.json`. See `../../../docs/explanation/design-patterns.md#zod-at-the-boundary`,
-  ADR `../../../docs/adr/0004-client-core-shared-frontend-package.md`.
+  ADR `../../../docs/adr/0021-frontend-shared-code-lives-in-the-spa.md`.
 - Immutable mirror, the `api` schema is read-only. The reader role cannot write.
   See `../../../docs/explanation/design-patterns.md#immutable-mirror`,
   ADR `../adr/0002-disposable-mirror-zotero-source-of-truth.md`.

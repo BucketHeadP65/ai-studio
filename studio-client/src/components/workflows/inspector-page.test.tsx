@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { WorkflowGraph } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 const routerBack = vi.fn();
 vi.mock("next/navigation", () => ({

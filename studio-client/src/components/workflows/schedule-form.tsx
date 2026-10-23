@@ -1,10 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { Input } from "client-core/ui/input";
-import { Select } from "client-core/ui/select";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
 
@@ -22,6 +18,10 @@ import {
   readParameters,
   usesKnowledgeBases,
 } from "@/components/workflows/parameter-fields";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Select } from "@/shared/ui/select";
 
 // The one route onto a new schedule: pick a workflow (fixed, when the caller already knows which
 // one; a select fed by `studioApi.library()` otherwise), answer its declared parameters through
@@ -305,7 +305,7 @@ export function ScheduleForm({
   }
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: jsdom in tests doesn't implement <dialog>.showModal, matches client-core's ConfirmDialog.
+    // biome-ignore lint/a11y/useSemanticElements: jsdom in tests doesn't implement <dialog>.showModal, matches the shared ConfirmDialog.
     <div
       role="dialog"
       aria-modal="true"

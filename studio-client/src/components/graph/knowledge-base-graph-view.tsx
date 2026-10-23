@@ -1,9 +1,6 @@
 "use client";
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Card } from "client-core/ui/card";
-import { Input } from "client-core/ui/input";
 import { Search } from "lucide-react";
 import dynamic from "next/dynamic";
 import { type KeyboardEvent, useMemo, useState } from "react";
@@ -11,6 +8,9 @@ import { type KeyboardEvent, useMemo, useState } from "react";
 import { type GraphFilters as GraphFilterValues, knowledgeBaseApi } from "@/api/knowledge-base";
 import type { GraphNode, GraphResult } from "@/api/types";
 import { nodeColor } from "@/lib/graph-model";
+import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
 
 import { GraphDetailPanel, type GraphSelection } from "./graph-detail-panel";
 import { GraphFilters } from "./graph-filters";

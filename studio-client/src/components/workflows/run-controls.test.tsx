@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runKeys, studioKeys } from "@/api/query-keys";
 import type { RunView, SessionSummary } from "@/api/sessions-types";
 import type { RunEnvelope, RunLimits, RunState, WorkflowDetail } from "@/api/studio-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({

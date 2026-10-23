@@ -1,10 +1,6 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { EmptyState } from "client-core/ui/empty-state";
 import { FileText } from "lucide-react";
 import type { MouseEvent, RefObject } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -19,6 +15,10 @@ import {
 import { studioErrorMessage } from "@/api/studio";
 import { Rail } from "@/components/panels/rail";
 import { useStoredFlag } from "@/lib/use-stored";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 import { FileTree } from "./file-tree";
 import { MarkdownEditor } from "./markdown-editor";

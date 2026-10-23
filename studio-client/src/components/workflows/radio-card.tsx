@@ -1,7 +1,8 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import type { ReactElement, Ref } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // One option in a labelled group of radio cards: a filled dot when selected, the option's own
 // name, and an optional one-line description below it. Every option is a real radio input, so

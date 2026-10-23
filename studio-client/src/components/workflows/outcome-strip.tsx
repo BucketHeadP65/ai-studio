@@ -1,6 +1,5 @@
 "use client";
 
-import { formatRelative } from "client-core/lib/format-relative";
 import type { ReactElement, ReactNode } from "react";
 
 import type { RunView } from "@/api/sessions-types";
@@ -11,6 +10,7 @@ import { StatePill, type PillTone } from "@/components/marks/state-pill";
 import { formatElapsedMs, useNowTick } from "@/components/workflows/elapsed";
 import { runnerActor, runnerLabel } from "@/components/workflows/runner-label";
 import { spendText } from "@/lib/cost-text";
+import { formatRelative } from "@/shared/lib/format-relative";
 
 // The run's own outcome at a glance, a 5-card row above the gate trail: what it is doing or
 // did, when it started, how long it has run, who set it going, and what it has cost. A live

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { type PillTone, StatePill } from "./state-pill";
 

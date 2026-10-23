@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Card } from "client-core/ui/card";
 import { useState } from "react";
 
 import { harnessApi } from "@/api/harness";
 import { studioErrorMessage } from "@/api/studio";
+import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
 
 // The agent's built-in setup, honest about what can move: every functional plugin
 // wears a switch (a flip reaches the very next turn, no restart), and the always-on set is

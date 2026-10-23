@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type RenderOptions, render } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 
+// Renders a component inside a fresh QueryClientProvider with retries off. Exported as
+// both `renderWithProviders` and `render`.
 export function renderWithProviders(ui: ReactElement, options?: RenderOptions) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   function Wrapper({ children }: { children: ReactNode }) {
@@ -9,3 +11,5 @@ export function renderWithProviders(ui: ReactElement, options?: RenderOptions) {
   }
   return { queryClient, ...render(ui, { wrapper: Wrapper, ...options }) };
 }
+
+export { renderWithProviders as render };

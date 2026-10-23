@@ -2,7 +2,7 @@ import { screen } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { FONT_STORAGE_KEY, FontSection } from "./font-section";
 

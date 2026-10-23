@@ -1,13 +1,9 @@
 <!-- GENERATED from architecture.md by scripts/docs/split_doc.py --dir docs/architecture — do not edit here; edit the master and re-run the script. -->
 
 ## 6. Quality, risks, tech debt
-> **TL;DR:** Clean codebase (zero inline debt markers, debt is ledgered in prose). The live risks are ADR-0004's stale symlink story, engram's hand-written SQL api surface, the sync lazy-route invariant, Docker-gated coverage, the workflow runner's shell-out posture, and ADR-0009's recorded manifest/contract follow-ups.
+> **TL;DR:** Clean codebase (zero inline debt markers, debt is ledgered in prose). The live risks are engram's hand-written SQL api surface, the sync lazy-route invariant, Docker-gated coverage, the workflow runner's shell-out posture, and ADR-0009's recorded manifest/contract follow-ups.
 <!-- load-when: risks, tech debt, known issues, caveats, coverage, drift -->
 
-- **ADR-0004 is partly stale.** It records `client-core` as a `file:` symlink.
-  The copy-install pivot (post-Turbopack-OOM) is recorded only in root
-  `CLAUDE.md`. Treat `CLAUDE.md` as authoritative. Re-syncing `client-core`
-  after dependency changes is a known foot-gun.
 - **engram `api` surface is hand-written SQL** inside the migration chain,
   no type-checker coverage against `compile/orm.py`. Drift is a silent
   maintenance seam.

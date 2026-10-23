@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Badge } from "client-core/ui/badge";
 import { ChevronDown, FolderPlus } from "lucide-react";
 import { useState } from "react";
 
 import { type Project, projectKeys, projectsApi } from "@/api/projects";
 import { studioErrorMessage } from "@/api/studio";
+import { cn } from "@/shared/lib/cn";
+import { Badge } from "@/shared/ui/badge";
 
 import { useActiveProject } from "./active-project";
 import { OpenFolderDialog } from "./open-folder-dialog";

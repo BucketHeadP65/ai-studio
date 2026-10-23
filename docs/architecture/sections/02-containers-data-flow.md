@@ -1,7 +1,7 @@
 <!-- GENERATED from architecture.md by scripts/docs/split_doc.py --dir docs/architecture — do not edit here; edit the master and re-run the script. -->
 
 ## 2. Containers & data flow
-> **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over four libraries (engram, core, engram-connectors, client-core), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
+> **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over three libraries (engram, core, engram-connectors), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
 <!-- load-when: containers, deployment, databases, local Postgres, ParadeDB, ports, data flow, C4 L2, connectors, templates -->
 
 ```mermaid
@@ -15,7 +15,6 @@ C4Container
         Container(engram, "engram", "Python lib, uv path dep", "Note grammar, indexing pipeline, retrieval plugins, evals, sources ports, init/export")
         Container(connectors, "engram-connectors", "Python lib, uv path dep + extras", "Zotero / YouTube / URL-intake connectors and their converters, found by entry point")
         Container(core, "core", "Python lib, uv path dep", "db, files, markdown, cqrs, ai: model factories, retrieval, disclosure, workflows engine")
-        Container(clientcore, "client-core", "TS lib, file: dep", "typed zod fetch, ui primitives, test harness")
         Container(templates, "templates/", "Data, one folder per knowledge base", "knowledge-base-schema.json, _meta/ guidance, workflows/, the template a knowledge base starts from")
         ContainerDb(corpusdb, "knowledge base DB", "local Postgres pg17, :5434 (ParadeDB :5433 opt-in)", "disposable indexed knowledge base + api schema, kb_reader role and one login role per private knowledge base")
         ContainerDb(storedb, "engram_workflows", "same server, same memory schema", "workflows as an indexed collection")
@@ -77,9 +76,9 @@ Load-bearing properties of this picture:
   127.0.0.1:8770 (CORS open to exactly the two spellings of the studio's dev
   origin). Neither has auth. The localhost binding is the boundary.
 - **Shared code flows through libraries, not imports across apps.**
-  Python apps consume `core/` and `engram/` as editable uv path sources. TS apps
-  consume `client-core/` as a `file:` dependency (copy-installed, see
-  [section 3](#3-cross-cutting-concepts)). `engram` never imports `studio` or the
+  Python apps consume `core/` and `engram/` as editable uv path sources. The SPA
+  keeps its app-agnostic code in `studio-client/src/shared/`, which imports
+  nothing from the rest of the app. `engram` never imports `studio` or the
   engine. A package-boundary test enforces it. A change in a shared lib must
   keep **all** consumers' suites green.
 - **Knowledge base vocabulary and host knowledge are both outside the code.** A knowledge base's

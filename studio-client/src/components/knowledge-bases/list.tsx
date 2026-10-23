@@ -1,15 +1,15 @@
 "use client";
 
-import { formatRelative } from "client-core/lib/format-relative";
-import { Button } from "client-core/ui/button";
-import { Card } from "client-core/ui/card";
-import { EmptyState } from "client-core/ui/empty-state";
 import { Database } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactElement } from "react";
 
 import type { KnowledgeBaseListEntry } from "@/api/types";
+import { formatRelative } from "@/shared/lib/format-relative";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 interface Props {
   entries: KnowledgeBaseListEntry[];

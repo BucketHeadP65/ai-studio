@@ -2,7 +2,7 @@ import { screen } from "@testing-library/dom";
 import { describe, expect, it } from "vitest";
 
 import type { GraphNode, WorkflowGraph } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { StepSpine } from "./step-spine";
 

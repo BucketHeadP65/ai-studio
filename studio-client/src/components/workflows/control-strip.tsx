@@ -1,12 +1,12 @@
 "use client";
 
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
 import type { GateMode, PendingGate } from "@/api/studio-types";
 import { GatePanel } from "@/components/chat/gate-panel";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 // The one honest place every act on the live run happens: Run when nothing is
 // active, Pause/Resume once something is, Stop from either of those or from a

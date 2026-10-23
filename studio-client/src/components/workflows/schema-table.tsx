@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
@@ -12,6 +11,7 @@ import {
   typeLabel,
   unwrapNullable,
 } from "@/components/workflows/workflow-order";
+import { cn } from "@/shared/lib/cn";
 
 // The one field-table reading every node's `output_schema` (and the run's own hand back) share:
 // a caption sentence naming the shape, then a table of its fields when it has any -- an object's

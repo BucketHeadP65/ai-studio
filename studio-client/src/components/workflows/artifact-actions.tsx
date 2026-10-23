@@ -1,10 +1,10 @@
 "use client";
 
-import { Button } from "client-core/ui/button";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
 import { studioApi, studioErrorMessage } from "@/api/studio";
 import type { ArtifactAction, ArtifactDocument, ArtifactRef } from "@/api/studio-types";
+import { Button } from "@/shared/ui/button";
 
 // What a person may do with what a run produced, drawn from a closed set of intents this app
 // already implements. An action is data: a kind, an id, a label, and which declared artifacts it

@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DraftProvider } from "@/api/draft-store";
 import type { PluginsListing, TiersListing } from "@/api/harness-types";
 import type { RunView, SessionSummary } from "@/api/sessions-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import ChatPage from "./page";
 

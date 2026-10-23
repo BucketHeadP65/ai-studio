@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "client-core/ui/badge";
 import type { ReactElement, ReactNode } from "react";
 
 import type { GraphNode, MapTurn, WorkflowGraph } from "@/api/studio-types";
@@ -16,6 +15,7 @@ import {
   typeLabel,
   wiresInto,
 } from "@/components/workflows/workflow-order";
+import { Badge } from "@/shared/ui/badge";
 
 // The card "The steps, in the order they run": one row per node from `executionOrder`, a
 // vertical spine down the left threading through each glyph, top to bottom. A run or map row

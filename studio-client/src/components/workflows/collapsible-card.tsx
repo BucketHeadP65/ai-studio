@@ -1,9 +1,10 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import { ChevronDown } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useState } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // A card whose body folds away behind its title. The chevron and the title are one button
 // (`aria-expanded` says which way it stands); anything interactive in the header rides `aside`,

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RunView } from "@/api/sessions-types";
 import type { Outcome, RunEnvelope, WorkflowGraph } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({

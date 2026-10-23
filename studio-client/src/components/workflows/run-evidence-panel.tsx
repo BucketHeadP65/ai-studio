@@ -2,8 +2,6 @@
 
 import type { ReactElement } from "react";
 
-import { formatRelative } from "client-core/lib/format-relative";
-
 import type { OwnerReview, WorkflowDetail } from "@/api/studio-types";
 import {
   type ProvenanceActor,
@@ -12,6 +10,7 @@ import {
 } from "@/components/marks/provenance-chip";
 import { StatePill, type PillTone } from "@/components/marks/state-pill";
 import { TRUST_LABEL } from "@/components/workflows/trust-chip";
+import { formatRelative } from "@/shared/lib/format-relative";
 
 // The workflow's own earned trust, read plainly beside the run it is showing rather than left
 // off the page entirely: its level, how many runs stand behind that level, and how many of those

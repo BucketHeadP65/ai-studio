@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { Textarea } from "client-core/ui/textarea";
 import { Ban, Brain, Check, ChevronDown, ChevronRight, ChevronUp, CircleHelp, Eye, FileText, List, MessageSquare, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +13,9 @@ import { traceCounts, traceEntries } from "@/api/inspector-trace";
 import type { TraceEntry } from "@/api/inspector-trace";
 import { inspectionKeys } from "@/api/query-keys";
 import { studioErrorMessage } from "@/api/studio";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 
 import { RowContent, RowLabel } from "./trace-rows";
 

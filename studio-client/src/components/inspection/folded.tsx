@@ -1,7 +1,8 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import { type ReactElement, useState } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // A block of text that folds past a line count, once, no animation (the owner's Reduce Motion
 // is always on). A caller decides `mono` by what the text is, not by taste. Folded, past its

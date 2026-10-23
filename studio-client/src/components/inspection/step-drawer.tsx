@@ -3,11 +3,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 
-import { Drawer } from "client-core/ui/drawer";
-
 import { inspectionApi } from "@/api/inspection";
 import { inspectionKeys } from "@/api/query-keys";
 import { studioErrorMessage } from "@/api/studio";
+import { Drawer } from "@/shared/ui/drawer";
 
 import { TurnMessages } from "./turn-messages";
 

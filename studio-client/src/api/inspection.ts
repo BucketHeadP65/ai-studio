@@ -1,4 +1,4 @@
-import { createApiClient } from "client-core/api/client";
+import { createApiClient } from "@/shared/api/client";
 
 import { z } from "zod";
 
@@ -7,8 +7,8 @@ import { STUDIO_API_URL } from "./studio-config";
 
 // The inspection surface over the harness backend (:8770): what the detectors found, the evidence behind one
 // finding, the conversation the inspector answered in, everything one run cost the inspection, and one more
-// question to the inspector that made a finding. Same shape as `studioApi`: client-core supplies
-// request/parse/error, this module injects the base URL and builds the endpoint object.
+// question to the inspector that made a finding. Same shape as `studioApi`: the shared API
+// client supplies request/parse/error, this module injects the base URL and builds the endpoint object.
 
 const { request } = createApiClient({ baseUrl: STUDIO_API_URL });
 

@@ -1,9 +1,8 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-
 import type { GraphEdge, GraphNode, GraphResult } from "@/api/types";
 import { nodeColor } from "@/lib/graph-model";
+import { cn } from "@/shared/lib/cn";
 
 // The selection the canvas reports up: a node, an edge, or nothing yet.
 export type GraphSelection = { node: GraphNode } | { edge: GraphEdge } | null;

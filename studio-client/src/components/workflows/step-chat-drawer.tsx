@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Drawer } from "client-core/ui/drawer";
 import { isTextUIPart } from "ai";
 import { type ReactElement, useMemo, useState } from "react";
 
@@ -18,6 +17,7 @@ import { AssistantTurn } from "@/components/chat/assistant-turn";
 import { Composer, useComposerDraft } from "@/components/chat/composer";
 import { ThinkingMark } from "@/components/chat/thinking-mark";
 import { AgentMarkdown } from "@/components/conversation/markdown";
+import { Drawer } from "@/shared/ui/drawer";
 
 import type { UIMessage } from "ai";
 

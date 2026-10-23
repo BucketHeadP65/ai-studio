@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import { DismissableLayer } from "radix-ui/internal";
 import { useEffect, useState } from "react";
 
 import type { NoteListingEntry } from "@/api/projects";
+import { cn } from "@/shared/lib/cn";
 
 import { NoteThread } from "./note-thread";
 

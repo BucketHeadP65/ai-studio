@@ -3,11 +3,11 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { Button } from "client-core/ui/button";
-import { Modal, ModalTitle } from "client-core/ui/modal";
 import { useEffect, useState } from "react";
 
 import { STUDIO_API_URL } from "@/api/studio-config";
+import { Button } from "@/shared/ui/button";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
 
 import { resizeMessage, terminalWsUrl } from "./protocol";
 

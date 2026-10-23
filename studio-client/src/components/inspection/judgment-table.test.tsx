@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Blame } from "@/api/inspection";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { JudgmentTable } from "./judgment-table";
 

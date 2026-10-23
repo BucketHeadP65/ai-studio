@@ -30,23 +30,6 @@ const config: NextConfig = {
   // Without this, `next dev` started by a coding agent writes a Next.js block into AGENTS.md, which is a
   // symlink to the committed CLAUDE.md, so every dev server start would dirty the checkout.
   agentRules: false,
-  // client-core ships raw TypeScript (no build step, ADR-0004); Next must
-  // transpile it like first-party source.
-  //
-  // The package is a file: dep installed as a COPY, not a symlink
-  // (`install-links=true` in this app's .npmrc). Copying keeps its real path
-  // INSIDE this app, which preserves Turbopack's default project root: the
-  // symlink-era workaround (`turbopack.root` widened to the monorepo) put
-  // the Python projects' .venvs, .git and every node_modules into the dev watcher +
-  // persistent-cache task graph and leaked next-server unboundedly. The copy
-  // also carries no nested node_modules, so react / react-dom / next /
-  // react-query resolve to THIS app's single copies — required during SSR,
-  // where a second react-query instance hides the app's QueryClientProvider
-  // from client-core's hooks. NEVER set `turbopack.root` here. Consequence:
-  // after editing client-core/, refresh the copy with `npm install ../client-core`
-  // here — a plain `npm install`/`npm update` will NOT repack an unchanged spec,
-  // even if the package's version was bumped.
-  transpilePackages: ["client-core"],
   async headers() {
     return [
       {

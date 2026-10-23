@@ -4,7 +4,7 @@ import { http, HttpResponse } from "msw";
 import { type ReactNode, createElement } from "react";
 import { describe, expect, it } from "vitest";
 
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 import { useConversation } from "./use-conversation";
 

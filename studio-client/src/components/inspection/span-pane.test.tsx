@@ -4,7 +4,7 @@ import { type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Evidence } from "@/api/inspection";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { SpanPane } from "./span-pane";
 

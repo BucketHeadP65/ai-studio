@@ -2,12 +2,9 @@ import { z } from "zod";
 
 // App-agnostic typed fetch wrapper with a zod-validated response boundary.
 //
-// `client/` baked the API base URL, the localStorage token accessor, and the
-// 401 → /login redirect directly into this module. Here those are injected via
-// `createApiClient` so a second app (studio-client, which is unauthenticated in
-// v1) reuses the request/parse/error machinery without inheriting client/'s
-// auth or routing. Each app builds its own typed endpoint object (the `api`
-// const) on top of the returned `request`.
+// The base URL, the token accessor and the 401 handling are injected through
+// `createApiClient`, so this module knows no backend. Each API module builds its own
+// typed endpoint object on top of the returned `request`.
 
 // 204 No Content endpoints carry no body — z.undefined() validates the
 // undefined we synthesize on that branch instead of attempting to parse JSON.

@@ -14,8 +14,8 @@ symlink so both clients discover it.
 
 ## Repository Structure
 
-Two Python applications, three Python libraries, one SPA, one shared frontend library, and the
-knowledge base templates the applications are kept clean of:
+Two Python applications, three Python libraries, one SPA, and the knowledge base templates the
+applications are kept clean of:
 
 - **`engram/`**: domain-general markdown knowledge-base indexer, **the library** (Python 3.13): note
   grammar, index-to-Postgres, retrieval tools, evals, sources, init/export. Ships one package,
@@ -30,11 +30,11 @@ knowledge base templates the applications are kept clean of:
   engine itself is `core.ai.workflows`. See `harness/CLAUDE.md` and `harness/CONTEXT.md`.
 - **`studio-client/`**: **AI Factory Studio**, the SPA (Next.js) over the `harness`
   backend (:8770) and the `studio` knowledge base API (:8100): the workflow studio (main entry point), the graph,
-  knowledge bases, and the harness control room. See `studio-client/CLAUDE.md`.
+  knowledge bases, and the harness control room. Its app-agnostic frontend code (the typed fetch and zod
+  boundary, the UI primitives, the utilities and the test support) lives in `studio-client/src/shared/`,
+  which imports nothing from the rest of the app (root ADR-0021). See `studio-client/CLAUDE.md`.
 - **`core/`**: THE shared Python library (`core.db`, `core.files`, `core.markdown`, `core.cqrs`,
   `core.observability`, `core.resolver`, `core.ai.*`, root ADR-0007). See `core/CLAUDE.md`.
-- **`client-core/`**: the shared frontend library (raw TypeScript, no build step), consumed by
-  `studio-client/` as a packed copy. See `client-core/CLAUDE.md`.
 - **`connectors/`**: the connectors and their document converters (Python 3.13, package
   `engram_connectors`, distribution `engram-connectors`): Zotero, YouTube and a general URL connector over
   engram's `Connector` / `DocumentConverter` ports, one subpackage per connector behind its own
@@ -58,7 +58,7 @@ knowledge base templates the applications are kept clean of:
   goes to `docs/explanation/upstream-extensions.md` (UE-n).
 
 **Ownership rule:** general-purpose, app-agnostic code lives in `core/` (Python) and
-`client-core/` (frontend). An app's domain stays in the app. Each application owns its
+`studio-client/src/shared/` (frontend). An app's domain stays in the app. Each application owns its
 `DeclarativeBase`/metadata. The repo's single alembic chain lives in `engram/`.
 **A knowledge base's vocabulary lives in its template** (its page types, folders, field names, statuses and
 collection name), never in `engram/`, `studio/`, `harness/` or the SPA, which take all of it from
@@ -67,7 +67,7 @@ derivation, its item-type vocabulary, its deep links) and lives in `connectors/`
 indexer. A knowledge-base-specific or host-specific literal in a domain-general layer is a review failure
 (root ADR-0018).
 
-> **Ripple rule: `core/` and `client-core/` are shared dependencies.** A change there must keep
+> **Ripple rule: `core/` is a shared dependency.** A change there must keep
 > every consumer green. Run the consumers' full gates before claiming it done.
 
 ## The local stack

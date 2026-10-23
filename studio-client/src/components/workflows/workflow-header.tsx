@@ -1,11 +1,6 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "client-core/ui/badge";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { Input } from "client-core/ui/input";
-import { Textarea } from "client-core/ui/textarea";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
@@ -16,6 +11,11 @@ import type { Readiness, Trust, WorkflowDetail } from "@/api/studio-types";
 import { ARCHIVE_CONFIRM } from "@/components/workflows/archive-copy";
 import { FieldFinding, ReadinessNotice } from "@/components/workflows/readiness-findings";
 import { TrustChip } from "@/components/workflows/trust-chip";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Input } from "@/shared/ui/input";
+import { Textarea } from "@/shared/ui/textarea";
 
 // The identity an open workflow carries: what it is (title, id@version, trust, the words that
 // describe it) and the two routes that change its card, title-only up here so its height follows

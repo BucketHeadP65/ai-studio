@@ -1,11 +1,11 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
 import { Reply } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 
 import type { Blame } from "@/api/inspection";
 import { SPAN_TOKEN, citesOf, sentence, spaced, surfaceLabel } from "@/api/inspection-words";
+import { cn } from "@/shared/lib/cn";
 
 import { rootCauseIcon, surfaceIcon } from "./icons";
 

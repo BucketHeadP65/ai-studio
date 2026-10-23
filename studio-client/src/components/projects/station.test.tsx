@@ -10,7 +10,7 @@ import type {
   ProjectListingEntry,
   SkillCard,
 } from "@/api/projects";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 vi.mock("@/api/projects", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/api/projects")>();

@@ -9,7 +9,6 @@ import {
   isTextUIPart,
   isToolUIPart,
 } from "ai";
-import { Drawer } from "client-core/ui/drawer";
 import { Wrench } from "lucide-react";
 import { type ReactElement, useState } from "react";
 
@@ -17,6 +16,7 @@ import { sessionKeys } from "@/api/query-keys";
 import { parseTranscriptPayload, transcriptTurns } from "@/api/sessions";
 import type { TranscriptMessage } from "@/api/sessions-types";
 import { AgentMarkdown } from "@/components/conversation/markdown";
+import { Drawer } from "@/shared/ui/drawer";
 
 import { JsonTree, LONG_STRING_THRESHOLD } from "./json-tree";
 import { readableToolText } from "./reply-text";

@@ -4,8 +4,8 @@ import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { HarnessArtifact } from "@/api/harness-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { HarnessKindSection } from "./kind-section";
 

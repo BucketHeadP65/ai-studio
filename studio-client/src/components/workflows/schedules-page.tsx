@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
-import { EmptyState } from "client-core/ui/empty-state";
 import { CalendarClock } from "lucide-react";
 import { type ReactElement, useState } from "react";
 
@@ -13,6 +10,9 @@ import { schedulesApi } from "@/api/schedules";
 import { studioApi, studioErrorMessage } from "@/api/studio";
 import { ScheduleCard, formatNextRun } from "@/components/workflows/schedule-card";
 import { ScheduleForm, type ScheduleFormPayload } from "@/components/workflows/schedule-form";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 // The schedules station at `/workflows/schedules`: management home for every standing,
 // cadence-driven trigger, one vertical stack with every schedule on, soonest fire first, then

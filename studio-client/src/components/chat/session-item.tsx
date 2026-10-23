@@ -1,11 +1,11 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { formatRelative } from "client-core/lib/format-relative";
 import { Archive, ArchiveRestore, Check, MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { SessionSummary } from "@/api/sessions-types";
+import { cn } from "@/shared/lib/cn";
+import { formatRelative } from "@/shared/lib/format-relative";
 
 export interface SessionItemProps {
   session: SessionSummary;

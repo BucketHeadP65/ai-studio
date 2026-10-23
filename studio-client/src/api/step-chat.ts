@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 
-import { ApiError, createApiClient } from "client-core/api/client";
+import { ApiError, createApiClient } from "@/shared/api/client";
 
 import { dataLines } from "./chat-stream";
 import { NEVER_ANSWERED } from "./sessions";

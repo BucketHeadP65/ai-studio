@@ -4,8 +4,8 @@ import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ModelEntry, TierView } from "@/api/harness-types";
-import { server } from "@/test-support/msw/server";
-import { render } from "@/test-support/render";
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
 
 import { ModelTiers } from "./model-tiers";
 

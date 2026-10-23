@@ -40,22 +40,19 @@ Trade-offs / Revisit-when rather than smoothed over.
   manually, no enforced cross-app gate.
 - **Revisit when:** a CI matrix exists that can gate all consumers.
 
-## `file:` dependency, copy-installed (TypeScript)
+## Shared frontend code inside the SPA (TypeScript)
 
-- **What:** `client-core` consumed by both clients as
-  `"file:../client-core"` with `transpilePackages`. Installed as a **copy** made by
-  `npm pack`, never a symlink (`install-links=true` in `.npmrc`).
-- **Why:** [ADR 0004](../adr/0004-client-core-shared-frontend-package.md)
-  rejected npm workspaces for the same per-app-independence reasons as ADR
-  0001. The copy-install pivot is recorded in root `CLAUDE.md`: symlinked
-  source under Turbopack required `turbopack.root`, which leaked `next-server`
-  to ~60 GB and OOM'd dev five times (2026-06-11). `CLAUDE.md` is authoritative
-  over ADR 0004 on this point.
-- **Trade-offs:** editing `client-core` requires `npm install ../client-core`
-  in **each** consumer (npm won't repack on a plain install even after a
-  version bump), a known foot-gun.
-- **Revisit when:** a third consumer appears, or Turbopack's multi-root story
-  changes.
+- **What:** the app-agnostic frontend code (the typed fetch and zod boundary,
+  the UI primitives, the utilities and the test support) lives in
+  `studio-client/src/shared/`, which imports nothing from the rest of the app.
+  `src/shared/boundary.test.ts` fails on an import that crosses that line.
+- **Why:** [ADR 0021](../adr/0021-frontend-shared-code-lives-in-the-spa.md).
+  The separate package had one consumer, and its copy install cost a refresh
+  after every change, a Tailwind `@source` into `node_modules`, duplicated
+  dependencies and a split test setup.
+- **Trade-offs:** a second frontend would have to extract the folder into a
+  package again.
+- **Revisit when:** a second frontend needs the same code.
 
 ## `core.ai`, the shared AI stack (formerly `engramai`)
 
@@ -262,8 +259,8 @@ Trade-offs / Revisit-when rather than smoothed over.
   hooks/transitions surface the dashboards use (optimistic updates, etc.).
 - **Trade-offs / honest flag:** this is the **bleeding edge**, Next 16 +
   React 19 are very new, and the repo has *already* paid for it: the
-  Turbopack symlink OOM that forced the `client-core` copy-install pivot
-  (ADR 0004 / `CLAUDE.md`). Early-adopter tax is a recurring cost here, not a
+  Turbopack symlink OOM that forced the shared frontend package's copy install
+  (root ADR 0004). Early-adopter tax is a recurring cost here, not a
   hypothetical. Justified if staying current matters to the owner. Worth a
   conscious "yes" rather than a default.
 - **Revisit when:** another framework-version upgrade costs material debugging
@@ -282,7 +279,7 @@ Trade-offs / Revisit-when rather than smoothed over.
 ## Tailwind v4, **rationale inferred, confirm**
 
 - **What:** Tailwind CSS v4 via `@tailwindcss/postcss`. UI primitives in
-  `client-core/ui`.
+  `studio-client/src/shared/ui/`.
 - **Why (inferred, confirm):** utility-first styling keeps shared primitives
   framework-light and copyable into both clients without a component-library
   dependency. Mild newness flag (v4's engine is recent) but low blast radius.
@@ -302,7 +299,7 @@ Trade-offs / Revisit-when rather than smoothed over.
 
 - **What:** unit/component tests in Vitest with MSW network interception
   (`onUnhandledFrame: "error"`). e2e in Playwright. Shared test lifecycle in
-  `client-core` `test-support`.
+  `studio-client/src/shared/test-support/`.
 - **Why:** the MSW discipline *is* recorded, root `CLAUDE.md` section "No shared MSW
   handlers (the empty default handler set is load-bearing: every test states
   the network behaviour it depends on). The tool choices themselves are not.

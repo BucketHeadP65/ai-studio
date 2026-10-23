@@ -1,12 +1,12 @@
 "use client";
 
-import { cn } from "client-core/lib/cn";
-import { Button } from "client-core/ui/button";
-import { StatusDot } from "client-core/ui/status-dot";
-import { Textarea } from "client-core/ui/textarea";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { Turn } from "@/api/studio-types";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { StatusDot } from "@/shared/ui/status-dot";
+import { Textarea } from "@/shared/ui/textarea";
 
 import { AgentMarkdown } from "./markdown";
 

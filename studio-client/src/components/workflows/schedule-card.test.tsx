@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Schedule } from "@/api/schedules";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({

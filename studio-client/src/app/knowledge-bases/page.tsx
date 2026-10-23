@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
 import dynamic from "next/dynamic";
 import { useRef, useState } from "react";
 
@@ -11,6 +10,7 @@ import type { KnowledgeBaseListEntry } from "@/api/types";
 import { CreateKnowledgeBaseDialog } from "@/components/knowledge-bases/create-dialog";
 import { KnowledgeBasesList } from "@/components/knowledge-bases/list";
 import { KnowledgeBaseSchemaViewer } from "@/components/knowledge-bases/schema-viewer";
+import { Button } from "@/shared/ui/button";
 
 // Loaded client-side ONLY. xterm reads `self` at module evaluation, which does not
 // exist in Node, a plain import made the server render of this route throw, so

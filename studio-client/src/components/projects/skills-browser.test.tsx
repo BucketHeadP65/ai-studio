@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, type SkillCard, projectsApi } from "@/api/projects";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { SkillsBrowser } from "./skills-browser";
 

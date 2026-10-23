@@ -5,7 +5,7 @@ import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useSessionChat } from "@/components/chat/use-session-chat";
-import { server } from "@/test-support/msw/server";
+import { server } from "@/shared/test-support/msw/server";
 
 // The companion's navigate verb against a router that moves the page a tick after the push,
 // the way Next's App Router does when the route it is sent to was never prefetched. The whole

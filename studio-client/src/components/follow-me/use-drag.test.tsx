@@ -2,7 +2,7 @@ import { fireEvent, screen } from "@testing-library/dom";
 import { type ReactElement, useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import { useDrag } from "./use-drag";
 

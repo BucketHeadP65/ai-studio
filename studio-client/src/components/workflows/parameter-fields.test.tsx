@@ -5,7 +5,7 @@ import { useState } from "react";
 import { describe, expect, it } from "vitest";
 
 import type { GraphNode, JsonSchema, WorkflowGraph, WorkflowPresentation } from "@/api/studio-types";
-import { render } from "@/test-support/render";
+import { render } from "@/shared/test-support/render";
 
 import {
   type KnowledgeBaseRegistry,

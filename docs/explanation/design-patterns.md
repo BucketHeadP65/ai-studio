@@ -161,7 +161,7 @@ decision records in the ADRs.
 - **Intent:** make backend drift loud. Every HTTP response is `.parse()`d
   against a zod schema at the fetch boundary, so a contract change surfaces as
   a `ZodError` there instead of `undefined.something` deep in a component.
-- **Where used:** the typed fetch factory `client-core` `api/client`
+- **Where used:** the typed fetch factory `studio-client/src/shared/api/client`
   (`createApiClient`). Schemas in `studio-client/src/api/` and the
   sibling client's. Never `as`-casts. The Python analogue is
   `BaseModel(frozen=True, extra="ignore")` for response shapes at httpx
@@ -172,7 +172,7 @@ decision records in the ADRs.
   clients mitigate with generated `schema.d.ts` + zod on top). A parse
   cost per response.
 - **See also:** root `CLAUDE.md` section API response validation,
-  [ADR 0004](../adr/0004-client-core-shared-frontend-package.md).
+  [ADR 0021](../adr/0021-frontend-shared-code-lives-in-the-spa.md).
 
 ## Immutable mirror
 

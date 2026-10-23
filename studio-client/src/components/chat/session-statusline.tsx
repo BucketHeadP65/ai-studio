@@ -1,8 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "client-core/lib/cn";
-import { ConfirmDialog } from "client-core/ui/confirm-dialog";
 import Link from "next/link";
 import { type ReactElement, type Ref, useState } from "react";
 
@@ -14,6 +12,8 @@ import type { GateMode } from "@/api/studio-types";
 import { ClearControl, VitalsReadout } from "@/components/follow-me/vitals";
 import { GATE_MODE_WORDS } from "@/components/marks/gate-mode";
 import { useNowTick } from "@/components/workflows/elapsed";
+import { cn } from "@/shared/lib/cn";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 // The chat station's one status row, under the composer: this session's own cost and context
 // reading, the choice of who decides a gate this run reaches, how many plugins the agent may use

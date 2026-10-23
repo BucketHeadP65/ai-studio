@@ -1,11 +1,11 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "client-core/ui/button";
-import { Modal, ModalTitle } from "client-core/ui/modal";
 
 import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";
 import { knowledgeBaseKeys } from "@/api/query-keys";
+import { Button } from "@/shared/ui/button";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
 
 interface Props {
   name: string | null;

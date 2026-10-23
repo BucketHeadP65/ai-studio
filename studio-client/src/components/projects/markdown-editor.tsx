@@ -3,13 +3,13 @@
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { Button } from "client-core/ui/button";
 import { basicSetup } from "codemirror";
 import type { KeyboardEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { ApiError, type FileContent, projectsApi } from "@/api/projects";
 import { studioErrorMessage } from "@/api/studio";
+import { Button } from "@/shared/ui/button";
 
 import { stampProseTheme, useAppIsDark } from "./use-app-dark";
 import "./prose.css";

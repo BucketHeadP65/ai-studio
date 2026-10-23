@@ -17,10 +17,6 @@
             "path": "studio"
         },
         {
-            "name": "client-core",
-            "path": "client-core"
-        },
-        {
             "name": "studio-client",
             "path": "studio-client"
         },

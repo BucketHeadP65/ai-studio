@@ -1,4 +1,4 @@
-import { ApiError, createApiClient } from "client-core/api/client";
+import { ApiError, createApiClient } from "@/shared/api/client";
 
 import { z } from "zod";
 import { STUDIO_API_URL } from "./studio-config";
@@ -47,8 +47,8 @@ import {
 } from "./studio-types";
 
 // The Workflow studio's typed API surface, over the studio agent backend,
-// `studio.agent` (:8770). Same shape as `knowledgeBaseApi`: client-core supplies request/parse/
-// error, this module injects the base URL and builds the endpoint object.
+// `studio.agent` (:8770). Same shape as `knowledgeBaseApi`: the shared API client supplies
+// request/parse/error, this module injects the base URL and builds the endpoint object.
 // Local-only and unauthenticated, like the rest of the dashboard.
 
 const { request } = createApiClient({ baseUrl: STUDIO_API_URL });
@@ -96,7 +96,7 @@ export function refusedReadiness(error: unknown): Readiness | null {
 }
 
 // The backend answers failures as JSON with a human sentence in `detail` or
-// `message`; client-core throws the raw body as ApiError.message. This is the
+// `message`. The shared API client throws the raw body as ApiError.message. This is the
 // one place that unwraps it, so every view shows the sentence, never the soup.
 // A FastAPI 422 carries `detail` as an ARRAY of issue objects, not a sentence —
 // only a string may pass through, or React is handed an object as a child.
