@@ -29,6 +29,7 @@ from engram.indexing.contracts import IndexKnowledgeBase, IndexReport, Knowledge
 from engram.init.contracts import code_head_revision
 from engram.kb import contracts as kb
 from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError
 
 from studio.knowledge_base.container import create_container, dispose_container
 from studio.knowledge_base.refresh.contracts import REFRESH_KIND, refresh_history
@@ -39,7 +40,7 @@ from studio.knowledge_base.settings import (
     find_knowledge_base_root,
     knowledge_base_slug,
 )
-from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, unreachable_cause
 from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
@@ -354,8 +355,11 @@ async def announce_db(
             code_revision=code_head_revision(),
             last_run=await _last_run_of(container, active),
         )
-    except UNREACHABLE_ERRORS as exc:
-        typer.echo(unreachable_line(database, exc), err=err)
+    except (*UNREACHABLE_ERRORS, DBAPIError) as exc:
+        cause = unreachable_cause(exc)
+        if cause is None:
+            raise
+        typer.echo(unreachable_line(database, cause), err=err)
         return None
     application = active.application
     rebuilds_everything = indexer_version_changed(identity.indexer_version, application.infrastructure.azure_openai, application.ingestion)

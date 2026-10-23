@@ -20,6 +20,26 @@ UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (OSError, InvalidPasswordError
 """The errors a failed connection to Postgres raises."""
 
 
+def unreachable_cause(error: BaseException) -> Exception | None:
+    """The error in `error`'s chain of causes that says Postgres could not be reached, or `None` when none does.
+
+    SQLAlchemy wraps asyncpg's refusal of a password or of a database name in a `DBAPIError`, so a caller catching
+    `UNREACHABLE_ERRORS` and `DBAPIError` passes what it caught here and re-raises when this answers `None`.
+
+    Args:
+        error: The error a connection or a read raised.
+
+    Returns:
+        The first of `UNREACHABLE_ERRORS` in the chain, `error` itself included.
+    """
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, UNREACHABLE_ERRORS):
+            return current
+        current = current.__cause__
+    return None
+
+
 class ReaderEngine:
     """The read-only engine, under its own type so the container tells it apart from the admin engine.
 

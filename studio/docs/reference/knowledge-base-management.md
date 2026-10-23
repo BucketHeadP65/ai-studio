@@ -552,7 +552,9 @@ is the one exception. A long-lived server has nothing to exit into, so it prints
 the database is reachable.` as a third line and still builds and serves its tool surface, every tool call failing cleanly
 once it actually reads the database, rather than the whole server dying at startup on a database that has not come up yet.
 Its reader role is then checked on each new connection, so no read runs until the database answers with a role that may
-only read.
+only read. Since it could not check its role at launch, it builds no authoring and no documentation-authoring tool, and
+prints one stderr line saying so. A wrong password and a database name the server does not hold count as unreachable
+here too, though SQLAlchemy reports them wrapped in its own error.
 
 `studio mcp` also serves when its role may not read the index state, as when the knowledge base reader role is in both
 database URLs (the harness launches it that way, naming the knowledge base with `--knowledge-base`). Postgres refuses

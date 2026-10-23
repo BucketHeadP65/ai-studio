@@ -140,7 +140,7 @@ from studio.knowledge_base.settings import (
 )
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
-from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderSqlGateway, SearchReranking
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderSqlGateway, SearchReranking, unreachable_cause
 from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
@@ -516,7 +516,9 @@ async def _stored_switches(surface: ReadSurface) -> RetrievalSwitches | None:
         return None
     try:
         return await surface.switch_source()
-    except UNREACHABLE_ERRORS:
+    except (*UNREACHABLE_ERRORS, DBAPIError) as error:
+        if unreachable_cause(error) is None:
+            raise
         return RetrievalSwitches()
 
 
@@ -533,8 +535,9 @@ async def _build_mcp_server(
     settings_path: Path = _DEFAULT_SETTINGS_PATH,
     logging_settings: LoggingSettings | None = None,
     read_only: bool = False,
+    role_unchecked: bool = False,
 ) -> MCPServer:
-    """Resolve everything the MCP server needs on this loop and build it, its answers stamped by slug alone when `read_only`."""
+    """Resolve everything the MCP server needs on this loop and build it, with no write tool when `read_only` or `role_unchecked`."""
     configure_logging(logging_settings)
     reader_gateway = await container.get(ReaderSqlGateway)
     describe_handler = await container.get(DescribeSchemaHandler)
@@ -564,7 +567,9 @@ async def _build_mcp_server(
 
     # The documentation-authoring tools are wired when either `--doc-authoring` or the schema's
     # `retrieval.doc_authoring` opts in. A read-only server wires no tool that writes.
-    authoring, wants_doc_authoring = _writing_tools(read_only=read_only, authoring=authoring, doc_authoring=doc_authoring or schema.retrieval.doc_authoring)
+    authoring, wants_doc_authoring = _writing_tools(
+        read_only=read_only, role_unchecked=role_unchecked, authoring=authoring, doc_authoring=doc_authoring or schema.retrieval.doc_authoring
+    )
     doc_authoring_tools: AuthoringTools | None = None
     doc_engine: AsyncEngine | None = None
     registry_note: str | None = None
@@ -670,14 +675,16 @@ async def _build_mcp_server(
     return server
 
 
-def _writing_tools(*, read_only: bool, authoring: bool, doc_authoring: bool) -> tuple[bool, bool]:
-    """The authoring and documentation-authoring opt-ins a server wires, none when read-only, which names what it left out on stderr."""
-    left_out = [name for name, wanted in (("the authoring tools", authoring), ("the documentation-authoring tools", doc_authoring)) if wanted]
-    if not read_only:
-        return authoring, doc_authoring
-    if left_out:
-        typer.echo(f"read-only: left out {' and '.join(left_out)}, since this role may not write.", err=True)
-    return False, False
+def _writing_tools(*, read_only: bool, role_unchecked: bool, authoring: bool, doc_authoring: bool) -> tuple[bool, bool]:
+    """The write-tool opt-ins a server wires, none when read-only or its role went unchecked, naming what it left out on stderr."""
+    left_out = " and ".join(name for name, wanted in (("the authoring tools", authoring), ("the documentation-authoring tools", doc_authoring)) if wanted)
+    if read_only and left_out:
+        typer.echo(f"read-only: left out {left_out}, since this role may not write.", err=True)
+    elif role_unchecked and left_out:
+        typer.echo(f"left out {left_out}, since the database role could not be checked at launch.", err=True)
+    if read_only or role_unchecked:
+        return False, False
+    return authoring, doc_authoring
 
 
 async def _mcp_server_after_identity(
@@ -686,6 +693,7 @@ async def _mcp_server_after_identity(
     """Announce the identity, then build the MCP server on the same loop, even on an unreachable database or a read-only role."""
     announce_knowledge_base(settings_knowledge_base_path(settings), err=True)
     read_only = False
+    role_unchecked = False
     try:
         identity = await announce_db(container, settings, collection=collection, err=True)
     except DBAPIError as error:
@@ -696,8 +704,14 @@ async def _mcp_server_after_identity(
     else:
         if identity is None:
             typer.echo("serving anyway, every call fails until the database is reachable.", err=True)
+            role_unchecked = True
     return await _build_mcp_server(
-        container, authoring=authoring, doc_authoring=doc_authoring, logging_settings=settings.application.logging, read_only=read_only
+        container,
+        authoring=authoring,
+        doc_authoring=doc_authoring,
+        logging_settings=settings.application.logging,
+        read_only=read_only,
+        role_unchecked=role_unchecked,
     )
 
 
@@ -1003,8 +1017,11 @@ async def _index_after_identity(
         await asyncio.to_thread(assert_schema_at_head, settings.application.infrastructure.database.url)
     except SchemaRevisionError as exc:
         _fail(str(exc))
-    except UNREACHABLE_ERRORS as exc:
-        typer.echo(unreachable_line(redact_db(settings.application.infrastructure.database.url), exc))
+    except (*UNREACHABLE_ERRORS, DBAPIError) as exc:
+        cause = unreachable_cause(exc)
+        if cause is None:
+            raise
+        typer.echo(unreachable_line(redact_db(settings.application.infrastructure.database.url), cause))
         raise typer.Exit(code=1) from None
     identity = await announce_db(container, settings, collection=collection)
     if identity is None:

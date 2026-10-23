@@ -34,6 +34,7 @@ from engram.retrieval.contracts import (
     verify_reader_role,
     verify_reader_role_on_connect,
 )
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from wireup import injectable
 
@@ -52,7 +53,14 @@ from studio.knowledge_base.settings import (
     RetrievalSettings,
     SettingsFile,
 )
-from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderEngine, ReaderSqlGateway, SearchReranking
+from studio.knowledge_base.wiring.contracts import (
+    UNREACHABLE_ERRORS,
+    AdminSqlGateway,
+    ReaderEngine,
+    ReaderSqlGateway,
+    SearchReranking,
+    unreachable_cause,
+)
 
 
 @injectable
@@ -71,7 +79,9 @@ async def reader_engine_provider(database: DatabaseSettings) -> ReaderEngine:
     engine = build_reader_engine(database.reader_url)
     try:
         await verify_reader_role(engine)
-    except UNREACHABLE_ERRORS:
+    except (*UNREACHABLE_ERRORS, DBAPIError) as error:
+        if unreachable_cause(error) is None:
+            raise
         verify_reader_role_on_connect(engine)
     await register_pgvector(engine)
     return ReaderEngine(engine)
