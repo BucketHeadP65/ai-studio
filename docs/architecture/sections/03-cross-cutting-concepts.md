@@ -174,7 +174,7 @@ record rather than inferring them from an absence. The contract is in
 ### zod at the boundary (TS apps)
 Every backend response is `.parse()`d against a zod schema before reaching
 components, never `as`-cast, so backend drift surfaces as a `ZodError` at the
-boundary. The typed fetch wrapper lives in `client-core` (`api/client`).
+boundary. The typed fetch wrapper lives in `studio-client/src/shared/api/client`.
 
 ### Local-only, no auth
 Neither backend authenticates: `studio serve-http` and the agent app bind
@@ -186,7 +186,7 @@ a resolved working directory. The documented non-goal is "never load untrusted
 courses" (it runs the user's own code on the user's own machine). Programs
 are the exception: they run in a Monty sandbox, never `exec`.
 
-### Dependency strategy (`file:` / path sources, not workspaces)
+### Dependency strategy (path sources, not workspaces)
 Python: `core = { path = "../core" }` and `engram = { path = "../engram" }` in
 the app, deliberately **not** a uv workspace, so each project keeps its own
 lockfile/venv ([ADR 0001](../../adr/0001-wiki-app-placement-and-core.md)).
@@ -203,12 +203,8 @@ after a package layout change, re-sync every consumer with
 workflow engine ships behind `core[workflows]` / `core[workflows-temporal]`, so
 plain `core` (and therefore `engram`) never installs the engine's optional
 weight ([ADR 0009](../../adr/0009-ai-factory-studio-consolidation.md), amended by [ADR 0010](../../adr/0010-harness-extraction.md)). TS:
-`"client-core": "file:../client-core"` + `transpilePackages`
-([ADR 0004](../../adr/0004-client-core-shared-frontend-package.md)), **pivoted
-to copy-install** (`install-links=true` in `.npmrc`) after a Turbopack OOM
-incident. The ADR's symlink wording is stale on this point, root `CLAUDE.md`
-is authoritative. Editing `client-core` requires `npm install ../client-core`
-in each consumer.
+one npm package, `studio-client`, with its app-agnostic code in `src/shared/`
+([ADR 0021](../../adr/0021-frontend-shared-code-lives-in-the-spa.md)).
 
 ### Dependency injection (two styles, deliberately)
 The knowledge base half is **wireup DI**: composition root

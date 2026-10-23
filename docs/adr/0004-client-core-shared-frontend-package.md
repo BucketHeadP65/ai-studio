@@ -3,14 +3,17 @@ id: adr-0004-client-core-package
 aliases: ["adr-0004-client-core-package"]
 type: adr
 app: root
-status: accepted
+status: superseded
+superseded_by: "[[adr-0021-frontend-shared-code-lives-in-the-spa]]"
 tags: []
 title: "0004 — `client-core` shared frontend package via `file:` path dependencies"
 ---
 
 # 0004 — `client-core` shared frontend package via `file:` path dependencies
 
-- **Status:** accepted
+**Superseded by [ADR-0021](0021-frontend-shared-code-lives-in-the-spa.md) (2026-10-23).**
+
+- **Status:** superseded by [ADR-0021](0021-frontend-shared-code-lives-in-the-spa.md)
 - **Date:** 2026-06-11
 - **Deciders:** repository maintainers (ui-skeleton feature)
 - **Supersedes / Amends:** none

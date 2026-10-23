@@ -136,18 +136,16 @@ Entry shape: what was not adopted, what we do instead, why not, what would make 
   in the record sweep.
 
 
-## DD-12. No uv workspace and no npm workspace, shared code ships as path and file sources
+## DD-12. No uv workspace, shared Python code ships as path sources
 
-- **Not adopted:** a uv workspace over the Python projects, and an npm workspace over the frontend.
+- **Not adopted:** a uv workspace over the Python projects.
 - **Instead:** every project keeps its own in-project venv and lockfile and names the shared code as a path source
-  (`studio/pyproject.toml:47-49`, `engram/pyproject.toml:63-64`, `harness/pyproject.toml:76-79`), and `studio-client` names
-  `client-core` as `file:../client-core` (`studio-client/package.json:34`), which npm installs as a copy under
-  `node_modules/client-core`.
+  (`studio/pyproject.toml:47-49`, `engram/pyproject.toml:63-64`, `harness/pyproject.toml:76-79`). The frontend is one
+  npm package, `studio-client`, whose shared code lives in `src/shared/` (root ADR 0021), so no npm workspace is needed.
 - **Why not:** independent lockfiles per project, and a consumer free to sit on an older copy of the shared library while it catches
   up.
-- **Look again when:** the copy costs more than the independence. It already costs one thing, an edit to `client-core` does not reach a
-  consumer until `npm install ../client-core` runs there, and npm will not repack an unchanged spec even after a version bump.
-- **Where:** root `CLAUDE.md` (Package Management), `studio-client/CLAUDE.md:55-59` (Consuming `client-core`).
+- **Look again when:** keeping the separate lockfiles in step costs more than the independence they buy.
+- **Where:** root `CLAUDE.md` (Package Management).
 
 ## DD-13. One database with logical collection partitions, not a schema or a database per knowledge base
 

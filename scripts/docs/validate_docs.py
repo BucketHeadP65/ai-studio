@@ -38,7 +38,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 
 # Apps are the top-level dirs that may own a docs/ tree + CONTEXT.md.
-APPS = ["core", "engram", "studio", "studio-client", "client-core", "harness"]
+APPS = ["core", "engram", "studio", "studio-client", "harness"]
 
 SPEC = json.loads((REPO / "docs" / "knowledge-base-schema.json").read_text(encoding="utf-8"))
 PAGE_TYPES = {pt["page_type"]: pt for pt in SPEC["page_types"]}
@@ -394,7 +394,7 @@ def _initiative_is_live(folder):
 
 def _guidance_files():
     """CLAUDE.md files, README files, the plugin's pages and every skill file: read first, so they carry the vocabulary."""
-    packages = APPS + ["connectors", "client-core"]
+    packages = APPS + ["connectors"]
     files = [REPO / "CLAUDE.md", REPO / "README.md", REPO / "scripts" / "stack" / "README.md"]
     files += [REPO / a / "CLAUDE.md" for a in packages] + [REPO / a / "README.md" for a in packages]
     files += sorted(REPO.glob("templates/*/README.md")) + sorted(REPO.glob("harness/proof/*.md"))

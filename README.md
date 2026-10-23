@@ -58,7 +58,7 @@ in a container. The Python apps and the web app run from source.
 ```
 
 Each Python project keeps its own environment in `<project>/.venv`. `studio` and `harness` install `engram`, `core` and
-`connectors` from their folders as editable path dependencies. `npm install` copies `client-core` into the web app.
+`connectors` from their folders as editable path dependencies.
 
 ### 2. Configure
 
@@ -152,7 +152,6 @@ uv run harness import ../templates/repo-docs/workflows   # the template's own st
 | [studio-client/](studio-client/README.md) | **AI Factory Studio**, the web app. | `npm run dev` on :3031 |
 | [core/](core/README.md) | The shared Python library: database, files, settings, messaging, observability and the AI stack, including the workflow engine. | library |
 | [connectors/](connectors/README.md) | Source connectors, watch-list scanners and document converters: Zotero, YouTube, any URL, X, BEIR and MultiHop-RAG. | library |
-| [client-core/](client-core/README.md) | The shared frontend library: the typed fetch client with zod, UI primitives and the test setup. | library |
 | [templates/](templates/) | Knowledge base templates: a schema, guidance pages, workflows and sometimes evals. | data |
 | [scripts/](scripts/) | The macOS stack scripts and the code and documentation checks. | tools |
 

@@ -12,7 +12,6 @@
         "../studio/docs/adr",
         "../core/docs/adr",
         "../studio-client/docs/adr",
-        "../client-core/docs/adr",
         "../harness/docs/adr"
       ],
       "frontmatter_fields": [
@@ -26,7 +25,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         },
@@ -71,7 +69,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         }
@@ -90,8 +87,7 @@
         "../engram/docs/reference",
         "../studio/docs/reference",
         "../harness/docs/reference",
-        "../core/docs/reference",
-        "../client-core/docs/reference"
+        "../core/docs/reference"
       ],
       "files": [
         "../engram/docs/known-issues.md"
@@ -107,7 +103,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         }
@@ -141,7 +136,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         }
@@ -170,7 +164,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         }
@@ -201,7 +194,6 @@
             "engram",
             "studio",
             "studio-client",
-            "client-core",
             "harness"
           ]
         }

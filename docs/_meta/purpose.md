@@ -7,7 +7,7 @@ and the code plane (`mod.*` pages linking packages to the decisions that govern 
 
 ## How to move
 
-The map groups pages by owning app (`root`, `core`, `engram`, `studio`, `studio-client`, `client-core`). Every page's
+The map groups pages by owning app (`root`, `core`, `engram`, `studio`, `studio-client`). Every page's
 `kind` says what it is: `adr` for decisions, `architecture` and `reference` for the consolidated system, `explanation`
 for the why, `spec-doc`/`plan-doc`/`brainstorming-doc` for work in flight, `memory-unit` and `hub` for factored working
 knowledge, `module` for the code plane. Resume a thread by opening its brainstorm or hub. Answer "what governs this

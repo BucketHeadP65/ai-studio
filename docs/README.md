@@ -38,7 +38,7 @@ Every governed doc starts with:
 ---
 id: stable-kebab-slug   # never changes, even when the file moves
 type: adr | architecture | reference | explanation | how-to | glossary
-app: root | core | engram | studio | studio-client | client-core | harness
+app: root | core | engram | studio | studio-client | harness
 status: draft | current | superseded     # ADRs use proposed | accepted | deprecated | superseded
 tags: []
 title: "..."

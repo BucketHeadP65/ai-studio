@@ -61,7 +61,7 @@ the agents that author and run workflows, and the building-feature
 tooling that maintains this repo.
 
 ## 2. Containers & data flow
-> **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over four libraries (engram, core, engram-connectors, client-core), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
+> **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over three libraries (engram, core, engram-connectors), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
 <!-- load-when: containers, deployment, databases, local Postgres, ParadeDB, ports, data flow, C4 L2, connectors, templates -->
 
 ```mermaid
@@ -75,7 +75,6 @@ C4Container
         Container(engram, "engram", "Python lib, uv path dep", "Note grammar, indexing pipeline, retrieval plugins, evals, sources ports, init/export")
         Container(connectors, "engram-connectors", "Python lib, uv path dep + extras", "Zotero / YouTube / URL-intake connectors and their converters, found by entry point")
         Container(core, "core", "Python lib, uv path dep", "db, files, markdown, cqrs, ai: model factories, retrieval, disclosure, workflows engine")
-        Container(clientcore, "client-core", "TS lib, file: dep", "typed zod fetch, ui primitives, test harness")
         Container(templates, "templates/", "Data, one folder per knowledge base", "knowledge-base-schema.json, _meta/ guidance, workflows/, the template a knowledge base starts from")
         ContainerDb(corpusdb, "knowledge base DB", "local Postgres pg17, :5434 (ParadeDB :5433 opt-in)", "disposable indexed knowledge base + api schema, kb_reader role and one login role per private knowledge base")
         ContainerDb(storedb, "engram_workflows", "same server, same memory schema", "workflows as an indexed collection")
@@ -137,9 +136,9 @@ Load-bearing properties of this picture:
   127.0.0.1:8770 (CORS open to exactly the two spellings of the studio's dev
   origin). Neither has auth. The localhost binding is the boundary.
 - **Shared code flows through libraries, not imports across apps.**
-  Python apps consume `core/` and `engram/` as editable uv path sources. TS apps
-  consume `client-core/` as a `file:` dependency (copy-installed, see
-  [section 3](#3-cross-cutting-concepts)). `engram` never imports `studio` or the
+  Python apps consume `core/` and `engram/` as editable uv path sources. The SPA
+  keeps its app-agnostic code in `studio-client/src/shared/`, which imports
+  nothing from the rest of the app. `engram` never imports `studio` or the
   engine. A package-boundary test enforces it. A change in a shared lib must
   keep **all** consumers' suites green.
 - **Knowledge base vocabulary and host knowledge are both outside the code.** A knowledge base's
@@ -326,7 +325,7 @@ record rather than inferring them from an absence. The contract is in
 ### zod at the boundary (TS apps)
 Every backend response is `.parse()`d against a zod schema before reaching
 components, never `as`-cast, so backend drift surfaces as a `ZodError` at the
-boundary. The typed fetch wrapper lives in `client-core` (`api/client`).
+boundary. The typed fetch wrapper lives in `studio-client/src/shared/api/client`.
 
 ### Local-only, no auth
 Neither backend authenticates: `studio serve-http` and the agent app bind
@@ -338,7 +337,7 @@ a resolved working directory. The documented non-goal is "never load untrusted
 courses" (it runs the user's own code on the user's own machine). Programs
 are the exception: they run in a Monty sandbox, never `exec`.
 
-### Dependency strategy (`file:` / path sources, not workspaces)
+### Dependency strategy (path sources, not workspaces)
 Python: `core = { path = "../core" }` and `engram = { path = "../engram" }` in
 the app, deliberately **not** a uv workspace, so each project keeps its own
 lockfile/venv ([ADR 0001](../adr/0001-wiki-app-placement-and-core.md)).
@@ -355,12 +354,8 @@ after a package layout change, re-sync every consumer with
 workflow engine ships behind `core[workflows]` / `core[workflows-temporal]`, so
 plain `core` (and therefore `engram`) never installs the engine's optional
 weight ([ADR 0009](../adr/0009-ai-factory-studio-consolidation.md), amended by [ADR 0010](../adr/0010-harness-extraction.md)). TS:
-`"client-core": "file:../client-core"` + `transpilePackages`
-([ADR 0004](../adr/0004-client-core-shared-frontend-package.md)), **pivoted
-to copy-install** (`install-links=true` in `.npmrc`) after a Turbopack OOM
-incident. The ADR's symlink wording is stale on this point, root `CLAUDE.md`
-is authoritative. Editing `client-core` requires `npm install ../client-core`
-in each consumer.
+one npm package, `studio-client`, with its app-agnostic code in `src/shared/`
+([ADR 0021](../adr/0021-frontend-shared-code-lives-in-the-spa.md)).
 
 ### Dependency injection (two styles, deliberately)
 The knowledge base half is **wireup DI**: composition root
@@ -434,9 +429,9 @@ three-view pattern of engram ADR-0020: the per-slice C4 L3 **component** diagram
 engram's own arc42/C4 master, **[engram/docs/architecture/index.md](../../engram/docs/architecture/index.md)**.
 Glossary: [engram/CONTEXT.md](../../engram/CONTEXT.md).
 
-## 5. Frontends & client-core
-> **TL;DR:** One Next.js 16/React 19 SPA, studio-client (:3031), local and no-auth, branded "AI Factory Studio", over client-core: a typed zod fetch factory, UI primitives, and a Vitest/MSW test harness.
-<!-- load-when: frontend, studio-client, client-core, AI Factory Studio, the Studio, dashboard, react, next.js, ui, SPA -->
+## 5. Frontends
+> **TL;DR:** One Next.js 16/React 19 SPA, studio-client (:3031), local and no-auth, branded "AI Factory Studio", with its app-agnostic code in `src/shared/`: a typed zod fetch factory, UI primitives, and a Vitest/MSW test harness.
+<!-- load-when: frontend, studio-client, src/shared, AI Factory Studio, the Studio, dashboard, react, next.js, ui, SPA -->
 
 - **studio-client/**, user-visibly **AI Factory Studio**:
   `/search`, `/chat`, `/graph` (sigma.js + graphology), `/studio` (the workflow
@@ -446,25 +441,18 @@ knowledge base API's `/openapi.json` (`npm run gen:types`). Every response zod-p
 in `src/api`. The brand lives in copy only, routes, ports, and
   `NEXT_PUBLIC_*` names are unchanged
   ([ADR 0009](../adr/0009-ai-factory-studio-consolidation.md), amended by [ADR 0010](../adr/0010-harness-extraction.md)).
-- **client-core/**, `client-core` v0.0.x, raw TS, no build step,
-  transpiled by each consumer. Exported seams: `api/client`
-  (`createApiClient({baseUrl, getToken?, onUnauthorized?})`), `ui/button`,
-  `ui/confirm-dialog`, `lib/cn`, `lib/format-relative`, and the test harness
-  (`test-support/setup`, `test-support/render`). React/next/zod/TanStack are
-peerDependencies. Deep imports per module, no barrel
-  ([ADR 0004](../adr/0004-client-core-shared-frontend-package.md)).
-
-Ownership rule (mirrors `core/`): a `client-core` change must keep **every**
-consumer's suite green.
+- **studio-client/src/shared/**, the app-agnostic code, which imports nothing
+  from the rest of the app (`src/shared/boundary.test.ts` fails on a crossing).
+  Seams: `api/client` (`createApiClient({baseUrl, getToken?, onUnauthorized?})`),
+  the `ui/*` primitives, `lib/cn`, `lib/format-relative`, and the test support
+  (`test-support/setup`, `test-support/render`, `test-support/msw/server`). Deep
+  imports per module, no barrel
+  ([ADR 0021](../adr/0021-frontend-shared-code-lives-in-the-spa.md)).
 
 ## 6. Quality, risks, tech debt
-> **TL;DR:** Clean codebase (zero inline debt markers, debt is ledgered in prose). The live risks are ADR-0004's stale symlink story, engram's hand-written SQL api surface, the sync lazy-route invariant, Docker-gated coverage, the workflow runner's shell-out posture, and ADR-0009's recorded manifest/contract follow-ups.
+> **TL;DR:** Clean codebase (zero inline debt markers, debt is ledgered in prose). The live risks are engram's hand-written SQL api surface, the sync lazy-route invariant, Docker-gated coverage, the workflow runner's shell-out posture, and ADR-0009's recorded manifest/contract follow-ups.
 <!-- load-when: risks, tech debt, known issues, caveats, coverage, drift -->
 
-- **ADR-0004 is partly stale.** It records `client-core` as a `file:` symlink.
-  The copy-install pivot (post-Turbopack-OOM) is recorded only in root
-  `CLAUDE.md`. Treat `CLAUDE.md` as authoritative. Re-syncing `client-core`
-  after dependency changes is a known foot-gun.
 - **engram `api` surface is hand-written SQL** inside the migration chain,
   no type-checker coverage against `compile/orm.py`. Drift is a silent
   maintenance seam.
