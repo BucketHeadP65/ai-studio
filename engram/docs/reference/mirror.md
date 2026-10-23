@@ -82,7 +82,8 @@ SQLAlchemy):
   `source_key`, `source_version`, `source_hash`, `converter` (defaults to
   `"unknown"` so a note naming no provenance label still loads), `provider` (required, with no
   default: it is what a sync run's orphan pass narrows by, so one connector's run never archives
-  another's mirrors and a guessed name would), `status`.
+  another's mirrors and a guessed name would), `status`, and the source's own `url` and `doi`
+  (`None` when it has none), which a sync matches a new item against so one source gets one mirror.
 - **`MirrorStatus`**, `StrEnum`: `ACTIVE` (lives in `Sources/`) | `REMOVED`
   (soft-deleted to `Sources/_archive/`).
 

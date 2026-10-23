@@ -416,7 +416,7 @@ class TestRowBuilderPluggableStrategies:
             "research",
             section_summary_spec=SectionSummarySpec(),
             note_strategies=build_note_embed_strategies({"page-card": fake}),
-            source_key_field="",
+            source_key_field="", digest_link_field="",
             source_hash_field="",
             date_field="created",
         )
@@ -433,7 +433,7 @@ class TestRowBuilderPluggableStrategies:
             "research",
             section_summary_spec=SectionSummarySpec(),
             source_strategies=build_source_embed_strategies({"source-chunk": fake}),
-            source_key_field="",
+            source_key_field="", digest_link_field="",
             source_hash_field="",
             date_field="created",
         )
@@ -445,7 +445,7 @@ class TestRowBuilderPluggableStrategies:
     def test_the_default_registries_reproduce_the_stock_page_card_text(self):
         note = _note()
         resolved = _resolved(note)
-        builder = RowBuilder("research", section_summary_spec=SectionSummarySpec(), source_key_field="", source_hash_field="", date_field="created")
+        builder = RowBuilder("research", section_summary_spec=SectionSummarySpec(), source_key_field="", digest_link_field="", source_hash_field="", date_field="created")
 
         builder.add_note(resolved)
 
@@ -455,7 +455,7 @@ class TestRowBuilderPluggableStrategies:
     def test_a_card_prints_the_facets_the_schema_marks_for_it(self):
         note = _note()
         builder = RowBuilder(
-            "research", section_summary_spec=SectionSummarySpec(), source_key_field="", source_hash_field="", date_field="created", facets=research_spec().facets
+            "research", section_summary_spec=SectionSummarySpec(), source_key_field="", digest_link_field="", source_hash_field="", date_field="created", facets=research_spec().facets
         )
 
         builder.add_note(_resolved(note))
@@ -465,7 +465,7 @@ class TestRowBuilderPluggableStrategies:
     def test_a_card_prints_no_facet_line_when_no_facet_is_marked(self):
         note = _note()
         unmarked = tuple(facet.model_copy(update={"card": False}) for facet in research_spec().facets)
-        builder = RowBuilder("research", section_summary_spec=SectionSummarySpec(), source_key_field="", source_hash_field="", date_field="created", facets=unmarked)
+        builder = RowBuilder("research", section_summary_spec=SectionSummarySpec(), source_key_field="", digest_link_field="", source_hash_field="", date_field="created", facets=unmarked)
 
         builder.add_note(_resolved(note))
 

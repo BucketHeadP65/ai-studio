@@ -330,7 +330,8 @@ full block `write` serialises (provenance: `source_id`, `provider`,
 `published`). `MirrorFile` is the thin
 reconcile-relevant slice `load_index` reads back (`converter` defaults to
 `"unknown"` so a note naming no provenance label still loads. `provider` has no default and is
-required, since a sync run's orphan pass narrows by it), keyed by
+required, since a sync run's orphan pass narrows by it, and `url` and `doi` are the source's own,
+which a sync matches a new item against), keyed by
 `source_key`. Nothing in the model names a host: `source_link` carries whatever
 deep link the item's own connector filled in, empty for a connector that owns none.
 The on-disk
@@ -381,6 +382,8 @@ classDiagram
         +str converter
         +str provider
         +MirrorStatus status
+        +str url
+        +str doi
     }
     class MirrorStatus {
         <<enumeration>>
@@ -422,7 +425,10 @@ lives here, not in the store**: the pure `decide` function (`domain/sync.py`) ma
 an item's current `MirrorFile` + freshly hashed PDF onto a `SyncAction`
 (CREATE / RECONVERT / REFRESH / SKIP, DELETE is tallied by the orphan pass), and
 `SyncMirrorsHandler` drives the side effects, sync *owns the decision*, `mirror`
-owns only the atomic write (the policy-vs-store split, mirror section 3 above). Second,
+owns only the atomic write (the policy-vs-store split, mirror section 3 above). Before `decide`,
+`holder_of` refuses an item with no live mirror of its own whose URL, arXiv id or DOI an active
+mirror under another key already holds, so a source two connectors bring gets one mirror
+([ADR-0051](../../adr/0051-a-sync-admits-one-mirror-per-source.md)). Second,
 **each Ingestion adapter gets its own wiring module app-side**:
 `studio/src/studio/knowledge_base/wiring/sources.py`, `studio/src/studio/knowledge_base/wiring/conversion.py`, and
 `studio/src/studio/knowledge_base/wiring/mirror.py` each bind one
@@ -449,6 +455,7 @@ C4Component
 
     Component_Boundary(s, "engram/sources") {
         Component(handler, "SyncMirrorsHandler", "service/sync.py", "Drives convert+write+soft-delete, collects per-item failures, emits SyncStarted/SyncCompleted")
+        Component(holder, "holder_of", "domain/sync.py", "Pure policy: the active mirror under another key holding the item's URL, arXiv id or DOI, else none")
         Component(decide, "decide", "domain/sync.py", "Pure policy: item + MirrorFile + pdf_hash to SyncAction (CREATE/RECONVERT/REFRESH/SKIP)")
         Component(apply, "_apply / _apply_one / _resolve_body", "service/sync.py", "Applying run: hash PDF, decide, build_frontmatter, write (REFRESH may reuse stored body)")
         Component(plan, "_plan", "service/sync.py", "Dry run: same decisions into report.planned, zero writes/conversions")
@@ -457,6 +464,7 @@ C4Component
 
     Rel(bus, handler, "SyncMirrors to __call__ (routed at construction)")
     Rel(deps, handler, "sync_handler_provider: injects the three ports")
+    Rel(handler, holder, "per-item admission")
     Rel(handler, decide, "per-item action")
     Rel(handler, apply, "applying run")
     Rel(handler, plan, "dry run")
@@ -476,7 +484,8 @@ command. `SyncAction` is the decision enum. `PlannedAction` is one dry-run row
 (`key` + `title` + `action`). `SyncError` is one captured per-item failure so the
 run continues. `SyncReport` is the frozen tally (`created` / `updated`
 (RECONVERT+REFRESH both count as an update) / `archived` / `skipped`, plus
-`errors`, the `unavailable` list of items whose PDF path could not resolve, and the
+`errors`, the `unavailable` list of items whose PDF path could not resolve,
+`already_mirrored` (each refused item's key mapped to the mirror holding its source), and the
 dry-run `planned` rows). `SyncStarted` / `SyncCompleted` are the events the bus
 hands to the outbox once the handler returns, delivered once per subscriber by a worker.
 
@@ -514,6 +523,7 @@ classDiagram
         +int skipped
         +tuple~SyncError~ errors
         +tuple~str~ unavailable
+        +dict~str,str~ already_mirrored
         +bool dry_run
         +tuple~PlannedAction~ planned
     }

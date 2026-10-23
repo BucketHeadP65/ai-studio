@@ -52,7 +52,7 @@ class FakeMirrorStore:
     async def write(self, *, frontmatter: MirrorFrontmatter, body: str, assets: Mapping[str, bytes] | None = None) -> None:
         """Insert or replace the mirror's index entry and body, and record the frontmatter.
 
-        The stored `MirrorFile` keeps the frontmatter's `converter` and `provider`. Assets merge
+        The stored `MirrorFile` keeps the frontmatter's `converter`, `provider`, `url` and `doi`. Assets merge
         per file, so an empty write keeps earlier assets.
 
         Args:
@@ -67,6 +67,8 @@ class FakeMirrorStore:
             converter=frontmatter.converter,
             provider=frontmatter.provider,
             status=frontmatter.status,
+            url=frontmatter.url,
+            doi=frontmatter.doi,
         )
         self.bodies[frontmatter.source_key] = body
         self.assets.setdefault(frontmatter.source_key, {}).update(assets or {})

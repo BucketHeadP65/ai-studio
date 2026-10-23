@@ -84,7 +84,8 @@ class MirrorFile(BaseModel):
     A frozen snapshot. `converter` falls back to `unknown` so a note naming no provenance label
     still loads. `provider` has no default and is required: a sync run's orphan pass narrows the
     index by it, so a guessed name would archive another connector's mirrors. A note naming no
-    connector is not a mirror the store can address.
+    connector is not a mirror the store can address. `url` and `doi` are the source's own, `None`
+    when it has none, and a sync matches a new item against them.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -95,3 +96,5 @@ class MirrorFile(BaseModel):
     provider: str
     converter: str = "unknown"
     status: MirrorStatus
+    url: str | None
+    doi: str | None

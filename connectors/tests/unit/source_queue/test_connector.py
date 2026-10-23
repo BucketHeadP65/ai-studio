@@ -65,6 +65,57 @@ async def test_a_resolved_row_is_served_from_its_cache_without_resolving_again(t
     assert second[0].year == 2024
 
 
+def _cache(tmp_path: Path, key: str, resolved: Resolved) -> None:
+    """Write a cached resolution the way the connector writes one."""
+    cache = tmp_path / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / f"{key}.md").write_text(resolved.markdown, encoding="utf-8")
+    (cache / f"{key}.meta.json").write_text(resolved.model_dump_json(exclude={"markdown"}), encoding="utf-8")
+
+
+async def test_a_cached_bot_check_page_fails_its_row_and_is_served_no_more(tmp_path: Path) -> None:
+    provider, ledger = _provider(tmp_path, article=FakeResolver())
+    row = ledger.add("https://openreview.net/forum?id=abc")
+    ledger.mark(row.key, SourceQueueStatus.RESOLVED)
+    wall = "OpenReview .net Verifying your browser Complete the check below to continue to OpenReview Please complete the verification above."
+    _cache(tmp_path, row.key, Resolved(title="Verifying your browser | OpenReview", markdown=wall, url=row.url, converter="intake"))
+
+    items = await provider.list_items_with_pdf()
+
+    assert items == []
+    failed = ledger.get(row.key)
+    assert failed is not None
+    assert failed.status is SourceQueueStatus.FAILED
+    assert failed.reason == "https://openreview.net/forum?id=abc answered a bot-check page, not the article: 'Verifying your browser | OpenReview'"
+    assert not (tmp_path / "cache" / f"{row.key}.md").exists()
+    assert not (tmp_path / "cache" / f"{row.key}.meta.json").exists()
+
+
+async def test_a_retried_row_with_a_cached_bot_check_page_is_fetched_again(tmp_path: Path) -> None:
+    page = Resolved(title="A study of agents", markdown="# A study of agents\n\n" + "words " * 60, url="https://openreview.net/forum?id=abc", converter="article")
+    resolver = FakeResolver(results={"url": page})
+    provider, ledger = _provider(tmp_path, article=resolver)
+    row = ledger.add("https://openreview.net/forum?id=abc")
+    wall = "OpenReview .net Verifying your browser Complete the check below to continue to OpenReview Please complete the verification above."
+    _cache(tmp_path, row.key, Resolved(title="Verifying your browser | OpenReview", markdown=wall, url=row.url, converter="intake"))
+
+    items = await provider.list_items_with_pdf()
+
+    assert resolver.calls == [row.key]
+    assert [item.title for item in items] == ["A study of agents"]
+
+
+async def test_a_cached_short_post_is_still_served(tmp_path: Path) -> None:
+    provider, ledger = _provider(tmp_path, post=FakeResolver())
+    row = ledger.add("https://x.com/someone/status/1234")
+    ledger.mark(row.key, SourceQueueStatus.RESOLVED)
+    _cache(tmp_path, row.key, Resolved(title="Great work!", markdown="# @someone\n\nGreat work!", url=row.url, converter="intake"))
+
+    items = await provider.list_items_with_pdf()
+
+    assert [item.provider_key for item in items] == [row.key]
+
+
 async def test_a_failing_resolve_marks_the_row_failed_with_the_reason_and_yields_no_item(tmp_path: Path) -> None:
     provider, ledger = _provider(tmp_path, paper=FakeResolver(errors={"arxiv": "no HTML rendering for this id"}))
     row = ledger.add(ARXIV)

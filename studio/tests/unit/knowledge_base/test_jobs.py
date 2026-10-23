@@ -263,6 +263,14 @@ class TestPipeline:
 
         assert "1 too old" in RefreshResult.model_validate_json(returned).detail
 
+    async def test_items_another_mirror_holds_are_counted_in_the_detail(self, tmp_path: Path):
+        settings_path = _register(tmp_path, "tube", _youtube_knowledge_base(tmp_path / "tube", "tube"))
+        container = FakeRunContainer(bus=FakeMessageBus(sync_report=SyncReport(already_mirrored={"ITEM0001": "LIBRARY1"})))
+
+        returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+
+        assert "1 already mirrored" in RefreshResult.model_validate_json(returned).detail
+
     async def test_a_validation_error_raises(self, tmp_path: Path):
         settings_path = _register(tmp_path, "demo", _plain_knowledge_base(tmp_path / "demo", "demo"))
         container = FakeRunContainer(bus=FakeMessageBus(index_report=IndexReport(pages=1, validation=_one_validation_error())))

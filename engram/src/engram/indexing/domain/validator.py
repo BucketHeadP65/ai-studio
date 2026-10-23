@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from engram.indexing.domain.models import ValidationIssue, ValidationReport, frontmatter_value
+from engram.indexing.domain.models import ValidationIssue, ValidationReport, cited_mirror_key
 from engram.indexing.domain.resolver import resolve
 from engram.kb.contracts import KnowledgeBaseSchema, facet_choices_drift, quotes_in_mirror, resolve_schema, schema_vocabulary_drift
 
@@ -158,8 +158,9 @@ def validate_note(
     """
     resolved = _collapse_dangling_link_warnings(resolve((note,), relations=spec.relations if spec is not None else ()), note.frontmatter.id)
     # A `None` spec reaches `validate` unchanged, which refuses it.
-    key_field = spec.sources.key_field if spec is not None else ""
-    mirror_texts = {frontmatter_value(note.frontmatter, key_field): mirror_text} if mirror_text is not None else None
+    key_field, link_field = (spec.sources.key_field, spec.sources.digest_link_field) if spec is not None else ("", "")
+    cited = cited_mirror_key(note.frontmatter, key_field=key_field, digest_link_field=link_field)
+    mirror_texts = {cited: mirror_text} if mirror_text is not None else None
     return validate(
         resolved.notes,
         vocabulary,
@@ -275,7 +276,7 @@ def _check_note(
     if knowledge_base_source_keys is not None:
         issues.extend(_check_source_ref(frontmatter, page_id, spec, knowledge_base_source_keys))
 
-    mirror_text = mirrors.get(frontmatter_value(frontmatter, spec.sources.key_field))
+    mirror_text = mirrors.get(cited_mirror_key(frontmatter, key_field=spec.sources.key_field, digest_link_field=spec.sources.digest_link_field))
     for claim in note.claims:
         issues.extend(_check_claim(claim, vocabulary, page_id, mirror_text, quote_required_types, required_qualifiers))
 
@@ -345,8 +346,8 @@ def _path_root_provenance(spec: KnowledgeBaseSchema, path_root_source: str | Non
 def _check_source_ref(
     frontmatter: BaseFrontmatter, page_id: str, spec: KnowledgeBaseSchema, knowledge_base_source_keys: frozenset[str]
 ) -> list[ValidationIssue]:
-    """A page's own cited source with no mirror is a warning, not a failed page."""
-    key = frontmatter_value(frontmatter, spec.sources.key_field)
+    """A page's own cited source (its key field, else its digest link field) with no mirror is a warning, not a failed page."""
+    key = cited_mirror_key(frontmatter, key_field=spec.sources.key_field, digest_link_field=spec.sources.digest_link_field)
     if not key or key in knowledge_base_source_keys:
         return []
     message = f"cites source {key!r} but the knowledge base has no mirror for it, restore the mirror or remove the reference (or the page)"

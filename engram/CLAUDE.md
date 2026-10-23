@@ -114,7 +114,9 @@ an `article` keyed by URL hash. The connector registered as `intake`
 (`engram_connectors.source_queue`) then resolves a `requested` row through the source type's resolver (a YouTube
 transcript, an arXiv or an article conversion) and caches its rendered markdown under
 `<knowledge_base>/_meta/source-queue-cache/`. A `resolved` row is served straight from that cache on every later
-sync, and a `failed` row moves back to `requested` on retry.
+sync, and a `failed` row moves back to `requested` on retry. A web page that answers a bot check (by its title, or a
+short body asking the reader to pass a check) is never stored or served: the fetch fails the row, and a cached one is
+deleted, its row failed, or fetched again when the row was retried.
 
 The watch list (`engram.sources.service.watch_list`) watches for new URLs to add to that source queue. Each row of
 `<knowledge_base>/_meta/watch-list.yaml` names the scanner that reads it (`scanner`), what that scanner reads
@@ -137,7 +139,7 @@ host mounts on `embedded_read_tools` via `authoring=`, alongside the standing `s
 authoring payload against the knowledge base's own grammar (render, parse, validate), writes it under the page
 type's folder, and indexes it again through the host's `Reindex` port. An id already on disk is
 replaced, unless that page is the digest of a different source, which is refused. A grammar or
-validation refusal becomes a `ModelRetry` naming every finding. A claim must read back from the rendered page as written, each part read the way the parser reads it (`kb.claims_not_read_back`: edge whitespace and comments dropped, a quote unwrapped). A claim whose text holds a blank line, or whose field value holds a line break, is refused before validation runs, and the refusal names every such claim and the part that differs. When the schema sets `sources.quote_verify` and a page names its mirror through `sources.key_field`, the write checks every quote against that mirror (`Sources/*.md`, as the index reads it), swaps a quote that is only a locator with its loc when the loc is the mirror's words, and refuses any other missing quote naming the claim. `digest_skeleton` numbers a digest's id
+validation refusal becomes a `ModelRetry` naming every finding. A claim must read back from the rendered page as written, each part read the way the parser reads it (`kb.claims_not_read_back`: edge whitespace and comments dropped, a quote unwrapped). A claim whose text holds a blank line, or whose field value holds a line break, is refused before validation runs, and the refusal names every such claim and the part that differs. When the schema sets `sources.quote_verify` and a page names its mirror through `sources.key_field`, or else through `sources.digest_link_field`, the write checks every quote against that mirror (`Sources/*.md`, as the index reads it), swaps a quote that is only a locator with its loc when the loc is the mirror's words, and refuses any other missing quote naming the claim. `digest_skeleton` numbers a digest's id
 (`-2`, `-3`) when another page already sits where it would land.
 `check_note(knowledge_base, payload, path="")` runs the same checks with nothing written and answers the
 findings as its reply, so a drafting step fixes them before any write. An explicit

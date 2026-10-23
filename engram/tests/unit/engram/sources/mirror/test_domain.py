@@ -49,7 +49,7 @@ def test_mirror_file_converter_defaults_to_unknown_for_legacy_notes() -> None:
     # A deliberate domain default, not a pydantic incidental: a note carrying no provenance label
     # must still load, reading back as "unknown".
     mirror_file = MirrorFile(
-        source_key="ABCD1234", source_version=7, source_hash="deadbeef", provider="example-library", status=MirrorStatus.ACTIVE
+        source_key="ABCD1234", source_version=7, source_hash="deadbeef", provider="example-library", status=MirrorStatus.ACTIVE, url=None, doi=None
     )
 
     assert mirror_file.converter == "unknown"
@@ -67,7 +67,7 @@ def test_mirror_frontmatter_is_frozen() -> None:
 
 def test_mirror_file_is_frozen() -> None:
     mirror_file = MirrorFile(
-        source_key="ABCD1234", source_version=7, source_hash="deadbeef", provider="example-library", status=MirrorStatus.ACTIVE
+        source_key="ABCD1234", source_version=7, source_hash="deadbeef", provider="example-library", status=MirrorStatus.ACTIVE, url=None, doi=None
     )
 
     with pytest.raises(pydantic.ValidationError):

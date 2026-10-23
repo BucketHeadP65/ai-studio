@@ -126,6 +126,29 @@ def test_claims_written_in_a_section_body_are_checked_and_never_swapped(tmp_path
         NoteWriter(_knowledge_base(tmp_path)).write(payload)
 
 
+def _article(claims: list[dict[str, object]]) -> dict[str, object]:
+    """An article digest, which names its mirror only through the digest link field."""
+    return {
+        "frontmatter": {
+            "id": "art.a-benchmark",
+            "type": "article",
+            "title": "A benchmark",
+            "summary": "A benchmark of code reasoning.",
+            "status": "active",
+            "digest_of": "arxiv-1",
+        },
+        "sections": [{"heading": "TL;DR", "body": "A benchmark."}],
+        "claims": claims,
+    }
+
+
+def test_a_page_naming_its_mirror_only_through_the_digest_link_field_is_checked(tmp_path: Path) -> None:
+    payload = _article([{"text": "Invented.", "kind": "observation", "quote": "words nobody wrote", "loc": "§2"}])
+
+    with pytest.raises(NoteRefusedError, match=r"claim \^c1: claim quote not found in the source mirror"):
+        NoteWriter(_knowledge_base(tmp_path)).write(payload)
+
+
 def test_a_page_naming_no_mirror_is_written_unchecked(tmp_path: Path) -> None:
     payload = _paper([{"text": "x", "kind": "observation", "quote": "words nobody wrote", "loc": "§2"}], key="arxiv-missing")
     assert NoteWriter(_knowledge_base(tmp_path)).write(payload).path.is_file()

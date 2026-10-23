@@ -84,7 +84,7 @@ if TYPE_CHECKING:
 _logger = get_logger(__name__)
 
 
-INDEXER_VERSION = "7"
+INDEXER_VERSION = "8"
 """The indexer's version, stored in the index fingerprint with the chunk sizes and the chunk planner (`indexer_version`). Another stored version forces a full rebuild.
 
 You must change it whenever a change alters what the index writes, such as a new parse rule or a new row shape.
@@ -425,6 +425,7 @@ class IndexKnowledgeBaseHandler:
             # source keys a page row may reference.
             known_source_keys=frozenset(src.source_key for src in parsed.sources),
             source_key_field=self._spec.sources.key_field,
+            digest_link_field=self._spec.sources.digest_link_field,
             source_hash_field=self._spec.sources.hash_field,
             date_field=self._spec.retrieval.date_field,
             chunk_sizes=self._chunk_sizes,

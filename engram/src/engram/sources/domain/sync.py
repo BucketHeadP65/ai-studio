@@ -2,8 +2,9 @@
 
 `SyncMirrors` is the one sync command, and `SyncStarted` and `SyncCompleted` are the events a run
 emits around itself. `SyncReport` is the run summary. `decide` picks what to do with one item,
-`build_frontmatter` maps an item onto a mirror's frontmatter, and the orphan-archival rule decides
-which mirrors a run archives. Nothing here does I/O.
+`holder_of` names the mirror that already holds an item's source, `build_frontmatter` maps an item
+onto a mirror's frontmatter, and the orphan-archival rule decides which mirrors a run archives.
+Nothing here does I/O.
 """
 
 from __future__ import annotations
@@ -15,8 +16,10 @@ from core.cqrs.contracts import Command, Event
 from pydantic import BaseModel, ConfigDict, Field
 
 from engram.sources.domain.mirror import MirrorFrontmatter, MirrorStatus
+from engram.sources.domain.source_queue import source_identities
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from datetime import datetime
 
     from engram.sources.domain.mirror import MirrorFile
@@ -75,6 +78,8 @@ class SyncReport(BaseModel):
     errors: tuple[SyncError, ...] = ()
     unavailable: tuple[str, ...] = ()  # items whose attachment path could not resolve
     too_old: tuple[str, ...] = ()  # items refused at admission by the knowledge base policy's max_age_years
+    already_mirrored: dict[str, str] = Field(default_factory=dict)
+    """The items refused at admission because another active mirror already holds their source, each item's key mapped to that mirror's key."""
     dry_run: bool = False
     planned: tuple[PlannedAction, ...] = ()  # populated only when dry_run
     created_by_connector: dict[str, int] = Field(default_factory=dict)
@@ -111,6 +116,43 @@ def decide(item: SourceItem, existing: MirrorFile | None, pdf_hash: str) -> Sync
     if item.version != existing.source_version:
         return SyncAction.REFRESH
     return SyncAction.SKIP
+
+
+def mirrors_by_identity(index: Mapping[str, MirrorFile]) -> dict[str, str]:
+    """Each identifier an active mirror's source carries, mapped to that mirror's key. A removed mirror holds nothing.
+
+    Args:
+        index: The mirrors by key.
+
+    Returns:
+        The holding mirror's key by identifier.
+    """
+    held: dict[str, str] = {}
+    for key, mirror in index.items():
+        if mirror.status is MirrorStatus.ACTIVE:
+            held.update(dict.fromkeys(source_identities(url=mirror.url, doi=mirror.doi), key))
+    return held
+
+
+def holder_of(item: SourceItem, existing: MirrorFile | None, held: Mapping[str, str]) -> str | None:
+    """The key of another active mirror that already holds the source `item` names, or `None`.
+
+    An item with a live mirror of its own is never refused, so it keeps converging.
+
+    Args:
+        item: The connector's item under consideration.
+        existing: The item's current mirror state, or `None` if it has no mirror.
+        held: The holding mirror's key by identifier, as `mirrors_by_identity` answers it.
+
+    Returns:
+        The holding mirror's key, or `None` when the item may be admitted.
+    """
+    if existing is not None and existing.status is MirrorStatus.ACTIVE:
+        return None
+    for identity in sorted(source_identities(url=item.url, doi=item.doi)):
+        if (holder := held.get(identity)) is not None:
+            return holder
+    return None
 
 
 def build_frontmatter(

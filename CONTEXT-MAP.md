@@ -36,7 +36,7 @@ silence. A future docs indexer walks this file as its root.
 
 | App | Glossary | ADRs | Reference docs |
 |---|---|---|---|
-| [engram](engram/README.md) | [CONTEXT.md](engram/CONTEXT.md) | [engram/docs/adr/](engram/docs/adr/0001-pdf-to-markdown-via-azure-document-intelligence.md) (0001-0050) | [architecture](engram/docs/architecture/index.md), [init](engram/docs/reference/init.md), [index](engram/docs/reference/indexing.md), [serve](engram/docs/reference/serve.md), [sync](engram/docs/reference/sync.md), [export](engram/docs/reference/export.md), [evals](engram/docs/reference/evals.md), [plugin](engram/docs/reference/plugin.md), [conversion](engram/docs/reference/conversion.md), [knowledge base](engram/docs/reference/knowledge-base.md), [zotero](engram/docs/reference/zotero.md), [mirror](engram/docs/reference/mirror.md), [auto-retrieval-mode](engram/docs/reference/auto-retrieval-mode.md) |
+| [engram](engram/README.md) | [CONTEXT.md](engram/CONTEXT.md) | [engram/docs/adr/](engram/docs/adr/0001-pdf-to-markdown-via-azure-document-intelligence.md) (0001-0051) | [architecture](engram/docs/architecture/index.md), [init](engram/docs/reference/init.md), [index](engram/docs/reference/indexing.md), [serve](engram/docs/reference/serve.md), [sync](engram/docs/reference/sync.md), [export](engram/docs/reference/export.md), [evals](engram/docs/reference/evals.md), [plugin](engram/docs/reference/plugin.md), [conversion](engram/docs/reference/conversion.md), [knowledge base](engram/docs/reference/knowledge-base.md), [zotero](engram/docs/reference/zotero.md), [mirror](engram/docs/reference/mirror.md), [auto-retrieval-mode](engram/docs/reference/auto-retrieval-mode.md) |
 | [studio-client](studio-client/README.md) | [CONTEXT.md](studio-client/CONTEXT.md) | root [ADR 0009](docs/adr/0009-ai-factory-studio-consolidation.md), [studio-client/docs/adr/](studio-client/docs/adr/0001-vercel-ai-protocol-and-sdk.md) (0001-0004) | [harness-station](studio-client/docs/reference/harness-station.md) |
 | [client-core](client-core/README.md) | (TODO) | root [ADR 0004](docs/adr/0004-client-core-shared-frontend-package.md) | (TODO) |
 | [core](core/README.md) | (TODO) | root [ADR 0001](docs/adr/0001-wiki-app-placement-and-core.md), [0006](docs/adr/0006-engramai-shared-ai-library.md), [0007](docs/adr/0007-consolidate-shared-python-into-core.md), [0008](docs/adr/0008-progressive-disclosure-protocol.md), [0009](docs/adr/0009-ai-factory-studio-consolidation.md), [core/docs/adr/](core/docs/adr/0001-coordination-layer.md) (0001-0003) | [core-ai](core/docs/reference/core-ai.md) |
@@ -65,6 +65,12 @@ silence. A future docs indexer walks this file as its root.
 | Doc | What it covers |
 |---|---|
 | [Claim fields come from the knowledge base's schema](engram/docs/adr/0050-claim-fields-come-from-the-knowledge-base-schema.md) | engram ADR 0050: engram's own claim fields, declared text and link fields stored in `kb.claims.fields` and `kb.claim_qualifiers` or refused, relation qualifiers as groups of link fields, migration 0064 |
+
+## Sources
+
+| Doc | What it covers |
+|---|---|
+| [A sync admits one mirror per source](engram/docs/adr/0051-a-sync-admits-one-mirror-per-source.md) | engram ADR 0051: a source's identity (URL, arXiv id, DOI), `MirrorFile.url` and `MirrorFile.doi`, the sync refusing an item another active mirror holds, `SyncReport.already_mirrored` |
 
 ## Inspection reliability
 

@@ -93,7 +93,7 @@ def _builder() -> RowBuilder:
         "research",
         section_summary_spec=SectionSummarySpec(),
         facets=_RESEARCH_SPEC.facets,
-        source_key_field=_RESEARCH_SPEC.sources.key_field,
+        source_key_field=_RESEARCH_SPEC.sources.key_field, digest_link_field=_RESEARCH_SPEC.sources.digest_link_field,
         source_hash_field=_RESEARCH_SPEC.sources.hash_field,
         date_field="created",
     )
@@ -295,7 +295,7 @@ class TestDeclaredClaimFieldRows:
             "research",
             section_summary_spec=SectionSummarySpec(),
             claim_grammar=_DECLARED_GRAMMAR,
-            source_key_field=_RESEARCH_SPEC.sources.key_field,
+            source_key_field=_RESEARCH_SPEC.sources.key_field, digest_link_field=_RESEARCH_SPEC.sources.digest_link_field,
             source_hash_field=_RESEARCH_SPEC.sources.hash_field,
             date_field="created",
         )
@@ -570,7 +570,7 @@ class TestPageSourceLinkGate:
             section_summary_spec=SectionSummarySpec(),
             facets=_RESEARCH_SPEC.facets,
             known_source_keys=frozenset({"K"}),
-            source_key_field=_RESEARCH_SPEC.sources.key_field,
+            source_key_field=_RESEARCH_SPEC.sources.key_field, digest_link_field=_RESEARCH_SPEC.sources.digest_link_field,
             source_hash_field=_RESEARCH_SPEC.sources.hash_field,
             date_field="created",
         )
@@ -586,7 +586,7 @@ class TestPageSourceLinkGate:
             section_summary_spec=SectionSummarySpec(),
             facets=_RESEARCH_SPEC.facets,
             known_source_keys=frozenset(),
-            source_key_field=_RESEARCH_SPEC.sources.key_field,
+            source_key_field=_RESEARCH_SPEC.sources.key_field, digest_link_field=_RESEARCH_SPEC.sources.digest_link_field,
             source_hash_field=_RESEARCH_SPEC.sources.hash_field,
             date_field="created",
         )
@@ -610,7 +610,7 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
 
     def test_the_declared_field_becomes_the_page_source_id(self):
         builder = RowBuilder(
-            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", source_hash_field="", date_field="created"
+            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", digest_link_field="", source_hash_field="", date_field="created"
         )
 
         builder.add_note(resolve((_document_note(source_path="Sources/handbook.md"),)).notes[0])
@@ -620,7 +620,7 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
 
     def test_another_knowledge_base_own_key_field_leaves_the_page_source_id_null(self):
         builder = RowBuilder(
-            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", source_hash_field="", date_field="created"
+            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", digest_link_field="", source_hash_field="", date_field="created"
         )
 
         builder.add_note(resolve((_document_note(zotero_key="K"),)).notes[0])
@@ -629,7 +629,7 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
         assert row["source_id"] is None
 
     def test_a_knowledge_base_declaring_no_key_field_leaves_every_page_source_id_null(self):
-        builder = RowBuilder("handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="", source_hash_field="", date_field="created")
+        builder = RowBuilder("handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="", digest_link_field="", source_hash_field="", date_field="created")
 
         builder.add_note(resolve((_document_note(source_path="Sources/handbook.md"),)).notes[0])
 
@@ -641,7 +641,7 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
             "research",
             section_summary_spec=SectionSummarySpec(),
             facets=_RESEARCH_SPEC.facets,
-            source_key_field="zotero_key",
+            source_key_field="zotero_key", digest_link_field="",
             source_hash_field="",
             date_field="created",
         )
@@ -656,7 +656,7 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
             "handbooks",
             section_summary_spec=SectionSummarySpec(),
             known_source_keys=frozenset({"Sources/other.md"}),
-            source_key_field="source_path",
+            source_key_field="source_path", digest_link_field="",
             source_hash_field="",
             date_field="created",
         )
@@ -667,12 +667,52 @@ class TestThePageSourceIdComesFromTheSpecsKeyField:
         assert row["source_id"] is None
 
 
+class TestAPageWithNoKeyFieldTakesItsSourceFromTheDigestLinkField:
+    """`pages.source_id` is the key field's value, else the source the digest link field names, gated to known mirrors."""
+
+    @staticmethod
+    def _builder(known: frozenset[str] | None = None) -> RowBuilder:
+        return RowBuilder(
+            "handbooks",
+            section_summary_spec=SectionSummarySpec(),
+            known_source_keys=known,
+            source_key_field="source_path",
+            digest_link_field="derived_from",
+            source_hash_field="",
+            date_field="created",
+        )
+
+    def test_a_page_naming_its_source_only_through_the_digest_link_field_gets_that_source_id(self):
+        builder = self._builder(frozenset({"Sources/handbook.md"}))
+
+        builder.add_note(resolve((_document_note(derived_from="Sources/handbook.md"),)).notes[0])
+
+        (row,) = builder.pages
+        assert row["source_id"] == "Sources/handbook.md"
+
+    def test_the_key_field_keeps_its_value_when_both_are_set(self):
+        builder = self._builder()
+
+        builder.add_note(resolve((_document_note(source_path="Sources/handbook.md", derived_from="Sources/other.md"),)).notes[0])
+
+        (row,) = builder.pages
+        assert row["source_id"] == "Sources/handbook.md"
+
+    def test_a_digest_link_outside_the_known_source_universe_is_gated_to_null(self):
+        builder = self._builder(frozenset({"Sources/other.md"}))
+
+        builder.add_note(resolve((_document_note(derived_from="Sources/handbook.md"),)).notes[0])
+
+        (row,) = builder.pages
+        assert row["source_id"] is None
+
+
 class TestThePageSourceHashComesFromTheSpecsHashField:
     """`pages.source_hash` is the page's value under the knowledge base's declared `sources.hash_field`."""
 
     def _builder_for(self, hash_field: str) -> RowBuilder:
         return RowBuilder(
-            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", source_hash_field=hash_field, date_field="created"
+            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", digest_link_field="", source_hash_field=hash_field, date_field="created"
         )
 
     def test_the_declared_field_becomes_the_page_source_hash(self):
@@ -692,7 +732,7 @@ class TestThePageSourceHashComesFromTheSpecsHashField:
         assert row["source_hash"] is None
 
     def test_a_knowledge_base_declaring_no_hash_field_leaves_every_page_source_hash_null(self):
-        builder = RowBuilder("handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", source_hash_field="", date_field="created")
+        builder = RowBuilder("handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", digest_link_field="", source_hash_field="", date_field="created")
 
         builder.add_note(resolve((_document_note(source_path="Sources/handbook.md", content_hash="abc123"),)).notes[0])
 
@@ -704,7 +744,7 @@ class TestThePageSourceHashComesFromTheSpecsHashField:
             "research",
             section_summary_spec=SectionSummarySpec(),
             facets=_RESEARCH_SPEC.facets,
-            source_key_field=_RESEARCH_SPEC.sources.key_field,
+            source_key_field=_RESEARCH_SPEC.sources.key_field, digest_link_field=_RESEARCH_SPEC.sources.digest_link_field,
             source_hash_field=_RESEARCH_SPEC.sources.hash_field,
             date_field="created",
         )
@@ -720,7 +760,7 @@ class TestThePageDateComesFromTheSchemasDateField:
 
     def _builder_for(self, date_field: str) -> RowBuilder:
         return RowBuilder(
-            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", source_hash_field="", date_field=date_field
+            "handbooks", section_summary_spec=SectionSummarySpec(), source_key_field="source_path", digest_link_field="", source_hash_field="", date_field=date_field
         )
 
     def _page_row(self, date_field: str, **fields: object) -> Mapping[str, object]:

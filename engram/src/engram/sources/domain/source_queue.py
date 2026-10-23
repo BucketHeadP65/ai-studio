@@ -1,9 +1,9 @@
-"""The source queue's rows, and the rules that classify and key a URL.
+"""The source queue's rows, the rules that classify and key a URL, and the identifiers that name a source.
 
 A row is a URL somebody wants in the knowledge base, what type of thing it is, and where it
 stands. A URL's source type and key come from the knowledge base's own connectors, asked in
 declared order. The only hosts read here are the identifier schemes `arxiv_id_of` and `doi_of`
-name, and neither claims a URL.
+name, and neither claims a URL. `source_identities` names one source by those schemes and its URL.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 _ARXIV_ID = re.compile(r"(?:abs|pdf|html)/(\d{4}\.\d{4,5})(?:v\d+)?")
 _DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
+_ARXIV_DOI = re.compile(r"10\.48550/arxiv\.(\d{4}\.\d{4,5})(?:v\d+)?", re.IGNORECASE)
 
 
 class SourceType(StrEnum):
@@ -152,6 +153,37 @@ def doi_of(url: str) -> str | None:
     if parts.netloc.lower().removeprefix("www.") in _DOI_HOSTS and parts.path.strip("/"):
         return parts.path.strip("/")
     return None
+
+
+def source_identities(*, url: str | None, doi: str | None) -> frozenset[str]:
+    """The identifiers that name one source whatever connector brought it: its URL, its arXiv id and its DOI.
+
+    Each identifier carries its scheme (`url:`, `arxiv:`, `doi:`), so values of two schemes never
+    match. A DOI compares in lower case, whether given as a DOI or inside a doi.org URL, and an
+    arXiv DOI (`10.48550/arXiv.<id>`) also names its arXiv id. A `None` or blank value names nothing.
+
+    Args:
+        url: The source's URL.
+        doi: The source's DOI.
+
+    Returns:
+        The identifiers.
+    """
+    identities: set[str] = set()
+    dois: list[str] = []
+    if url is not None and url.strip():
+        identities.add(f"url:{url.strip()}")
+        if (arxiv_id := arxiv_id_of(url)) is not None:
+            identities.add(f"arxiv:{arxiv_id}")
+        if (url_doi := doi_of(url)) is not None:
+            dois.append(url_doi)
+    if doi is not None and doi.strip():
+        dois.append(doi.strip())
+    for named in dois:
+        identities.add(f"doi:{named.lower()}")
+        if (match := _ARXIV_DOI.fullmatch(named)) is not None:
+            identities.add(f"arxiv:{match.group(1)}")
+    return frozenset(identities)
 
 
 def classify_url(url: str, *, connectors: Sequence[UrlClaimant]) -> tuple[SourceType, str]:

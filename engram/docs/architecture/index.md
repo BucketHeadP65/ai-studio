@@ -37,7 +37,7 @@ restated. The entry point to every governed doc is
 [CONTEXT-MAP.md](../../../CONTEXT-MAP.md). The binding vocabulary is
 [engram/CONTEXT.md](../../CONTEXT.md).
 
-Sections: 10 · whole document ≈ 21,091 tokens.
+Sections: 10 · whole document ≈ 21,218 tokens.
 
 ### 01 — Orientation & scope
 [sections/01-orientation-scope.md](sections/01-orientation-scope.md) · ~585 tokens
@@ -50,7 +50,7 @@ Sections: 10 · whole document ≈ 21,091 tokens.
 - **Load when:** containers, components, C4 L2, entry points, CQRS bus, data flow, overview, how it fits together, package layout, engram library vs studio application, library, application
 
 ### 03 — Ingestion (bounded context)
-[sections/03-ingestion-bounded-context.md](sections/03-ingestion-bounded-context.md) · ~4,055 tokens
+[sections/03-ingestion-bounded-context.md](sections/03-ingestion-bounded-context.md) · ~4,182 tokens
 - **TL;DR:** The source-to-`Sources/` path: engram owns the two ports (`Connector`, `DocumentConverter`), the entry-point registry that resolves a knowledge base's declared connector names, the guarded fetcher, the mirror store, the reconcile, the source queue and the scanners. The connector and converter implementations (Zotero, YouTube, the general URL connector, arXiv-HTML/Azure conversion) live in the sibling `connectors/` project and arrive by entry point.
 - **Load when:** ingestion, connectors, zotero, conversion, mirror, sync, source queue, watch list, sources, pdf, arxiv, mirrors, paper import, entry point, registry, scanners, refresh
 

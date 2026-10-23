@@ -61,6 +61,23 @@ def frontmatter_value(frontmatter: BaseFrontmatter, field: str) -> str:
     return str(value) if value else ""
 
 
+def cited_mirror_key(frontmatter: BaseFrontmatter, *, key_field: str, digest_link_field: str) -> str:
+    """The key of the mirror a page cites: its key field's value, else its digest link field's value.
+
+    Both field names are the ones the knowledge base declares (`sources.key_field`, `sources.digest_link_field`), so a
+    digest that names its source only through the digest link field cites that mirror as a key-field page does.
+
+    Args:
+        frontmatter: The page's frontmatter.
+        key_field: The declared key field, or an empty string.
+        digest_link_field: The declared digest link field, or an empty string.
+
+    Returns:
+        The mirror key, or an empty string when the page names neither.
+    """
+    return frontmatter_value(frontmatter, key_field) or frontmatter_value(frontmatter, digest_link_field)
+
+
 def loadable_mirrors(mirrors: Iterable[MirrorDoc]) -> tuple[MirrorDoc, ...]:
     """The mirrors a load may write, in order: the ones declaring a provider (`MirrorDoc.provider`).
 

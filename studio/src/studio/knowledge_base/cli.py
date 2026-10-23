@@ -271,6 +271,9 @@ def _print_sync_report(report: SyncReport) -> None:
         typer.echo(f"Unavailable, no readable PDF ({len(report.unavailable)}): {', '.join(report.unavailable)}")
     if report.too_old:
         typer.echo(f"Not admitted, older than the policy's max_age_years ({len(report.too_old)}): {', '.join(report.too_old)}")
+    if report.already_mirrored:
+        held = ", ".join(f"{key} as {holder}" for key, holder in report.already_mirrored.items())
+        typer.echo(f"Not admitted, already mirrored ({len(report.already_mirrored)}): {held}")
     for error in report.errors:
         typer.echo(f"  ERROR {error.key}: {error.message}")
 
