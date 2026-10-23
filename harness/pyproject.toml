@@ -52,10 +52,10 @@ dependencies = [
     "httpx>=0.28.1",
     "logfire[fastapi,variables]>=5.2.0",
     # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
-    "pydantic-ai>=2.57.0",
+    "pydantic-ai>=2.59.0",
     # ``acp`` rides along for ``harness.acp`` — the studio served to ACP clients (Zed et al.)
     # with the save gesture as a protocol-level permission request; experimental upstream.
-    "pydantic-ai-harness[code-mode,acp]>=0.57.0",
+    "pydantic-ai-harness[code-mode,acp]>=0.59.0",
     # `from acp import ...` in harness.features.running.infrastructure.acp_gate — the dist behind the
     # harness's `acp` extra, declared for the same direct-import reason as fastmcp/monty.
     "agent-client-protocol>=0.11",

@@ -121,7 +121,7 @@ uv run python -m harness.acp                           # the agent served over A
 
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes
-installed) and `core[workflows-temporal]` (path sources), and `pydantic-ai-harness` from PyPI (`>=0.57.0`, versioned with pydantic-ai, 0.57 with 2.57). Every agent that holds
+installed) and `core[workflows-temporal]` (path sources), and `pydantic-ai-harness` from PyPI (`>=0.59.0,<0.60`, versioned with pydantic-ai, 0.59 with 2.59). Every agent that holds
 a shell, file tools or skills runs in a `LocalWorkspace` (harness ADR 0023). A change in
 any of them must keep this app green. `docker-compose.yml` here brings up the Temporal dev server only.
 

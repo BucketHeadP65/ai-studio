@@ -2,7 +2,7 @@
 
 The steer route collects messages on the session's `steer_inbox`.
 This capability moves them onto the run's own pending-message queue with `ctx.enqueue`.
-pydantic-ai then delivers them into the next model request, or continues a run that was about to end
+pydantic-ai then delivers them into the model request about to be sent, or continues a run that was about to end
 so the reply addresses what arrived.
 """
 

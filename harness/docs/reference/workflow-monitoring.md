@@ -237,9 +237,9 @@ started at plus the chunks it has seen. A step chat opened mid-step therefore sh
 first token whenever the buffer still holds it. A steer is accepted only while the line is executing (409 otherwise,
 404 for a line that never opened, which is what a temporal-engine run answers). It is appended to the line's inbox
 and echoed onto the stream at once as a `data-steer` chunk (`{"message", "at"}`) so every viewer sees the person's
-words, and the step's own delivery capability folds it into a following model request the way the chat's mid-turn
-steer does, inside the run's loop, never as a concurrent write to its history (upstream delivers one request boundary
-after the drain, or redirects a run that was about to end into one more request). A steer spends inside the step's
+words, and the step's own delivery capability folds it into the step's next model request the way the chat's mid-turn
+steer does, inside the run's loop, never as a concurrent write to its history (upstream delivers it into the request
+the drain ran ahead of, or redirects a run that was about to end into one more request). A steer spends inside the step's
 stated request budget. A step that overruns because of one fails as any overrun does.
 
 Live streaming and steering need the in-process engine (the default): on the temporal
