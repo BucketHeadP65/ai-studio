@@ -1,4 +1,4 @@
-import type { MessagePayload } from "./sessions-types";
+import type { MessagePart, MessagePayload } from "./sessions-types";
 import { argsRecord, callLine, treeText } from "./tree-text";
 
 // The inspector's conversation read as a trace, not a chat: what it was told, what it thought, what it called
@@ -28,24 +28,32 @@ export function errorItemText(item: unknown): string {
 }
 
 // A string, or a Pydantic error list joined with ", ".
-export function retryPromptText(content: unknown): string {
+export function retryText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) return content.map(errorItemText).join(", ");
   return plainText(content);
 }
 
-// A tool's return by its call's `tool_call_id`, and the `tool_call_id` of every call a
-// retry-prompt names as rejected -- both read in the same pass over the conversation, ahead of
-// the entries themselves, since a call's return or its retry-prompt can land several parts later.
+// Whether a part is a call's return asking the model to make the call again.
+function isRetriedReturn(part: MessagePart): boolean {
+  return part.part_kind === "tool-return" && part.outcome === "retried";
+}
+
+// A tool's return by its call's `tool_call_id`, and the `tool_call_id` of every call a retried
+// return names as rejected -- both read in the same pass over the conversation, ahead of the
+// entries themselves, since a call's return can land several parts later.
 export function toolReturnsByCallId(messages: MessagePayload[]): { returns: Map<string, unknown>; rejectedCallIds: Set<string> } {
   const returns = new Map<string, unknown>();
   const rejectedCallIds = new Set<string>();
   for (const message of messages) {
     for (const part of message.parts) {
-      if (part.part_kind === "tool-return" && part.tool_call_id !== undefined) {
-        returns.set(part.tool_call_id, part.content);
-      } else if (part.part_kind === "retry-prompt" && part.tool_call_id !== undefined) {
+      if (part.part_kind !== "tool-return" || part.tool_call_id === undefined) {
+        continue;
+      }
+      if (isRetriedReturn(part)) {
         rejectedCallIds.add(part.tool_call_id);
+      } else {
+        returns.set(part.tool_call_id, part.content);
       }
     }
   }
@@ -56,7 +64,7 @@ export function traceEntries(messages: MessagePayload[]): TraceEntry[] {
   const { returns, rejectedCallIds } = toolReturnsByCallId(messages);
   const entries: TraceEntry[] = [];
   // A rejected `final_result_*` call's own args, by its id -- filled in as the call is walked,
-  // read back once the retry-prompt naming it follows.
+  // read back once the retried return naming it follows.
   const rejectedArgsByCallId = new Map<string, Record<string, unknown>>();
   let sawFirstPrompt = false;
   for (const message of messages) {
@@ -97,11 +105,16 @@ export function traceEntries(messages: MessagePayload[]): TraceEntry[] {
           entries.push({ kind: "call", name, line: callLine(name, args), returned });
           break;
         }
-        case "retry-prompt": {
-          const rejected = part.tool_call_id !== undefined ? (rejectedArgsByCallId.get(part.tool_call_id) ?? null) : null;
-          entries.push({ kind: "refused", text: retryPromptText(part.content), rejected });
+        case "tool-return": {
+          if (isRetriedReturn(part)) {
+            const rejected = part.tool_call_id !== undefined ? (rejectedArgsByCallId.get(part.tool_call_id) ?? null) : null;
+            entries.push({ kind: "refused", text: retryText(part.content), rejected });
+          }
           break;
         }
+        case "retry-feedback":
+          entries.push({ kind: "refused", text: retryText(part.content), rejected: null });
+          break;
         default:
           break;
       }

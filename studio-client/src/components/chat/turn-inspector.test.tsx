@@ -73,7 +73,70 @@ const STORED_RUN: TranscriptMessage[] = [
   },
 ];
 
+const RETRIED_RUN: TranscriptMessage[] = [
+  {
+    run_id: "r2",
+    idx: 0,
+    kind: "request",
+    payload: { kind: "request", parts: [{ part_kind: "user-prompt", content: "find the port" }] },
+    text: "find the port",
+  },
+  {
+    run_id: "r2",
+    idx: 1,
+    kind: "response",
+    payload: {
+      kind: "response",
+      parts: [{ part_kind: "tool-call", tool_name: "lookup", tool_call_id: "c1", args: { name: 5 } }],
+    },
+    text: "",
+  },
+  {
+    run_id: "r2",
+    idx: 2,
+    kind: "request",
+    payload: {
+      kind: "request",
+      parts: [
+        {
+          part_kind: "tool-return",
+          tool_name: "lookup",
+          tool_call_id: "c1",
+          content: "name must be a string",
+          outcome: "retried",
+          retry: { cause: "validation_error", attempt: 1, max_retries: 1 },
+        },
+        { part_kind: "retry-feedback", content: "Please return text.", retry: { cause: "no_output" } },
+      ],
+    },
+    text: "",
+  },
+  {
+    run_id: "r2",
+    idx: 3,
+    kind: "response",
+    payload: { kind: "response", parts: [{ part_kind: "text", content: "Port 5433." }] },
+    text: "Port 5433.",
+  },
+];
+
 describe("TurnInspector", () => {
+  it("shows a retried return and retry feedback as retries, never as a tool's return", () => {
+    render(
+      renderInspector(seededQueryClient("s2", RETRIED_RUN), {
+        sessionId: "s2",
+        message: { id: "r2:3", role: "assistant", parts: [{ type: "text", text: "Port 5433." }] },
+        onClose: vi.fn(),
+      }),
+    );
+
+    expect(screen.getAllByText("Retry requested")).toHaveLength(2);
+    expect(screen.getByText("(lookup)")).toBeInTheDocument();
+    expect(screen.getByText("name must be a string")).toBeInTheDocument();
+    expect(screen.getByText("Please return text.")).toBeInTheDocument();
+    expect(screen.queryByText("return")).not.toBeInTheDocument();
+  });
+
   it("renders one row per part of a stored turn, from the last user prompt through the reply", () => {
     const queryClient = seededQueryClient("s1", STORED_RUN);
     render(

@@ -549,7 +549,7 @@ function userPromptText(payload: MessagePayload): string {
 // rows -> one assistant bubble, the same shape the live wire streams: a `step-start` part opens
 // each response, then its text (untouched) and one `tool-{name}` part per companion tool call it
 // made, each carrying its own return (or the never-answered marker when the transcript has
-// none). A response with none of those parts opens no step, and a tool return or a retry-prompt
+// none). A response with none of those parts opens no step, and a tool return or retry feedback
 // never reaches the main thread, nor does a call to a tool that isn't the companion's own. A
 // user bubble's id is `${run_id}:${idx}` of its row. An assistant bubble's is `${run_id}:${idx}`
 // of the last response row that gave it a part, so the inspector can find that row and walk the

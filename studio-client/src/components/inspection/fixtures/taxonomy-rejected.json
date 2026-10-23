@@ -69,11 +69,19 @@
     {
       "parts": [
         {
-          "content": "the inspector named something the taxonomy does not know: \"no symptom named 'not_in_taxonomy'\"",
           "tool_name": "final_result_Attribution",
+          "content": "the inspector named something the taxonomy does not know: \"no symptom named 'not_in_taxonomy'\"",
           "tool_call_id": "pyd_ai_27d4b531244e40e886fc0769ca3f6740",
+          "tool_kind": null,
+          "metadata": null,
           "timestamp": "2026-09-12T22:02:41.267817Z",
-          "part_kind": "retry-prompt"
+          "outcome": "retried",
+          "retry": {
+            "cause": "model_retry",
+            "attempt": null,
+            "max_retries": null
+          },
+          "part_kind": "tool-return"
         }
       ],
       "timestamp": "2026-09-12T22:02:41.268103Z",

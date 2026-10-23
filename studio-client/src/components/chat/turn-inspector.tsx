@@ -34,7 +34,7 @@ type Row =
   | { key: string; kind: "thinking"; text: string }
   | { key: string; kind: "tool-call"; toolName: string; args: unknown }
   | { key: string; kind: "tool-return"; toolName: string; content: unknown }
-  | { key: string; kind: "retry-prompt"; text: string; toolName: string | null }
+  | { key: string; kind: "retry"; text: string; toolName: string | null }
   | { key: string; kind: "other"; label: string; value: unknown };
 
 function assertNever(value: never): never {
@@ -88,20 +88,15 @@ function rowsFromStoredTurn(messages: TranscriptMessage[], runId: string, idx: n
           });
           break;
         case "tool-return":
-          rows.push({
-            key,
-            kind: "tool-return",
-            toolName: part.tool_name ?? "tool",
-            content: part.content ?? null,
-          });
+          // A return asking for the call again is a retry, the schema's rejection or the tool's refusal.
+          rows.push(
+            part.outcome === "retried"
+              ? { key, kind: "retry", text: textOfContent(part.content), toolName: part.tool_name ?? null }
+              : { key, kind: "tool-return", toolName: part.tool_name ?? "tool", content: part.content ?? null },
+          );
           break;
-        case "retry-prompt":
-          rows.push({
-            key,
-            kind: "retry-prompt",
-            text: textOfContent(part.content),
-            toolName: part.tool_name ?? null,
-          });
+        case "retry-feedback":
+          rows.push({ key, kind: "retry", text: textOfContent(part.content), toolName: null });
           break;
         default:
           rows.push({ key, kind: "other", label: part.part_kind, value: part });
@@ -308,7 +303,7 @@ function InspectorRow({
           </div>
         </div>
       );
-    case "retry-prompt":
+    case "retry":
       return (
         <div className="rounded-md bg-warn-soft px-2.5 py-2 text-warn-ink text-caption">
           <span className="font-semibold">Retry requested</span>

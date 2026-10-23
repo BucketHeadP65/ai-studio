@@ -101,7 +101,10 @@ const MESSAGES = [
     idx: 2,
     kind: "request",
     text: "",
-    payload: { kind: "request", parts: [{ part_kind: "retry-prompt", tool_call_id: "c-final-1", content: "field required" }] },
+    payload: {
+      kind: "request",
+      parts: [{ part_kind: "tool-return", tool_name: "final_result_Attribution", tool_call_id: "c-final-1", content: "field required", outcome: "retried" }],
+    },
   },
   {
     run_id: "inspector-a1b2",
