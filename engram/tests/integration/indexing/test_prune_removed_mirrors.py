@@ -1,9 +1,11 @@
-"""Removing a source mirror's file, through the full and the incremental index, over a real migrated database.
+"""Removing, renaming and changing source mirrors and pages, through the full and the incremental index, over a real database.
 
 A removed mirror that no surviving page cites must leave no `kb.sources_raw` row and no `kb.raw_chunks` row behind,
 whether the mirror was first read by a full index or by an incremental one, and the report's `pruned` count must count
-the source row as a full index counts it. A removed mirror that a surviving page still cites keeps its row. The
-database tests skip when Docker is unavailable (the `migrated` fixture raises `pytest.skip`).
+the source row as a full index counts it. A removed mirror that a surviving page still cites keeps its row. A key a
+mirror still on disk loads, after a rename or beside a removed file of the same key, keeps its row. A mirror that stops
+loading or changes its key at the same path gives up its old row. A removed page counts in `pruned` as in a full index.
+The database tests skip when Docker is unavailable (the `migrated` fixture raises `pytest.skip`).
 """
 
 from __future__ import annotations
@@ -37,12 +39,14 @@ if TYPE_CHECKING:
 _COLLECTION = "removed-mirrors"
 
 
-def _mirror(stem: str) -> str:
-    """An ordinary mirror of two heading sections, naming its source id, provider and provider key."""
+def _mirror(stem: str, *, key: str = "", provider: str = "intake") -> str:
+    """A mirror of two heading sections, keyed by `key` when given (else its file stem), naming no provider when `provider` is empty."""
+    identity = key or stem
+    source_key = f"source_key: {key}\n" if key else ""
+    provider_line = f"provider: {provider}\n" if provider else ""
     return f"""---
-source_id: {stem}
-provider: intake
-provider_key: {stem}
+{source_key}source_id: {identity}
+{provider_line}provider_key: {identity}
 title: {stem.title()}
 ---
 
@@ -127,6 +131,11 @@ async def _manifest_mirrors(migrated: str) -> list[tuple[str, ...]]:
     return await _rows(migrated, "SELECT path, source_key FROM kb.index_manifest WHERE collection = :collection AND kind = 'source'")
 
 
+async def _chunk_bodies(migrated: str, source_id: str) -> list[tuple[str, ...]]:
+    sql = f"SELECT body FROM kb.raw_chunks WHERE collection = :collection AND source_id = '{source_id}'"  # noqa: S608 (a literal id the test chose)
+    return await _rows(migrated, sql)
+
+
 class TestRemovingAMirrorTheFullIndexRead:
     @pytest.mark.parametrize("full", [True, False], ids=["full", "incremental"])
     async def test_the_index_deletes_its_source_row_and_chunks_and_counts_the_row(self, tmp_path: Path, migrated: str, full: bool) -> None:
@@ -181,3 +190,101 @@ class TestRemovingAMirrorASurvivingPageCites:
         assert report.mode == "incremental"
         assert await _source_ids(migrated) == [("alpha",)]
         assert report.pruned == 0
+
+
+class TestRenamingAMirror:
+    @pytest.mark.parametrize("origin", ["full", "incremental"])
+    async def test_the_incremental_index_keeps_its_source_row_and_chunks(self, tmp_path: Path, migrated: str, origin: str) -> None:
+        spec = _spec()
+        builder = _knowledge_base(tmp_path, spec)
+        builder.add_source_mirror("beta", _mirror("beta"))
+        if origin == "full":
+            old = builder.add_source_mirror("alpha", _mirror("alpha", key="alpha"))
+            await _index(tmp_path, migrated, spec, full=True)
+        else:
+            await _index(tmp_path, migrated, spec, full=True)
+            old = builder.add_source_mirror("alpha", _mirror("alpha", key="alpha"))
+            await _index(tmp_path, migrated, spec, full=False)
+
+        old.rename(old.with_name("Alpha renamed.md"))
+        report = await _index(tmp_path, migrated, spec, full=False)
+        again = await _index(tmp_path, migrated, spec, full=False)
+
+        assert (report.mode, again.mode) == ("incremental", "incremental")
+        assert await _source_ids(migrated) == [("alpha",), ("beta",)]
+        assert await _chunk_sources(migrated) == [("alpha",), ("beta",)]
+        assert await _manifest_mirrors(migrated) == [("Sources/Alpha renamed.md", "alpha"), ("Sources/beta.md", "beta")]
+        assert report.pruned == 0
+
+
+class TestRemovingOneOfTwoMirrorsSharingAKey:
+    """Two files sharing a key, the second loaded by a later incremental index, since one load refuses a key twice."""
+
+    async def test_the_incremental_index_keeps_the_row_and_loads_the_surviving_file(self, tmp_path: Path, migrated: str) -> None:
+        spec = _spec()
+        builder = _knowledge_base(tmp_path, spec)
+        builder.add_source_mirror("first", _mirror("first", key="shared"))
+        await _index(tmp_path, migrated, spec, full=True)
+        gone = builder.add_source_mirror("second", _mirror("second", key="shared"))
+        await _index(tmp_path, migrated, spec, full=False)
+        assert "second mirror" in " ".join(body for (body,) in await _chunk_bodies(migrated, "shared"))
+
+        gone.unlink()
+        report = await _index(tmp_path, migrated, spec, full=False)
+
+        assert report.mode == "incremental"
+        assert await _source_ids(migrated) == [("shared",)]
+        bodies = " ".join(body for (body,) in await _chunk_bodies(migrated, "shared"))
+        assert "first mirror" in bodies
+        assert "second mirror" not in bodies
+        assert report.pruned == 0
+
+
+class TestAMirrorThatStopsLoading:
+    @pytest.mark.parametrize("full", [True, False], ids=["full", "incremental"])
+    async def test_losing_its_provider_deletes_its_source_row_and_manifest_row(self, tmp_path: Path, migrated: str, full: bool) -> None:
+        spec = _spec()
+        builder = _knowledge_base(tmp_path, spec)
+        changed = builder.add_source_mirror("alpha", _mirror("alpha"))
+        builder.add_source_mirror("beta", _mirror("beta"))
+        await _index(tmp_path, migrated, spec, full=True)
+
+        changed.write_text(_mirror("alpha", provider=""), encoding="utf-8")
+        report = await _index(tmp_path, migrated, spec, full=full)
+
+        assert report.mode == ("full" if full else "incremental")
+        assert await _source_ids(migrated) == [("beta",)]
+        assert await _chunk_sources(migrated) == [("beta",)]
+        assert await _manifest_mirrors(migrated) == [("Sources/beta.md", "beta")]
+        assert report.pruned == 1
+
+    @pytest.mark.parametrize("full", [True, False], ids=["full", "incremental"])
+    async def test_changing_its_key_at_the_same_path_deletes_the_old_row(self, tmp_path: Path, migrated: str, full: bool) -> None:
+        spec = _spec()
+        builder = _knowledge_base(tmp_path, spec)
+        changed = builder.add_source_mirror("alpha", _mirror("alpha", key="alpha"))
+        builder.add_source_mirror("beta", _mirror("beta"))
+        await _index(tmp_path, migrated, spec, full=True)
+
+        changed.write_text(_mirror("alpha", key="omega"), encoding="utf-8")
+        report = await _index(tmp_path, migrated, spec, full=full)
+
+        assert report.mode == ("full" if full else "incremental")
+        assert await _source_ids(migrated) == [("beta",), ("omega",)]
+        assert await _chunk_sources(migrated) == [("beta",), ("omega",)]
+        assert report.pruned == 1
+
+
+class TestRemovingANotePage:
+    @pytest.mark.parametrize("full", [True, False], ids=["full", "incremental"])
+    async def test_the_index_counts_the_deleted_page(self, tmp_path: Path, migrated: str, full: bool) -> None:
+        spec = _spec()
+        builder = _knowledge_base(tmp_path, spec)
+        gone = builder.add_unit_document("Wiki/Notes", "gone", _note("gone"))
+        await _index(tmp_path, migrated, spec, full=True)
+
+        gone.unlink()
+        report = await _index(tmp_path, migrated, spec, full=full)
+
+        assert report.mode == ("full" if full else "incremental")
+        assert report.pruned == 1

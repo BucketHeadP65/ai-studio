@@ -287,7 +287,7 @@ class Pages(_IdRepository[PageORM]):
         """
         return delete(PageORM).where(PageORM.__table__.c.collection == collection, _in_values(PageORM.__table__.c.id, ids))
 
-    async def delete_by_ids(self, ids: set[str], *, collection: str) -> None:
+    async def delete_by_ids(self, ids: set[str], *, collection: str) -> int:
         """Delete the pages whose id is in `ids`, their claims first, a no-op on an empty set.
 
         A claim cites a page through its subject and its qualifiers with no cascade, so the pages' own claims go first,
@@ -297,13 +297,17 @@ class Pages(_IdRepository[PageORM]):
         Args:
             ids: The page ids to delete.
             collection: The collection the pages belong to.
+
+        Returns:
+            The number of claim and page rows removed. Sections and qualifiers go by cascade and are not counted.
         """
         if not ids:
-            return
-        await self._db.execute(self.delete_claims_by_ids_statement(ids, collection))
+            return 0
+        claims = await self._db.execute(self.delete_claims_by_ids_statement(ids, collection))
         await self._db.execute(self.clear_superseded_by_ids_statement(ids, collection))
-        await self._db.execute(self.delete_by_ids_statement(ids, collection))
+        pages = await self._db.execute(self.delete_by_ids_statement(ids, collection))
         await self._db.flush()
+        return _deleted_count(claims) + _deleted_count(pages)
 
     @staticmethod
     def key_rows_statement(collection: str) -> Select:

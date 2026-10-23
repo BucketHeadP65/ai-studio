@@ -68,11 +68,11 @@ It then dispatches `IndexKnowledgeBase` incremental, with embeddings on and no s
   freshness, ADR [`0019`](../adr/0019-true-incremental-ingestion.md)).
 - **Ports:** `KnowledgeBaseReader` and `BatchEmbedder` protocols (`domain.py`) decouple
   the handler from the filesystem and the embedding provider.
-- **Invariants:** **incremental equals full**, an incremental run is bit-for-bit
-  identical to a `--full` rebuild over every `memory.*` data table plus `validation_store`
-  (proven by `tests/integration/indexing/test_incremental_equals_full.py`, whose matrix covers
-  removing a section, renaming a heading, removing a claim anchor,
-  stripping a page of every child, and removing a page's introduction prose).
+- **Invariants:** **incremental equals full**, an incremental run is meant to leave every
+  `memory.*` data table plus `validation_store` as a `--full` rebuild would. The integration tests
+  `tests/integration/indexing/test_prune_*.py` run the same change through both paths and compare the
+  rows. One difference is known: an incremental run keeps the source row of a removed mirror that a
+  surviving page cites (see "Removing a source mirror" under [Incremental ingestion](#incremental-ingestion)).
   Idempotent, re-running on an unchanged knowledge base is a no-op at the row level
   (every row upsert is **hash-gated** in `src/engram/indexing/infrastructure/repository.py`, and
   the incremental path skips a clean file entirely on a manifest hit). Embedding is
@@ -288,10 +288,14 @@ link-refs, and lint per source, and re-projects the
 AGE graph only when an edge changed. A persisted per-page validation store lets the
 whole-knowledge-base `n_errors` gate be reassembled exactly.
 
-**Removing a source mirror.** The incremental load writes a manifest row for every mirror it loads, so the next run
-sees the mirror's file go. A removed mirror's `kb.sources_raw` row is then deleted, its `kb.raw_chunks` with it, unless
-a surviving page still cites it. These are the source rows a full rebuild prunes, and each one counts once in the
-run's `pruned`, as it does in a full rebuild (the chunks go by cascade and are not counted).
+**Removing a source mirror.** The incremental load writes a manifest row for every mirror it loads, so the next run sees the mirror's file go. A
+mirror gives up its key when its file is removed, when it stops loading (it lost its `provider`) or when its file now
+names another key. The given-up key's `kb.sources_raw` row is then deleted, its `kb.raw_chunks` with it, unless a
+mirror read this run still loads that key or a surviving page cites it. So a renamed mirror keeps its row, and when one
+of two files sharing a key goes, the other file is loaded again so the row holds its text. A mirror that stops loading
+also loses its manifest row. Each deleted source row counts once in the run's `pruned`, as in a full rebuild (the
+chunks go by cascade and are not counted). A full rebuild also deletes the row of a removed mirror that a page still
+cites, and unsets that page's `source_id`. An incremental run keeps that row until a full rebuild.
 
 **Reconciling a rebuilt page's children.** An upsert alone cannot shrink a page: a
 section, a claim or a disclosure summary the page no longer
@@ -309,7 +313,7 @@ rows, so it is left out of the owning page set and keeps its children rather tha
 them reconciled against an empty load. `claim_qualifiers` needs no reconcile of its own:
 its rows cascade from `kb.claims` and are replaced per owning page. The whole reconcile
 rides the single load transaction, so a failure mid-way rolls back the deletes with the
-upserts, and the rows removed are reported as the run's `pruned` count.
+upserts, and the rows removed are reported as the run's `pruned` count, with each deleted page and its claims.
 
 **Repairing a database indexed before the reconcile landed.** The reconcile only removes
 what a *later* run finds stale. A row already orphaned by an earlier incremental index is
@@ -326,11 +330,8 @@ uv run studio index --knowledge-base ../docs --collection repo-docs --full
 (unchanged behavior, including the belt-and-braces whole-set `NOT IN` prune)
 additionally rewriting all four tables fresh. It is auto-forced by a missing or empty
 manifest (a cold start) or a fingerprint mismatch (a spec, registry, or embed-model
-change), and CI runs it. The `incremental == full` property test
-(`tests/integration/indexing/test_incremental_equals_full.py`) is the correctness
-oracle: it replays a scenario matrix end to end and asserts the two DBs are identical
-over every `memory.*` data table plus `validation_store`, claim
-qualifiers and unit summaries included.
+change), and CI runs it. The integration tests `tests/integration/indexing/test_prune_*.py`
+run the same change through both paths and compare the rows they leave.
 
 `--dry-run` previews the dirty set and writes nothing: it re-hashes the knowledge base, expands
 the diff into the dirty set with every write suppressed, and prints each partition's
@@ -444,10 +445,9 @@ See the glossary at `../../CONTEXT.md` for slice, port, and mirror definitions.
 - **Tests:** unit tests in `tests/unit/engram/indexing/` (the pure manifest diff +
   closure scenarios incl. the completeness lemma in `test_manifest.py`, the
   `run_incremental` and full-vs-incremental branch logic over the fake UoW in
-  `test_incremental_handler.py`). The **`incremental == full` correctness oracle**
-  in `tests/integration/indexing/test_incremental_equals_full.py` and the
-  writes-nothing `--dry-run` check in `test_dry_run_writes_nothing.py`
-  (testcontainers analog). Full index, then search, then fetch round-trip in
+  `test_incremental_handler.py`). The full-versus-incremental comparisons in
+  `tests/integration/indexing/test_prune_*.py` (testcontainers), and the writes-nothing
+  `--dry-run` check in `tests/unit/engram/indexing/test_handlers.py`. Full index, then search, then fetch round-trip in
   `tests/e2e/test_compile_and_search.py`. Golden fixture
   `tests/fixtures/golden/lightrag-2025.md`. Disclosure summaries: `SummaryStage` over the
   `Summarizer` Protocol and a `FakeSummarizer`/fake `SummaryUnitOfWork`

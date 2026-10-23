@@ -87,13 +87,15 @@ class _RecordingRepo:
             self.page_of.pop(row_id, None)
         return len(deleted)
 
-    async def delete_by_ids(self, ids: set[str], *, collection: str) -> None:
+    async def delete_by_ids(self, ids: set[str], *, collection: str) -> int:
         self._trace("delete_by_ids")
         if not ids:  # mirror the real repo's empty-set early return (records no call)
-            return
+            return 0
         self.deleted_ids.append(set(ids))
         self.deleted_ids_collections.append(collection)
+        deleted = self.existing & ids
         self.existing -= ids
+        return len(deleted)
 
     async def rows_needing_embedding(self, *, collection: str = "minimal") -> Sequence[PendingEmbedRow]:
         del collection  # the scripted queue plays every scoped read the same way
