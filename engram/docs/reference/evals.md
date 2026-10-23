@@ -57,7 +57,7 @@ adds them to the calls that already ran without failing, and a total above `N` f
 counts. With `--code-mode` on, the agent's code mode is `ModelCallsCodeMode`
 (`src/engram/evals/harness/code_mode.py`): each `run_code` call counts once, like any tool the model
 calls directly, and the tool calls its program makes never count, because each `run_code` call
-records them on a usage of its own. A program's calls are bounded instead by code mode's own limit of
+records them on a usage of its own and runs them under no tool-call limit. A program's calls are bounded instead by code mode's own limit of
 100 per `run_code` call. So a code-mode run and its twin without code mode are held to the same count
 of the model's own calls, and the results-file header records the same `max_tool_calls` for both, so
 `studio evals compare` still pairs them. A code-mode results file written before 2026-10-16 counted
