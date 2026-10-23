@@ -9,6 +9,8 @@ the CLI, a bare library consumer.
 from __future__ import annotations
 
 import logging
+import subprocess
+import sys
 
 from typing import TYPE_CHECKING
 
@@ -87,6 +89,43 @@ def test_console_settings_print_at_the_configured_level(recorded_configure: list
     console = recorded_configure[0]["console"]
     assert isinstance(console, logfire.ConsoleOptions)
     assert console.min_log_level == "debug"
+
+
+_AFTER_STOP = """
+import logfire
+from opentelemetry import trace
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from core.observability import configure_logging, stop_tracing
+
+class Counting(SimpleSpanProcessor):
+    ended = 0
+
+    def on_end(self, span):
+        Counting.ended += 1
+        super().on_end(span)
+
+configure_logging()
+trace.get_tracer_provider().add_span_processor(Counting(InMemorySpanExporter()))
+stop_tracing()
+with logfire.span("after the stop"):
+    pass
+print(Counting.ended)
+"""
+
+
+def test_a_span_after_stop_tracing_reaches_a_closed_processor_once() -> None:
+    """A closed span processor warns about every span it is handed, and that warning must not come back to it as a span.
+
+    pydantic-evals adds a processor like this one to the process's tracer provider. The probe runs in its own process
+    because `stop_tracing` closes the process's providers for good.
+    """
+    answered = subprocess.run(  # noqa: S603 (runs this interpreter on a fixed probe)
+        [sys.executable, "-c", _AFTER_STOP], capture_output=True, text=True, check=False, timeout=120
+    )
+
+    assert answered.returncode == 0, answered.stderr[-2000:]
+    assert int(answered.stdout) <= 1, "the processor's warning came back to it as another span"
 
 
 def test_stop_tracing_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
