@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from fastapi import FastAPI
+    from logfire.testing import CaptureLogfire
 
 ROUTE_BASELINE: frozenset[tuple[str, str]] = frozenset(
     {
@@ -163,6 +164,20 @@ class TestEveryControllerAnswers:
                 assert dict(start["headers"])[b"content-type"].startswith(b"text/event-stream")
             finally:
                 await stop_stream(task)
+
+    async def test_a_request_records_no_span_of_fastapis_own(self, tmp_path: Path, capfire: CaptureLogfire):
+        # capfire configures a real global tracer provider, which FastAPI's native telemetry records into when it is on.
+        app = _app_over_fakes(tmp_path)
+
+        async with (
+            AsyncClient(transport=ASGITransport(app=app, raise_app_exceptions=False), base_url="http://localhost") as client,
+            app.router.lifespan_context(app),
+        ):
+            response = await client.get("/api/templates")
+
+        assert response.status_code == 200
+        names = [str(span["name"]) for span in capfire.exporter.exported_spans_as_dict()]
+        assert [name for name in names if name.startswith(("GET ", "fastapi."))] == [], names
 
     def test_every_controller_is_mounted(self):
         assert sorted(controller.__name__ for controller in CONTROLLERS) == [
