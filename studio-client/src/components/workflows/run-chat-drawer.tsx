@@ -1,9 +1,9 @@
 "use client";
 
-import { Drawer } from "@/shared/ui/drawer";
 import type { ReactElement } from "react";
 
 import { SessionChat } from "@/components/chat/session-chat";
+import { Drawer } from "@/shared/ui/drawer";
 
 // Every run opens its own conversation: the session behind it, full height,
 // in a drawer that leaves the page underneath untouched. Works the same for

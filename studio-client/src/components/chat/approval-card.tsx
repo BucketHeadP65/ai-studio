@@ -1,9 +1,10 @@
 "use client";
 
-import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useState } from "react";
+
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 
 import type { PendingApproval } from "./tool-parts";
 

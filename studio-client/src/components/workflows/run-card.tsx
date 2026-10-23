@@ -1,7 +1,5 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
 import { ChevronDown, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -20,6 +18,8 @@ import { ResultSummary } from "@/components/workflows/outcome-strip";
 import { runnerActor, startedBySentence } from "@/components/workflows/runner-label";
 import { spendText } from "@/lib/cost-text";
 import { artifactHref, runHref } from "@/lib/workflow-href";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
 
 // One card on a board, one shape for every run in view, read top to bottom in the order a person
 // needs it: what the run is and what state it is in, then what it wants from a person (a waiting

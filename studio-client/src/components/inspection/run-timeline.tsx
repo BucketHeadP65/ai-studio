@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
 
 import type { StepOutline } from "@/api/inspection";
 import { plural } from "@/api/inspection-words";
+import { cn } from "@/shared/lib/cn";
 import type { StepMark } from "./run-overview-facts";
 
 // The run's steps as one bar per step, width by how many messages it added: the accent for a

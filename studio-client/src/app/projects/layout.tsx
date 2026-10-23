@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { Folder, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -14,6 +11,9 @@ import { type Project, type ProjectListingEntry, projectKeys, projectsApi } from
 import { studioErrorMessage } from "@/api/studio";
 import { ActiveProjectProvider, useActiveProject } from "@/components/projects/active-project";
 import { OpenFolderDialog } from "@/components/projects/open-folder-dialog";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 interface ProjectCounts {
   files: number | null;

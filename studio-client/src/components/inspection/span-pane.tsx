@@ -1,11 +1,11 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactElement } from "react";
 
 import type { Evidence } from "@/api/inspection";
 import { sentence, spanStep } from "@/api/inspection-words";
+import { cn } from "@/shared/lib/cn";
 
 import { FOLD_FADE_CLASS, useFolded } from "./folded";
 import { Highlighted } from "./highlighted";

@@ -1,6 +1,11 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Sparkles } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+
+import { type SkillCard, projectKeys, projectsApi } from "@/api/projects";
+import { studioErrorMessage } from "@/api/studio";
 import { cn } from "@/shared/lib/cn";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
@@ -8,11 +13,6 @@ import { EmptyState } from "@/shared/ui/empty-state";
 import { Input } from "@/shared/ui/input";
 import { Modal, ModalTitle } from "@/shared/ui/modal";
 import { Select } from "@/shared/ui/select";
-import { Sparkles } from "lucide-react";
-import { useEffect, useId, useState } from "react";
-
-import { type SkillCard, projectKeys, projectsApi } from "@/api/projects";
-import { studioErrorMessage } from "@/api/studio";
 
 export interface SkillsBrowserProps {
   /** The project whose skills these are; the browser never reads any other project. */

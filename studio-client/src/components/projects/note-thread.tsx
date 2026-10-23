@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { Textarea } from "@/shared/ui/textarea";
 import { Pencil } from "lucide-react";
 import type { ReactElement } from "react";
 import { useState } from "react";
@@ -12,6 +9,9 @@ import { type NoteListingEntry, type NoteReply, projectsApi } from "@/api/projec
 import { studioErrorMessage } from "@/api/studio";
 import { NodeGlyph } from "@/components/marks/node-glyph";
 import { StatePill } from "@/components/marks/state-pill";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { Textarea } from "@/shared/ui/textarea";
 
 export interface NoteThreadProps {
   projectId: string;

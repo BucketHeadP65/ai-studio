@@ -1,12 +1,12 @@
 "use client";
 
-import { EmptyState } from "@/shared/ui/empty-state";
 import { ScanSearch } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";
 
 import type { Finding } from "@/api/inspection";
 import { runLocator, runName, shortDate, spaced } from "@/api/inspection-words";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { SurfaceChip } from "./surface-chip";
 
 // The findings list: one row per finding, newest first, its symptom naming the row and opening the finding page.

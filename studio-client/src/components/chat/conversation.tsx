@@ -1,7 +1,6 @@
 "use client";
 
 import { type UIMessage, getToolName, isDynamicToolUIPart, isTextUIPart, isToolUIPart } from "ai";
-import { cn } from "@/shared/lib/cn";
 import { Fragment, type ReactElement } from "react";
 
 import type { RunView, TranscriptMessage } from "@/api/sessions-types";
@@ -20,6 +19,7 @@ import {
 import { NodeGlyph } from "@/components/marks/node-glyph";
 import { useNowTick } from "@/components/workflows/elapsed";
 import { OpenRunLink } from "@/components/workflows/open-run-link";
+import { cn } from "@/shared/lib/cn";
 import { RUN_TOOL_NAME } from "./run-tool-calls";
 
 import { AssistantTurn } from "./assistant-turn";

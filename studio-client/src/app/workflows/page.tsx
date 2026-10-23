@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
 import { Play } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactElement, useMemo } from "react";
@@ -15,6 +14,7 @@ import { useNowTick } from "@/components/workflows/elapsed";
 import { type FleetCard, RunCard } from "@/components/workflows/run-card";
 import { RunLegend } from "@/components/workflows/run-legend";
 import { runName } from "@/lib/run-name";
+import { Button } from "@/shared/ui/button";
 
 // The fleet at /workflows: one vertical stack of every run worth watching, waiting first, then
 // running, then paused, then the archive newest first -- no lanes, and no scheduled runs (their

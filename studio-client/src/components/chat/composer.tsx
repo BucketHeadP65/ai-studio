@@ -1,6 +1,5 @@
 "use client";
 
-import { Textarea } from "@/shared/ui/textarea";
 import { ArrowUp, Square } from "lucide-react";
 import {
   type KeyboardEvent,
@@ -14,6 +13,7 @@ import {
 import type { GateMode } from "@/api/studio-types";
 import { useTargetRegistration } from "@/components/follow-me/targets";
 import { GATE_MODE_WORDS } from "@/components/marks/gate-mode";
+import { Textarea } from "@/shared/ui/textarea";
 
 // The chat input row: send a message, and stop a running answer. Presentational only, every act
 // it takes arrives through a prop, it fetches nothing itself. Stays usable while a gate waits --

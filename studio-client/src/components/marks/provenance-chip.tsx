@@ -1,5 +1,6 @@
-import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // Who or what caused a run to move, said as a sentence a person can read
 // aloud, never as a color alone. actor picks the icon and its tone; variant

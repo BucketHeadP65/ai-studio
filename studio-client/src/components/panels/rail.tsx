@@ -1,9 +1,9 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import { type ReactNode, type PointerEvent as ReactPointerEvent, useRef } from "react";
 
 import { useStoredNumber } from "@/lib/use-stored";
+import { cn } from "@/shared/lib/cn";
 
 // An IDE-style side drawer: resizable by its inner edge, collapsible to a slim
 // labelled strip that reopens it, carrying a marker when the page has one to show.

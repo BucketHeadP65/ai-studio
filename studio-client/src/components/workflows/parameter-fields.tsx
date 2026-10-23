@@ -1,8 +1,5 @@
 "use client";
 
-import { Input } from "@/shared/ui/input";
-import { Select } from "@/shared/ui/select";
-import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useId } from "react";
 
@@ -16,6 +13,9 @@ import {
   type WorkflowGraph,
   type WorkflowPresentation,
 } from "@/api/studio-types";
+import { Input } from "@/shared/ui/input";
+import { Select } from "@/shared/ui/select";
+import { Textarea } from "@/shared/ui/textarea";
 
 // The control registry: one declared parameter, drawn as the control a person answers it
 // through, and read back as the native JSON value a launch sends.

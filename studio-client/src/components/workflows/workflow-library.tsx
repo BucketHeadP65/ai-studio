@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { EmptyState } from "@/shared/ui/empty-state";
-import { Input } from "@/shared/ui/input";
 import { LayoutGrid, Search } from "lucide-react";
 import Link from "next/link";
 import { type ReactElement, useMemo, useState } from "react";
@@ -14,6 +11,9 @@ import { studioApi, studioErrorMessage } from "@/api/studio";
 import type { LibraryEntry } from "@/api/studio-types";
 import { LibraryCard } from "@/components/workflows/library-card";
 import { TRUST_LABEL } from "@/components/workflows/trust-chip";
+import { Button } from "@/shared/ui/button";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Input } from "@/shared/ui/input";
 
 // The browsable home for every saved workflow artifact, reachable until now only from chat.
 // One card per artifact off `studioApi.library()` (filtered client side, the library is small),

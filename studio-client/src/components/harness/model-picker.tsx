@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "@/shared/lib/cn";
-import { Card } from "@/shared/ui/card";
-import { Input } from "@/shared/ui/input";
 import { type KeyboardEvent, useEffect, useId, useState } from "react";
 
 import { harnessApi } from "@/api/harness";
 import type { ModelEntry } from "@/api/harness-types";
+import { cn } from "@/shared/lib/cn";
+import { Card } from "@/shared/ui/card";
+import { Input } from "@/shared/ui/input";
 
 // The model combobox: search-as-you-type over the harness's model list (the owner's
 // gateway route plus OpenRouter's catalogue), one tier at a time. The W3C APG combobox

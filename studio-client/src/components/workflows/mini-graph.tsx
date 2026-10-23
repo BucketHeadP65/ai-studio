@@ -1,8 +1,8 @@
-import { cn } from "@/shared/lib/cn";
 import { Fragment, type ReactElement } from "react";
 
 import type { GraphEdge, GraphNode, WorkflowGraph } from "@/api/studio-types";
 import { type GlyphFill, type GlyphKind, NodeGlyph } from "@/components/marks/node-glyph";
+import { cn } from "@/shared/lib/cn";
 
 // The fleet card's own graph strip: one node group per real step or gate (a param carries no
 // work, so it never earns a group here), left to right in the order the wiring runs. Kahn's

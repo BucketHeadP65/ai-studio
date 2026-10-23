@@ -1,9 +1,11 @@
-import { server } from "@/shared/test-support/msw/server";
-import { render } from "@/shared/test-support/render";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it } from "vitest";
+
+import { server } from "@/shared/test-support/msw/server";
+import { render } from "@/shared/test-support/render";
+
 import { DecisionsCard } from "./decisions";
 
 afterEach(cleanup);

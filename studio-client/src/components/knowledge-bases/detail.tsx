@@ -1,16 +1,16 @@
 "use client";
 
+import { useRef, useState } from "react";
+
+import type { KnowledgeBaseDetail } from "@/api/types";
+import { useTargetRegistration } from "@/components/follow-me/targets";
+import { KnowledgeBaseGraphView } from "@/components/graph/knowledge-base-graph-view";
 import { cn } from "@/shared/lib/cn";
 import { formatRelative } from "@/shared/lib/format-relative";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
-import { useRef, useState } from "react";
-
-import type { KnowledgeBaseDetail } from "@/api/types";
-import { useTargetRegistration } from "@/components/follow-me/targets";
-import { KnowledgeBaseGraphView } from "@/components/graph/knowledge-base-graph-view";
 
 import { DecisionsCard } from "./decisions";
 import { RefreshCard } from "./refresh";

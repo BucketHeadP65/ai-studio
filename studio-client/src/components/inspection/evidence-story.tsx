@@ -1,10 +1,10 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import type { ReactElement, ReactNode } from "react";
 
 import type { Evidence } from "@/api/inspection";
 import { keyLine, partWords, sentence } from "@/api/inspection-words";
+import { cn } from "@/shared/lib/cn";
 
 import { Highlighted } from "./highlighted";
 import { partIcon } from "./icons";

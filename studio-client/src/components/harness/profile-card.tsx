@@ -1,12 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card } from "@/shared/ui/card";
-import { Select } from "@/shared/ui/select";
 import { useState } from "react";
 
 import { harnessApi } from "@/api/harness";
 import { studioErrorMessage } from "@/api/studio";
+import { Card } from "@/shared/ui/card";
+import { Select } from "@/shared/ui/select";
 
 // Which profile governs the composition. The picker offers the default (the
 // hand-set plugins) plus every ACTIVE profile -- a pending one never appears,

@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Select } from "@/shared/ui/select";
 import { type ReactElement, useId, useState } from "react";
 
 import { inspectionApi } from "@/api/inspection";
@@ -10,6 +9,7 @@ import { inspectionKeys } from "@/api/query-keys";
 import { studioErrorMessage } from "@/api/studio";
 import { countLine, filterFindings, type FindingsFilters } from "@/components/inspection/findings-filters";
 import { FindingsTable } from "@/components/inspection/findings-table";
+import { Select } from "@/shared/ui/select";
 
 // Everything the detectors have found, newest first: a count line, four filters over the loaded list, and the
 // table. The page loads the newest 200 findings once and narrows in the browser.

@@ -1,17 +1,17 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+
+import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";
+import { knowledgeBaseKeys } from "@/api/query-keys";
+import type { Job, RefreshRun, Schedule } from "@/api/types";
 import { formatRelative } from "@/shared/lib/format-relative";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
-import { useEffect, useState } from "react";
-
-import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";
-import { knowledgeBaseKeys } from "@/api/query-keys";
-import type { Job, RefreshRun, Schedule } from "@/api/types";
 
 interface Props {
   name: string;

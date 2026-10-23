@@ -1,12 +1,12 @@
 "use client";
 
+import { type ReactNode, useEffect, useRef, useState } from "react";
+
+import type { Turn } from "@/api/studio-types";
 import { cn } from "@/shared/lib/cn";
 import { Button } from "@/shared/ui/button";
 import { StatusDot } from "@/shared/ui/status-dot";
 import { Textarea } from "@/shared/ui/textarea";
-import { type ReactNode, useEffect, useRef, useState } from "react";
-
-import type { Turn } from "@/api/studio-types";
 
 import { AgentMarkdown } from "./markdown";
 

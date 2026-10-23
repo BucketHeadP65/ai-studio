@@ -1,8 +1,10 @@
-import type { GraphResult } from "@/api/types";
-import { render } from "@/shared/test-support/render";
 import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import type { GraphResult } from "@/api/types";
+import { render } from "@/shared/test-support/render";
+
 import { GraphFilters, pageTypeOptions, relOptions } from "./graph-filters";
 
 afterEach(cleanup);

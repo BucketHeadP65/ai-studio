@@ -1,15 +1,15 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Modal, ModalDescription, ModalTitle } from "@/shared/ui/modal";
-import { Textarea } from "@/shared/ui/textarea";
 import { type ReactElement, useId, useState } from "react";
 
 import { knowledgeBaseApi, knowledgeBaseErrorMessage } from "@/api/knowledge-base";
 import type { ArtifactRef } from "@/api/studio-types";
 import type { NoteDraft, NotePreview, RetainedNote } from "@/api/types";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalDescription, ModalTitle } from "@/shared/ui/modal";
+import { Textarea } from "@/shared/ui/textarea";
 
 // Keeping what a run worked out, as a note in a knowledge base the person chooses.
 //

@@ -1,8 +1,9 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 import { SettingsSectionCard } from "./settings-section-card";
 

@@ -1,9 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { ChevronDown } from "lucide-react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { type ReactElement, Suspense, useMemo, useState } from "react";
@@ -51,6 +48,9 @@ import { StepChatDrawer } from "@/components/workflows/step-chat-drawer";
 import type { RunHighlight } from "@/components/workflows/workflow-canvas";
 import { WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 import { WorkflowHeader } from "@/components/workflows/workflow-header";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 // A node opens its own step chat -- brief, thinking, tool acts, a live tail, and a composer
 // that steers it -- when it structurally runs an agent: a `run`/`map` node with no carried

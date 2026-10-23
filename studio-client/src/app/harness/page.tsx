@@ -1,7 +1,5 @@
 "use client";
 
-import { Drawer } from "@/shared/ui/drawer";
-import { Input } from "@/shared/ui/input";
 import { useState } from "react";
 
 import type { HarnessArtifact, HarnessKind } from "@/api/harness-types";
@@ -11,6 +9,8 @@ import { HarnessKindSection } from "@/components/harness/kind-section";
 import { ModelTiers } from "@/components/harness/model-tiers";
 import { PluginsCard } from "@/components/harness/plugins-card";
 import { ProfileCard } from "@/components/harness/profile-card";
+import { Drawer } from "@/shared/ui/drawer";
+import { Input } from "@/shared/ui/input";
 
 // The control room: the agent's setup IS the page. The live composition and its
 // plugins up top, then the three authored shelves, full width, with the owner's acts

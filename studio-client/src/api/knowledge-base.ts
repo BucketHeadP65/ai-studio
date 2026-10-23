@@ -1,5 +1,6 @@
-import { ApiError, createApiClient } from "@/shared/api/client";
 import { z } from "zod";
+
+import { ApiError, createApiClient } from "@/shared/api/client";
 
 import { KNOWLEDGE_BASE_API_URL } from "./config";
 import {

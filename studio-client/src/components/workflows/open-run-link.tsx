@@ -1,8 +1,9 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import Link from "next/link";
 import type { ReactElement } from "react";
+
+import { cn } from "@/shared/lib/cn";
 
 // The Secondary-styled link to a run's own page, reused everywhere the chat station points at
 // one: a turn's own info box (the compact `sm` size) and the session rail's live card (the

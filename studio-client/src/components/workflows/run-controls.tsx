@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
@@ -13,6 +12,7 @@ import { AdaptDialog } from "@/components/workflows/adapt-dialog";
 import { BeforeRunDialog, type RunSetup } from "@/components/workflows/before-run-dialog";
 import { ControlStrip } from "@/components/workflows/control-strip";
 import { useDeliberateLaunch } from "@/components/workflows/use-launch";
+import { Button } from "@/shared/ui/button";
 
 // The interactive half of an open workflow: set a run up and start it, pause a
 // run of it in flight, resume one that is paused, stop one for good, answer its

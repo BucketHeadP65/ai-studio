@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { cn } from "@/shared/lib/cn";
 import {
   AppWindow,
   Bot,
@@ -31,6 +30,7 @@ import { studioErrorMessage } from "@/api/studio";
 import type { ChatReply } from "@/api/studio-types";
 import { SessionChat } from "@/components/chat/session-chat";
 import { useStoredChoice, useStoredFlag, useStoredJson, useStoredNumber } from "@/lib/use-stored";
+import { cn } from "@/shared/lib/cn";
 
 import {
   HEIGHT,

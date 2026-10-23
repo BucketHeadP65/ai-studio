@@ -1,14 +1,14 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
-import { Button } from "@/shared/ui/button";
-import { Textarea } from "@/shared/ui/textarea";
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import type { PendingGate } from "@/api/studio-types";
 import { ProvenanceChip, provenance } from "@/components/marks/provenance-chip";
 import { StatePill } from "@/components/marks/state-pill";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { Textarea } from "@/shared/ui/textarea";
 
 // The one gate a person answers: which workflow is waiting, on which gate id,
 // and the value under review exactly as the backend rendered it. Approve

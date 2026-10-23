@@ -1,13 +1,13 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { Input } from "@/shared/ui/input";
-import { Modal, ModalTitle } from "@/shared/ui/modal";
 import { useEffect, useId, useState } from "react";
 
 import { type Project, projectsApi } from "@/api/projects";
 import { studioErrorMessage } from "@/api/studio";
+import { Button } from "@/shared/ui/button";
+import { Input } from "@/shared/ui/input";
+import { Modal, ModalTitle } from "@/shared/ui/modal";
 
 interface Props {
   open: boolean;

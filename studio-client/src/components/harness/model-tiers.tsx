@@ -1,8 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { Card } from "@/shared/ui/card";
 import { useState } from "react";
 
 import { harnessApi } from "@/api/harness";
@@ -10,6 +8,8 @@ import type { ModelEntry, Thinking, Tier, TierView } from "@/api/harness-types";
 import { studioErrorMessage } from "@/api/studio";
 import type { RadioCardOption } from "@/components/workflows/radio-card";
 import { RadioCardGroup } from "@/components/workflows/radio-card";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
 
 import { Fact } from "./composition";
 import { ModelPicker, formatContext, formatMoney } from "./model-picker";

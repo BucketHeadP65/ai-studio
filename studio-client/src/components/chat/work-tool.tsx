@@ -1,7 +1,6 @@
 "use client";
 
 import { getToolName } from "ai";
-import { cn } from "@/shared/lib/cn";
 import { CheckCircle2, ChevronDown, Clock, XCircle } from "lucide-react";
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from "react";
 
@@ -9,6 +8,7 @@ import { Tool, ToolContent } from "@/components/ai-elements/tool";
 import { compactCount } from "@/components/follow-me/vitals";
 import { CollapsibleTrigger } from "@/components/ui/collapsible";
 import { formatElapsedMs, useNowTick } from "@/components/workflows/elapsed";
+import { cn } from "@/shared/lib/cn";
 
 import { DiffView } from "./diff-view";
 import { JsonTree, LONG_STRING_THRESHOLD } from "./json-tree";

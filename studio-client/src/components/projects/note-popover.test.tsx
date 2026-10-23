@@ -1,9 +1,9 @@
 import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ApiError } from "@/shared/api/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { projectsApi } from "@/api/projects";
+import { ApiError } from "@/shared/api/client";
 import { render } from "@/shared/test-support/render";
 
 import { AddNoteButton, NotePopover, anchorFor } from "./note-popover";

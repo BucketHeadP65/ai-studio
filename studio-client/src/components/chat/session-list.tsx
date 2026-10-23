@@ -1,11 +1,6 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/shared/ui/button";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { EmptyState } from "@/shared/ui/empty-state";
-import { Input } from "@/shared/ui/input";
-import { cn } from "@/shared/lib/cn";
 import { Archive, MessageSquare, Plus, Search, X } from "lucide-react";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
@@ -14,6 +9,11 @@ import { sessionKeys } from "@/api/query-keys";
 import { sessionsApi } from "@/api/sessions";
 import type { SessionSummary } from "@/api/sessions-types";
 import { studioErrorMessage } from "@/api/studio";
+import { cn } from "@/shared/lib/cn";
+import { Button } from "@/shared/ui/button";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Input } from "@/shared/ui/input";
 
 import { SessionItem } from "./session-item";
 

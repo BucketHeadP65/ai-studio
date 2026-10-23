@@ -1,12 +1,12 @@
 "use client";
 
-import { cn } from "@/shared/lib/cn";
 import type { CSSProperties, ReactElement } from "react";
 
 import type { GraphNode, SpendView, StepEvent } from "@/api/studio-types";
 import { type GlyphFill, type GlyphKind, NodeGlyph } from "@/components/marks/node-glyph";
 import { formatElapsedMs, useNowTick } from "@/components/workflows/elapsed";
 import { spendText } from "@/lib/cost-text";
+import { cn } from "@/shared/lib/cn";
 
 // The run's steps as a time chart: one horizontal lane per node that has run, in the order
 // each first started, and a queued lane below for every other node the graph declares (a param

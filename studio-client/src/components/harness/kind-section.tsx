@@ -1,11 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge } from "@/shared/ui/badge";
-import { Button } from "@/shared/ui/button";
-import { Card } from "@/shared/ui/card";
-import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
-import { EmptyState } from "@/shared/ui/empty-state";
 import { PackageOpen } from "lucide-react";
 import { useState } from "react";
 
@@ -18,6 +13,11 @@ import type {
   PromotionAction,
 } from "@/api/harness-types";
 import { studioErrorMessage } from "@/api/studio";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 interface Props {
   kind: HarnessKind;
