@@ -36,7 +36,9 @@ dependencies = [
     "pydantic>=2.13.4",
     # Held below 2.60 and 0.60. pydantic-ai 2.60 replaces `RetryPromptPart` with a retried `ToolReturnPart` and a
     # `RetryFeedbackPart`, which the transcripts, the inspection, the record and the harness session still have to read.
-    "pydantic-ai[retries]>=2.59.0,<2.60",
+    # A trial on 2.60 and 0.60 also failed on the memory toolset's search (no match), the file tools' sidecar refusal
+    # (a raised `PermissionError`) and capability instructions wrapped in `<context id="capability:...">`.
+    "pydantic-ai[retries]>=2.57.0,<2.60",
     "pydantic-ai-harness>=0.59.0,<0.60",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.4",

@@ -336,7 +336,7 @@ requires-dist = [
     { name = "openai", specifier = ">=1.60.0" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
-    { name = "pydantic-ai", extras = ["retries"], specifier = ">=2.59.0,<2.60" },
+    { name = "pydantic-ai", extras = ["retries"], specifier = ">=2.57.0,<2.60" },
     { name = "pydantic-ai-harness", specifier = ">=0.59.0,<0.60" },
     { name = "pydantic-graph", marker = "extra == 'workflows'", specifier = ">=2.49.0" },
     { name = "pydantic-graph", marker = "extra == 'workflows-temporal'", specifier = ">=2.49.0" },
