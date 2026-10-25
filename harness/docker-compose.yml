@@ -88,7 +88,7 @@ services:
 
   # The standalone UI, for the persistent profile only — the default stack serves its own on 8233.
   temporal-ui:
-    image: temporalio/ui:2.56.0
+    image: temporalio/ui:2.57.0
     container_name: workflows-temporal-ui
     profiles:
       - persistent
