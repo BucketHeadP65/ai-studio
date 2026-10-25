@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [[package]]
@@ -2476,6 +2476,7 @@ wheels = [
 name = "studio"
 version = "0.0.1"
 source = { editable = "." }
+default-groups = ["dev", "test"]
 dependencies = [
     { name = "core" },
     { name = "engram" },
@@ -2515,7 +2516,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-ai", specifier = ">=2.57.0" },
     { name = "pydantic-settings", specifier = ">=2.16.0" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.4" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.6" },
     { name = "typer", specifier = ">=0.27.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "wireup", specifier = ">=2.12.1" },
