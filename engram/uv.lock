@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.13.*"
 
 [[package]]
@@ -530,6 +530,7 @@ wheels = [
 name = "engram"
 version = "0.0.1"
 source = { editable = "." }
+default-groups = ["dev", "test"]
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
@@ -589,7 +590,7 @@ requires-dist = [
     { name = "pydantic-evals", specifier = ">=2.0.0" },
     { name = "pytest", marker = "extra == 'testing'", specifier = ">=9.0.2" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.4" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.1.6" },
     { name = "testcontainers", extras = ["postgres"], marker = "extra == 'testing'", specifier = ">=4.15.0" },
     { name = "text-unidecode", specifier = ">=1.3" },
     { name = "tiktoken", specifier = ">=0.13.0" },
