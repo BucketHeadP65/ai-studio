@@ -26,8 +26,15 @@ from sqlalchemy.engine import make_url
 _STUDIO = Path(sys.executable).parent / "studio"
 _NOBODY = "postgresql+asyncpg://kb_reader:unused@127.0.0.1:1/knowledge_bases"
 
-# The studio refuses to start without these sections, and an empty one takes every default.
-_STUDIO_SECTIONS = ("APP_RETRIEVAL", "APP_INGESTION", "APP_SOURCES", "APP_EVALS")
+# The studio reads the settings file at a path fixed to its own code, so a checkout holding one feeds it to the spawned
+# server, and an exported value wins over the file key by key. The studio refuses to start without these sections. The
+# retrieval section pins the served profile to keyword search and turns re-ranking off, so no search reaches a model.
+_STUDIO_SECTIONS = {
+    "APP_RETRIEVAL": json.dumps({"retrieval_profile": "search-keyword", "rerank": {"enabled": False}}),
+    "APP_INGESTION": "{}",
+    "APP_SOURCES": "{}",
+    "APP_EVALS": "{}",
+}
 
 # The server builds its embedding model as it starts, so it needs an endpoint. Keyword search never calls it.
 _UNCALLED_EMBEDDING_ENDPOINT = "https://embeddings.example.invalid"
@@ -62,7 +69,7 @@ def _env(url: str) -> dict[str, str]:
         "APP_INFRASTRUCTURE__AZURE_OPENAI__ENDPOINT": _UNCALLED_EMBEDDING_ENDPOINT,
         "APP_KNOWLEDGE_BASES": json.dumps({}),
     }
-    env.update(dict.fromkeys(_STUDIO_SECTIONS, "{}"))
+    env.update(_STUDIO_SECTIONS)
     return env
 
 

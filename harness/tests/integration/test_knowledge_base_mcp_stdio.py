@@ -40,10 +40,18 @@ if TYPE_CHECKING:
 
 _NAME = "served"
 
-# The studio refuses to start without these sections, and an empty one takes every default. A settings file in the
-# studio checkout still merges in under them, its registry included, so there the server also reads every live
-# knowledge base it registers.
-_STUDIO_SECTIONS = ("APP_RETRIEVAL", "APP_INGESTION", "APP_SOURCES", "APP_EVALS")
+# The studio reads the settings file at a path fixed to its own code, so a checkout holding one feeds it to the spawned
+# server, and an exported value wins over the file key by key. The studio refuses to start without these sections. The
+# retrieval section pins the served profile to keyword search, since a settings profile other than `full` wins over the
+# schema's and a hybrid one would embed the query, and turns re-ranking off, since a configured key would call the
+# re-rank model. The file's registry still merges in, so the server also builds a read route for every knowledge base
+# it registers, read-only.
+_STUDIO_SECTIONS = {
+    "APP_RETRIEVAL": json.dumps({"retrieval_profile": "search-keyword", "rerank": {"enabled": False}}),
+    "APP_INGESTION": "{}",
+    "APP_SOURCES": "{}",
+    "APP_EVALS": "{}",
+}
 
 # The server builds its embedding model as it starts, so it needs an endpoint. Keyword search never calls it.
 _UNCALLED_EMBEDDING_ENDPOINT = ("APP_INFRASTRUCTURE__AZURE_OPENAI__ENDPOINT", "https://embeddings.example.invalid")
@@ -104,8 +112,8 @@ async def test_the_read_only_server_completes_the_handshake_and_serves_search_an
     await _index(root, _knowledge_base(root), migrated)
     monkeypatch.setenv(KNOWLEDGE_BASE_READER_ENV, reader_url.replace("postgresql+asyncpg://", "postgresql://"))
     monkeypatch.setenv("APP_KNOWLEDGE_BASES", json.dumps({_NAME: {"path": str(root)}}))
-    for section in _STUDIO_SECTIONS:
-        monkeypatch.setenv(section, "{}")
+    for section, value in _STUDIO_SECTIONS.items():
+        monkeypatch.setenv(section, value)
     monkeypatch.setenv(*_UNCALLED_EMBEDDING_ENDPOINT)
 
     async with Client(knowledge_base_stdio_transport(knowledge_base=root), init_timeout=_INIT_TIMEOUT_SECONDS) as client:
