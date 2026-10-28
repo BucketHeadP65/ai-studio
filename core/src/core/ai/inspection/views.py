@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final, Literal
 from pydantic import JsonValue, TypeAdapter, ValidationError
 from pydantic_ai.messages import (
     CompactionPart,
+    InstructionDeltaPart,
     ModelMessage,
     ModelRequest,
     ModelRequestPart,
@@ -78,6 +79,8 @@ _RETRIED: Final[Mapping[str, str]] = {
 """Why a retried return asks for its call again, by the retry's cause."""
 _RETRIED_UNKNOWN: Final = "asked again"
 """How a retried return reads when it does not say why."""
+_WITHDRAWN: Final = "This instruction was withdrawn."
+"""How an instruction change that withdraws its block reads."""
 
 
 def text_of(part: ModelRequestPart | ModelResponsePart) -> str:
@@ -91,6 +94,8 @@ def text_of(part: ModelRequestPart | ModelResponsePart) -> str:
     """
     if isinstance(part, ToolCallPart):
         return str(part.args_as_dict())
+    if isinstance(part, InstructionDeltaPart):
+        return part.content if part.content is not None else _WITHDRAWN
     if isinstance(part, TextPart | SystemPromptPart | ThinkingPart | RetryFeedbackPart | ToolReturnPart | UserPromptPart | CompactionPart):
         return str(part.content)
     return ""
@@ -147,7 +152,7 @@ def _writer_of(part: ModelRequestPart | ModelResponsePart) -> str:
     if isinstance(part, ToolReturnPart):
         return f"the retry asked of {part.tool_name}" if part.outcome == "retried" else f"the return of {part.tool_name}"
     if isinstance(part, RetryFeedbackPart):
-        return "the retry feedback"
+        return "the retry feedback part"
     return part.part_kind
 
 
@@ -468,11 +473,11 @@ def _read_content(index: int, step: Step, start: int, end: int, resource: ReadRe
         if resource == "instructions":
             if isinstance(message, ModelRequest) and message.instructions is not None:
                 lines.append(f"{index}.{message_index}.instructions [instructions] {message.instructions}")
-            lines.extend(
-                f"{index}.{message_index}.{part_index} [system-prompt] {part.content}"
-                for part_index, part in enumerate(message.parts)
-                if isinstance(part, SystemPromptPart)
-            )
+            for part_index, part in enumerate(message.parts):
+                if isinstance(part, SystemPromptPart):
+                    lines.append(f"{index}.{message_index}.{part_index} [system-prompt] {part.content}")
+                elif isinstance(part, InstructionDeltaPart):
+                    lines.append(f"{index}.{message_index}.{part_index} [instruction-delta {part.id}] {text_of(part)}")
         else:
             lines.extend(
                 f"{index}.{message_index}.{part_index} [{kind_of(part)}] {text_of(part)}" for part_index, part in enumerate(message.parts)

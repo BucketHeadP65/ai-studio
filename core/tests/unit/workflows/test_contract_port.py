@@ -265,7 +265,7 @@ BROKEN_CATALOG = replace(WITH_CATALOG, catalog_tool="no_such_tool")
 class Script:
     """A model that issues the given tool calls, then reports what last came back.
 
-    Reporting the last tool return (or retry prompt) as its final text is what lets a test
+    Reporting the last tool return (a retried one included) as its final text is what lets a test
     assert on the *content* of a refusal without reading private state.
     """
 

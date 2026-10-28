@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic_ai.messages import (
     ModelMessage,
@@ -63,14 +63,24 @@ def result(
     )
 
 
+SCHEMA_ERRORS: Final = [{"type": "string_type", "loc": ["name"], "msg": "Input should be a valid string", "input": 5}]
+"""The content pydantic-ai gives a retried return the schema rejected: the validation errors, as a list."""
+
+
 def retried(
     tool_call_id: str,
-    content: str = "name must be a string",
+    content: str | list[dict[str, object]] | None = None,
     *,
     cause: ToolRetryCause | None = "validation_error",
     tool_name: str = "lookup_city",
 ) -> ModelRequest:
-    """The call's answer asking for it again: the schema rejected it by default, `cause="model_retry"` when the tool refused it."""
+    """The call's answer asking for it again: the schema rejected it by default, `cause="model_retry"` when the tool refused it.
+
+    Without `content`, a schema rejection carries `SCHEMA_ERRORS` and any other cause a refusal's text, the shapes
+    pydantic-ai writes.
+    """
+    if content is None:
+        content = SCHEMA_ERRORS if cause == "validation_error" else "name must be a string"
     return ModelRequest(
         parts=[
             ToolReturnPart(

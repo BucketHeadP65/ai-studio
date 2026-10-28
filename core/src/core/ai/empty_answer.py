@@ -1,7 +1,7 @@
 """A capability that asks the model, by name, to answer again when it reasons and then answers with only whitespace.
 
 A response with a thinking part, no tool call and only whitespace text is caught before output
-validation runs. The model is sent retry feedback that names the mistake.
+validation runs. The model is sent a retry feedback part that names the mistake.
 """
 
 from __future__ import annotations
@@ -41,12 +41,12 @@ def _is_blank_after_thinking(response: ModelResponse) -> bool:
 class EmptyAnswerRetry(AbstractCapability[AgentDepsT]):
     """Ask the model to try again, by name, when it reasons and then answers with only whitespace.
 
-    It runs before the output validator, so the model never gets generic "invalid JSON" retry
-    feedback for this failure. Each retry spends one turn of the agent's output retry budget.
+    It runs before the output validator, so the model never gets a generic "invalid JSON" retry
+    feedback part for this failure. Each retry spends one turn of the agent's output retry budget.
     """
 
     message: str = DEFAULT_MESSAGE
-    """The retry feedback sent back to the model when the blank-after-thinking pattern is detected."""
+    """The text of the retry feedback part sent back to the model when the blank-after-thinking pattern is detected."""
 
     async def after_model_request(
         self,

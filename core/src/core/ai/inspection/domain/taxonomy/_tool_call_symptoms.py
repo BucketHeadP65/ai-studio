@@ -1,8 +1,8 @@
 """The symptoms of tool use.
 
 In reading order: choosing whether and which tool, calling it, reacting to what came back, doing all of that economically,
-and the tool's own faults. Most show in the tool call or in its return, a retry included: the schema rejecting the arguments
-and the tool refusing the call both answer the call with a retried return. One shows in text (giving up on an error the
+and the tool's own faults. Most show in the tool call or in its return, a retry included: a call rejected before any tool
+ran and a call a tool refused both answer the call with a retried return. One shows in text (giving up on an error the
 agent could have recovered from). The health of a tool or its host is not here: that is a number in a span, not a
 relationship between what the agent was told and what it did.
 """
@@ -76,7 +76,7 @@ DENIED_ACTION_REPEATED = Symptom(
 SCHEMA_REJECTED_ARGUMENTS = Symptom(
     name="schema_rejected_arguments",
     shows_in="tool-return",
-    what_you_see="The schema rejected the call before the tool ran.",
+    what_you_see="No tool ran: the call named no tool on offer, or its arguments failed the tool's schema.",
     caught_by="rule",
     horizon="moment",
     possible_root_causes=(TOOL_SCHEMA, TOOL_DESCRIPTION, MODEL_TIER),
@@ -85,8 +85,8 @@ TOOL_REFUSED_CALL = Symptom(
     name="tool_refused_call",
     shows_in="tool-return",
     what_you_see=(
-        "The arguments passed the schema, the tool ran and refused the call, and asked the model to call it again with something "
-        "changed (an id that does not resolve, a name that is not registered, a value the tool cannot use)."
+        "The call passed the schema, then the tool, a guard around it or its own check asked the model to call again with "
+        "something changed (an id that does not resolve, a path a guard denies, a program that raised)."
     ),
     caught_by="rule",
     horizon="moment",

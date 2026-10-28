@@ -54,10 +54,19 @@ def _succeeded(call: Call) -> bool:
     return call.answer is not None and call.answer.outcome == "success"
 
 
-def _retried_because(call: Call, cause: ToolRetryCause) -> bool:
-    """Whether the answer asks for the call again for this cause."""
+_REJECTED: Final[frozenset[ToolRetryCause]] = frozenset({"validation_error", "unknown_tool", "unavailable_tool"})
+"""The retry causes no tool ran for: the arguments failed the schema, or the call matched no tool on offer."""
+_REFUSED: Final[frozenset[ToolRetryCause]] = frozenset({"model_retry"})
+"""The retry cause a tool, a guard around it or its own check gives when it asks for the call again."""
+
+
+def _tool_retried_because(transcript: Transcript, call: Call, causes: frozenset[ToolRetryCause]) -> bool:
+    """Whether a call to a tool, never an output tool, was answered with a retry for one of `causes`."""
     answer = call.answer
-    return answer is not None and answer.outcome == "retried" and answer.retry is not None and answer.retry.cause == cause
+    if answer is None or answer.outcome != "retried" or answer.retry is None or answer.retry.cause not in causes:
+        return False
+    parameters = transcript.steps[call.at.step].parameters
+    return parameters is None or all(tool.name != call.call.tool_name for tool in parameters.output_tools)
 
 
 def _before(a: Span, b: Span) -> bool:
@@ -91,10 +100,13 @@ def _count(ctx: InspectionContext, symptom: Symptom, pairs: list[tuple[Span, ...
 
 @dataclass
 class SchemaRejectedArguments(Evaluator[str, Inspected, None]):
-    """The schema rejected the call before the tool ran: its answer is a retried return caused by a validation error."""
+    """No tool ran: the call matched no tool on offer or failed the tool's schema, and its answer is a retried return.
+
+    An output tool's retry is not a lead. Steps that recorded no request parameters count every retried call.
+    """
 
     def evaluate(self, ctx: InspectionContext) -> dict[str, int]:
-        """One lead per call the schema rejected, at the retried return that carries the validation errors.
+        """One lead per call rejected before any tool ran, at the retried return that says why.
 
         Args:
             ctx: The rule's context, whose output receives the leads.
@@ -102,17 +114,20 @@ class SchemaRejectedArguments(Evaluator[str, Inspected, None]):
         Returns:
             The number of leads recorded, by symptom name.
         """
-        calls = ctx.output.transcript.calls()
-        hits = [(_answered_or_called(call),) for call in calls if _retried_because(call, "validation_error")]
+        transcript = ctx.output.transcript
+        hits = [(_answered_or_called(call),) for call in transcript.calls() if _tool_retried_because(transcript, call, _REJECTED)]
         return _count(ctx, SCHEMA_REJECTED_ARGUMENTS, hits, found_by="schema_rejected_arguments")
 
 
 @dataclass
 class ToolRefusedCall(Evaluator[str, Inspected, None]):
-    """The tool ran and refused the call: its answer is a retried return the tool asked for."""
+    """The call passed the schema, then the tool, a guard around it or its own check asked for it again.
+
+    An output tool's retry is not a lead. Steps that recorded no request parameters count every retried call.
+    """
 
     def evaluate(self, ctx: InspectionContext) -> dict[str, int]:
-        """One lead per call the tool refused, at the retried return that carries the tool's reason.
+        """One lead per call a tool refused, at the retried return that carries the reason.
 
         Args:
             ctx: The rule's context, whose output receives the leads.
@@ -120,8 +135,8 @@ class ToolRefusedCall(Evaluator[str, Inspected, None]):
         Returns:
             The number of leads recorded, by symptom name.
         """
-        calls = ctx.output.transcript.calls()
-        hits = [(_answered_or_called(call),) for call in calls if _retried_because(call, "model_retry")]
+        transcript = ctx.output.transcript
+        hits = [(_answered_or_called(call),) for call in transcript.calls() if _tool_retried_because(transcript, call, _REFUSED)]
         return _count(ctx, TOOL_REFUSED_CALL, hits, found_by="tool_refused_call")
 
 

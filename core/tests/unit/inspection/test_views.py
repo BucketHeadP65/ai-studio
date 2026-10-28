@@ -11,8 +11,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from pydantic_ai.messages import (
+    CapabilityInstructionSource,
     CompactionPart,
     ImageUrl,
+    InstructionDeltaPart,
+    InstructionId,
     ModelRequest,
     ModelRequestPart,
     ModelResponse,
@@ -106,9 +109,28 @@ def test_the_outline_says_why_a_call_has_to_be_made_again(cause: ToolRetryCause 
 def test_a_retried_return_reads_as_a_retry_with_its_cause() -> None:
     rendered_run = rendered(a_run().messages)
 
-    assert "[request tool-return, rejected by the schema] name must be a string" in rendered_run
+    assert "[request tool-return, rejected by the schema] [{'type': 'string_type', 'loc': ['name']" in rendered_run
     assert "[request tool-return, refused by the tool] no city named Atlantis" in rendered_run
     assert "[request tool-return] sunny and mild" in rendered_run
+
+
+def test_a_changed_instruction_reads_in_the_messages_and_the_instructions() -> None:
+    changed = ModelRequest(
+        parts=[
+            InstructionDeltaPart(id=InstructionId(CapabilityInstructionSource("shell")), content="Commands run in /new."),
+            InstructionDeltaPart(id=InstructionId(CapabilityInstructionSource("files")), content=None),
+            UserPromptPart(content="go on", timestamp=AT),
+        ]
+    )
+    given = transcript(question(), answer("done"), changed)
+
+    instructions = read(given, 0, resource="instructions")
+    messages = read(given, 0)
+
+    assert "0.2.0 [instruction-delta capability:shell] Commands run in /new." in instructions
+    assert "0.2.1 [instruction-delta capability:files] This instruction was withdrawn." in instructions
+    assert "0.2.0 [instruction-delta] Commands run in /new." in messages
+    assert text_of(changed.parts[1]) == "This instruction was withdrawn."
 
 
 def test_retry_feedback_reads_as_its_content() -> None:
@@ -437,7 +459,7 @@ LABEL_CASES: list[tuple[ModelRequestPart | ModelResponsePart, str]] = [
         ToolReturnPart(tool_name="lookup_city", content="bad args", tool_call_id="c1", outcome="retried"),
         "step 2, the retry asked of lookup_city",
     ),
-    (RetryFeedbackPart(content="bad output", retry=RetryInfo(cause="validation_error")), "step 2, the retry feedback"),
+    (RetryFeedbackPart(content="bad output", retry=RetryInfo(cause="validation_error")), "step 2, the retry feedback part"),
     (CompactionPart(), "step 2, compaction"),
 ]
 
