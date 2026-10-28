@@ -40,8 +40,8 @@ function isRetriedReturn(part: MessagePart): boolean {
 }
 
 // A tool's return by its call's `tool_call_id`, and the `tool_call_id` of every call a retried
-// return names as rejected -- both read in the same pass over the conversation, ahead of the
-// entries themselves, since a call's return can land several parts later.
+// return names as rejected. Both are read in one pass over the conversation, ahead of the entries
+// themselves, since a call's return can land several parts later.
 export function toolReturnsByCallId(messages: MessagePayload[]): { returns: Map<string, unknown>; rejectedCallIds: Set<string> } {
   const returns = new Map<string, unknown>();
   const rejectedCallIds = new Set<string>();

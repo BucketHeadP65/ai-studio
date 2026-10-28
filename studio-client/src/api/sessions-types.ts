@@ -76,8 +76,8 @@ export const TranscriptSchema = z.object({ messages: z.array(TranscriptMessageSc
 export const MessagePartSchema = z.looseObject({
   part_kind: z.string(),
   content: z.unknown().optional(),
-  // Absent on a part that names no tool, such as retry feedback, which answers no call.
-  tool_name: z.string().nullish(),
+  // Absent on a part that names no tool, such as a retry feedback part, which answers no call.
+  tool_name: z.string().optional(),
   tool_call_id: z.string().optional(),
   // How a tool-return ended: success, failed, denied, interrupted, or retried when it asks the
   // model to make the call again (the schema rejected it or the tool refused it).

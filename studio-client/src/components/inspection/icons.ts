@@ -48,7 +48,7 @@ const PART_ICON: Record<string, LucideIcon> = {
   text: MessageSquare,
   "user-prompt": User,
   "system-prompt": FileText,
-  "retry-feedback": Ban,
+  "retried-return": Ban,
 };
 
 export function rootCauseIcon(name: string): LucideIcon {

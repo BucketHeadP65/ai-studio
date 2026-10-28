@@ -121,7 +121,7 @@ const RETRIED_RUN: TranscriptMessage[] = [
 ];
 
 describe("TurnInspector", () => {
-  it("shows a retried return and retry feedback as retries, never as a tool's return", () => {
+  it("shows a retried return and a retry feedback part as retries, never as a tool's return", () => {
     render(
       renderInspector(seededQueryClient("s2", RETRIED_RUN), {
         sessionId: "s2",
