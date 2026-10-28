@@ -12,7 +12,7 @@ from core.ai.inspection.contracts import TAXONOMY, Finding, InspectionQueries, J
 from core.ai.inspection.domain.taxonomy import Blame, Surface, SurfaceKind
 from core.ai.transcripts.contracts import RunFacts, RunSummary, Span, Step, Transcript, TranscriptLoaders
 from core.cqrs.contracts import JobQueries, MemoryJobs
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, RetryInfo, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 
 from harness.domain.ports import ConversationMessages
 from harness.features.inspection.controller import LEADS_WITH_JOBS
@@ -173,6 +173,43 @@ async def test_one_finding_carries_its_lead_and_every_span_rendered_as_text(tmp_
     assert evidence["kind"] == "tool-call"
     assert evidence["text"] == "path: a.md"
     assert "{'" not in evidence["text"]
+
+
+async def test_the_evidence_of_a_retried_return_says_it_is_a_retry(tmp_path: Path) -> None:
+    span = Span(step=0, message=2, part=0)
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="look it up", timestamp=AT)]),
+        ModelResponse(parts=[ToolCallPart(tool_name="lookup", args={"name": "x"}, tool_call_id="c1")], timestamp=AT),
+        ModelRequest(
+            parts=[
+                ToolReturnPart(
+                    tool_name="lookup",
+                    content="no city named x",
+                    tool_call_id="c1",
+                    timestamp=AT,
+                    outcome="retried",
+                    retry=RetryInfo(cause="model_retry"),
+                )
+            ]
+        ),
+    ]
+    retried_run = Transcript(source=SOURCE, steps=(Step(messages=tuple(messages), ordinals=tuple(range(len(messages)))),), durations_ms={})
+
+    class OpensTheRetriedRun:
+        async def __call__(self, locator: str) -> Transcript:
+            del locator
+            return retried_run
+
+    store = FakeInspectionStore()
+    (lead_id,) = await store.add_leads("every-run", [Lead(source=SOURCE, symptom="tool_refused_call", spans=(span,), found_by="tool_refused_call")])
+    await store.add_finding(a_finding(spans=(span,)), source=SOURCE, lead_id=lead_id, found_by="inspector", model="claude-test")
+    answers = {**answering_with(store), TranscriptLoaders: TranscriptLoaders(by_key={"record": OpensTheRetriedRun()})}
+
+    async with a_served_client(state=tmp_path, answering=answers) as client:
+        response = await client.get("/api/inspection/findings/1")
+
+    (evidence,) = response.json()["evidence"]
+    assert (evidence["label"], evidence["kind"], evidence["text"]) == ("step 0, the retry asked of lookup", "retried-return", "no city named x")
 
 
 async def test_the_evidence_of_a_tool_return_holding_json_renders_it_as_a_tree(tmp_path: Path) -> None:

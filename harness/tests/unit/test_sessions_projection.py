@@ -109,7 +109,7 @@ async def test_a_second_turns_snapshot_that_dropped_two_old_messages_before_its_
         parts=[
             ToolReturnPart(
                 tool_name="read_file",
-                content="bad arguments",
+                content=[{"type": "missing", "loc": ["path"], "msg": "Field required", "input": {}}],
                 tool_call_id="call-1",
                 outcome="retried",
                 retry=RetryInfo(cause="validation_error"),

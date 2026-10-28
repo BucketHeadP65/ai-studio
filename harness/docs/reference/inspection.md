@@ -83,7 +83,7 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 | `find(text, run=None, offset=0)` | Up to 50 bounded matches across messages, instructions and tool metadata, with exact follow-up reads centered on the match. |
 | `earlier_runs(offset=0)` | Earlier runs from the same conversation, newest first, in bounded pages. |
 
-Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts. The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
+Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 

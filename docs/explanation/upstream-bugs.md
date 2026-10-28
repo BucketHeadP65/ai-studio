@@ -263,10 +263,13 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   now always its return, the inspection's rules, views and taxonomy, `core.ai.history.message_key`, the harness session
   rescue and pending calls, the inspection API's evidence kinds, the SPA's inspector trace and turn inspector), and
   engram's seen recall skips a retried return, which 2.60 would otherwise read as a tool result. By the owner's ruling
-  `schema_rejected_arguments` counts only a `validation_error`, and a tool that ran and asked for a retry is the new
-  `tool_refused_call` symptom. Both show in the tool return, and `unknown_tool`, `unavailable_tool` and a retry with no
-  cause count as neither. Stored retries were moved forward by a one-off script (the record's forms, keys and
-  checkpoint digests, the session projection, the run archive), not read by a compatibility branch.
+  `schema_rejected_arguments` counts a call no tool ran for (`validation_error`, and by the controller's ruling
+  `unknown_tool` and `unavailable_tool`), and a call that passed the schema before the tool, a guard or its own check
+  asked for it again (`model_retry`) is the new `tool_refused_call` symptom. Both show in the tool return. Neither
+  counts an output tool's retry, which an output validator or the output's schema asks for, nor a retry with no
+  cause. The inspection views read the instruction changes 2.60 sends (`InstructionDeltaPart`). Stored retries were
+  moved forward by a one-off script (the record's forms, keys and checkpoint digests, the session projection, the run
+  archive, and the stored leads and findings a tool refusal produced), not read by a compatibility branch.
 - **A dumped `ToolReturnPart` carries a `retry` field** (pydantic-ai 2.60.0). Every tool return now dumps `"retry": null`,
   so a step's checkpoint digest, which digests the dumped messages, differs under 2.60 from the one 2.59 stored, and a
   durable run's next turn would refuse the checkpoint. The same one-off script readdresses every completed continuation
@@ -274,9 +277,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   which costs space, never correctness.
 - **The bundled memory stores search only the files directly under a prefix** (pydantic-ai-harness 0.60.0). A deeper
   folder is skipped as another scope, so a search over a scope found none of the harness's notes, which sit in category
-  folders. The harness's `NoteMemory` searches each category
-  folder of its scope and merges the matches (UE-23). The agent-memory store's ranked search, which the global and
-  project mounts use, was never affected.
+  folders. The agent-memory store's ranked search, which the global and project mounts use, was never affected and
+  stays one search per call. The store's fallback without ranking, the scratchpad's in-memory store and any other
+  bundled store are searched one category folder at a time and the matches merged (UE-23).
 - **A framework capability's dynamic instructions are framed as a `<context id="...">` element** (pydantic-ai 2.60.0).
   Built-in and harness capabilities now default a computed instruction block to `on_change='append'`, so a later change
   is appended as an `InstructionDeltaPart` instead of rewriting the cached prefix, and the prefix renders each such block

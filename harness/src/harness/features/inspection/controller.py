@@ -31,7 +31,7 @@ from core.ai.transcripts.contracts import UNREADABLE, RunFacts, TranscriptLoader
 from core.cqrs.contracts import JobQueries
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, ToolReturnPart
 from wireup.integration.fastapi import WireupRoute
 
 from harness.domain.contracts import ConversationMessages
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from core.ai.inspection.contracts import StoredBlame, StoredFinding, StoredLead, StoredQuestion
     from core.ai.transcripts.contracts import RunEmptyError, Span, Transcript
     from core.cqrs.contracts import Job
-    from pydantic_ai.messages import ModelMessage
+    from pydantic_ai.messages import ModelMessage, ModelRequestPart, ModelResponsePart
 
 JOBS_PER_KEY: Final = 5
 """How many attempts of one command a run's overview carries, newest first."""
@@ -94,6 +94,11 @@ def _root_cause_text(name: str, taxonomy: Taxonomy) -> str:
         return taxonomy.root_cause(name).meaning
     except KeyError:
         return ""
+
+
+def _evidence_kind(part: ModelRequestPart | ModelResponsePart) -> str:
+    """The kind an evidence span is served with: `retried-return` for a tool return asking for its call again, else the part's kind."""
+    return "retried-return" if isinstance(part, ToolReturnPart) and part.outcome == "retried" else part.part_kind
 
 
 def _symptom_text(name: str, taxonomy: Taxonomy) -> str:
@@ -394,7 +399,7 @@ class InspectionController:
                     EvidenceView(span=_span_text(span), label=f"step {span.step}", kind="unreadable", text="this span is not in the run")
                 )
             else:
-                rendered.append(EvidenceView(span=_span_text(span), label=label_of(span, part), kind=part.part_kind, text=shown(part)))
+                rendered.append(EvidenceView(span=_span_text(span), label=label_of(span, part), kind=_evidence_kind(part), text=shown(part)))
         return rendered
 
     async def _jobs_of(self, source: str, lead_ids: Sequence[int]) -> list[JobView]:

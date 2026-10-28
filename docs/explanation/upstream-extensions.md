@@ -296,17 +296,19 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   on a usage of their own and off the run's `tool_calls_limit` (0.59.0 documents that they count, and offers no way out).
   The setting a caller compares runs under should mean the same thing with code mode on and off.
 
-### UE-23. `NoteMemory` (harness): memory notes in category folders, searched one folder at a time
+### UE-23. `NoteMemory` (harness): memory notes in category folders, searched across every folder
 
 - **What:** pydantic-ai-harness's `Memory` keeps flat files directly in a scope. `NoteMemory` keeps each note at
   `<category>/<slug>.md` inside its scope (categories world, project and reference, from `engram.agent_memory`), names a
   note by `category` and `slug` or by that relative path, and links every note in the `MEMORY.md` it injects. Since 0.60.0
   the bundled stores search only the files directly under the prefix they are given and skip a deeper folder as another
-  scope, so `search_memory` searches each category folder of the scope, ranks the matches by score and bounds them to the
-  capability's result count and characters.
-- **Where:** `harness/src/harness/features/projects/memory.py` (`NoteToolset`, `NoteMemory`, `memory_mounts`), tests in
-  `harness/tests/unit/features/projects/test_memory.py`.
-- **Since:** the category grammar since the memory mounts landed, the search by category folder since 2026-10-23.
+  scope. `search_memory` therefore makes one search on engram's agent-memory store, which ranks every category folder
+  in one ranked search and searches its inner store folder by folder when it has no ranking, and searches folder by
+  folder on any other store (`engram.agent_memory.search_categories`: each category folder at once, the matches ranked
+  together and cut to one search's result count and characters).
+- **Where:** `harness/src/harness/features/projects/memory.py` (`NoteToolset`, `NoteMemory`, `memory_mounts`),
+  `engram/src/engram/agent_memory/service.py` (`search_categories`, `EngramMemoryStore.search`), tests in
+  `harness/tests/unit/features/projects/test_memory.py` and `engram/tests/unit/engram/agent_memory/test_store.py`.
+- **Since:** the category grammar since the memory mounts landed, the search across category folders since 2026-10-23.
 - **Upstream candidate:** later. A store protocol that tells a subfolder of one scope from a nested scope would let a
-  note grammar with folders search in one call.
-
+  note grammar with folders search in one call on every store.
