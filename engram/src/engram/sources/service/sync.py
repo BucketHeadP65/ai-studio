@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from core.cqrs.contracts import Command, Event
 
     from engram.sources.domain.mirror import MirrorFile
-    from engram.sources.domain.source_item import SourceItem
+    from engram.sources.domain.source_item import SourceItem, UnresolvedItem
     from engram.sources.internal_contracts import Connector, DocumentConverter, MirrorStore, SyncHandler
 
 _logger = get_logger(__name__)
@@ -132,8 +132,9 @@ class SyncMirrorsHandler:
         """Run one sync pass (dry or applying) and return its `SyncReport`.
 
         A `limit` slices the item list to a partial backfill and disables orphan archiving. The dry
-        run mirrors the applying run exactly, so its plan is a faithful preview of what an applying
-        run would do. An item with no live mirror of its own whose source another active mirror
+        run lists through the connector's preview, so it fetches, resolves and writes nothing, and it
+        plans the items at hand exactly as an applying run would. The rows an applying run would resolve
+        first land in `would_resolve`, and a mirror of one is never planned as an orphan. An item with no live mirror of its own whose source another active mirror
         already holds (any identifier `source_identities` names) is never converted or written and lands in
         `already_mirrored`, and so does a second item of one source within the run. In an applying run,
         an item with a missing or unreadable PDF lands in
@@ -149,13 +150,13 @@ class SyncMirrorsHandler:
             The run's report.
         """
         self._emit(SyncStarted())
-        items = await self._connector.list_items_with_pdf()
-        items = items[: command.limit]
         archives_orphans = full_run_archives(command)
         if command.dry_run:
-            report = await self._plan(items, include_orphans=archives_orphans)
+            preview = await self._connector.preview_items()
+            report = await self._plan(list(preview.items)[: command.limit], include_orphans=archives_orphans, would_resolve=preview.would_resolve)
         else:
-            report = await self._apply(items, archive_orphans=archives_orphans)
+            items = await self._connector.list_items_with_pdf()
+            report = await self._apply(items[: command.limit], archive_orphans=archives_orphans)
         self._emit(SyncCompleted(report=report))
         return report
 
@@ -266,8 +267,8 @@ class SyncMirrorsHandler:
 
     # -- dry run ---------------------------------------------------------------
 
-    async def _plan(self, items: list[SourceItem], *, include_orphans: bool) -> SyncReport:
-        """Compute the per-item plan with zero writes or conversions (the dry run)."""
+    async def _plan(self, items: list[SourceItem], *, include_orphans: bool, would_resolve: tuple[UnresolvedItem, ...]) -> SyncReport:
+        """Compute the per-item plan with zero writes or conversions (the dry run), a row awaiting resolution being no orphan."""
         index = await self._store.load_index()
         held = mirrors_by_identity(index)
         now = self._clock()
@@ -293,14 +294,19 @@ class SyncMirrorsHandler:
             )
             _hold(held, item)
         if include_orphans:
-            present_keys = {item.provider_key for item in items}
+            present_keys = {item.provider_key for item in items} | {row.key for row in would_resolve}
             planned.extend(
                 PlannedAction(key=key, title=_ORPHAN_TITLE, action=SyncAction.DELETE)
                 for key, mirror in self._mine(index).items()
                 if should_archive(mirror, present_keys=present_keys)
             )
         return SyncReport(
-            dry_run=True, planned=tuple(planned), unavailable=tuple(unavailable), too_old=tuple(too_old), already_mirrored=already_mirrored
+            dry_run=True,
+            planned=tuple(planned),
+            would_resolve=would_resolve,
+            unavailable=tuple(unavailable),
+            too_old=tuple(too_old),
+            already_mirrored=already_mirrored,
         )
 
     def _emit(self, event: Event) -> None:
@@ -362,6 +368,7 @@ class MultiConnectorSync:
             already_mirrored={key: holder for r in reports for key, holder in r.already_mirrored.items()},
             dry_run=command.dry_run,
             planned=tuple(p for r in reports for p in r.planned),
+            would_resolve=tuple(row for r in reports for row in r.would_resolve),
             created_by_connector={name: report.created for name, report in zip(self._handlers, reports, strict=True) if report.created},
         )
 

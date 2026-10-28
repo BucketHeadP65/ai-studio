@@ -220,12 +220,12 @@ class TestTheHeldBackKeySetReadsTheSpecsKeyField:
         return resolve((note,)).notes[0]
 
     def test_a_citation_under_the_declared_field_holds_the_row_back(self) -> None:
-        deletable = _deletable_source_keys(self._dirty_set(), clean=(), dirty_notes=(self._note(),), source_key_field="source_path", digest_link_field="")
+        deletable = _deletable_source_keys(self._dirty_set(), given_up=frozenset(), loaded={}, clean=(), dirty_notes=(self._note(),), source_key_field="source_path", digest_link_field="")
 
         assert deletable == set()
 
     def test_the_same_note_under_another_key_field_holds_nothing_back(self) -> None:
-        deletable = _deletable_source_keys(self._dirty_set(), clean=(), dirty_notes=(self._note(),), source_key_field="zotero_key", digest_link_field="")
+        deletable = _deletable_source_keys(self._dirty_set(), given_up=frozenset(), loaded={}, clean=(), dirty_notes=(self._note(),), source_key_field="zotero_key", digest_link_field="")
 
         assert deletable == {"Sources/handbook.md"}
 
@@ -235,11 +235,24 @@ class TestTheHeldBackKeySetReadsTheSpecsKeyField:
         )
         note = resolve((KnowledgeBaseNote(frontmatter=frontmatter, sections=(), claims=(), source_path="Wiki/post.md"),)).notes[0]
 
-        deletable = _deletable_source_keys(self._dirty_set(), clean=(), dirty_notes=(note,), source_key_field="source_path", digest_link_field="derived_from")
+        deletable = _deletable_source_keys(self._dirty_set(), given_up=frozenset(), loaded={}, clean=(), dirty_notes=(note,), source_key_field="source_path", digest_link_field="derived_from")
+
+        assert deletable == set()
+
+    def test_a_key_a_mirror_still_loads_is_held_back(self) -> None:
+        deletable = _deletable_source_keys(
+            self._dirty_set(),
+            given_up=frozenset(),
+            loaded={"Sources/Handbook renamed.md": "Sources/handbook.md"},
+            clean=(),
+            dirty_notes=(),
+            source_key_field="",
+            digest_link_field="",
+        )
 
         assert deletable == set()
 
     def test_a_knowledge_base_declaring_no_key_field_holds_nothing_back(self) -> None:
-        deletable = _deletable_source_keys(self._dirty_set(), clean=(), dirty_notes=(self._note(),), source_key_field="", digest_link_field="")
+        deletable = _deletable_source_keys(self._dirty_set(), given_up=frozenset(), loaded={}, clean=(), dirty_notes=(self._note(),), source_key_field="", digest_link_field="")
 
         assert deletable == {"Sources/handbook.md"}

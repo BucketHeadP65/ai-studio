@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Literal, NoReturn
 
 import typer
 
-from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
+from asyncpg.exceptions import InsufficientPrivilegeError, InvalidCatalogNameError, InvalidPasswordError
 from core.ai.retrieval.contracts import FeedbackEntry
 from core.connection_failures import connection_failure_message
 from core.cqrs.contracts import ImmediateWake, JobQueries, MemoryJobs, MessageBus, Worker
@@ -29,6 +29,7 @@ from engram.indexing.contracts import IndexKnowledgeBase, IndexReport, Knowledge
 from engram.init.contracts import code_head_revision
 from engram.kb import contracts as kb
 from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError
 
 from studio.knowledge_base.container import create_container, dispose_container
 from studio.knowledge_base.refresh.contracts import REFRESH_KIND, refresh_history
@@ -39,7 +40,7 @@ from studio.knowledge_base.settings import (
     find_knowledge_base_root,
     knowledge_base_slug,
 )
-from studio.knowledge_base.wiring.contracts import AdminSqlGateway
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, unreachable_cause
 from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
@@ -50,11 +51,6 @@ if TYPE_CHECKING:
     from engram.indexing.contracts import ValidationIssue
 
     from studio.knowledge_base.settings import ApplicationSettings
-
-# The errors a failed connection to Postgres raises. A dead port and an unknown host raise an `OSError`
-# subtype (`ConnectionRefusedError`, `socket.gaierror`), a wrong password and a wrong database name raise
-# an asyncpg error. A query error is not one of them, so a missing schema still reaches the preflight.
-_UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (OSError, InvalidPasswordError, InvalidCatalogNameError)
 
 UnreachableReason = Literal["connection refused", "host not found", "timed out", "authentication failed", "database does not exist"]
 
@@ -111,10 +107,29 @@ def _fail(message: str) -> NoReturn:
     raise typer.Exit(code=1)
 
 
+def first_reason(error: ValueError) -> str:
+    """One line saying why a value was refused: a validation error's first problem, else the error's first line.
+
+    Args:
+        error: The refusal, a pydantic `ValidationError` or any other `ValueError`.
+
+    Returns:
+        The line, with pydantic's `Value error, ` prefix dropped.
+    """
+    if isinstance(error, ValidationError):
+        first = error.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        reason = first["msg"].removeprefix("Value error, ")
+        return f"{where}: {reason}" if where else reason
+    lines = str(error).splitlines()
+    return lines[0] if lines else type(error).__name__
+
+
 def load_knowledge_base_schema_or_fail(knowledge_base_path: Path) -> kb.KnowledgeBaseSchema:
-    """Load a knowledge base's schema, or print why it is missing and exit with code 1.
+    """Load a knowledge base's schema, or print why it is missing or does not load and exit with code 1.
 
     A knowledge base with no `knowledge-base-schema.json` prints the error's own message, which names the fix, and no traceback.
+    A schema that does not parse or validate prints one line naming the file and the first problem.
 
     Args:
         knowledge_base_path: The knowledge base root.
@@ -126,6 +141,8 @@ def load_knowledge_base_schema_or_fail(knowledge_base_path: Path) -> kb.Knowledg
         return kb.load_knowledge_base_schema(knowledge_base_path)
     except kb.KnowledgeBaseSchemaMissingError as exc:
         _fail(str(exc))
+    except ValueError as exc:
+        _fail(f"The knowledge base schema at {knowledge_base_path / 'knowledge-base-schema.json'} does not load: {first_reason(exc)}")
 
 
 def resolve_partition(explicit: str | None, schema: kb.KnowledgeBaseSchema) -> str:
@@ -181,6 +198,23 @@ def _mapped_reason(error: Exception) -> UnreachableReason | None:
     if isinstance(error, socket.gaierror):
         return "host not found"
     return None
+
+
+def is_permission_refusal(error: BaseException) -> bool:
+    """Whether `error` is, or was raised from, Postgres refusing the connected role a privilege it lacks.
+
+    Args:
+        error: The error a database read raised.
+
+    Returns:
+        True when the refusal is anywhere in the error's chain of causes.
+    """
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, InsufficientPrivilegeError):
+            return True
+        current = current.__cause__
+    return False
 
 
 def unreachable_reason(error: Exception) -> str:
@@ -321,8 +355,11 @@ async def announce_db(
             code_revision=code_head_revision(),
             last_run=await _last_run_of(container, active),
         )
-    except _UNREACHABLE_ERRORS as exc:
-        typer.echo(unreachable_line(database, exc), err=err)
+    except (*UNREACHABLE_ERRORS, DBAPIError) as exc:
+        cause = unreachable_cause(exc)
+        if cause is None:
+            raise
+        typer.echo(unreachable_line(database, cause), err=err)
         return None
     application = active.application
     rebuilds_everything = indexer_version_changed(identity.indexer_version, application.infrastructure.azure_openai, application.ingestion)

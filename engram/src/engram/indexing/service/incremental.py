@@ -114,7 +114,9 @@ async def run_incremental(
     """Reindex only the dirty set in one transaction and return its report.
 
     You must call it only when the stored fingerprint matches and the manifest is not empty.
-    Pages that vanished or were renamed away are deleted, and every write is scoped to the command's collection.
+    Pages that vanished or were renamed away are deleted. So is the source row of each mirror removed, no longer
+    loadable or re-keyed, unless a mirror read this run still loads its key or a surviving page cites it. Every write
+    is scoped to the command's collection.
     When `cmd.embed` is set, every file owning a row with no embedding joins the dirty set, and the changed
     rows are embedded after the load. The `PagesLoaded` and `CitingPagesChanged` events commit with the rows.
 
@@ -126,8 +128,9 @@ async def run_incremental(
             section over the maximum chunk size.
 
     Returns:
-        The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `validation` holding
-        the dirty set's issues and `standing_validation` every issue stored for the collection once the load committed.
+        The report, with `mode="incremental"`, `skipped` counting the manifest files left untouched, `pruned` counting the
+        child rows reconciled away, the pages and claims deleted and the source rows deleted, `validation` holding the dirty set's issues and
+        `standing_validation` every issue stored for the collection once the load committed.
     """
     collection = cmd.collection
     files = _read_files(deps.kb_reader, collection)
@@ -146,6 +149,10 @@ async def run_incremental(
         widening = await _plan_embed_widening(embed_stage, clean=clean, stored=stored, collection=collection)
         diff = _widen_diff(diff, widening.content_changed)
         rebuild_about = widening.rebuild_about
+    read_mirrors = _all_mirrors(files)
+    loaded = _loaded_keys(read_mirrors)
+    # A mirror still on disk that loads a key a removed or re-keyed mirror gave up is loaded again, so its row holds its own text.
+    diff = _widen_diff(diff, _paths_sharing(_given_up_keys(diff, stored, loaded), loaded, diff))
 
     old_surfaces = _old_surfaces(clean, stored)
     reparse_notes = _parse_dirty_notes(frozenset({*diff.added, *diff.content_changed}), files, deps.spec).notes
@@ -167,7 +174,6 @@ async def run_incremental(
     index = build_link_index_from_pages(_index_base(clean, dirty_set)).merge(build_link_index(dirty_notes))
     resolved = resolve_with_index(dirty_notes, index, relations=deps.spec.relations)
     other_ids = _other_page_ids(clean, dirty_set, resolved)
-    read_mirrors = _all_mirrors(files)
     mirror_errors = mirror_provider_issues(read_mirrors)
     mirror_texts = {source.source_key: source.text for source in loadable_mirrors(read_mirrors)}
     validation = _incremental_validate(
@@ -212,17 +218,20 @@ async def run_incremental(
         # A parse or mirror error is keyed by its file path, so those paths join the dirty ids and
         # their errors are stored as a full rebuild stores them.
         validation_rows=_validation_rows(validation, row_ids(load.pages) | {issue.page_id for issue in (*parsed.errors, *mirror_errors)}, collection),
-        manifest_rows=_manifest_rows(resolved.notes, hashed, collection),
+        manifest_rows=_manifest_rows(resolved.notes, dirty_mirrors, hashed, collection),
         edge_src_ids=row_ids(load.pages) | dirty_set.deleted_page_ids,
         deleted_page_ids=set(dirty_set.deleted_page_ids),
         deleted_source_keys=_deletable_source_keys(
             dirty_set,
+            given_up=_given_up_keys(diff, stored, loaded),
+            loaded=loaded,
             clean=clean,
             dirty_notes=resolved.notes,
             source_key_field=deps.spec.sources.key_field,
             digest_link_field=deps.spec.sources.digest_link_field,
         ),
         removed_paths=set(diff.removed),
+        unloaded_mirror_paths=_unloaded_mirror_paths(diff, stored, loaded),
     )
     pruned, standing_validation = await _load_dirty(deps, write, collection)
 
@@ -275,6 +284,8 @@ async def preview_dirty_set(cmd: IndexKnowledgeBase, *, deps: IncrementalDeps) -
 
     hashed = {path: _hash_file(path, doc) for path, doc in files.items()}
     diff = compute_diff(stored, hashed)
+    loaded = _loaded_keys(_all_mirrors(files))
+    diff = _widen_diff(diff, _paths_sharing(_given_up_keys(diff, stored, loaded), loaded, diff))
 
     clean = deps.clean_page_view()
     old_surfaces = _old_surfaces(clean, stored)
@@ -582,17 +593,50 @@ def _other_page_ids(clean: Sequence[CleanPage], dirty_set: DirtySet, resolved: R
     return frozenset(page.id for page in clean if page.id not in dirty_ids and page.id not in dirty_set.deleted_page_ids)
 
 
-def _deletable_source_keys(
-    dirty_set: DirtySet, *, clean: Sequence[CleanPage], dirty_notes: Sequence[ResolvedNote], source_key_field: str, digest_link_field: str
+def _loaded_keys(mirrors: Sequence[MirrorDoc]) -> dict[str, str]:
+    """The source key each loadable mirror read this run produces, by its path."""
+    return {mirror.path: mirror.source_key for mirror in loadable_mirrors(mirrors)}
+
+
+def _given_up_keys(diff: ManifestDiff, stored: Mapping[str, ManifestEntry], loaded: Mapping[str, str]) -> frozenset[str]:
+    """The stored keys of the removed mirror paths and of the changed ones that now load no mirror or another key."""
+    keys: set[str] = set()
+    for path in (*diff.removed, *diff.content_changed):
+        entry = stored.get(path)
+        if entry is not None and entry.kind is FileType.SOURCE and entry.source_key and loaded.get(path) != entry.source_key:
+            keys.add(entry.source_key)
+    return frozenset(keys)
+
+
+def _paths_sharing(keys: frozenset[str], loaded: Mapping[str, str], diff: ManifestDiff) -> frozenset[str]:
+    """The unchanged loadable mirror paths whose key is one of `keys`."""
+    unchanged = set(diff.unchanged)
+    return frozenset(path for path, key in loaded.items() if key in keys and path in unchanged)
+
+
+def _unloaded_mirror_paths(diff: ManifestDiff, stored: Mapping[str, ManifestEntry], loaded: Mapping[str, str]) -> set[str]:
+    """The changed mirror paths the manifest holds that load no mirror this run, whose manifest rows go."""
+    return {path for path in diff.content_changed if (entry := stored.get(path)) is not None and entry.kind is FileType.SOURCE and path not in loaded}
+
+
+def _deletable_source_keys(  # noqa: PLR0913 (one param per input the citation check reads)
+    dirty_set: DirtySet,
+    *,
+    given_up: frozenset[str],
+    loaded: Mapping[str, str],
+    clean: Sequence[CleanPage],
+    dirty_notes: Sequence[ResolvedNote],
+    source_key_field: str,
+    digest_link_field: str,
 ) -> set[str]:
-    """The removed source keys no surviving page still cites, which the load may delete."""
+    """The given-up source keys that no mirror loads this run and no surviving page still cites, which the load may delete."""
     surviving_refs = {page.source_id for page in clean if page.source_id and page.id not in dirty_set.deleted_page_ids}
     surviving_refs |= {
         key
         for resolved in dirty_notes
         if (key := cited_mirror_key(resolved.note.frontmatter, key_field=source_key_field, digest_link_field=digest_link_field))
     }
-    return set(dirty_set.deleted_source_keys) - surviving_refs
+    return (set(dirty_set.deleted_source_keys) | given_up) - surviving_refs - set(loaded.values())
 
 
 def _incremental_validate(  # noqa: PLR0913 (one param per validation input, as validate takes them)
@@ -700,8 +744,8 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
         await uow.claim_qualifiers.replace_for_pages(load.claim_qualifiers, write.edge_src_ids, collection=collection)
         pruned += await uow.claims.prune_for_pages(row_ids(load.claims), dirty_page_ids, collection=collection)
 
-        await uow.pages.delete_by_ids(write.deleted_page_ids, collection=collection)
-        await uow.sources.delete_sources_by_keys(write.deleted_source_keys, collection=collection)
+        pruned += await uow.pages.delete_by_ids(write.deleted_page_ids, collection=collection)
+        pruned += await uow.sources.delete_sources_by_keys(write.deleted_source_keys, collection=collection)
 
         pruned += await uow.sections.prune_for_pages(section_ids, dirty_page_ids, collection=collection)
 
@@ -718,7 +762,7 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
         await uow.validation_store.replace_for_pages(write.validation_rows, validation_keys, collection=collection)
         standing_validation = await uow.validation_store.whole_report(collection)
         await uow.manifest.upsert_many(write.manifest_rows, collection=collection)
-        await uow.manifest.delete_paths(write.removed_paths, collection=collection)
+        await uow.manifest.delete_paths(write.removed_paths | write.unloaded_mirror_paths, collection=collection)
         # Stamp the index time and the knowledge base root on the fingerprint row, which exists on this path.
         await uow.fingerprint.touch(collection, knowledge_base_root=str(deps.kb_reader.root))
         # Keep the page-type contracts current on every run.
@@ -729,7 +773,7 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
             await uow.edges.refresh_graph()
 
         # The events commit in the same transaction as the rows they describe. `pruned` counts the
-        # child rows the reconcile deleted.
+        # child rows the reconcile deleted, the deleted pages with their claims and the deleted source rows.
         uow.record(
             PagesLoaded(
                 collection=collection,
@@ -750,8 +794,10 @@ def _validation_rows(validation: ValidationReport, dirty_page_ids: set[str], col
     return [validation_row(issue, collection) for issue in (*validation.errors, *validation.warnings) if issue.page_id in dirty_page_ids]
 
 
-def _manifest_rows(resolved_notes: Sequence[ResolvedNote], hashed: Mapping[str, HashedFile], collection: str) -> list[Row]:
-    """One `kb.index_manifest` row per dirty note, from the hash of its exact source path."""
+def _manifest_rows(
+    resolved_notes: Sequence[ResolvedNote], mirrors: Sequence[MirrorDoc], hashed: Mapping[str, HashedFile], collection: str
+) -> list[Row]:
+    """One `kb.index_manifest` row per dirty note and per loaded dirty mirror, from the hash of its exact path."""
     rows: list[Row] = []
     for resolved_note in resolved_notes:
         note = resolved_note.note
@@ -769,6 +815,19 @@ def _manifest_rows(resolved_notes: Sequence[ResolvedNote], hashed: Mapping[str, 
                 "source_key": None,
             }
         )
+    rows.extend(
+        {
+            "collection": collection,
+            "path": hashed_file.path,
+            "kind": FileType.SOURCE.value,
+            "content_hash": hashed_file.content_hash,
+            "identity_hash": hashed_file.identity_hash,
+            "page_id": None,
+            "source_key": mirror.source_key,
+        }
+        for mirror in mirrors
+        if (hashed_file := hashed.get(mirror.path)) is not None
+    )
     return rows
 
 
@@ -804,7 +863,7 @@ class _FileDoc:
 
 @dataclass(frozen=True, slots=True)
 class _DirtyWrite:
-    """The rows `_load_dirty` writes and the page ids, source keys and paths it deletes or replaces."""
+    """The rows `_load_dirty` writes and the page ids, source keys, paths and manifest rows it deletes or replaces."""
 
     load: LoadSet
     link_ref_rows: list[Row]
@@ -814,3 +873,4 @@ class _DirtyWrite:
     deleted_page_ids: set[str]
     deleted_source_keys: set[str]
     removed_paths: set[str]
+    unloaded_mirror_paths: set[str]

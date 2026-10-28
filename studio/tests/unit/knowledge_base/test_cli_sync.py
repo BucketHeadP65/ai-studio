@@ -14,14 +14,28 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from core.cqrs.contracts import JobQueries, MemoryJobs, MessageBus
 from engram.indexing.contracts import KnowledgeBaseReader
+from engram.kb.contracts import KnowledgeBaseSchema
 from engram.retrieval.domain import SqlResult
-from engram.sources.contracts import ConversionError, MirrorStatus, SyncMirrors, SyncMirrorsHandler, SyncReport
+from engram.sources.contracts import (
+    ConversionError,
+    MirrorStatus,
+    ScanWatchList,
+    ScanWatchListHandler,
+    SourceQueue,
+    SourceType,
+    SyncMirrors,
+    SyncMirrorsHandler,
+    SyncReport,
+    UnresolvedItem,
+    WatchListFile,
+)
 from engram.sources.service.sync import pdf_sha256
 from engram.testing.factories.mirror import MirrorFileFactory
 from engram.testing.factories.source_item import SourceItemFactory
@@ -31,15 +45,16 @@ from engram.testing.fakes.conversion import FakeDocumentConverter
 from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.fakes.mirror import FakeMirrorStore
+from engram.testing.fakes.watch_list import FakeScanner
 from engram.testing.specs import research_spec
 from typer.testing import CliRunner
 
 from studio.knowledge_base.cli import app
+from studio.knowledge_base.settings import KnowledgeBaseSettings
+from studio.knowledge_base.watch_list import WATCH_LIST_PATH
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from engram.sources.contracts import SourceItem
 
 runner = CliRunner()
@@ -116,6 +131,7 @@ class SyncContainerFactory:
     def __init__(
         self, *, repo: FakeConnector, converter: FakeDocumentConverter, store: FakeMirrorStore, max_age_years: int | None = None
     ) -> None:
+        self.connector = repo
         self.handler = SyncMirrorsHandler(repo, converter, store, max_age_years=max_age_years)
         self._bus = MessageBus({SyncMirrors: self.handler}, {})
 
@@ -268,6 +284,18 @@ class TestDryRun:
         assert store.deleted == []
         assert converter.call_count == 0
 
+    def test_lists_each_row_a_real_run_would_resolve_first(self, tmp_path: Path):
+        pending = UnresolvedItem(connector="intake", key="x-1234", source_type=SourceType.POST, url="https://x.com/someone/status/1234")
+        factory = _factory([_item(tmp_path, key="ITEM0001")], FakeMirrorStore())
+        factory.connector.would_resolve.append(pending)
+
+        result = runner.invoke(app, ["sync", "--dry-run"], obj=factory)
+
+        assert result.exit_code == 0
+        assert "Would resolve first (dry run): 1" in result.stdout
+        assert "intake  x-1234  post  https://x.com/someone/status/1234" in result.stdout
+        assert factory.connector.listings == 0
+
     def test_missing_pdf_is_listed_distinctly_and_does_not_abort(self, tmp_path: Path):
         items = [_item(tmp_path, key="ITEM0001"), _item_without_pdf(tmp_path, key="GONEPDF1")]
 
@@ -279,6 +307,67 @@ class TestDryRun:
         assert "unavailable" in result.stdout.lower()
         assert "ITEM0001" in result.stdout
         assert "create" in result.stdout.lower()
+
+
+class WatchListContainer(FakeContainer):
+    """A fake container that also serves the knowledge base's schema and folder, so the sync reaches its watch list."""
+
+    def __init__(self, handler: object, bus: MessageBus, root: Path, scan: ScanWatchListHandler) -> None:
+        super().__init__(handler, bus)
+        self._root = root
+        self._scan = scan
+
+    async def get(self, key: type) -> object:
+        if key is KnowledgeBaseSchema:
+            return research_spec()
+        if key is KnowledgeBaseSettings:
+            return KnowledgeBaseSettings(path=self._root)
+        if key is ScanWatchListHandler:
+            return self._scan
+        return await super().get(key)
+
+
+class TestWatchListOnDryRun:
+    """The watch list of a knowledge base whose rows an `x` scanner and an `xml` scanner read, and one a `podcast` scanner nobody built would."""
+
+    def _container(self, root: Path, scanner: FakeScanner) -> WatchListContainer:
+        watch_list = WatchListFile(root / WATCH_LIST_PATH)
+        watch_list.add("x", "@someone", max_items=5)
+        watch_list.add("xml", "https://example.org/feed.xml")
+        watch_list.add("podcast", "feed-1")
+        queue = SourceQueue(root / "_meta" / "source-queue.yaml", connectors=())
+        scan = ScanWatchListHandler(watch_list, {"x": scanner, "xml": scanner}, queue)
+        sync = RecordingCommandHandler(result=SyncReport(dry_run=True))
+        return WatchListContainer(sync, MessageBus({SyncMirrors: sync, ScanWatchList: scan}, {}), root, scan)
+
+    def test_a_dry_run_lists_each_row_and_calls_no_scanner(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        scanner = FakeScanner()
+        container = self._container(root, scanner)
+        watch_list_text = (root / WATCH_LIST_PATH).read_text(encoding="utf-8")
+
+        result = runner.invoke(app, ["sync", "--dry-run"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert scanner.since == []
+        assert "x @someone" in result.stdout
+        assert "xml https://example.org/feed.xml\n" in result.stdout
+        assert "podcast feed-1 (no scanner)" in result.stdout
+        assert (root / WATCH_LIST_PATH).read_text(encoding="utf-8") == watch_list_text
+        assert not (root / "_meta" / "source-queue.yaml").exists()
+
+    def test_a_real_sync_scans_each_row(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        scanner = FakeScanner()
+        container = self._container(root, scanner)
+
+        result = runner.invoke(app, ["sync"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert len(scanner.since) == 2
+        assert "Scanned the watch list" in result.stdout
 
 
 class TestDispatch:

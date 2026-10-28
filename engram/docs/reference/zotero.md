@@ -43,7 +43,7 @@ the `sync` slice.
 
 | Surface | Entry | Defined in |
 |---|---|---|
-| Programmatic (port) | `Connector.list_items_with_pdf()` / `.get(provider_key)` | `engram/src/engram/sources/internal_contracts.py` |
+| Programmatic (port) | `Connector.list_items_with_pdf()` / `.preview_items()` / `.get(provider_key)` | `engram/src/engram/sources/internal_contracts.py` |
 | Adapter | `SqliteZoteroConnector`, built by `SqliteZoteroConnector.build(resources)` | `connectors/src/engram_connectors/zotero/infrastructure/connector.py` |
 | Registration | the name `zotero` under the `engram.sources.connectors` entry-point group | `connectors/pyproject.toml` |
 | Resolution | `connector_class("zotero")` loads that one entry point, `ConnectorNotInstalledError` when nothing registers it | `engram/src/engram/sources/registry.py` |
@@ -54,7 +54,7 @@ the composition root resolves that string through `engram.sources.registry`, and
 `SqliteZoteroConnector.build(resources)` constructs it from the `SourceResources` object
 (`engram/src/engram/config.py`), reading its own `zotero` settings block through
 `engram_connectors.zotero.domain.library_settings`. `SyncMirrorsHandler`
-then calls `list_items_with_pdf()` once per reconcile (`engram/src/engram/sources/service/sync.py`),
+then calls `list_items_with_pdf()` once per reconcile, or `preview_items()` on a dry run (`engram/src/engram/sources/service/sync.py`),
 and `MultiConnectorSync` (`engram/src/engram/sources/service/sync.py`) runs one handler per declared
 connector when a knowledge base names more than one.
 
@@ -64,6 +64,8 @@ connector when a knowledge base names more than one.
   reads**:
   - `async def list_items_with_pdf(self) -> list[SourceItem]`, every non-trashed
     top-level item that owns a non-trashed PDF attachment with a local file.
+  - `async def preview_items(self) -> ItemPreview`, the same items for a dry run, read from what is at hand
+    with no fetch, model call or write, plus the rows a real listing would resolve first (none for Zotero).
   - `async def get(self, provider_key: str) -> SourceItem | None`, one item by key, or
     `None` if absent / trashed / lacking a PDF.
   - `claims(url)`, `key_for(url)`, `source_type_of(item_type)`, the stateless classification trio every

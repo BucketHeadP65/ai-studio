@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 from core.cqrs.contracts import ImmediateWake, MemoryJobs, MemoryOutbox, MessageBus, Worker
 
-from engram.sources.contracts import ConversionError, MirrorStatus, SyncMirrors, SyncMirrorsHandler, SyncReport
+from engram.sources.contracts import ConversionError, MirrorStatus, SourceType, SyncMirrors, SyncMirrorsHandler, SyncReport, UnresolvedItem
 from engram.sources.domain.sync import PlannedAction, SyncAction, SyncCompleted, SyncStarted, build_frontmatter, decide
 from engram.sources.service.sync import pdf_sha256
 from engram.testing.factories.mirror import MirrorFileFactory
@@ -465,6 +465,37 @@ async def _deliver(bus: MessageBus) -> None:
     outbox = bus.outbox
     assert isinstance(outbox, MemoryOutbox)
     await Worker(jobs=MemoryJobs(), outbox=outbox, bus=bus, wake=ImmediateWake(), name="test").deliver_once()
+
+
+class TestDryRunPreview:
+    """A dry run lists through the connector's preview, never its real listing."""
+
+    _PENDING = UnresolvedItem(connector="fake", key="VID00001", source_type=SourceType.VIDEO, url="https://video.example/watch/1")
+
+    async def test_the_dry_run_never_lists_and_reports_the_rows_awaiting_resolution(self, tmp_path: Path):
+        connector = FakeConnector(items=[_item(tmp_path, key="ITEM0001")], would_resolve=[self._PENDING])
+        handler = SyncMirrorsHandler(connector, FakeDocumentConverter(), FakeMirrorStore())
+
+        report = await handler.handle(SyncMirrors(dry_run=True))
+
+        assert connector.listings == 0
+        assert [row.key for row in report.planned] == ["ITEM0001"]
+        assert report.would_resolve == (self._PENDING,)
+
+    async def test_a_mirror_of_a_row_awaiting_resolution_is_no_orphan(self):
+        store = FakeMirrorStore(index={"VID00001": MirrorFileFactory.build(source_key="VID00001", provider="fake")})
+        connector = FakeConnector(would_resolve=[self._PENDING])
+
+        report = await SyncMirrorsHandler(connector, FakeDocumentConverter(), store).handle(SyncMirrors(dry_run=True))
+
+        assert report.planned == ()
+
+    async def test_an_applying_run_lists_for_real(self, tmp_path: Path):
+        connector = FakeConnector(items=[_item(tmp_path, key="ITEM0001")])
+
+        await SyncMirrorsHandler(connector, FakeDocumentConverter(), FakeMirrorStore()).handle(SyncMirrors())
+
+        assert connector.listings == 1
 
 
 class TestEvents:

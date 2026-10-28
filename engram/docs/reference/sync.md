@@ -40,22 +40,27 @@ Both surfaces dispatch `SyncMirrors` on the knowledge base's `MessageBus`. `buil
 (`studio/src/studio/knowledge_base/container.py`) binds it to the handler `sync_handler_provider`
 (`studio/src/studio/knowledge_base/wiring/sync.py`) provides, a `MultiConnectorSync` over one
 `SyncMirrorsHandler` per declared connector. The CLI scans the watch list, dispatches inline and
-prints a report. The HTTP route queues a `kb.refresh` job, and `studio worker` runs it as
+prints a report. A CLI dry run (`--dry-run`) scans nothing, since a scanner may call a paid model: it
+prints each watch-list row's scanner and ref (marked `(no scanner)` when this host built none for it), then the
+sync's plan. The HTTP route queues a `kb.refresh` job, and `studio worker` runs it as
 `RefreshKnowledgeBaseJob`: when the schema turns sources on, it scans the watch list if there is one
 and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](indexing.md) describes.
 
 ## Public contract
 
-- **Inputs:** `SyncMirrors` (`engram/src/engram/sources/domain/sync.py`). `dry_run` plans
-  without writing or converting. `limit` processes at most N items **and**
+- **Inputs:** `SyncMirrors` (`engram/src/engram/sources/domain/sync.py`). `dry_run` plans from
+  what each connector already holds, through `Connector.preview_items`, with no fetch, no model call,
+  no conversion and no write. A benchmark connector whose dataset was never downloaded downloads it, as
+  a real listing would. `limit` processes at most N items **and**
   disables orphan archiving (a partial view must never archive the rest of the
   library).
 - **Outputs:** `SyncReport` (`engram/src/engram/sources/domain/sync.py`). Per-action counters
   (`created`/`updated`/`archived`/`skipped`), per-item `errors`
   (`SyncError`), an `unavailable` list (items whose attachment path could not
   resolve), `already_mirrored` (each item refused because another active mirror holds its
-  source, mapped to that mirror's key), and dry-run `planned` rows (`PlannedAction` over the `SyncAction`
-  enum). Events `SyncStarted` / `SyncCompleted` (carrying the report) bracket the
+  source, mapped to that mirror's key), dry-run `planned` rows (`PlannedAction` over the `SyncAction`
+  enum), and dry-run `would_resolve` rows (`UnresolvedItem`: the connector, key, source type and URL of each row a
+  real listing would fetch or resolve before planning it). Events `SyncStarted` / `SyncCompleted` (carrying the report) bracket the
   run.
 - **Ports:** the handler drives three protocols, never their
   adapters. `Connector` (`engram/src/engram/sources/internal_contracts.py`, served by a connector in
@@ -86,7 +91,7 @@ and dispatches `SyncMirrors`, and then it indexes, as the [indexing reference](i
 ```mermaid
 flowchart TD
     A[SyncMirrors] --> S([SyncStarted])
-    S --> L["connector.list_items_with_pdf to items[:limit]"]
+    S --> L["connector.list_items_with_pdf, or preview_items on a dry run, to items[:limit]"]
     L --> M{"holder_of: another active mirror holds the source?"}
     M -->|yes| AM[append to already_mirrored]
     M -->|no| H["per item: pdf_sha256 to decide(action)"]
@@ -106,14 +111,17 @@ under another key that already holds the item's source, matched on `source_ident
 the arXiv id, also read from an arXiv DOI, and the lower-cased DOI). An item it names goes to `already_mirrored` and is not
 decided. `decide` (`handlers.py`) is the pure per-item function: CREATE when there is no
 live mirror, RECONVERT when the PDF hash changed, REFRESH when only the metadata
-version changed, else SKIP. A dry run computes the same decisions into
-`report.planned` with **zero** conversions or writes (the marked exit), and
-appends a DELETE row per orphaned mirror only when unlimited.
+version changed, else SKIP. A dry run lists through `preview_items`, so the source-queue connector serves only
+the rows it already cached and the YouTube connector serves none, each naming the rows a real listing would
+fetch or resolve in `would_resolve`. It computes the same decisions for the items at hand into
+`report.planned` with **zero** fetches, model calls, conversions or writes (the marked exit), and
+appends a DELETE row per orphaned mirror only when unlimited, never for a mirror of a row awaiting resolution.
 
 ## Examples
 
 ```bash
-# Preview the plan without writing or converting (never exits non-zero)
+# Preview the plan: the watch-list rows a real run would scan, each item's action and each row a real
+# run would resolve first, with no scan, fetch, model call, conversion or write (never exits non-zero)
 studio sync --dry-run
 
 # Partial backfill of at most 25 items; skips orphan archiving
@@ -124,8 +132,8 @@ studio sync
 ```
 
 ```bash
-# Trigger a sync job over HTTP (returns a Job to poll at /api/jobs/{id})
-curl -X POST localhost:8100/api/jobs/sync -d '{"dry_run": true}'
+# Queue a refresh job over HTTP, which scans, syncs and indexes (poll the returned id at /api/jobs/{id})
+curl -X POST localhost:8100/api/knowledge-bases/research/refresh
 ```
 
 ## Patterns used

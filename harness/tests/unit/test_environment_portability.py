@@ -20,6 +20,7 @@ engram verbatim dies on a `TypeError` naming a keyword the visitor never wrote.
 
 from __future__ import annotations
 
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import asyncpg
@@ -199,17 +200,17 @@ def test_the_knowledge_base_subprocess_inherits_the_override(monkeypatch: pytest
 
 
 def test_the_knowledge_base_subprocess_runs_the_sibling_knowledge_base_cli() -> None:
-    """The cross-process plugin spawns `studio mcp` from the sibling knowledge base checkout.
+    """The cross-process plugin spawns `studio mcp` from the sibling knowledge base checkout, naming the knowledge base it serves.
 
     The knowledge base CLI lives in the `studio` project beside this one, so the transport must run
     from that checkout (where `uv run studio` resolves) -- a transport still naming this
     checkout fails at spawn time, in a subprocess, where the error is a closed stdio pipe
     rather than an import that names what is missing.
     """
-    transport = knowledge_base_stdio_transport()
+    transport = knowledge_base_stdio_transport(knowledge_base=Path("/knowledge-bases/served"))
 
     assert transport.command == "uv"
-    assert transport.args == ["run", "studio", "mcp"]
+    assert transport.args == ["run", "studio", "mcp", "--knowledge-base", "/knowledge-bases/served"]
     assert "engram" not in transport.args
     assert transport.cwd == str(STUDIO_REPO)
 

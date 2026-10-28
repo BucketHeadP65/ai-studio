@@ -18,7 +18,7 @@ import pytest_asyncio
 
 from core.ai.history.contracts import PoolDatabase, create_record_schema
 from core.ai.workflows.contracts import connect
-from engram.testing.infrastructure.knowledge_base_db import pg  # noqa: F401 -- imported to be used as a pytest fixture, never called directly
+from engram.testing.infrastructure.knowledge_base_db import migrated, pg, reader_url  # noqa: F401 (imported to be used as pytest fixtures, never called directly)
 from temporalio.testing import WorkflowEnvironment
 
 from harness.adapters.store import RecordDatabase

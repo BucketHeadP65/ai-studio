@@ -76,10 +76,12 @@ from engram.retrieval.contracts import (
     switch_source,
 )
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
+from engram.retrieval.infrastructure.embedded import slug_only_stamp
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, create_mcp_server
-from engram.sources.contracts import ScanReport, ScanWatchList, SyncMirrors, SyncReport
+from engram.sources.contracts import ScanReport, ScanWatchList, ScanWatchListHandler, SyncMirrors, SyncReport, WatchEntry, WatchListFile
 from pydantic import ValidationError
 from sqlalchemy import NullPool, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from studio.knowledge_base.cli_decisions import decisions_app
@@ -89,7 +91,6 @@ from studio.knowledge_base.cli_init import init_app
 from studio.knowledge_base.cli_note import note_app
 from studio.knowledge_base.cli_source_queue import source_queue_app
 from studio.knowledge_base.cli_support import (
-    _UNREACHABLE_ERRORS,
     FEEDBACK_FILE,
     ActiveKnowledgeBase,
     KnowledgeBaseMissingError,
@@ -101,6 +102,8 @@ from studio.knowledge_base.cli_support import (
     announce_db,
     announce_identity,
     announce_knowledge_base,
+    first_reason,
+    is_permission_refusal,
     knowledge_base_path_origin,
     load_knowledge_base_schema_or_fail,
     read_feedback,
@@ -137,12 +140,12 @@ from studio.knowledge_base.settings import (
 )
 from studio.knowledge_base.source_queue import source_queue_at
 from studio.knowledge_base.watch_list import WATCH_LIST_PATH
-from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
+from studio.knowledge_base.wiring.contracts import UNREACHABLE_ERRORS, AdminSqlGateway, ReaderSqlGateway, SearchReranking, unreachable_cause
 from studio.knowledge_base.wiring.indexing import indexer_version_changed
 
 if TYPE_CHECKING:
     from asyncio.subprocess import Process
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from core.ai.retrieval.contracts import FeedbackCategory, FeedbackSink, KnowledgeBaseStamp, SqlGateway
     from core.cqrs.contracts import JobObserver, JobsAndQueries, Wake
@@ -214,38 +217,63 @@ def _resolve_settings(knowledge_base: str | None, *, cwd: Path) -> ActiveKnowled
     """The settings and the knowledge base that `knowledge_base` names, or the one `cwd` sits in."""
     try:
         root = resolve_knowledge_base_root(knowledge_base, cwd=cwd)
+        knowledge_base_settings = KnowledgeBaseSettings(path=root)
     except KnowledgeBaseMissingError as exc:
         _fail(str(exc))
-    return ActiveKnowledgeBase(application=fetch_application_settings(), knowledge_base=KnowledgeBaseSettings(path=root))
+    except ValidationError as exc:
+        _fail(first_reason(exc))
+    return ActiveKnowledgeBase(application=fetch_application_settings(), knowledge_base=knowledge_base_settings)
 
 
-async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | None, SyncReport]:
-    """Scan the knowledge base's watch list when there is one, then dispatch `command` through the message bus."""
+async def _dispatch_sync(container: Resolver, command: SyncMirrors) -> tuple[ScanReport | _WatchListPlan | None, SyncReport]:
+    """Scan the knowledge base's watch list when there is one, or read its rows on a dry run, then dispatch `command`."""
     bus = await container.get(MessageBus)
-    scan = await _maybe_scan_watch_list(container, bus)
+    watch_list = await _watch_list(container)
+    scan: ScanReport | _WatchListPlan | None = None
+    if watch_list is not None:
+        # A scan calls each row's scanner, and a scanner may call a paid model, so a dry run only reads the rows.
+        if command.dry_run:
+            served = (await container.get(ScanWatchListHandler)).served_scanners
+            scan = _WatchListPlan(rows=tuple(watch_list.entries()), served_scanners=served)
+        else:
+            scan = await _scan_watch_list(bus)
     report = await bus.handle(command)
     if not isinstance(report, SyncReport):  # pragma: no cover (the sync handler returns a SyncReport)
         _fail("sync produced no report.")
     return scan, report
 
 
+@dataclass(frozen=True, slots=True)
+class _WatchListPlan:
+    """The watch-list rows a real sync would scan, and the scanner names this host built."""
+
+    rows: tuple[WatchEntry, ...]
+    served_scanners: frozenset[str]
+
+
 async def _sync_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, command: SyncMirrors, *, collection: str
-) -> tuple[ScanReport | None, SyncReport]:
+) -> tuple[ScanReport | _WatchListPlan | None, SyncReport]:
     """Announce the identity, then dispatch the sync, one event loop for both."""
     await announce_identity(container, settings, collection=collection)
     return await _dispatch_sync(container, command)
 
 
-async def _maybe_scan_watch_list(container: Resolver, bus: MessageBus) -> ScanReport | None:
-    """Scan the knowledge base's watch list, or return `None` when there is no knowledge base, source layer or watch list."""
+async def _watch_list(container: Resolver) -> WatchListFile | None:
+    """The knowledge base's watch list, or `None` when there is no knowledge base, source layer or watch list."""
     try:
         schema = await container.get(KnowledgeBaseSchema)
         knowledge_base = await container.get(KnowledgeBaseSettings)
     except Exception:  # noqa: BLE001 (a resolver with no knowledge base context has nothing to scan)
         return None
-    if not (schema.sources.enabled and (knowledge_base.path / WATCH_LIST_PATH).is_file()):
+    path = knowledge_base.path / WATCH_LIST_PATH
+    if not (schema.sources.enabled and path.is_file()):
         return None
+    return WatchListFile(path)
+
+
+async def _scan_watch_list(bus: MessageBus) -> ScanReport:
+    """Scan every row of the knowledge base's watch list through the message bus."""
     scan = await bus.handle(ScanWatchList())
     if not isinstance(scan, ScanReport):  # pragma: no cover (the scan handler always returns a ScanReport)
         _fail("scan produced no report.")
@@ -259,12 +287,24 @@ def _print_scan_report(report: ScanReport) -> None:
         typer.echo(f"  FAILED {label}: {reason}")
 
 
+def _print_watch_list_rows(plan: _WatchListPlan) -> None:
+    """Echo the watch-list rows a real sync would scan, each as its scanner and ref, marking a row no built scanner serves."""
+    typer.echo(f"Would scan the watch list (dry run): {len(plan.rows)}")
+    for row in plan.rows:
+        unserved = "" if row.scanner in plan.served_scanners else " (no scanner)"
+        typer.echo(f"  {row.scanner} {row.ref}{unserved}")
+
+
 def _print_sync_report(report: SyncReport) -> None:
     """Echo the human-readable sync summary: the plan rows on a dry run, counters otherwise."""
     if report.dry_run:
         typer.echo(f"Planned actions (dry run): {len(report.planned)}")
         for row in report.planned:
             typer.echo(f"  {row.action.value.upper():<9} {row.key}  {row.title}")
+        if report.would_resolve:
+            typer.echo(f"Would resolve first (dry run): {len(report.would_resolve)}")
+            for pending in report.would_resolve:
+                typer.echo(f"  {pending.connector}  {pending.key}  {pending.source_type.value}  {pending.url}")
     else:
         typer.echo(f"Synced: {report.created} created, {report.updated} updated, {report.archived} archived, {report.skipped} skipped")
     if report.unavailable:
@@ -344,7 +384,7 @@ def _read_surfaces(
     active_schema: KnowledgeBaseSchema,
     settings_path: Path,
     reader_gateway: ReadOnlySqlGateway,
-    admin_gateway: SqlGateway,
+    admin_gateway: SqlGateway | None,
     embedder: BatchEmbedder,
     *,
     active_hybrid: bool,
@@ -415,23 +455,32 @@ def _registered_schema(name: str, root: Path, *, notes: list[str]) -> KnowledgeB
         return None
 
 
+def _index_stamp(
+    admin_gateway: SqlGateway, reader: FilesystemKnowledgeBaseReader, *, slug: str, collection: str
+) -> Callable[[], Awaitable[KnowledgeBaseStamp]]:
+    """A stamp that reads the last index and the files moved since it through the admin gateway, on every answer."""
+
+    async def stamp() -> KnowledgeBaseStamp:
+        return await read_stamp(admin_gateway, reader, slug=slug, collection=collection)
+
+    return stamp
+
+
 def _read_surface(
     root: Path,
     schema: KnowledgeBaseSchema,
     reader_gateway: ReadOnlySqlGateway,
-    admin_gateway: SqlGateway,
+    admin_gateway: SqlGateway | None,
     embedder: BatchEmbedder,
     *,
     hybrid: bool,
     rerank: Reranking | None,
 ) -> ReadSurface:
-    """One knowledge base's read route, whose handlers, freshness stamp and facet keys come from its own collection, files and schema."""
+    """One knowledge base's read route, its stamp naming the slug alone when there is no admin gateway to read freshness through."""
     collection = schema.retrieval.collection
     gateway = reader_gateway.for_collection(collection)
     reader = FilesystemKnowledgeBaseReader(root, note_folders=schema.note_folders, note_files=schema.note_files)
-
-    async def stamp() -> KnowledgeBaseStamp:
-        return await read_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)
+    stamp = slug_only_stamp(schema.slug) if admin_gateway is None else _index_stamp(admin_gateway, reader, slug=schema.slug, collection=collection)
 
     return ReadSurface(
         name=schema.slug,
@@ -467,7 +516,9 @@ async def _stored_switches(surface: ReadSurface) -> RetrievalSwitches | None:
         return None
     try:
         return await surface.switch_source()
-    except _UNREACHABLE_ERRORS:
+    except (*UNREACHABLE_ERRORS, DBAPIError) as error:
+        if unreachable_cause(error) is None:
+            raise
         return RetrievalSwitches()
 
 
@@ -483,8 +534,10 @@ async def _build_mcp_server(
     doc_authoring: bool = False,
     settings_path: Path = _DEFAULT_SETTINGS_PATH,
     logging_settings: LoggingSettings | None = None,
+    read_only: bool = False,
+    role_unchecked: bool = False,
 ) -> MCPServer:
-    """Resolve everything the MCP server needs on this loop and build it, for the caller to run over stdio."""
+    """Resolve everything the MCP server needs on this loop and build it, with no write tool when `read_only` or `role_unchecked`."""
     configure_logging(logging_settings)
     reader_gateway = await container.get(ReaderSqlGateway)
     describe_handler = await container.get(DescribeSchemaHandler)
@@ -513,23 +566,27 @@ async def _build_mcp_server(
     profile, descriptions, policy_instructions = _apply_active_policy(profile, knowledge_base_settings.path)
 
     # The documentation-authoring tools are wired when either `--doc-authoring` or the schema's
-    # `retrieval.doc_authoring` opts in.
+    # `retrieval.doc_authoring` opts in. A read-only server wires no tool that writes.
+    authoring, wants_doc_authoring = _writing_tools(
+        read_only=read_only, role_unchecked=role_unchecked, authoring=authoring, doc_authoring=doc_authoring or schema.retrieval.doc_authoring
+    )
     doc_authoring_tools: AuthoringTools | None = None
     doc_engine: AsyncEngine | None = None
     registry_note: str | None = None
-    if doc_authoring or schema.retrieval.doc_authoring:
+    if wants_doc_authoring:
         doc_authoring_tools, doc_engine, registry_note = _build_doc_authoring(container, database, knowledge_base_settings, schema, settings_path)
 
     # One read route per knowledge base this server may reach: the one it serves, then every registered
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
-    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call.
+    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call. A read-only
+    # server has no such gateway, so its stamps name the knowledge base alone.
     read_notes: list[str] = []
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,
         settings_path,
         reader_gateway,
-        await container.get(AdminSqlGateway),
+        None if read_only else await container.get(AdminSqlGateway),
         await container.get(BatchEmbedder),
         active_hybrid=profile.search_hybrid is not False,
         notes=read_notes,
@@ -608,8 +665,9 @@ async def _build_mcp_server(
         hits_per_document=surfaces[0].hits_per_document,
         database=redact_db(database.reader_url),
     )
-    # The admin engine pools connections and `stamp` reads through it. Disposing it before this loop closes
-    # makes the served loop open fresh connections instead of reusing ones bound to this loop.
+    # The admin engine pools connections and `stamp` reads through it, except on a read-only server, whose
+    # stamp reads nothing. Disposing it before this loop closes makes the served loop open fresh connections
+    # instead of reusing ones bound to this loop.
     engine = await container.get(AsyncEngine)
     await engine.dispose()
     if doc_engine is not None:
@@ -617,15 +675,44 @@ async def _build_mcp_server(
     return server
 
 
+def _writing_tools(*, read_only: bool, role_unchecked: bool, authoring: bool, doc_authoring: bool) -> tuple[bool, bool]:
+    """The write-tool opt-ins a server wires, none when read-only or its role went unchecked, naming what it left out on stderr."""
+    left_out = " and ".join(name for name, wanted in (("the authoring tools", authoring), ("the documentation-authoring tools", doc_authoring)) if wanted)
+    if read_only and left_out:
+        typer.echo(f"read-only: left out {left_out}, since this role may not write.", err=True)
+    elif role_unchecked and left_out:
+        typer.echo(f"left out {left_out}, since the database role could not be checked at launch.", err=True)
+    if read_only or role_unchecked:
+        return False, False
+    return authoring, doc_authoring
+
+
 async def _mcp_server_after_identity(
     container: Resolver, settings: ActiveKnowledgeBase, *, collection: str, authoring: bool, doc_authoring: bool = False
 ) -> MCPServer:
-    """Announce the identity, then build the MCP server on the same loop, even when the database is unreachable."""
+    """Announce the identity, then build the MCP server on the same loop, even on an unreachable database or a read-only role."""
     announce_knowledge_base(settings_knowledge_base_path(settings), err=True)
-    identity = await announce_db(container, settings, collection=collection, err=True)
-    if identity is None:
-        typer.echo("serving anyway, every call fails until the database is reachable.", err=True)
-    return await _build_mcp_server(container, authoring=authoring, doc_authoring=doc_authoring, logging_settings=settings.application.logging)
+    read_only = False
+    role_unchecked = False
+    try:
+        identity = await announce_db(container, settings, collection=collection, err=True)
+    except DBAPIError as error:
+        if not is_permission_refusal(error):
+            raise
+        typer.echo("database: this role may not read the index state, so it is not shown. Serving read-only.", err=True)
+        read_only = True
+    else:
+        if identity is None:
+            typer.echo("serving anyway, every call fails until the database is reachable.", err=True)
+            role_unchecked = True
+    return await _build_mcp_server(
+        container,
+        authoring=authoring,
+        doc_authoring=doc_authoring,
+        logging_settings=settings.application.logging,
+        read_only=read_only,
+        role_unchecked=role_unchecked,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -930,8 +1017,11 @@ async def _index_after_identity(
         await asyncio.to_thread(assert_schema_at_head, settings.application.infrastructure.database.url)
     except SchemaRevisionError as exc:
         _fail(str(exc))
-    except _UNREACHABLE_ERRORS as exc:
-        typer.echo(unreachable_line(redact_db(settings.application.infrastructure.database.url), exc))
+    except (*UNREACHABLE_ERRORS, DBAPIError) as exc:
+        cause = unreachable_cause(exc)
+        if cause is None:
+            raise
+        typer.echo(unreachable_line(redact_db(settings.application.infrastructure.database.url), cause))
         raise typer.Exit(code=1) from None
     identity = await announce_db(container, settings, collection=collection)
     if identity is None:
@@ -1289,7 +1379,9 @@ def mcp_cmd(
     `--knowledge-base .` serves the knowledge base in the current directory, which is how a plugin runs
     it. No `application_settings.json` is needed, and the database URL and dialect come from the
     environment. The tools served follow the knowledge base's `retrieval.profile` in
-    `knowledge-base-schema.json`, for example `code-mode` adds `run_code`.
+    `knowledge-base-schema.json`, for example `code-mode` adds `run_code`. Everything it prints before
+    serving, a refusal included, goes to stderr, since stdout carries the protocol. A database role that
+    may not read the index state, such as the reader role, serves read-only, with no authoring tool.
 
     `--authoring` also serves the write tools: `propose_eval_seeds` and `submit_eval_cases` to write
     evaluation cases, `diagnose`, `evaluate_policy` and `submit_tuning` to tune a retrieval policy by
@@ -1304,14 +1396,16 @@ def mcp_cmd(
     and `api.about` lists them. A knowledge base whose schema sets
     `retrieval.doc_authoring` gets these tools without the flag.
     """
-    settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
-    container = _build_container(ctx, settings)
-    schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
-    server = asyncio.run(
-        _mcp_server_after_identity(
-            container, settings, collection=schema.retrieval.collection, authoring=authoring, doc_authoring=doc_authoring
+    # The client reads stdout as JSON-RPC, so everything said before serving, a refusal included, goes to stderr.
+    with contextlib.redirect_stdout(sys.stderr):
+        settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
+        container = _build_container(ctx, settings)
+        schema = load_knowledge_base_schema_or_fail(settings_knowledge_base_path(settings))
+        server = asyncio.run(
+            _mcp_server_after_identity(
+                container, settings, collection=schema.retrieval.collection, authoring=authoring, doc_authoring=doc_authoring
+            )
         )
-    )
     server.run(transport="stdio")
 
 
@@ -1324,17 +1418,19 @@ def sync_cmd(
     ),
     dry_run: bool = typer.Option(
         default=False,
-        help="Plan only: print each item's action without writing mirrors or converting. On a connector-backed knowledge base "
-        "(e.g. youtube), the listing phase itself still fetches each item over the network and updates the source queue "
-        "before the plan is even computed. Only the mirror write and the conversion are skipped.",
+        help="Plan only, with no scan, no fetch, no model call, no conversion and no write: list each watch-list row a real run "
+        "would scan (its scanner and ref), each item's action, and each source-queue row a real run would fetch or resolve "
+        "first (the connector, its key, source type and URL). A benchmark connector whose dataset was never downloaded "
+        "downloads it, as a real run would.",
     ),
     limit: int | None = typer.Option(default=None, help="Process at most N items. A limited run never archives orphans."),
 ) -> None:
     """Bring the knowledge base's `Sources/` mirrors in line with its connector: convert changed PDFs, refresh metadata, archive orphans.
 
     It first scans the knowledge base's watch list, when it has one, and adds what is new to the source
-    queue. Then it syncs the mirrors and prints both reports. Exits 1 when any item failed. Items whose
-    PDF could not be read are listed apart and do not fail the run. A dry run never fails.
+    queue. Then it syncs the mirrors and prints both reports. A dry run lists the watch list's rows
+    instead of scanning them. Exits 1 when any item failed. Items whose PDF could not be read are listed
+    apart and do not fail the run. A dry run never fails.
     """
     settings = _resolve_settings(knowledge_base, cwd=Path.cwd())
     configure_logging(settings.application.logging)
@@ -1345,8 +1441,10 @@ def sync_cmd(
         on_error="sync failed",
         database=settings.database,
     )
-    if scan is not None:
+    if isinstance(scan, ScanReport):
         _print_scan_report(scan)
+    elif scan is not None:
+        _print_watch_list_rows(scan)
     _print_sync_report(report)
     if report.errors:
         raise typer.Exit(code=1)

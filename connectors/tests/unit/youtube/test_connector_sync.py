@@ -13,7 +13,15 @@ import hashlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from engram.sources.contracts import SourceQueue, SourceQueueStatus, SyncMirrors, SyncMirrorsHandler, claimants_for
+from engram.sources.contracts import (
+    SourceQueue,
+    SourceQueueStatus,
+    SourceType,
+    SyncMirrors,
+    SyncMirrorsHandler,
+    UnresolvedItem,
+    claimants_for,
+)
 from engram.testing.fakes.conversion import FakeDocumentConverter
 from engram.testing.fakes.mirror import FakeMirrorStore
 
@@ -125,3 +133,22 @@ class TestFetchFailure:
         assert report.created == 1
         assert [written.provider_key for written in store.written] == [f"yt-{good.video_id}"]
         assert ledger.entries()[1].status is SourceQueueStatus.FAILED
+
+
+class TestDryRun:
+    async def test_a_dry_run_fetches_nothing_and_writes_no_queue_or_cache_file(self, tmp_path: Path):
+        doc = VideoTranscriptFactory.build()
+        fetcher = FakeTranscriptFetcher(videos={doc.video_id: FetchedVideo(doc=doc, url=WATCH_URL)})
+        store = FakeMirrorStore()
+        handler, ledger = _handler(tmp_path, fetcher, store)
+        row = ledger.add(WATCH_URL)
+        queue_text = (tmp_path / "source-queue.yaml").read_text(encoding="utf-8")
+
+        report = await handler.handle(SyncMirrors(dry_run=True))
+
+        assert fetcher.fetched == []
+        assert (tmp_path / "source-queue.yaml").read_text(encoding="utf-8") == queue_text
+        assert not (tmp_path / "cache").exists()
+        assert report.planned == ()
+        assert report.would_resolve == (UnresolvedItem(connector="youtube", key=row.key, source_type=SourceType.VIDEO, url=WATCH_URL),)
+        assert store.written == []

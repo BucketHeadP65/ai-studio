@@ -22,7 +22,7 @@ from engram.retrieval.infrastructure.embedded import (
     read_hits_per_document,
     switch_source,
 )
-from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway, verify_reader_role
+from engram.retrieval.infrastructure.gateway import ReadOnlySqlGateway, verify_reader_role, verify_reader_role_on_connect
 from engram.retrieval.infrastructure.reader_roles import PrivateReaders, SqlReaderScopes, private_reader_url
 from engram.retrieval.queries import (
     DescribeSchemaHandler,
@@ -114,4 +114,5 @@ __all__ = [
     "search_result_status",
     "switch_source",
     "verify_reader_role",
+    "verify_reader_role_on_connect",
 ]

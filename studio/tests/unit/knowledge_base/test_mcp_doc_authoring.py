@@ -32,6 +32,8 @@ from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGat
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pytest
+
     from mcp.server.mcpserver import MCPServer
 
 _DOC_AUTHORING_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"})
@@ -235,3 +237,20 @@ class TestDocAuthoringMultiTarget:
         assert "could not be read" in server.instructions
         # the surface still serves, and this session's own knowledge base is still reachable
         assert "alpha" in await _unknown_knowledge_base_error_text(server)
+
+
+class TestReadOnlyServer:
+    """A server whose database role may not read the index state builds no tool that writes, whatever opts in."""
+
+    async def test_it_lists_no_authoring_tool_and_says_what_it_left_out(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        container = _McpContainer(knowledge_base=_make_knowledge_base(tmp_path, doc_authoring_in_spec=True))
+
+        server = await _build_mcp_server(container, authoring=True, doc_authoring=True, read_only=True, settings_path=_no_registry(tmp_path))
+
+        names = await _tool_names(server)
+        assert not names & _DOC_AUTHORING_TOOLS
+        assert "propose_eval_seeds" not in names
+        assert "submit_eval_cases" not in names
+        assert {"search", "fetch"} <= names
+        err = capsys.readouterr().err
+        assert "read-only: left out the authoring tools and the documentation-authoring tools, since this role may not write." in err

@@ -418,7 +418,7 @@ without sacrificing this equality.
 | Incremental run | `src/engram/indexing/service/incremental.py` (`run_incremental`) | `tests/unit/engram/indexing/test_incremental_handler.py` |
 | Full vs incremental dispatch | `src/engram/indexing/service/index.py` (`handle`, `_can_incremental`) | `tests/unit/engram/indexing/test_handlers.py` |
 | Schema | `alembic/versions/0006_compile_state.py` | `tests/integration/indexing/test_index_state_migration.py` |
-| **`incremental == full`** | (whole pipeline) | `tests/integration/indexing/test_incremental_equals_full.py` |
+| **`incremental == full`** | (whole pipeline) | `tests/integration/indexing/test_prune_*.py`, one change through both paths |
 | CLI surface (`--full`/`--dry-run`/`status`) | `src/cli.py` | `tests/unit/test_cli_compile.py` |
 
 ---

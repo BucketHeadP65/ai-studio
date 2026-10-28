@@ -154,3 +154,12 @@ async def test_two_ids_that_differ_only_by_case_get_their_own_files(tmp_path: Pa
     assert by_id["Doc"].pdf_path.name.lower() != by_id["doc"].pdf_path.name.lower()
     assert "Upper text." in by_id["Doc"].pdf_path.read_text(encoding="utf-8")
     assert "Lower text." in by_id["doc"].pdf_path.read_text(encoding="utf-8")
+
+
+async def test_the_preview_lists_the_same_items_with_nothing_awaiting_resolution(tmp_path: Path) -> None:
+    connector = _connector(tmp_path, _CountingFetcher(_tiny_zip(tmp_path)))
+
+    preview = await connector.preview_items()
+
+    assert list(preview.items) == await connector.list_items_with_pdf()
+    assert preview.would_resolve == ()

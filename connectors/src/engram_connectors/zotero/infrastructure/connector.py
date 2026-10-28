@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Final, Literal
 
-from engram.sources.contracts import Creator, SourceType, url_key
+from engram.sources.contracts import Creator, ItemPreview, SourceType, url_key
 from pydantic import BaseModel, BeforeValidator, ConfigDict, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -276,6 +276,16 @@ class SqliteZoteroConnector:
         async with self._connect() as connection:
             rows = [_ItemRow.model_validate(dict(row)) for row in (await connection.execute(text(sql), params)).mappings().all()]
             return [(await self._row_to_item(connection, row)).to_source_item() for row in rows]
+
+    async def preview_items(self) -> ItemPreview:
+        """The items `list_items_with_pdf` answers, with no row awaiting resolution.
+
+        That listing reads the local Zotero database alone and changes nothing.
+
+        Returns:
+            Those items, with no row awaiting resolution.
+        """
+        return ItemPreview(items=tuple(await self.list_items_with_pdf()))
 
     async def get(self, provider_key: str) -> SourceItem | None:
         """Read one item by its Zotero key.

@@ -1,8 +1,8 @@
-"""The connector-neutral item shape every connector maps its own item type onto.
+"""The connector-neutral item shape every connector maps its own item type onto, and a dry run's preview of a listing.
 
 `provider_key` is the host's own item key, the field name the mirror note and `kb.sources_raw`
 persist. `source_id` is engram's own identifier, a connector's proposal, which may be the
-`provider_key` verbatim.
+`provider_key` verbatim. `ItemPreview` is what a connector lists with nothing fetched, resolved or written.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ from datetime import date, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
+
+from engram.sources.domain.source_queue import SourceType
 
 
 class Creator(BaseModel):
@@ -47,3 +49,23 @@ class SourceItem(BaseModel):
     pdf_path: Path  # absolute path to the attachment PDF on disk
     source_link: str = ""  # a connector-owned deep link back to the item, in that host's own URI scheme, empty when none
     meta: dict[str, str] = {}  # the connector's own text metadata by key, empty when the connector carries none
+
+
+class UnresolvedItem(BaseModel):
+    """A row a real listing would first fetch or resolve, which a dry run names instead of serving, with the connector that would."""
+
+    model_config = ConfigDict(frozen=True)
+
+    connector: str
+    key: str
+    source_type: SourceType
+    url: str
+
+
+class ItemPreview(BaseModel):
+    """What a connector lists for a dry run: the items at hand and the rows a real listing would resolve first."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: tuple[SourceItem, ...] = ()
+    would_resolve: tuple[UnresolvedItem, ...] = ()

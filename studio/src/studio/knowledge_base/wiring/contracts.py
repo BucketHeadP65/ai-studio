@@ -5,11 +5,39 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from asyncpg.exceptions import InvalidCatalogNameError, InvalidPasswordError
 from engram.retrieval.contracts import ReadOnlySqlGateway, Reranking
 
 if TYPE_CHECKING:
     from engram.retrieval.contracts import SqlKnowledgeBase
     from sqlalchemy.ext.asyncio import AsyncEngine
+
+
+# A dead port and an unknown host raise an `OSError` subtype (`ConnectionRefusedError`, `socket.gaierror`), a wrong
+# password and a wrong database name raise an asyncpg error. A query error is not one of them, so a missing schema
+# still reaches the preflight.
+UNREACHABLE_ERRORS: tuple[type[Exception], ...] = (OSError, InvalidPasswordError, InvalidCatalogNameError)
+"""The errors a failed connection to Postgres raises."""
+
+
+def unreachable_cause(error: BaseException) -> Exception | None:
+    """The error in `error`'s chain of causes that says Postgres could not be reached, or `None` when none does.
+
+    SQLAlchemy wraps asyncpg's refusal of a password or of a database name in a `DBAPIError`, so a caller catching
+    `UNREACHABLE_ERRORS` and `DBAPIError` passes what it caught here and re-raises when this answers `None`.
+
+    Args:
+        error: The error a connection or a read raised.
+
+    Returns:
+        The first of `UNREACHABLE_ERRORS` in the chain, `error` itself included.
+    """
+    current: BaseException | None = error
+    while current is not None:
+        if isinstance(current, UNREACHABLE_ERRORS):
+            return current
+        current = current.__cause__
+    return None
 
 
 class ReaderEngine:

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from engram.sources.contracts import Connector, SourceItem, UrlClaimant
+    from engram.sources.contracts import Connector, ItemPreview, SourceItem, UrlClaimant
 
     from engram_connectors.x.infrastructure.scanner import AgentFactory
 
@@ -55,6 +55,9 @@ class _FakeXProvider:
         raise NotImplementedError
 
     async def list_items_with_pdf(self) -> list[SourceItem]:
+        raise NotImplementedError
+
+    async def preview_items(self) -> ItemPreview:
         raise NotImplementedError
 
     async def get(self, provider_key: str) -> SourceItem | None:

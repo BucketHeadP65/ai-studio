@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from engram.config import SourceResources
-    from engram.sources.contracts import ConversionResult, Scanner, SourceItem, SourceType
+    from engram.sources.contracts import ConversionResult, ItemPreview, Scanner, SourceItem, SourceType
 
 
 class _Zotero:
@@ -47,6 +47,9 @@ class _Zotero:
         return cls()
 
     async def list_items_with_pdf(self) -> list[SourceItem]:
+        raise NotImplementedError
+
+    async def preview_items(self) -> ItemPreview:
         raise NotImplementedError
 
     async def get(self, provider_key: str) -> SourceItem | None:

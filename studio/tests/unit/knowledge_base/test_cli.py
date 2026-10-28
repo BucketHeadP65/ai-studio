@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 import pytest
 import typer
 
+from asyncpg.exceptions import InsufficientPrivilegeError
 from core.ai.embedding import BatchEmbedder
 from engram.evals.commands import KnowledgeBaseGatewayFactory, PolicyEvaluatorFactory, SeedRepositoryFactory
 from engram.evals.generation.contracts import GenerationConfig
@@ -45,6 +46,7 @@ from engram.testing.fakes.recommendation import FakeKnowledgeBaseGateway
 from engram.testing.specs import research_spec
 from mcp.client import Client
 from sqlalchemy import NullPool
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from typer.testing import CliRunner
 
@@ -610,3 +612,80 @@ class TestMcpServesAnywayOnAnUnreachableDatabase:
         assert lines[1].endswith("unreachable, connection refused.")
         assert lines[2] == "serving anyway, every call fails until the database is reachable."
         assert server is not None
+
+
+class _RefusingAdminGateway(AdminSqlGateway):
+    """An `AdminSqlGateway` whose every read raises the refusal Postgres gives a role with no grant on the table."""
+
+    def __init__(self) -> None:
+        super().__init__(create_async_engine("postgresql+asyncpg://kb_reader:pw@localhost:5433/knowledge_bases", poolclass=NullPool))
+
+    async def rows(self, sql: str, params: Mapping[str, object] | None = None, *, cap: int = 50) -> SqlResult:
+        del params, cap
+        denied = InsufficientPrivilegeError("permission denied for table index_fingerprint")
+        try:
+            raise denied
+        except InsufficientPrivilegeError as error:
+            raise ProgrammingError(sql, None, error) from error
+
+
+class TestMcpServesReadOnlyWhenTheRoleMayNotReadTheIndexState:
+    """`studio mcp` launched as the reader role, which reads the api schema only, says so and serves."""
+
+    async def test_the_identity_lines_say_so_and_the_server_still_builds(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+        container = _container(tmp_path)
+        container.admin_gateway = _RefusingAdminGateway()
+
+        server = await _mcp_server_after_identity(container, _mcp_settings(tmp_path), collection="research", authoring=False)
+
+        lines = capsys.readouterr().err.splitlines()
+        assert lines[0].startswith("knowledge base ")
+        assert lines[1] == "database: this role may not read the index state, so it is not shown. Serving read-only."
+        assert server is not None
+
+
+class TestMcpSaysNothingOnStdoutBeforeServing:
+    """An MCP client reads `studio mcp`'s stdout as JSON-RPC, so a refusal before serving goes to stderr alone."""
+
+    def test_no_knowledge_base_named_is_refused_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(app, ["mcp"])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert "No knowledge base named" in result.stderr
+
+    def test_a_folder_with_no_schema_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        bare = tmp_path / "bare"
+        bare.mkdir()
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(bare)])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr == f"knowledge_base.path {bare} holds no knowledge-base-schema.json file\n"
+
+    def test_a_missing_folder_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        missing = tmp_path / "missing"
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(missing)])
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr == f"knowledge_base.path is not an existing directory: {missing}\n"
+
+    def test_a_malformed_schema_is_refused_in_one_line_on_stderr(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        broken = tmp_path / "broken"
+        broken.mkdir()
+        (broken / "knowledge-base-schema.json").write_text("{not json", encoding="utf-8")
+
+        result = runner.invoke(app, ["mcp", "--knowledge-base", str(broken)], obj=lambda: _container(tmp_path))
+
+        assert result.exit_code == 1
+        assert result.stdout == ""
+        assert result.stderr.startswith(f"The knowledge base schema at {broken / 'knowledge-base-schema.json'} does not load: ")
+        assert len(result.stderr.splitlines()) == 1

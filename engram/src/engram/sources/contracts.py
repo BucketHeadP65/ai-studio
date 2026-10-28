@@ -2,7 +2,7 @@
 
 from engram.sources.domain.conversion import ConversionResult
 from engram.sources.domain.mirror import MirrorFile, MirrorFrontmatter, MirrorStatus
-from engram.sources.domain.source_item import Creator, SourceItem
+from engram.sources.domain.source_item import Creator, ItemPreview, SourceItem, UnresolvedItem
 from engram.sources.domain.source_queue import (
     NOT_SERVED,
     Resolved,
@@ -46,6 +46,7 @@ __all__ = [
     "Creator",
     "DocumentConverter",
     "FoundSource",
+    "ItemPreview",
     "MirrorFile",
     "MirrorFrontmatter",
     "MirrorStatus",
@@ -69,6 +70,7 @@ __all__ = [
     "SyncMirrors",
     "SyncMirrorsHandler",
     "SyncReport",
+    "UnresolvedItem",
     "UrlClaimant",
     "WatchEntry",
     "WatchListFile",

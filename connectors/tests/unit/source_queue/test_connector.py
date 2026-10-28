@@ -12,8 +12,13 @@ from engram.sources.contracts import (
     SourceQueueStatus,
     SourceQueueUnreadableError,
     SourceType,
+    SyncMirrors,
+    SyncMirrorsHandler,
+    UnresolvedItem,
     claimants_for,
 )
+from engram.testing.fakes.conversion import FakeDocumentConverter
+from engram.testing.fakes.mirror import FakeMirrorStore
 
 from engram_connectors.conversion.contracts import ArxivHtmlConverter, HybridConverter
 from engram_connectors.source_queue.contracts import ArxivResolver, PaperResolver, PdfResolver, PostResolver, Resolver, SourceQueueConnector
@@ -404,3 +409,21 @@ async def test_get_on_a_malformed_ledger_raises_the_same_readable_error(tmp_path
 
     with pytest.raises(SourceQueueUnreadableError, match="could not be read"):
         await provider.get("yt-abc")
+
+
+async def test_a_dry_run_sync_resolves_nothing_and_writes_no_queue_or_cache_file(tmp_path: Path) -> None:
+    post = FakeResolver(results={"x": Resolved(title="A post", markdown="# A post", url="https://x.com/someone/status/1234", converter="intake")})
+    provider, ledger = _provider(tmp_path, post=post, article=FakeResolver())
+    requested = ledger.add("https://x.com/someone/status/1234")
+    cached = ledger.add(ARTICLE)
+    _cache(tmp_path, cached.key, Resolved(title="Agents that plan", markdown="# Agents\n\nbody", url=ARTICLE, converter="article/trafilatura"))
+    queue_text = (tmp_path / "source-queue.yaml").read_text(encoding="utf-8")
+    cache_files = sorted(path.name for path in (tmp_path / "cache").iterdir())
+
+    report = await SyncMirrorsHandler(provider, FakeDocumentConverter(), FakeMirrorStore()).handle(SyncMirrors(dry_run=True))
+
+    assert post.calls == []
+    assert (tmp_path / "source-queue.yaml").read_text(encoding="utf-8") == queue_text
+    assert sorted(path.name for path in (tmp_path / "cache").iterdir()) == cache_files
+    assert [row.key for row in report.planned] == [cached.key]
+    assert report.would_resolve == (UnresolvedItem(connector="intake", key=requested.key, source_type=SourceType.POST, url=requested.url),)
