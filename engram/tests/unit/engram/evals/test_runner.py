@@ -27,7 +27,7 @@ import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 import httpx2
 import pytest
@@ -47,7 +47,7 @@ from core.settings import AzureOpenAiSettings, DatabaseSettings, LogfireSettings
 from openai import APIConnectionError
 from pydantic_ai import FunctionToolset
 from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError, UnexpectedModelBehavior
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
@@ -96,7 +96,7 @@ if TYPE_CHECKING:
 
     from core.thinking import Thinking
     from pydantic_ai.capabilities import AbstractCapability
-    from pydantic_ai.messages import ModelMessage
+    from pydantic_ai.messages import ModelMessage, ModelRequestPart
     from pydantic_ai.models import Model
     from pydantic_ai.toolsets import AbstractToolset
 
@@ -1108,6 +1108,11 @@ def _tool_calls_made(messages: list[ModelMessage]) -> int:
     return sum(isinstance(part, ToolCallPart) for message in messages if isinstance(message, ModelResponse) for part in message.parts)
 
 
+def _is_retry(part: ModelRequestPart) -> TypeGuard[ToolReturnPart]:
+    """Whether `part` is a tool return asking the model to call again."""
+    return isinstance(part, ToolReturnPart) and part.outcome == "retried"
+
+
 def _named_dataset(*cases: tuple[str, str, tuple[str, ...]]) -> EvaluationDataset:
     """A dataset of `(name, expected answer, gold ids)` cases, each asking `question <name>`."""
     return build_dataset(
@@ -1194,13 +1199,13 @@ class TestDeclaredFacets(_ResetsLogfire):
         spec = research_spec()
         keys = [facet.key for facet in spec.facets]
         descriptions: list[str] = []
-        refusals: list[RetryPromptPart] = []
+        refusals: list[ToolReturnPart] = []
 
         def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
             descriptions.extend(tool.description or "" for tool in info.function_tools if tool.name == "search")
             if _tool_calls_made(messages) == 0:
                 return ModelResponse(parts=[ToolCallPart("search", {"query": "graph retrieval", "facets": {keys[0]: ["any"]}})])
-            refusals.extend(part for message in messages if isinstance(message, ModelRequest) for part in message.parts if isinstance(part, RetryPromptPart))
+            refusals.extend(part for message in messages if isinstance(message, ModelRequest) for part in message.parts if _is_retry(part))
             return _answer_part(info, "yes", [])
 
         config = EvaluationRunConfig(
@@ -1319,7 +1324,7 @@ class TestSqlSwitch(_ResetsLogfire):
                 for message in messages
                 if isinstance(message, ModelRequest)
                 for part in message.parts
-                if isinstance(part, RetryPromptPart)
+                if _is_retry(part)
             )
             return _answer_part(info, "A graph-based RAG system.", ["paper.lightrag-2025"])
 
@@ -1474,7 +1479,7 @@ class TestCodeModeWithSql(_ResetsLogfire):
                 for message in messages
                 if isinstance(message, ModelRequest)
                 for part in message.parts
-                if isinstance(part, RetryPromptPart)
+                if _is_retry(part)
             )
             return _answer_part(info, "yes", [])
 

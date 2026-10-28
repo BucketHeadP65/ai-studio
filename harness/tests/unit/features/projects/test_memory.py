@@ -9,6 +9,8 @@ from uuid import uuid4
 import pytest
 
 from core.ai.workflows.contracts import StepRegistry
+from engram.agent_memory.contracts import EngramMemoryStore
+from engram.testing.fakes.agent_memory import FakeCards, FakeIngest, FakeSearchHits
 from pydantic_ai import Agent, ModelRetry
 from pydantic_ai.capabilities import AbstractCapability, CombinedCapability
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextContent, TextPart, UserPromptPart
@@ -405,6 +407,30 @@ class TestAdaptedToolset:
         found = await toolset.search_memory(_ctx(), "postgres")
 
         assert len(found["matches"]) == 1
+
+    async def test_search_ranks_notes_from_two_category_folders_within_its_bounds(self) -> None:
+        toolset = memory_module.NoteMemory(
+            store=InMemoryStore(), namespace="notebook", max_search_results=1, max_search_result_chars=40
+        ).get_toolset()
+        await toolset.write_memory(_ctx(), category="world", slug="port", content="postgres answers on 5433")
+        await toolset.write_memory(_ctx(), category="reference", slug="tuning", content="postgres postgres postgres tuning")
+
+        found = await toolset.search_memory(_ctx(), "postgres")
+
+        assert [match["file"] for match in found["matches"]] == ["reference/tuning.md"]
+        assert len(found["matches"][0]["snippet"]) <= 40 - len("notebook/main/reference/tuning.md")
+        assert found["truncated"] is True
+
+    async def test_one_ranked_search_answers_a_scope_on_engrams_store(self) -> None:
+        hits = FakeSearchHits([("mem.proj.main.world.postgres-port", "Answers on 5433.", 0.9)])
+        store = EngramMemoryStore(InMemoryStore(), FakeIngest(), FakeCards(), search_hits=hits)
+        project = memory_module.memory_mounts(store, project_namespace="proj", global_memory_enabled=lambda: False)[1]
+        assert isinstance(project, memory_module.NoteMemory)
+
+        found = await project.get_toolset().search_memory(_ctx(), "postgres")
+
+        assert [(query, prefix) for query, prefix, _ in hits.calls] == [("postgres", "proj/main/")]
+        assert [match["file"] for match in found["matches"]] == ["world/postgres-port.md"]
 
     async def test_search_on_a_non_searchable_store_says_so_instead_of_returning_empty(self) -> None:
         toolset = memory_module.NoteMemory(store=_NotSearchable(), namespace="notebook").get_toolset()

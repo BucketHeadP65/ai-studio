@@ -5,7 +5,7 @@ import { traceCounts, traceEntries } from "./inspector-trace";
 
 // One conversation, built the same way the harness records it: a request row opening on the
 // view the inspector read, a response with thinking plus a tool call, the tool's return in the
-// next request, a retry-prompt request, and a response settling on `final_result_Attribution`.
+// next request, a retry-feedback request, and a response settling on `final_result_Attribution`.
 const MESSAGES: MessagePayload[] = [
   {
     kind: "request",
@@ -24,7 +24,7 @@ const MESSAGES: MessagePayload[] = [
   },
   {
     kind: "request",
-    parts: [{ part_kind: "retry-prompt", tool_name: "final_result_Attribution", content: "field required" }],
+    parts: [{ part_kind: "retry-feedback", content: "field required", retry: { cause: "validation_error" } }],
   },
   {
     kind: "response",
@@ -62,7 +62,7 @@ describe("traceEntries", () => {
   it("never treats the final exhausted output as accepted when no output return was recorded", () => {
     const entries = traceEntries([
       { kind: "response", parts: [{ part_kind: "tool-call", tool_name: "final_result_Attribution", tool_call_id: "bad-1", args: { symptom: "not_in_taxonomy" } }] },
-      { kind: "request", parts: [{ part_kind: "retry-prompt", tool_name: "final_result_Attribution", tool_call_id: "bad-1", content: "Unknown symptom" }] },
+      { kind: "request", parts: [{ part_kind: "tool-return", tool_name: "final_result_Attribution", tool_call_id: "bad-1", content: "Unknown symptom", outcome: "retried" }] },
       { kind: "response", parts: [{ part_kind: "tool-call", tool_name: "final_result_Attribution", tool_call_id: "bad-2", args: { symptom: "not_in_taxonomy" } }] },
     ]);
 
@@ -93,7 +93,7 @@ describe("traceEntries", () => {
       },
       {
         kind: "request",
-        parts: [{ part_kind: "retry-prompt", tool_name: "final_result_Attribution", tool_call_id: "t-first", content: "field required" }],
+        parts: [{ part_kind: "tool-return", tool_name: "final_result_Attribution", tool_call_id: "t-first", content: "field required", outcome: "retried" }],
       },
       {
         kind: "response",
@@ -124,6 +124,18 @@ describe("traceEntries", () => {
     ]);
   });
 
+  it("reads a retried return of an ordinary tool as a refusal, never as the call's return", () => {
+    const entries = traceEntries([
+      { kind: "response", parts: [{ part_kind: "tool-call", tool_name: "read", tool_call_id: "t3", args: { step: 9 } }] },
+      { kind: "request", parts: [{ part_kind: "tool-return", tool_name: "read", tool_call_id: "t3", content: "no step 9", outcome: "retried" }] },
+    ]);
+
+    expect(entries).toEqual([
+      { kind: "call", name: "read", line: "read(step: 9)", returned: null },
+      { kind: "refused", text: "no step 9", rejected: null },
+    ]);
+  });
+
   it("marks a call whose return never came", () => {
     const entries = traceEntries([{ kind: "response", parts: [{ part_kind: "tool-call", tool_name: "read", tool_call_id: "t9", args: {} }] }]);
 
@@ -132,7 +144,7 @@ describe("traceEntries", () => {
 
   it("joins a refusal's error list with commas", () => {
     const entries = traceEntries([
-      { kind: "request", parts: [{ part_kind: "retry-prompt", tool_name: "final_result", content: [{ msg: "field required" }, { msg: "too short" }] }] },
+      { kind: "request", parts: [{ part_kind: "retry-feedback", content: [{ msg: "field required" }, { msg: "too short" }], retry: { cause: "validation_error" } }] },
     ]);
 
     expect(entries).toEqual([{ kind: "refused", text: "field required, too short", rejected: null }]);

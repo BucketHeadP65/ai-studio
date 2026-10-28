@@ -24,8 +24,8 @@ class EvidenceView(BaseModel):
     span: str = Field(description="The position, written step.message.part.")
     label: str = Field(description="What the part is, in words: the step and who wrote it.")
     kind: str = Field(
-        description="The part's kind (user-prompt, text, thinking, tool-call, tool-return, retry-prompt, system-prompt), "
-        "or unreadable when the part could not be read."
+        description="The part's kind (user-prompt, text, thinking, tool-call, tool-return, retry-feedback, system-prompt), "
+        "retried-return for a tool return that asks for its call again, or unreadable when the part could not be read."
     )
     text: str = Field(description="What that part says, rendered for a person, or why it could not be read.")
 

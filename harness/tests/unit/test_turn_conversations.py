@@ -35,7 +35,7 @@ from core.ai.workflows.contracts import (
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.temporal import continuing_step_conversation
 from pydantic_ai import UnexpectedModelBehavior
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.usage import RequestUsage
 from pydantic_ai_harness.step_persistence import ContinuableSnapshot
 from pydantic_ai_harness.warn_on_cache_busts import CacheBustWarning
@@ -490,7 +490,9 @@ async def test_turn_one_recovers_after_first_answering_with_another_turns_shape(
 
     assert len(calls) == 4, "three turns plus the one retry turn one needed to answer with its own shape"
     line = _the_items_line(active)
-    retries = [part for message in line.messages for part in message.parts if isinstance(part, RetryPromptPart)]
+    retries = [
+        part for message in line.messages for part in message.parts if isinstance(part, ToolReturnPart) and part.outcome == "retried"
+    ]
     assert len(retries) == 1, "the item's conversation carries the correction sent back for turn one's wrong shape"
     draft_prompt = _last_user_prompt(calls[2])
     assert "worth a look" in draft_prompt, "turn two's briefing carries turn one's corrected note, not the wrong shape it first tried"

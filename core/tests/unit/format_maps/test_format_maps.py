@@ -10,7 +10,7 @@ import pytest
 
 from pydantic import AfterValidator, TypeAdapter, ValidationInfo
 from pydantic_ai import Agent
-from pydantic_ai.messages import ModelMessage, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from core.ai.format_maps.contracts import (
@@ -85,11 +85,11 @@ def _suffixed(value: str, info: ValidationInfo) -> str:
 
 
 def _returns(messages: list[ModelMessage], name: str) -> list[ToolReturnPart]:
-    return [p for m in messages for p in m.parts if isinstance(p, ToolReturnPart) and p.tool_name == name]
+    return [p for m in messages for p in m.parts if isinstance(p, ToolReturnPart) and p.tool_name == name and p.outcome != "retried"]
 
 
-def _retries(messages: list[ModelMessage], name: str) -> list[RetryPromptPart]:
-    return [p for m in messages for p in m.parts if isinstance(p, RetryPromptPart) and p.tool_name == name]
+def _retries(messages: list[ModelMessage], name: str) -> list[ToolReturnPart]:
+    return [p for m in messages for p in m.parts if isinstance(p, ToolReturnPart) and p.tool_name == name and p.outcome == "retried"]
 
 
 def _map_content(part: ToolReturnPart) -> dict[str, Any]:
@@ -622,8 +622,8 @@ class TestFormatMapsAgent:
 
         retry = _retries(result.all_messages(), "read_docs")
         assert retry
-        assert "Bogus" in retry[0].model_response()
-        assert "Usage" in retry[0].model_response()
+        assert "Bogus" in retry[0].model_response_str()
+        assert "Usage" in retry[0].model_response_str()
 
     async def test_a_part_call_without_cached_content_teaches_the_refresh(self, tmp_path: Path):
         cap: FormatMaps[object] = FormatMaps(tools={"read_docs": "markdown"}, over=200, cache=FileContentCache(tmp_path))
@@ -636,7 +636,7 @@ class TestFormatMapsAgent:
         assert (
             "No fetched content is available to take a part of. Call this tool again without `part` to fetch it fresh. "
             "The map comes back, and then you can select a part."
-        ) in retry[0].model_response()
+        ) in retry[0].model_response_str()
 
     async def test_a_part_miss_is_logged_for_telemetry(self, tmp_path: Path, caplog: pytest.LogCaptureFixture):
         cap: FormatMaps[object] = FormatMaps(tools={"read_docs": "markdown"}, over=200, cache=FileContentCache(tmp_path))
@@ -676,7 +676,7 @@ class TestFormatMapsAgent:
 
         retry = _retries(result.all_messages(), "lookup")
         assert retry
-        assert "no parts" in retry[0].model_response()
+        assert "no parts" in retry[0].model_response_str()
 
     async def test_a_per_tool_refetch_override_beats_the_capability_default(self, tmp_path: Path):
         cap: FormatMaps[object] = FormatMaps(
@@ -701,7 +701,7 @@ class TestFormatMapsAgent:
 
         retry = _retries(result.all_messages(), "read_docs")
         assert retry
-        assert "This result has no parts to select. Call again without `part`." in retry[0].model_response()
+        assert "This result has no parts to select. Call again without `part`." in retry[0].model_response_str()
         assert _returns(result.all_messages(), "read_docs")[0].content == page
 
     async def test_construction_rejects_an_unknown_format_name(self):
@@ -870,7 +870,7 @@ class TestFormatMapsAgent:
 
         retry = _retries(result.all_messages(), "run_command")
         assert retry
-        assert "no parts" in retry[0].model_response()
+        assert "no parts" in retry[0].model_response_str()
 
     async def test_a_small_structured_listing_passes_through_unserialized(self):
         cap: FormatMaps[object] = FormatMaps(tools={"list_tickets": "listing"}, over=100_000)
@@ -901,7 +901,7 @@ class TestFormatMapsAgent:
 
         retry = _retries(result.all_messages(), "read_docs")
         assert retry
-        assert "must be a string" in retry[0].model_response()
+        assert "must be a string" in retry[0].model_response_str()
 
     async def test_a_custom_args_validator_never_sees_part(self):
         from pydantic_ai import FunctionToolset, RunContext, Tool

@@ -69,17 +69,19 @@ export const TranscriptSchema = z.object({ messages: z.array(TranscriptMessageSc
 
 // A transcript message's `payload` is pydantic-ai's own `ModelMessage`, to_jsonable_python'd:
 // `{kind: "request"|"response", parts: [...]}`, one entry per `part_kind` (user-prompt,
-// text, tool-call, tool-return, thinking, retry-prompt, and others this app never renders).
+// text, tool-call, tool-return, thinking, retry-feedback, and others this app never renders).
 // Loose on purpose -- this is the subset the chat station renders, not the full pydantic-ai
 // message grammar, so an unrendered field or an unlisted part_kind passes through rather
 // than failing the parse.
 export const MessagePartSchema = z.looseObject({
   part_kind: z.string(),
   content: z.unknown().optional(),
-  // Null on a retry prompt pydantic-ai could not tie to one tool (validation failed before a
-  // tool was chosen); other parts always carry a name when they carry one at all.
-  tool_name: z.string().nullish(),
+  // Absent on a part that names no tool, such as a retry feedback part, which answers no call.
+  tool_name: z.string().optional(),
   tool_call_id: z.string().optional(),
+  // How a tool-return ended: success, failed, denied, interrupted, or retried when it asks the
+  // model to make the call again (the schema rejected it or the tool refused it).
+  outcome: z.string().optional(),
   args: z
     .union([z.string(), z.record(z.string(), z.unknown())])
     .nullable()

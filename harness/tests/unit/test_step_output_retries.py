@@ -9,7 +9,7 @@ import pytest
 from core.ai.workflows.contracts import prepare
 from core.ai.workflows.domain.vocabulary import Budget
 from pydantic_ai.exceptions import UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 
 from tests.support.environment import defined_step, spec_for, world_over
 from tests.support.streaming import streaming_function_model
@@ -23,7 +23,10 @@ if TYPE_CHECKING:
 async def test_a_single_step_survives_four_invalid_answers(tmp_path: Path) -> None:
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         sent_back = sum(
-            isinstance(part, RetryPromptPart) for message in messages if isinstance(message, ModelRequest) for part in message.parts
+            isinstance(part, ToolReturnPart) and part.outcome == "retried"
+            for message in messages
+            if isinstance(message, ModelRequest)
+            for part in message.parts
         )
         answer = {"note": "valid"} if sent_back >= 4 else {}
         return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, answer)])

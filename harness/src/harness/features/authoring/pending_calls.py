@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pydantic_ai.messages import ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.tools import DeferredToolResults, ToolDenied
 
 if TYPE_CHECKING:
@@ -34,7 +34,7 @@ def pending_calls(history: Sequence[ModelMessage]) -> dict[str, str]:
     for later in history[last_response + 1 :]:
         if isinstance(later, ModelRequest):
             for part in later.parts:
-                if isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_call_id is not None:
+                if isinstance(part, ToolReturnPart):
                     calls.pop(part.tool_call_id, None)
     return calls
 

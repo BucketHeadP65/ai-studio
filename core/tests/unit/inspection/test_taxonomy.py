@@ -1,5 +1,7 @@
 """The taxonomy: closed lists, cross-checked, resolved by name."""
 
+from typing import get_args
+
 import pytest
 
 from pydantic import ValidationError
@@ -11,6 +13,7 @@ from core.ai.inspection.domain.taxonomy import (
     Finding,
     Horizon,
     RootCause,
+    ShowsIn,
     Surface,
     SurfaceKind,
     Symptom,
@@ -22,7 +25,7 @@ A_SPAN = Span(step=0, message=1, part=0)
 
 
 def test_the_lists_are_the_documented_size() -> None:
-    assert len(TAXONOMY.symptoms) == 38
+    assert len(TAXONOMY.symptoms) == 39
     assert len(TAXONOMY.root_causes) == 12
 
 
@@ -36,6 +39,15 @@ def test_a_symptom_is_found_by_name_and_an_unknown_name_is_refused() -> None:
     assert TAXONOMY.symptom("duplicate_call").shows_in == "tool-call"
     with pytest.raises(KeyError):
         TAXONOMY.symptom("no_such_symptom")
+
+
+def test_a_retry_shows_in_the_return_that_answers_its_call() -> None:
+    rejected = TAXONOMY.symptom("schema_rejected_arguments")
+    refused = TAXONOMY.symptom("tool_refused_call")
+
+    assert (rejected.shows_in, rejected.caught_by) == ("tool-return", "rule")
+    assert (refused.shows_in, refused.caught_by, refused.horizon) == ("tool-return", "rule", "moment")
+    assert "retry-prompt" not in get_args(ShowsIn)
 
 
 def test_agent_reasoning_lands_only_on_the_model_tier() -> None:
@@ -73,6 +85,7 @@ def test_the_health_of_a_tool_is_no_longer_a_symptom_of_this_taxonomy() -> None:
 
 MOMENT = (
     "schema_rejected_arguments",
+    "tool_refused_call",
     "retried_after_vague_error",
     "warning_ignored",
     "uncertain_result_taken_as_fact",

@@ -4,7 +4,8 @@ Each mount's tools name a note by `category` and `slug`, or by the relative `pat
 back, in the store's grammar `<category>/<slug>.md` (categories world, project and reference, see
 `engram.agent_memory`). They never write `MEMORY.md`, the store's derived index, and a store's grammar refusal reaches
 the model as a `ModelRetry`, a retry that teaches rather than an abort. A search answers each match at its real nested
-path. Every tool name carries the mount's own prefix (`global_write_memory`, `project_read_memory`,
+path, in one search on engram's store, which ranks every category folder at once, and one per category folder on any
+other store, which searches only the files directly under the prefix it is given. Every tool name carries the mount's own prefix (`global_write_memory`, `project_read_memory`,
 `scratchpad_search_memory`), so three mounts on one agent register distinct tools and every guidance line and
 `ModelRetry` names a tool the model can call. The `MEMORY.md` each mount injects links every note as
 `<category>/<slug>.md`, relative, whether the store derives an index of its own or none at all.
@@ -20,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, TypedDict, get_args
 
 from engram import CATEGORIES
+from engram.agent_memory.contracts import EngramMemoryStore, search_categories
 from pydantic_ai import ModelRetry
 from pydantic_ai.capabilities import DynamicCapability
 
@@ -194,6 +196,11 @@ class _NoteIndexStore:
 
     def __init__(self, inner: MemoryStore) -> None:
         self._inner = inner
+
+    @property
+    def inner(self) -> MemoryStore:
+        """The store this one wraps."""
+        return self._inner
 
     async def read(self, path: str, *, max_chars: int) -> MemoryFile | None:
         if not _is_index_path(path):
@@ -425,18 +432,25 @@ class NoteToolset(FunctionToolset[Runtime]):
         if not isinstance(store, SearchableMemoryStore):
             msg = f"{type(store).__name__} cannot search."
             raise ModelRetry(msg)
-        result = await store.search(
-            prefix,
-            query,
-            limit=self._capability.max_search_results,
-            max_files=self._capability.max_search_files,
-            max_chars=self._capability.max_search_result_chars,
-            max_file_chars=self._capability.max_memory_size,
-        )
+        bounds = {
+            "limit": self._capability.max_search_results,
+            "max_files": self._capability.max_search_files,
+            "max_chars": self._capability.max_search_result_chars,
+            "max_file_chars": self._capability.max_memory_size,
+        }
+        if _ranks_every_category(store):
+            result = await store.search(prefix, query, **bounds)
+        else:
+            result = await search_categories(store, prefix, query, **bounds)
         matches: list[NoteSearchMatch] = [
             {"file": match.path.removeprefix(prefix), "snippet": match.snippet, "score": match.score} for match in result.matches
         ]
         return {"matches": matches, "scanned": result.scanned, "truncated": result.truncated}
+
+
+def _ranks_every_category(store: MemoryStore) -> bool:
+    """Whether one search of a scope finds its notes in every category folder: engram's store does, any other does not."""
+    return isinstance(store.inner if isinstance(store, _NoteIndexStore) else store, EngramMemoryStore)
 
 
 def _compose(

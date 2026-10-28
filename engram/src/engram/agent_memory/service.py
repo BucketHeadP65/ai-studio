@@ -8,6 +8,8 @@ raises. Retrying the same operation replays the stored result, and the page is i
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import TYPE_CHECKING
 
 from pydantic_ai_harness.memory import MemoryFile, MemorySearchMatch, MemorySearchResult, SearchableMemoryStore
@@ -181,11 +183,11 @@ class EngramMemoryStore:
         max_chars: int,
         max_file_chars: int,
     ) -> MemorySearchResult:
-        """Search the notes under a prefix the application resolved and trusts.
+        """Search the notes under a prefix the application resolved and trusts, in every category folder below it.
 
-        With `search_hits` wired it ranks pages in the agent-memory knowledge base. Without it the inner store's own
-        search answers, or an empty result when the inner store cannot search. A ranked hit with an empty snippet
-        is returned with its path alone.
+        With `search_hits` wired it ranks pages in the agent-memory knowledge base, in one ranked search. Without it
+        the inner store's own search answers through `search_categories`. An inner store that cannot search answers
+        an empty result. A ranked hit with an empty snippet is returned with its path alone.
 
         Args:
             prefix: The store path prefix to search under.
@@ -201,25 +203,14 @@ class EngramMemoryStore:
         if self._search_hits is None:
             inner = self._inner
             if isinstance(inner, SearchableMemoryStore):
-                return await inner.search(
-                    prefix, query, limit=limit, max_files=max_files, max_chars=max_chars, max_file_chars=max_file_chars
+                return await search_categories(
+                    inner, prefix, query, limit=limit, max_files=max_files, max_chars=max_chars, max_file_chars=max_file_chars
                 )
             return MemorySearchResult(matches=[], scanned=0, truncated=False)
         hits = await self._search_hits(query, prefix=prefix, limit=max_files)
-        matches: list[MemorySearchMatch] = []
-        remaining = max_chars
-        truncated = len(hits) > limit
-        for page_id, snippet, score in hits[:limit]:
-            path = path_of(page_id)
-            available = remaining - len(path)
-            if available <= 0:
-                truncated = True
-                break
-            # A hit with an empty snippet is still a match: it shows its path alone.
-            clipped = snippet[:available]
-            matches.append(MemorySearchMatch(path=path, snippet=clipped, score=score))
-            remaining -= len(path) + len(clipped)
-        return MemorySearchResult(matches=matches, scanned=len(hits), truncated=truncated)
+        ranked = [MemorySearchMatch(path=path_of(page_id), snippet=snippet, score=score) for page_id, snippet, score in hits]
+        matches, cut = _bounded(ranked, limit=limit, max_chars=max_chars)
+        return MemorySearchResult(matches=matches, scanned=len(hits), truncated=cut or len(hits) > limit)
 
     async def _project(self, pieces: NotePieces, *, status: str) -> None:
         """Index one note as a page at the given status."""
@@ -245,3 +236,57 @@ class EngramMemoryStore:
         rows = await self._cards()
         entries = [(path, title, summary) for page_id, title, summary in rows if (path := path_of(page_id)).startswith(scope_prefix)]
         return render_index(sorted(entries))
+
+
+async def search_categories(
+    store: SearchableMemoryStore,
+    prefix: str,
+    query: str,
+    *,
+    limit: int,
+    max_files: int,
+    max_chars: int,
+    max_file_chars: int,
+) -> MemorySearchResult:
+    """Search the notes of every category folder under a prefix, best score first, within the bounds of one search.
+
+    A store's own search reads only the files directly under the prefix it is given, so each category folder is searched
+    on its own, all at once, and the matches are ranked together and cut to `limit` matches and `max_chars` characters.
+
+    Args:
+        store: The store to search.
+        prefix: The scope's store path prefix, ending in `/`.
+        query: The search text.
+        limit: The most matches to return.
+        max_files: The most files each category's search may scan.
+        max_chars: The most characters across all paths and snippets.
+        max_file_chars: The most characters read from each file.
+
+    Returns:
+        The matches, how many files were scanned in all, and whether anything was cut.
+    """
+    found = await asyncio.gather(
+        *(
+            store.search(f"{prefix}{category}/", query, limit=limit, max_files=max_files, max_chars=max_chars, max_file_chars=max_file_chars)
+            for category in CATEGORIES
+        )
+    )
+    ranked = sorted((match for result in found for match in result.matches), key=lambda match: match.score, reverse=True)
+    matches, cut = _bounded(ranked, limit=limit, max_chars=max_chars)
+    truncated = cut or len(ranked) > limit or any(result.truncated for result in found)
+    return MemorySearchResult(matches=matches, scanned=sum(result.scanned for result in found), truncated=truncated)
+
+
+def _bounded(ranked: Sequence[MemorySearchMatch], *, limit: int, max_chars: int) -> tuple[list[MemorySearchMatch], bool]:
+    """The best `limit` matches whose paths and snippets fit `max_chars`, and whether one was dropped for room."""
+    matches: list[MemorySearchMatch] = []
+    remaining = max_chars
+    for match in ranked[:limit]:
+        available = remaining - len(match.path)
+        if available <= 0:
+            return matches, True
+        # A match with an empty snippet is still a match: it shows its path alone.
+        clipped = match.snippet[:available]
+        matches.append(MemorySearchMatch(path=match.path, snippet=clipped, score=match.score))
+        remaining -= len(match.path) + len(clipped)
+    return matches, False

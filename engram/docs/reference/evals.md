@@ -185,7 +185,7 @@ prints only a count sees nothing. A body printed from its middle counts only by 
 it, and a link inside such a fragment can count the linked unit when a tool call returned it. A body
 the program changes while it prints it, such as its quotes swapped or a prefix put on every line,
 matches only up to the first change, so the rest stays in the output where its links can count. A
-program that prints and then raises reaches the model as a retry prompt that carries its printed
+program that prints and then raises reaches the model as a retried return that carries its printed
 output but no tool returns, because code mode records none for a failed call. So what such a program
 showed never counts, and a unit it returned never becomes a candidate, so a later call that shows
 values the failed call assigned counts none of them. Every

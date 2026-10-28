@@ -68,7 +68,7 @@ The separate reconciliation loop uses `sweep_seconds`. Live watches use `reconci
 
 A watch's `clean_run_sample_rate` defaults to `0.1`, within 0 through 1, and controls sampling when `inspector` is `when_a_rule_led`. `every_run` ignores this sampling rate. `reconcile_hours` defaults to 24 for live watches. `sweep_hours` is required exactly when `when` is `sweep`.
 
-The shipped watch selects every agent except the inspector itself, triggers at run end, and runs six rules: schema rejection, unchanged retry after error, repeated denied action, duplicate call, result overflow and unfinished budget exhaustion. A watch without rules must use `every_run`.
+The shipped watch selects every agent except the inspector itself, triggers at run end, and runs seven rules: schema rejection, tool refusal, unchanged retry after error, repeated denied action, duplicate call, result overflow and unfinished budget exhaustion. A watch without rules must use `every_run`.
 
 Runtime inspector calls retain the framework's request limit. The evaluation command uses separate explicit limits of 12 requests and 120 seconds per trial.
 
@@ -83,7 +83,7 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 | `find(text, run=None, offset=0)` | Up to 50 bounded matches across messages, instructions and tool metadata, with exact follow-up reads centered on the match. |
 | `earlier_runs(offset=0)` | Earlier runs from the same conversation, newest first, in bounded pages. |
 
-Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts. The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
+Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 

@@ -21,7 +21,7 @@ from core.ai.workflows.contracts import StepRegistry, WorkflowContract
 from core.ai.workflows.infrastructure.folder import FOLDER, folder_toolset
 from pydantic_ai.capabilities import AbstractCapability, CombinedCapability, Toolset
 from pydantic_ai.exceptions import ModelRetry
-from pydantic_ai.messages import ModelResponse, RetryPromptPart, TextContent, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import ModelResponse, TextContent, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.anthropic import AnthropicCompaction
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.workspaces import LocalWorkspaceBackend
@@ -239,7 +239,7 @@ class TestFilesDoorDeniesTheNoteSidecar:
             del info
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, RetryPromptPart):
+                    if isinstance(part, ToolReturnPart):
                         return ModelResponse(parts=[TextPart(str(part.content))])
             return ModelResponse(parts=[ToolCallPart("read_file", {"path": "probe.md.threads.json"})])
 
@@ -313,7 +313,7 @@ class TestShellDoorDeniesTheFilesDoorsPaths:
             del info
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, RetryPromptPart | ToolReturnPart):
+                    if isinstance(part, ToolReturnPart):
                         return ModelResponse(parts=[TextPart(str(part.content))])
             return ModelResponse(parts=[ToolCallPart("run_command", {"command": "cat no-such-probe/application_settings.json"})])
 
@@ -332,7 +332,7 @@ class TestShellDoorDeniesTheFilesDoorsPaths:
             del info
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, RetryPromptPart | ToolReturnPart):
+                    if isinstance(part, ToolReturnPart):
                         return ModelResponse(parts=[TextPart(str(part.content))])
             return ModelResponse(parts=[ToolCallPart("run_command", {"command": f"cat {registry}"})])
 
@@ -463,6 +463,17 @@ async def _run[OutputT](agent: Agent[Runtime, OutputT]) -> None:
     await agent.run("hi", deps=runtime)
 
 
+_IDENTITY_CONTEXT = '<context id="capability:managed-prompt-studio_author">'
+"""How the identity block opens: pydantic-ai frames a framework capability's dynamic block as a `<context>` element."""
+
+
+def _context_body(content: str) -> str:
+    """An instruction part's text without the `<context id="...">` element pydantic-ai frames an append-mode block in."""
+    if not content.startswith("<context id="):
+        return content
+    return content.split(">\n", 1)[1].split("\n</context>", 1)[0]
+
+
 class TestInstructionOrder:
     """The studio identity (`ManagedPrompt`) sorts first among capability-contributed instructions.
 
@@ -488,7 +499,7 @@ class TestInstructionOrder:
 
         parts = captured["info"].model_request_parameters.instruction_parts
         assert parts, "the built agent contributed no instructions at all"
-        assert parts[0].content.startswith("You are a coding agent working against a real machine.")
+        assert parts[0].content.startswith(f"{_IDENTITY_CONTEXT}\nYou are a coding agent working against a real machine.")
 
     async def test_the_shell_and_files_situating_sentences_render_beside_the_identity(self, tmp_path: Path) -> None:
         """The two plugins' situating sentences carry the resolved `WORKSPACE`, after the identity opens the prompt."""
@@ -503,7 +514,7 @@ class TestInstructionOrder:
 
         parts = captured["info"].model_request_parameters.instruction_parts
         assert parts, "the built agent contributed no instructions at all"
-        contents = [part.content for part in parts]
+        contents = [_context_body(part.content) for part in parts]
         assert contents[0].startswith("You are a coding agent working against a real machine.")
         shell = next(text for text in contents if text.startswith("Commands run in "))
         files = next(text for text in contents if text.startswith("File paths are relative to "))

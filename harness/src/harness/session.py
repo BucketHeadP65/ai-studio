@@ -22,7 +22,7 @@ from core.ai.workflows.contracts import StepRegistry, Workflow, WorkflowLibrary,
 from core.observability import get_logger
 from pydantic import ValidationError
 from pydantic_ai.capabilities import on_event
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai_harness.compaction import (
     DEFAULT_CONTEXT_WINDOW,
     ContextUsage,
@@ -733,8 +733,8 @@ owner started the next message before this one settled. Boot rescue always uses 
 def rescue_history(messages: Sequence[ModelMessage], *, ended: str) -> list[ModelMessage]:
     """`messages` with every tool call a failed or cut-off turn left open closed and explained.
 
-    A call is open when no later `ToolReturnPart` or tool-bound `RetryPromptPart` answers its
-    `tool_call_id`, the pairing rule `is_provider_valid` checks. Each open call gets one
+    A call is open when no later `ToolReturnPart` answers its `tool_call_id`, the pairing rule
+    `is_provider_valid` checks. A retry that answers a call is that call's return. Each open call gets one
     `ToolReturnPart`, in call order, saying it went unanswered, why, and that the owner's next words
     come first. The returns go in one appended `ModelRequest`, or join the interrupted request
     `messages` ends on, which is then marked complete.
@@ -754,7 +754,7 @@ def rescue_history(messages: Sequence[ModelMessage], *, ended: str) -> list[Mode
                     open_calls[part.tool_call_id] = part
         else:
             for part in message.parts:
-                if isinstance(part, ToolReturnPart) or (isinstance(part, RetryPromptPart) and part.tool_name is not None):
+                if isinstance(part, ToolReturnPart):
                     open_calls.pop(part.tool_call_id, None)
     if not open_calls:
         return list(messages)

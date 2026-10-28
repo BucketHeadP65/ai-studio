@@ -6,17 +6,22 @@ import re
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pydantic_ai.messages import (
+    CapabilityInstructionSource,
     CompactionPart,
     ImageUrl,
+    InstructionDeltaPart,
+    InstructionId,
     ModelRequest,
     ModelRequestPart,
     ModelResponse,
     ModelResponsePart,
-    RetryPromptPart,
+    RetryFeedbackPart,
+    RetryInfo,
     SystemPromptPart,
     TextPart,
     ThinkingPart,
@@ -41,16 +46,21 @@ from core.ai.inspection.views import (
     parse_span,
     plain_whys,
     read,
+    rendered,
     runs_summary,
     shown,
     step_at,
+    text_of,
     turn_at,
     turns_for,
     view_for,
     with_refusal,
 )
 from core.ai.transcripts.contracts import RunSummary, Span, Step, Transcript
-from tests.support.fakes.inspection import AT, answer, call, question, refusal, result, transcript
+from tests.support.fakes.inspection import AT, answer, call, question, result, retried, transcript
+
+if TYPE_CHECKING:
+    from pydantic_ai.messages import ToolRetryCause
 
 EARLIER = RunSummary(
     source="record:run-0",
@@ -62,7 +72,16 @@ EARLIER = RunSummary(
 
 
 def a_run():
-    return transcript(question(), call("c1"), result("c1", "sunny and mild"), call("c2"), refusal("c2"), answer("done"))
+    return transcript(
+        question(),
+        call("c1"),
+        result("c1", "sunny and mild"),
+        call("c2"),
+        retried("c2"),
+        call("c3"),
+        retried("c3", "no city named Atlantis", cause="model_retry"),
+        answer("done"),
+    )
 
 
 def test_the_outline_gives_one_line_per_step_with_what_was_asked_called_and_said() -> None:
@@ -72,8 +91,53 @@ def test_the_outline_gives_one_line_per_step_with_what_was_asked_called_and_said
     assert lines[0].startswith("step 0: ")
     assert "asked 'What is the weather in Paris?'" in lines[0]
     assert "called lookup_city (answered)" in lines[0]
-    assert "called lookup_city (refused)" in lines[0]
+    assert "called lookup_city (rejected by the schema)" in lines[0]
+    assert "called lookup_city (asked for a change)" in lines[0]
     assert "said 'done'" in lines[0]
+
+
+@pytest.mark.parametrize(
+    ("cause", "ended"),
+    [("unknown_tool", "an unknown tool"), ("unavailable_tool", "not available yet"), (None, "asked again")],
+)
+def test_the_outline_says_why_a_call_has_to_be_made_again(cause: ToolRetryCause | None, ended: str) -> None:
+    given = transcript(question(), call("c1"), retried("c1", "try again", cause=cause))
+
+    assert f"called lookup_city ({ended})" in outline(given)
+
+
+def test_a_retried_return_reads_as_a_retry_with_its_cause() -> None:
+    rendered_run = rendered(a_run().messages)
+
+    assert "[request tool-return, rejected by the schema] [{'type': 'string_type', 'loc': ['name']" in rendered_run
+    assert "[request tool-return, asked for a change] no city named Atlantis" in rendered_run
+    assert "[request tool-return] sunny and mild" in rendered_run
+
+
+def test_a_changed_instruction_reads_in_the_messages_and_the_instructions() -> None:
+    changed = ModelRequest(
+        parts=[
+            InstructionDeltaPart(id=InstructionId(CapabilityInstructionSource("shell")), content="Commands run in /new."),
+            InstructionDeltaPart(id=InstructionId(CapabilityInstructionSource("files")), content=None),
+            UserPromptPart(content="go on", timestamp=AT),
+        ]
+    )
+    given = transcript(question(), answer("done"), changed)
+
+    instructions = read(given, 0, resource="instructions")
+    messages = read(given, 0)
+
+    assert "0.2.0 [instruction-delta capability:shell] Commands run in /new." in instructions
+    assert "0.2.1 [instruction-delta capability:files] This instruction was withdrawn." in instructions
+    assert "0.2.0 [instruction-delta] Commands run in /new." in messages
+    assert text_of(changed.parts[1]) == "This instruction was withdrawn."
+
+
+def test_retry_feedback_reads_as_its_content() -> None:
+    feedback = RetryFeedbackPart(content="Please return text.", retry=RetryInfo(cause="no_output"), timestamp=AT)
+
+    assert text_of(feedback) == "Please return text."
+    assert shown(feedback) == "Please return text."
 
 
 def test_the_outline_says_when_a_call_was_never_answered() -> None:
@@ -391,8 +455,11 @@ LABEL_CASES: list[tuple[ModelRequestPart | ModelResponsePart, str]] = [
     (ThinkingPart(content="hmm"), "step 2, the model's thinking"),
     (ToolCallPart(tool_name="lookup_city", args={}, tool_call_id="c1"), "step 2, the model's call to lookup_city"),
     (ToolReturnPart(tool_name="lookup_city", content="ok", tool_call_id="c1"), "step 2, the return of lookup_city"),
-    (RetryPromptPart(content="bad args", tool_name="lookup_city", tool_call_id="c1"), "step 2, the retry asked of lookup_city"),
-    (RetryPromptPart(content="bad args", tool_call_id="c1"), "step 2, a retry prompt"),
+    (
+        ToolReturnPart(tool_name="lookup_city", content="bad args", tool_call_id="c1", outcome="retried"),
+        "step 2, the retry asked of lookup_city",
+    ),
+    (RetryFeedbackPart(content="bad output", retry=RetryInfo(cause="validation_error")), "step 2, the retry feedback part"),
     (CompactionPart(), "step 2, compaction"),
 ]
 

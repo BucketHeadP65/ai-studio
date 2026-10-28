@@ -6,7 +6,7 @@ import pytest
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import LocalWorkspace
 from pydantic_ai.exceptions import UserError
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai_harness.shell import Shell
 
@@ -23,7 +23,7 @@ async def _answer(cwd: Path, command: str, *, tool: str = "run_command", denied:
         del info
         for message in messages:
             if isinstance(message, ModelRequest):
-                answers.extend(str(part.content) for part in message.parts if isinstance(part, ToolReturnPart | RetryPromptPart))
+                answers.extend(str(part.content) for part in message.parts if isinstance(part, ToolReturnPart))
         if answers:
             return ModelResponse(parts=[TextPart("done")])
         return ModelResponse(parts=[ToolCallPart(tool_name=tool, args={"command": command})])

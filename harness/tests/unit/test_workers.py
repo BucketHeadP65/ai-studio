@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from core.ai.shell import PathGuardedShell
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import AbstractCapability
-from pydantic_ai.messages import ModelResponse, RetryPromptPart, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.workspaces import LocalWorkspaceBackend
@@ -150,7 +150,7 @@ class TestWorkerShellDeniesTheWorkerFilesPaths:
             del info
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, RetryPromptPart | ToolReturnPart):
+                    if isinstance(part, ToolReturnPart):
                         return ModelResponse(parts=[TextPart(str(part.content))])
             return ModelResponse(parts=[ToolCallPart("run_command", {"command": "cat no-such-probe/x.md.threads.json"})])
 
@@ -180,7 +180,7 @@ class TestWorkerShellDeniesTheWorkerFilesPaths:
             del info
             for message in messages:
                 for part in message.parts:
-                    if isinstance(part, RetryPromptPart | ToolReturnPart):
+                    if isinstance(part, ToolReturnPart):
                         return ModelResponse(parts=[TextPart(str(part.content))])
             return ModelResponse(parts=[call])
 

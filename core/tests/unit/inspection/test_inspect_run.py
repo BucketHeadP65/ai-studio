@@ -24,8 +24,8 @@ from tests.support.fakes.inspection import (
     answer,
     call,
     question,
-    refusal,
     result,
+    retried,
     transcript,
 )
 
@@ -62,7 +62,7 @@ def a_handler(
 ) -> tuple[InspectRunHandler, FakeLeadsAndFindings, FakeLeadQueue]:
     store = FakeLeadsAndFindings()
     queue = FakeLeadQueue()
-    refused_twice = transcript(question(), call("c1"), refusal("c1"), call("c2"), refusal("c2"), source="test:run")
+    refused_twice = transcript(question(), call("c1"), retried("c1"), call("c2"), retried("c2"), source="test:run")
     loaders = TranscriptLoaders(by_key={"test": Opens(run=refused_twice)})
     registry = Rules(by_key={**RULES.by_key, "improvised_page": lambda _facts: ImprovisedPage(symptom=symptom)})
     rules = ("schema_rejected_arguments", "retried_after_clear_error", "improvised_page")

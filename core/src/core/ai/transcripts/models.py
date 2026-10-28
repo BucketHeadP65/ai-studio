@@ -18,11 +18,8 @@ from collections.abc import Iterator, Mapping
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from pydantic_ai.messages import ModelMessage, ModelRequestPart, ModelResponsePart, RetryPromptPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequestPart, ModelResponsePart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models import ModelRequestParameters
-
-type ToolAnswer = ToolReturnPart | RetryPromptPart
-"""What answers a tool call: the tool's return, or the retry prompt when the schema refused the arguments."""
 
 
 class Span(BaseModel):
@@ -89,7 +86,7 @@ class Step(BaseModel):
                         msg = f"tool call id {part.tool_call_id!r} is used twice"
                         raise ValueError(msg)
                     called.add(part.tool_call_id)
-                elif isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_name is not None:
+                elif isinstance(part, ToolReturnPart):
                     if part.tool_call_id not in called:
                         msg = f"answer to {part.tool_call_id!r} at message {message_index} has no earlier call"
                         raise ValueError(msg)
@@ -103,15 +100,15 @@ class Step(BaseModel):
 class Call(BaseModel):
     """One tool call and what answered it.
 
-    The answer is the tool's return, or the retry prompt when the schema refused the arguments, or None when the transcript
-    ended before one came, and `answered_at` is where that answer is.
+    The answer is the call's return, whose outcome says how it ended (a retry that asks for the call again is a return too), or
+    None when the transcript ended before one came, and `answered_at` is where that answer is.
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     at: Span
     call: ToolCallPart
-    answer: ToolAnswer | None
+    answer: ToolReturnPart | None
     answered_at: Span | None
     duration_ms: int | None
 
@@ -182,14 +179,14 @@ class Transcript(BaseModel):
         Returns:
             One call per tool call, with where its answer is and its duration when the source recorded one.
         """
-        answers: dict[str, tuple[Span, ToolAnswer]] = {}
+        answers: dict[str, tuple[Span, ToolReturnPart]] = {}
         found: list[tuple[Span, ToolCallPart]] = []
         for span, message in self.recorded():
             for part_index, part in enumerate(message.parts):
                 at = Span(step=span.step, message=span.message, part=part_index)
                 if isinstance(part, ToolCallPart):
                     found.append((at, part))
-                elif isinstance(part, ToolReturnPart | RetryPromptPart) and part.tool_name is not None:
+                elif isinstance(part, ToolReturnPart):
                     answers.setdefault(part.tool_call_id, (at, part))
         calls: list[Call] = []
         for at, call in found:
