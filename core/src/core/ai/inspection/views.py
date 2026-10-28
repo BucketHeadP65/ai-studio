@@ -72,7 +72,7 @@ _ENDED: Final[Mapping[str, str]] = {"success": "answered", "failed": "raised", "
 """How a tool return's outcome reads in an outline."""
 _RETRIED: Final[Mapping[str, str]] = {
     "validation_error": "rejected by the schema",
-    "model_retry": "refused by the tool",
+    "model_retry": "asked for a change",
     "unknown_tool": "an unknown tool",
     "unavailable_tool": "not available yet",
 }

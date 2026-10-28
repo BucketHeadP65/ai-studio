@@ -92,7 +92,7 @@ def test_the_outline_gives_one_line_per_step_with_what_was_asked_called_and_said
     assert "asked 'What is the weather in Paris?'" in lines[0]
     assert "called lookup_city (answered)" in lines[0]
     assert "called lookup_city (rejected by the schema)" in lines[0]
-    assert "called lookup_city (refused by the tool)" in lines[0]
+    assert "called lookup_city (asked for a change)" in lines[0]
     assert "said 'done'" in lines[0]
 
 
@@ -110,7 +110,7 @@ def test_a_retried_return_reads_as_a_retry_with_its_cause() -> None:
     rendered_run = rendered(a_run().messages)
 
     assert "[request tool-return, rejected by the schema] [{'type': 'string_type', 'loc': ['name']" in rendered_run
-    assert "[request tool-return, refused by the tool] no city named Atlantis" in rendered_run
+    assert "[request tool-return, asked for a change] no city named Atlantis" in rendered_run
     assert "[request tool-return] sunny and mild" in rendered_run
 
 
