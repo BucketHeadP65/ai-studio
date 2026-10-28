@@ -6,7 +6,7 @@ import pytest
 
 from pydantic_ai_harness.memory import InMemoryStore, MemoryOperation, MemorySearchMatch
 
-from engram.agent_memory.contracts import EngramMemoryStore
+from engram.agent_memory.contracts import EngramMemoryStore, search_categories
 from engram.agent_memory.domain import path_of
 from engram.testing.fakes.agent_memory import FakeCards, FakeIngest, FakeSearchHits
 
@@ -101,21 +101,25 @@ async def test_projection_failure_still_raises_but_authority_holds() -> None:
     assert stored is not None
 
 
-async def test_search_without_hits_falls_back_to_inner_lexical() -> None:
+async def test_search_without_hits_falls_back_to_inner_lexical_in_every_category_folder() -> None:
     memory, _ = store()
     await memory.write(PATH, NOTE, expected_version=None)
-    result = await memory.search(SCOPE + "/world/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
+    result = await memory.search(SCOPE + "/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
     assert result.matches
     assert result.matches[0].path.endswith("postgres-port.md")
 
 
-async def test_the_inner_lexical_search_reads_only_the_files_directly_under_the_prefix() -> None:
-    memory, _ = store()
-    await memory.write(PATH, NOTE, expected_version=None)
+async def test_a_search_by_category_ranks_every_folder_together_within_one_searchs_bounds() -> None:
+    inner = InMemoryStore()
+    await inner.write(f"{SCOPE}/world/postgres-port.md", "postgres answers on 5433", expected_version=None)
+    await inner.write(f"{SCOPE}/reference/postgres-tuning.md", "postgres postgres postgres tuning notes", expected_version=None)
 
-    result = await memory.search(SCOPE + "/", "postgres", limit=5, max_files=100, max_chars=2_000, max_file_chars=8_000)
+    result = await search_categories(inner, SCOPE + "/", "postgres", limit=1, max_files=20, max_chars=50, max_file_chars=8_000)
 
-    assert result.matches == []
+    assert [match.path for match in result.matches] == [f"{SCOPE}/reference/postgres-tuning.md"]
+    assert len(result.matches[0].path) + len(result.matches[0].snippet) <= 50
+    assert result.truncated is True
+    assert result.scanned == 2
 
 
 async def test_search_with_wired_hits_passes_the_prefix_through_and_maps_matches() -> None:

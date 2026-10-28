@@ -150,8 +150,7 @@ async def test_the_factory_composes_a_store_that_finds_a_written_note_hybrid_and
 
     Two more store instances (rather than the one just written through) so each opens its own pool
     with the `embed_query` this test wants — the factory's contract is that either composition
-    reads back whatever the other already wrote to the same collection. The ranked search finds the
-    note under its scope, the lexical one under its category folder, the only files it reads.
+    reads back whatever the other already wrote to the same collection.
     """
     async with embedded_memory_store(migrated, embedder=FakeEmbedding(), collection=_COLLECTION) as writer:
         await writer.write(_PATH, _NOTE, expected_version=None)
@@ -163,7 +162,7 @@ async def test_the_factory_composes_a_store_that_finds_a_written_note_hybrid_and
 
     async with embedded_memory_store(migrated, embedder=FakeEmbedding(), collection=_COLLECTION) as lexical:
         lexical_result = await lexical.search(
-            f"{_SCOPE}/world/", "postgres", limit=5, max_files=20, max_chars=2_000, max_file_chars=8_000
+            f"{_SCOPE}/", "postgres", limit=5, max_files=20, max_chars=2_000, max_file_chars=8_000
         )
 
     assert any(match.path == _PATH for match in hybrid_result.matches)
