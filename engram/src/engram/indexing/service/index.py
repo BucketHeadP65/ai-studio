@@ -25,7 +25,7 @@ from core.cqrs.contracts import narrow_command
 from core.observability import get_logger
 
 from engram.indexing.domain import card
-from engram.indexing.domain.manifest import FileType, identity_hash
+from engram.indexing.domain.manifest import FileType, ManifestEntry, changed_page_ids, identity_hash
 from engram.indexing.domain.mirror_chunks import DEFAULT_CHUNK_SIZES, DEFAULT_PLANNER_CEILING_TOKENS
 from engram.indexing.domain.models import (
     CitingPagesChanged,
@@ -56,6 +56,7 @@ from engram.indexing.service.row_builder import (
     duplicate_id_errors,
     id_str,
     link_ref_rows,
+    manifest_rows,
     page_type_contract_rows,
     row_ids,
     validation_row,
@@ -231,7 +232,7 @@ class IndexKnowledgeBaseHandler:
         preview = await preview_dirty_set(command, deps=deps)
 
         self._emit(ValidationCompleted(n_errors=0, n_warnings=0))
-        self._emit(PagesLoaded(collection=command.collection, pages=0, sections=0, claims=0, edges=0, pruned=0))
+        self._emit(PagesLoaded(collection=command.collection, pages=0, sections=0, claims=0, edges=0, pruned=0, page_ids=()))
         self._emit(CitingPagesChanged(collection=command.collection, page_ids=()))
 
         report = IndexReport(
@@ -445,11 +446,11 @@ class IndexKnowledgeBaseHandler:
     def _build_state(
         self, resolved: ResolveResult, parsed: _ParsedKnowledgeBase, validation: ValidationReport, collection: str, *, spec_hash: str, vocabulary_hash: str
     ) -> _FullState:
-        """The link refs, validation rows, manifest rows and fingerprint hashes the full load writes."""
+        """The link refs, validation rows, manifest entries and fingerprint hashes the full load writes."""
         return _FullState(
             link_ref_rows=link_ref_rows(resolved, collection),
             validation_rows=[validation_row(issue, collection) for issue in (*validation.errors, *validation.warnings)],
-            manifest_rows=_full_manifest_rows(resolved, parsed, collection),
+            manifest_entries=_full_manifest_entries(resolved, parsed),
             spec_hash=spec_hash,
             vocabulary_hash=vocabulary_hash,
         )
@@ -491,10 +492,11 @@ class IndexKnowledgeBaseHandler:
             # for a path this rebuild did not read is deleted, so no stale row outlives a full rebuild.
             await uow.link_refs.replace_for_sources(state.link_ref_rows, page_ids, collection=collection)
             await uow.validation_store.replace_all(state.validation_rows, collection=collection)
-            await uow.manifest.upsert_many(state.manifest_rows, collection=collection)
-            indexed_paths = {id_str(row["path"]) for row in state.manifest_rows}
-            stale_paths = {path for path in await uow.manifest.load(collection) if path not in indexed_paths}
-            await uow.manifest.delete_paths(stale_paths, collection=collection)
+            stored_manifest = await uow.manifest.load(collection)
+            starting_manifest = stored_manifest if self._is_own_root(await uow.fingerprint.get(collection)) else {}
+            await uow.manifest.upsert_many(manifest_rows(state.manifest_entries, collection), collection=collection)
+            indexed_paths = {entry.path for entry in state.manifest_entries}
+            await uow.manifest.delete_paths(set(stored_manifest) - indexed_paths, collection=collection)
             await uow.fingerprint.set(
                 collection=collection,
                 indexer_version=self._indexer_version,
@@ -515,6 +517,7 @@ class IndexKnowledgeBaseHandler:
                     claims=len(load.claims),
                     edges=len(load.edges),
                     pruned=pruned,
+                    page_ids=changed_page_ids(starting_manifest, state.manifest_entries),
                 ),
                 CitingPagesChanged(
                     collection=collection, page_ids=digest_page_ids(load.pages, frozenset(self._spec.sources.digest_types.values()))
@@ -527,14 +530,18 @@ class IndexKnowledgeBaseHandler:
         """The knowledge base root as a string."""
         return str(self._kb_reader.root)
 
+    def _is_own_root(self, fingerprint: StoredFingerprint | None) -> bool:
+        """Whether the stored fingerprint names this knowledge base root, or no root at all."""
+        return fingerprint is None or fingerprint.knowledge_base_root in ("", self._knowledge_base_path())
+
     def _emit(self, event: Event) -> None:
         """Append an event for the bus to drain."""
         self.events.append(event)
 
 
-def _full_manifest_rows(resolved: ResolveResult, parsed: _ParsedKnowledgeBase, collection: str) -> list[Row]:
-    """One `kb.index_manifest` row per indexed note and source mirror, the first note of a duplicate id winning."""
-    rows: list[Row] = []
+def _full_manifest_entries(resolved: ResolveResult, parsed: _ParsedKnowledgeBase) -> list[ManifestEntry]:
+    """One manifest entry per indexed note and source mirror, the first note of a duplicate id winning."""
+    entries: list[ManifestEntry] = []
     seen_ids: set[str] = set()
     for resolved_note in resolved.notes:
         note = resolved_note.note
@@ -543,30 +550,28 @@ def _full_manifest_rows(resolved: ResolveResult, parsed: _ParsedKnowledgeBase, c
             continue
         seen_ids.add(page_id)
         stem = note.source_path.rsplit("/", 1)[-1].removesuffix(".md")
-        rows.append(
-            {
-                "collection": collection,
-                "path": note.source_path,
-                "kind": FileType.NOTE.value,
-                "content_hash": card.content_hash(parsed.note_texts.get(note.source_path, "")),
-                "identity_hash": identity_hash(stem=stem, id_=page_id, title=note.frontmatter.title, aliases=note.frontmatter.aliases),
-                "page_id": page_id,
-                "source_key": None,
-            }
+        entries.append(
+            ManifestEntry(
+                path=note.source_path,
+                kind=FileType.NOTE,
+                content_hash=card.content_hash(parsed.note_texts.get(note.source_path, "")),
+                identity_hash=identity_hash(stem=stem, id_=page_id, title=note.frontmatter.title, aliases=note.frontmatter.aliases),
+                page_id=page_id,
+                source_key=None,
+            )
         )
-    rows.extend(
-        {
-            "collection": collection,
-            "path": source.path,
-            "kind": FileType.SOURCE.value,
-            "content_hash": card.content_hash(source.text),
-            "identity_hash": card.content_hash(source.source_key),
-            "page_id": None,
-            "source_key": source.source_key,
-        }
+    entries.extend(
+        ManifestEntry(
+            path=source.path,
+            kind=FileType.SOURCE,
+            content_hash=card.content_hash(source.text),
+            identity_hash=card.content_hash(source.source_key),
+            page_id=None,
+            source_key=source.source_key,
+        )
         for source in parsed.sources
     )
-    return rows
+    return entries
 
 
 @dataclass(frozen=True, slots=True)
@@ -585,10 +590,10 @@ class _ParsedKnowledgeBase:
 
 @dataclass(frozen=True, slots=True)
 class _FullState:
-    """The link refs, validation rows, manifest rows and fingerprint hashes a full load writes."""
+    """The link refs, validation rows, manifest entries and fingerprint hashes a full load writes."""
 
     link_ref_rows: list[Row]
     validation_rows: list[Row]
-    manifest_rows: list[Row]
+    manifest_entries: list[ManifestEntry]
     spec_hash: str
     vocabulary_hash: str

@@ -26,6 +26,7 @@ from engram.indexing.domain.manifest import (
     IdentitySurface,
     ManifestDiff,
     ManifestEntry,
+    changed_page_ids,
     compute_closure,
     compute_diff,
     identity_hash,
@@ -55,6 +56,7 @@ from engram.indexing.service.row_builder import (
     duplicate_id_errors,
     id_str,
     link_ref_rows,
+    manifest_rows,
     page_type_contract_rows,
     row_ids,
     validation_row,
@@ -212,13 +214,15 @@ async def run_incremental(
         date_field=deps.spec.retrieval.date_field,
         chunk_sizes=chunk_sizes,
     )
+    manifest_entries = _manifest_entries(resolved.notes, dirty_mirrors, hashed)
     write = _DirtyWrite(
         load=load,
         link_ref_rows=link_ref_rows(resolved, collection),
         # A parse or mirror error is keyed by its file path, so those paths join the dirty ids and
         # their errors are stored as a full rebuild stores them.
         validation_rows=_validation_rows(validation, row_ids(load.pages) | {issue.page_id for issue in (*parsed.errors, *mirror_errors)}, collection),
-        manifest_rows=_manifest_rows(resolved.notes, dirty_mirrors, hashed, collection),
+        manifest_entries=manifest_entries,
+        changed_page_ids=changed_page_ids(stored, manifest_entries),
         edge_src_ids=row_ids(load.pages) | dirty_set.deleted_page_ids,
         deleted_page_ids=set(dirty_set.deleted_page_ids),
         deleted_source_keys=_deletable_source_keys(
@@ -756,12 +760,12 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
         validation_keys = (
             write.edge_src_ids
             | {id_str(row["page_id"]) for row in write.validation_rows}
-            | {id_str(row["path"]) for row in write.manifest_rows}
+            | {entry.path for entry in write.manifest_entries}
             | write.removed_paths
         )
         await uow.validation_store.replace_for_pages(write.validation_rows, validation_keys, collection=collection)
         standing_validation = await uow.validation_store.whole_report(collection)
-        await uow.manifest.upsert_many(write.manifest_rows, collection=collection)
+        await uow.manifest.upsert_many(manifest_rows(write.manifest_entries, collection), collection=collection)
         await uow.manifest.delete_paths(write.removed_paths | write.unloaded_mirror_paths, collection=collection)
         # Stamp the index time and the knowledge base root on the fingerprint row, which exists on this path.
         await uow.fingerprint.touch(collection, knowledge_base_root=str(deps.kb_reader.root))
@@ -782,6 +786,7 @@ async def _load_dirty(deps: IncrementalDeps, write: _DirtyWrite, collection: str
                 claims=len(load.claims),
                 edges=len(load.edges),
                 pruned=pruned,
+                page_ids=write.changed_page_ids,
             ),
             CitingPagesChanged(collection=collection, page_ids=digest_page_ids(load.pages, frozenset(deps.spec.sources.digest_types.values()))),
         )
@@ -794,41 +799,39 @@ def _validation_rows(validation: ValidationReport, dirty_page_ids: set[str], col
     return [validation_row(issue, collection) for issue in (*validation.errors, *validation.warnings) if issue.page_id in dirty_page_ids]
 
 
-def _manifest_rows(
-    resolved_notes: Sequence[ResolvedNote], mirrors: Sequence[MirrorDoc], hashed: Mapping[str, HashedFile], collection: str
-) -> list[Row]:
-    """One `kb.index_manifest` row per dirty note and per loaded dirty mirror, from the hash of its exact path."""
-    rows: list[Row] = []
+def _manifest_entries(
+    resolved_notes: Sequence[ResolvedNote], mirrors: Sequence[MirrorDoc], hashed: Mapping[str, HashedFile]
+) -> list[ManifestEntry]:
+    """One manifest entry per dirty note and per loaded dirty mirror, from the hash of its exact path."""
+    entries: list[ManifestEntry] = []
     for resolved_note in resolved_notes:
         note = resolved_note.note
         hashed_file = hashed.get(note.source_path)
         if hashed_file is None:
             continue
-        rows.append(
-            {
-                "collection": collection,
-                "path": hashed_file.path,
-                "kind": FileType.NOTE.value,
-                "content_hash": hashed_file.content_hash,
-                "identity_hash": hashed_file.identity_hash,
-                "page_id": note.frontmatter.id,
-                "source_key": None,
-            }
+        entries.append(
+            ManifestEntry(
+                path=hashed_file.path,
+                kind=FileType.NOTE,
+                content_hash=hashed_file.content_hash,
+                identity_hash=hashed_file.identity_hash,
+                page_id=note.frontmatter.id,
+                source_key=None,
+            )
         )
-    rows.extend(
-        {
-            "collection": collection,
-            "path": hashed_file.path,
-            "kind": FileType.SOURCE.value,
-            "content_hash": hashed_file.content_hash,
-            "identity_hash": hashed_file.identity_hash,
-            "page_id": None,
-            "source_key": mirror.source_key,
-        }
+    entries.extend(
+        ManifestEntry(
+            path=hashed_file.path,
+            kind=FileType.SOURCE,
+            content_hash=hashed_file.content_hash,
+            identity_hash=hashed_file.identity_hash,
+            page_id=None,
+            source_key=mirror.source_key,
+        )
         for mirror in mirrors
         if (hashed_file := hashed.get(mirror.path)) is not None
     )
-    return rows
+    return entries
 
 
 def _page_keys(page: CleanPage) -> frozenset[str]:
@@ -863,12 +866,13 @@ class _FileDoc:
 
 @dataclass(frozen=True, slots=True)
 class _DirtyWrite:
-    """The rows `_load_dirty` writes and the page ids, source keys, paths and manifest rows it deletes or replaces."""
+    """The rows and manifest entries `_load_dirty` writes, what it deletes or replaces, and the changed pages it records."""
 
     load: LoadSet
     link_ref_rows: list[Row]
     validation_rows: list[Row]
-    manifest_rows: list[Row]
+    manifest_entries: list[ManifestEntry]
+    changed_page_ids: tuple[str, ...]
     edge_src_ids: set[str]
     deleted_page_ids: set[str]
     deleted_source_keys: set[str]

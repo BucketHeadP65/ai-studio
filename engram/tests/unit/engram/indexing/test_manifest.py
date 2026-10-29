@@ -1,6 +1,6 @@
 """Unit tests for the pure index-manifest change detector (`src/engram/indexing/domain/manifest.py`).
 
-These pin three contracts, all pure (no IO, no DB):
+These pin four contracts, all pure (no IO, no DB):
 
 - `identity_hash` — the sha256 of a note's normalized resolution-key set
   `{stem, id, title, *aliases}`: order-independent across aliases,
@@ -12,6 +12,8 @@ These pin three contracts, all pure (no IO, no DB):
   closure (pages referencing an appeared/disappeared resolution key) plus the
   mirror citers, with the targeted deletes (`deleted_page_ids` /
   `deleted_source_keys`), including the single-level completeness lemma.
+- `changed_page_ids`: the page ids of the notes whose file is new to the stored
+  manifest or whose content hash differs from it.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from engram.indexing.domain.manifest import (
     HashedFile,
     IdentitySurface,
     ManifestDiff,
+    changed_page_ids,
     compute_closure,
     compute_diff,
     identity_hash,
@@ -148,6 +151,62 @@ def test_identity_hash_deduplicates_keys() -> None:
 
     expected = content_hash("same")
     assert deduped == expected
+
+
+# --- changed_page_ids ----------------------------------------------------------
+
+
+def _note(path: str, page_id: str, *, content: str) -> ManifestEntry:
+    return ManifestEntry(path=path, kind=FileType.NOTE, content_hash=content, identity_hash=f"i-{path}", page_id=page_id, source_key=None)
+
+
+def _mirror(path: str, source_key: str, *, content: str) -> ManifestEntry:
+    return ManifestEntry(path=path, kind=FileType.SOURCE, content_hash=content, identity_hash=f"i-{path}", page_id=None, source_key=source_key)
+
+
+def test_a_new_note_file_is_a_changed_page() -> None:
+    stored = {"a.md": _note("a.md", "note.a", content="c-a")}
+    current = [_note("a.md", "note.a", content="c-a"), _note("b.md", "note.b", content="c-b")]
+
+    assert changed_page_ids(stored, current) == ("note.b",)
+
+
+def test_an_edited_note_file_is_a_changed_page() -> None:
+    stored = {"a.md": _note("a.md", "note.a", content="c-a-old")}
+    current = [_note("a.md", "note.a", content="c-a-new")]
+
+    assert changed_page_ids(stored, current) == ("note.a",)
+
+
+def test_an_unchanged_file_is_not_listed() -> None:
+    stored = {"a.md": _note("a.md", "note.a", content="c-a")}
+    current = [_note("a.md", "note.a", content="c-a")]
+
+    assert changed_page_ids(stored, current) == ()
+
+
+def test_a_source_mirror_is_never_listed() -> None:
+    stored = {"Sources/k.md": _mirror("Sources/k.md", "K", content="c-old")}
+    current = [_mirror("Sources/k.md", "K", content="c-new")]
+
+    assert changed_page_ids(stored, current) == ()
+
+
+def test_an_empty_stored_manifest_lists_nothing() -> None:
+    current = [_note("a.md", "note.a", content="c-a"), _note("b.md", "note.b", content="c-b")]
+
+    assert changed_page_ids({}, current) == ()
+
+
+def test_changed_page_ids_are_sorted_and_unique() -> None:
+    stored = {"z.md": _note("z.md", "note.z", content="c-z-old")}
+    current = [
+        _note("z.md", "note.z", content="c-z-new"),
+        _note("b.md", "note.b", content="c-b"),
+        _note("copy-of-b.md", "note.b", content="c-b"),
+    ]
+
+    assert changed_page_ids(stored, current) == ("note.b", "note.z")
 
 
 # --- compute_closure scenarios ------------------------------------------------

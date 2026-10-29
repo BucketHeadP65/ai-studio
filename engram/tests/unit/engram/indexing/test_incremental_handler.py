@@ -1007,3 +1007,63 @@ class TestDeletedPageSummaries:
         assert uow.summaries.section_units == {}
         _keep, _dirty, deleted = uow.summaries.pruned_for_pages[0]
         assert deleted == {_OLD_ENTITY_ID}
+
+
+# --- a retitle: the entity keeps its path and id but its title changes on disk. The paper links the
+# entity by its old title and is unchanged on disk, so the closure re-resolves it (its link now dangles).
+_OLD_ENTITY_TITLE = "GraphRAG"
+_NEW_ENTITY_TITLE = "GraphRAG Index"
+
+
+def _build_retitle_deps(uow: FakeKnowledgeBaseUnitOfWork) -> _Deps:
+    """Script one edited note (the entity's new title) and one linker the closure re-resolves with its file unchanged."""
+    reader = FakeKnowledgeBaseReader(
+        units=[(_LINKER_PATH, _linker_paper(_OLD_ENTITY_TITLE)), (_OLD_ENTITY_PATH, _entity_note(_OLD_ENTITY_ID, _NEW_ENTITY_TITLE))]
+    )
+    embedder = FakeEmbedding()
+    uow.manifest.stored = {
+        _LINKER_PATH: _note_entry(
+            _LINKER_PATH, _LINKER_ID, content=content_hash(_linker_paper(_OLD_ENTITY_TITLE)), title="LightRAG", slug="lightrag-2025"
+        ),
+        _OLD_ENTITY_PATH: _note_entry(
+            _OLD_ENTITY_PATH,
+            _OLD_ENTITY_ID,
+            content=content_hash(_entity_note(_OLD_ENTITY_ID, _OLD_ENTITY_TITLE)),
+            title=_OLD_ENTITY_TITLE,
+            slug=_OLD_ENTITY_SLUG,
+        ),
+    }
+    uow.fingerprint.stored = StoredFingerprint(
+        indexer_version="engram-index/1", spec_hash="spec-hash-1", vocabulary_hash="vocabulary-hash-1", embed_model=embedder.model_id
+    )
+    # The paper references the title that disappeared, so the name query answers the paper's id.
+    uow.link_refs.referencing = {_LINKER_ID}
+    clean = (
+        CleanPage(id=_LINKER_ID, slug="lightrag-2025", title="LightRAG", aliases=(), path=_LINKER_PATH),
+        CleanPage(id=_OLD_ENTITY_ID, slug=_OLD_ENTITY_SLUG, title=_OLD_ENTITY_TITLE, aliases=(), path=_OLD_ENTITY_PATH),
+    )
+    return _Deps(uow_factory=lambda: uow, kb_reader=reader, embedder=embedder, clean_pages=clean)
+
+
+class TestChangedPages:
+    """`PagesLoaded.page_ids` lists the notes whose file content changed, never a page loaded again for another reason."""
+
+    async def test_pages_loaded_lists_an_edited_note_and_not_a_relinked_one(self) -> None:
+        uow = FakeKnowledgeBaseUnitOfWork()
+        deps = _build_retitle_deps(uow)
+
+        await run_incremental(IndexKnowledgeBase(collection="research"), deps=deps)
+
+        assert _LINKER_ID in {row["id"] for row in uow.pages.upserted_rows}, "the closure re-resolves the linker"
+        loaded = next(event for event in uow.coordination.events if isinstance(event, PagesLoaded))
+        assert loaded.page_ids == (_OLD_ENTITY_ID,)
+
+    async def test_pages_loaded_does_not_list_a_file_the_embedding_backfill_widened_in(self) -> None:
+        uow = FakeKnowledgeBaseUnitOfWork(pages_needing=[PendingEmbedRow(_ENTITY_ID)])
+        deps = _build_deps(uow, paper_body=_PAPER_BODY_V2)
+
+        await run_incremental(IndexKnowledgeBase(collection="research", embed=True), deps=deps)
+
+        assert _ENTITY_ID in {row["id"] for row in uow.pages.upserted_rows}, "the backfill loads the unchanged entity again"
+        loaded = next(event for event in uow.coordination.events if isinstance(event, PagesLoaded))
+        assert loaded.page_ids == (_PAPER_ID,)

@@ -154,10 +154,14 @@ class ValidationCompleted(Event):
 
 
 class PagesLoaded(Event):
-    """Emitted after the Load transaction commits, naming its collection, with per-aggregate counts.
+    """Emitted after the Load transaction commits, naming its collection, with per-aggregate counts and its changed pages.
 
     `collection` is the knowledge base partition the transaction wrote. Several knowledge bases index into one
     database, so a subscriber reading this off the outbox knows whose rows the counts describe.
+    `page_ids` holds the changed pages, sorted and unique: each note whose file is new to the index manifest the
+    index started from or whose content hash differs from it. A page loaded again only to resolve its links or to
+    embed its rows is not listed, and neither is a source mirror. A first index, an index of a root that took over
+    the collection, and a dry run list none.
     """
 
     collection: str
@@ -166,6 +170,7 @@ class PagesLoaded(Event):
     claims: int
     edges: int
     pruned: int
+    page_ids: tuple[str, ...]
 
 
 class CitingPagesChanged(Event):
