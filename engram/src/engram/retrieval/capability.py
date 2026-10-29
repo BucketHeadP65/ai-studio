@@ -57,6 +57,7 @@ from .envelope import (
 )
 from .infrastructure.gateway import read_snapshot
 from .queries import expansion_hops, graph_next_steps, paths_next_steps, route_hops, routed_graph_paths, routed_graph_result
+from .query_embedding import keyword_only_note
 from .sql_tools import DESCRIBE_SCHEMA_DESCRIPTION, RUN_SQL_DESCRIPTION, make_describe_schema, make_run_sql, tooling_instructions
 from .tools import (
     DATE_RANGE_CLAUSE,
@@ -67,6 +68,7 @@ from .tools import (
     declared_facets_clause,
     document_clause,
     elide_k,
+    keyword_only_reason,
     leveled_fetch,
     no_map_refusal,
     no_unit_refusal,
@@ -464,16 +466,32 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
 
     async def _search_surface(
         self, surface: ReadSurface, query: str, k: int, *, since: date | None, until: date | None, facets: _Facets
-    ) -> tuple[tuple[SearchHit, ...], bool]:
-        """One surface's ranked hits, each with a qualified ref, and whether the vector leg ran."""
-        hybrid = await self._effective_hybrid(surface)
-        message = Search(query=query, k=k, hybrid=hybrid, collection=surface.collection, since=since, until=until, facets=dict(facets or {}))
-        return await _surface_search(surface, message), hybrid
+    ) -> _SurfaceHits:
+        """One surface's ranked hits, each with a qualified ref, whether the vector leg ran, and why it was skipped when it was meant to run."""
+        message = Search(
+            query=query,
+            k=k,
+            hybrid=await self._effective_hybrid(surface),
+            collection=surface.collection,
+            since=since,
+            until=until,
+            facets=dict(facets or {}),
+            keyword_fallback=True,
+        )
+        return await _surface_search(surface, message)
 
     async def _search_answer(
-        self, hits: tuple[SearchHit, ...], *, query: str, surfaces: tuple[ReadSurface, ...], hybrid: bool, dated: bool, filtered: bool
+        self,
+        hits: tuple[SearchHit, ...],
+        *,
+        query: str,
+        surfaces: tuple[ReadSurface, ...],
+        hybrid: bool,
+        dated: bool,
+        filtered: bool,
+        skipped: tuple[str, ...] = (),
     ) -> SearchResult:
-        """One `search` answer: status, next move, the stamp when a single surface answered, and its map ref when `fetch` opens one."""
+        """One `search` answer: status, next move, the stamp when a single surface answered, its map ref when `fetch` opens one, and why any vector leg was skipped."""
         status = search_result_status(hits)
         named = surfaces[0].name if len(surfaces) == 1 else ", ".join(surface.name for surface in surfaces)
         sole = surfaces[0] if len(surfaces) == 1 else None
@@ -492,6 +510,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 filtered=filtered,
             ),
             knowledge_base=stamp,
+            note=keyword_only_note(" and ".join(dict.fromkeys(skipped))) if skipped else None,
         )
 
     async def _dialed_defs(self, _ctx: RunContext[AgentDepsT], tool_defs: list[ToolDefinition]) -> list[ToolDefinition]:
@@ -549,9 +568,15 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
             refuse_undeclared_facets(facets or {}, {surface.name: surface.facet_keys}, ModelRetry)
             first, last = _date_range(since, until)
             async with read_snapshot():
-                hits, hybrid = await self._search_surface(surface, query, k, since=first, until=last, facets=facets)
+                found = await self._search_surface(surface, query, k, since=first, until=last, facets=facets)
                 return await self._search_answer(
-                    hits, query=query, surfaces=(surface,), hybrid=hybrid, dated=first is not None or last is not None, filtered=bool(facets)
+                    found.hits,
+                    query=query,
+                    surfaces=(surface,),
+                    hybrid=found.hybrid,
+                    dated=first is not None or last is not None,
+                    filtered=bool(facets),
+                    skipped=found.skipped,
                 )
 
         async def run_many(
@@ -566,15 +591,16 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 ranked = await asyncio.gather(
                     *(self._search_surface(surface, query, k, since=first, until=last, facets=facets) for surface in chosen)
                 )
-                merged = _merged_by_rank([hits for hits, _ in ranked])
+                merged = _merged_by_rank([found.hits for found in ranked])
                 # "hybrid" only when every surface reached ran its vector leg.
                 return await self._search_answer(
                     tuple(merged[:k]),
                     query=query,
                     surfaces=chosen,
-                    hybrid=all(leg for _, leg in ranked),
+                    hybrid=all(found.hybrid for found in ranked),
                     dated=first is not None or last is not None,
                     filtered=bool(facets),
+                    skipped=tuple(reason for found in ranked for reason in found.skipped),
                 )
 
         if (resolve_k := self.k_source) is not None:
@@ -947,11 +973,12 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     def _library_search_description(self, *, hybrid: bool, default_name: str | None = None) -> str:
         """The `search` description with several knowledge bases: the same text, plus `knowledge_base`."""
         ranking = "semantic + keyword ranking, fused" if hybrid else "keyword ranking"
+        fallback = " When the query cannot be embedded, the search runs keyword only and the result's `note` says why." if hybrid else ""
         return (
             f"Search your knowledge bases ({ranking}): returns the top-`k` "
             "ranked hits (a page, a section within one, or a smaller unit) as a list, each with its "
             f"`id`, `hit_level`, `page_id`/`page_title`, a `snippet`, and a relevance `score`.{self._document_sentences()}\n\n"
-            f"`query` is the search text. `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} "
+            f"`query` is the search text.{fallback} `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} "
             f"{declared_facets_clause({surface.name: surface.facet_keys for surface in self.surfaces}, several_per_call=self.cross_search)} "
             f"{self._knowledge_base_clause(default_name=default_name)}\n"
             f"{self._knowledge_base_listing()}\n\n"
@@ -1098,10 +1125,22 @@ def _merged_by_rank(lists: Sequence[tuple[SearchHit, ...]]) -> list[SearchHit]:
     return [hit for _position, _base, hit in placed]
 
 
-async def _surface_search(surface: ReadSurface, message: Search) -> tuple[SearchHit, ...]:
+@dataclass(frozen=True)
+class _SurfaceHits:
+    """One surface's ranked hits, whether its vector leg ran, and why it was skipped when it was meant to run."""
+
+    hits: tuple[SearchHit, ...]
+    hybrid: bool
+    skipped: tuple[str, ...]
+
+
+async def _surface_search(surface: ReadSurface, message: Search) -> _SurfaceHits:
     """One surface's ranked hits for `message`, each stamped with the legs that selected it and the surface's name."""
     result = await surface.handlers.search(message)
-    return search_hits(result.rows, collection=surface.collection, knowledge_base=surface.name, hybrid=message.hybrid)
+    reason = keyword_only_reason(result)
+    hybrid = message.hybrid and reason is None
+    hits = search_hits(result.rows, collection=surface.collection, knowledge_base=surface.name, hybrid=hybrid)
+    return _SurfaceHits(hits=hits, hybrid=hybrid, skipped=() if reason is None else (reason,))
 
 
 def _guidance(surface: ReadSurface) -> str | None:

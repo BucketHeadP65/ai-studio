@@ -332,6 +332,11 @@ class SearchResult(BaseModel):
         "budget_refused. Every non-refused status still means unverified candidates. Fetch before relying on one. "
         "unassessed means support was not computed for this result.",
     )
+    note: str | None = Field(
+        default=None,
+        description="Set when this search ran keyword only although its tool runs the vector leg too: the query could not be "
+        "embedded, and the note names why. Every hit is then a keyword match. None when the search ran as its tool says.",
+    )
     window: ResultWindow = Field(
         default_factory=ResultWindow,
         description="How complete this list of hits is: whether it was cut short of the underlying total, and why. "
