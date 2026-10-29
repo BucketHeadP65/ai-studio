@@ -5,14 +5,16 @@ out here. The three model steps are scripted and no model is reached. The four p
 sandbox, and every tool they call answers from a scripted records base and a scripted research base, so nothing
 reaches a real knowledge base.
 
-What the cases cover: a stance whose record changed is rewritten and written to its own path, a rewrite that alters
-Evidence is refused at landing, a refused write is reported beside the written one, more than twenty-five changed
-pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop, two groups proposing
-the same new stance make one item, a changed page the records base does not list leaves its stance alone, a changed
-page whose file lies outside the records base's root is still admitted, a repeated pair is listed once, and a full
-pass lists every pair with no cap. Then the stances the run cannot read: one read_page refuses and one carrying a
-field the workflow does not declare are both named and left alone while the run carries on, and a new draft never
-takes the id of a stance that exists or a path the model chose.
+What the cases cover: a stance whose record changed is rewritten and written to its own path, a refresh answer that
+names Evidence or Alternatives fails the refresh step's own output type, the merge keeps every section, frontmatter
+field and claim the draft does not name exactly as read, an existing stance's draft without its changes, or naming a
+section twice or one the page lacks, is refused, a refused write is reported beside the written one, more than
+twenty-five changed pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop,
+two groups proposing the same new stance make one item, a changed page the records base does not list leaves its
+stance alone, a changed page whose file lies outside the records base's root is still admitted, a repeated pair is
+listed once, and a full pass lists every pair with no cap. Then the stances the run cannot read: one read_page refuses
+and one carrying a field the workflow does not declare are both named and left alone while the run carries on, and a
+new draft never takes the id of a stance that exists or a path the model chose, and is refused without its page.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from core.ai.workflows.contracts import (
     load_step_document,
     step_page_id,
 )
+from pydantic import ValidationError
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_core import to_jsonable_python
 from pydantic_monty import AsyncMonty
@@ -94,6 +97,16 @@ class StanceAsRead(TypedDict):
     stance_id: str
     path: str
     payload: Payload
+
+
+class PayloadAsRead(Payload):
+    claims: list[dict[str, str]]
+
+
+class PageAsRead(TypedDict):
+    page_id: str
+    path: str
+    payload: PayloadAsRead
 
 
 class WriteCall(TypedDict):
@@ -227,9 +240,19 @@ def _skip_all(group: Group) -> list[dict[str, str]]:
 
 
 def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
-    """The draft a refresh worker answers: the stance moved to trying, with one section rewritten from its first page."""
+    """The draft a refresh worker answers: the stance moved to trying, with one section rewritten from its first page.
+
+    An existing stance's draft carries only its changes, its summary kept as read. A new stance's draft carries its whole page.
+    """
     resting_on = item["pages"][0]["page_id"]
     current = item["current"]
+    draft: dict[str, object] = {
+        "stance_id": item["stance_id"],
+        "path": item["path"],
+        "new": item["new"],
+        "sources": [page["page_id"] for page in item["pages"]],
+        "findings_left": [],
+    }
     if current is None:
         frontmatter: dict[str, object] = {
             "id": item["stance_id"],
@@ -242,22 +265,9 @@ def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
         sections = [
             Section(heading=heading, level=2, body=f"{heading} of the new stance, resting on `{resting_on}`.") for heading in SECTIONS
         ]
-    else:
-        frontmatter = dict(current["frontmatter"], status="trying")
-        sections = [
-            Section(heading=section["heading"], level=section["level"], body=f"Rewritten, resting on `{resting_on}`.")
-            if section["heading"] == changing
-            else section
-            for section in current["sections"]
-        ]
-    return {
-        "stance_id": item["stance_id"],
-        "path": item["path"],
-        "new": item["new"],
-        "payload": {"frontmatter": frontmatter, "sections": sections},
-        "sources": [page["page_id"] for page in item["pages"]],
-        "findings_left": [],
-    }
+        return {**draft, "payload": {"frontmatter": frontmatter, "sections": sections}}
+    changed = Section(heading=changing, level=2, body=f"Rewritten, resting on `{resting_on}`.")
+    return {**draft, "changes": {"status": "trying", "summary": str(current["frontmatter"]["summary"]), "sections": [changed]}}
 
 
 @dataclass
@@ -361,21 +371,95 @@ async def test_a_stance_whose_record_changed_is_rewritten_and_written(sandbox: A
     ] == [("stance.x", "Wiki/Stances/x.md", "considering", read["sections"])], "the page as it was before the run stays on the run"
 
 
-async def test_a_rewrite_that_alters_evidence_is_not_written(sandbox: AsyncMonty) -> None:
+@pytest.mark.parametrize("heading", ["Evidence", "Alternatives"])
+async def test_a_draft_naming_evidence_or_alternatives_fails_the_refresh_output_type(sandbox: AsyncMonty, heading: str) -> None:
+    registry, problems = (await _registry(sandbox, Bases())).including(_spec())
+    assert problems == ()
+    refresh = registry.get("refresh_stance")
+    assert refresh is not None
+    stance: PageAsRead = to_jsonable_python(_stance("x", record="adr-x"))
+    item = Item(
+        stance_id="stance.x", title="Stance on x", path="Wiki/Stances/x.md", new=False, pages=[_listed("adr-x")], current=stance["payload"]
+    )
+    _typed(refresh, _rewritten(item, changing="Position"))
+
+    with pytest.raises(ValidationError, match=r"changes\.sections\.0\.heading"):
+        _typed(refresh, _rewritten(item, changing=heading))
+
+
+async def test_the_merge_keeps_every_part_the_draft_does_not_name_exactly_as_read(sandbox: AsyncMonty) -> None:
+    stance = _stance(
+        "x",
+        record="adr-x",
+        recommends=["[[ent.a]]"],
+        advises_against=["[[ent.b]]"],
+        aliases=["x stance"],
+        decision_reason="Chosen in review.",
+    )
+    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": stance})
+
+    def rewrite_two_sections(item: Item) -> dict[str, object]:
+        sections = [
+            Section(heading="Open Questions", level=3, body="Answered by `adr-x`."),
+            Section(heading="TL;DR", level=2, body="Adopted, resting on `adr-x`."),
+        ]
+        return {**_rewritten(item), "changes": {"status": "adopted", "summary": "What the system does now.", "sections": sections}}
+
+    state = await _run(sandbox, bases, Scripted(rewrite=rewrite_two_sections), changed="adr-x")
+
+    read: PageAsRead = to_jsonable_python(stance)
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
+    written = bases.writes[0]["payload"]
+    assert written["frontmatter"] == dict(read["payload"]["frontmatter"], status="adopted", summary="What the system does now.")
+    replaced = {"TL;DR": "Adopted, resting on `adr-x`.", "Open Questions": "Answered by `adr-x`."}
+    assert written["sections"] == [
+        Section(heading=section["heading"], level=section["level"], body=replaced.get(section["heading"], section["body"]))
+        for section in read["payload"]["sections"]
+    ], "the named sections take the draft's body at the level and place the page gave them, and every other section stays as read"
+    assert to_jsonable_python(written).get("claims", []) == read["payload"]["claims"] == [], "a stance takes no claims and none is written"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+
+
+async def test_an_existing_stance_draft_without_its_changes_is_refused(sandbox: AsyncMonty) -> None:
     bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": _stance("x", record="adr-x")})
 
-    def alter_evidence(item: Item) -> dict[str, object]:
-        return _rewritten(item, changing="Evidence")
+    def answer_the_whole_page(item: Item) -> dict[str, object]:
+        draft = {key: value for key, value in _rewritten(item).items() if key != "changes"}
+        return {**draft, "payload": item["current"]}
 
-    scripted = Scripted(rewrite=alter_evidence)
+    state = await _run(sandbox, bases, Scripted(rewrite=answer_the_whole_page), changed="adr-x")
 
-    state = await _run(sandbox, bases, scripted, changed="adr-x")
-
-    assert scripted.calls.count("check_stances") == 1, "the judge approved the rewrite"
     assert bases.writes == []
     failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
     assert [entry["stance_id"] for entry in failed] == ["stance.x"]
-    assert "Evidence" in failed[0]["reason"]
+    assert "carries no changes" in failed[0]["reason"]
+
+
+@pytest.mark.parametrize(
+    ("headings", "reason"),
+    [
+        (["Position", "Position"], "changes the Position section twice"),
+        (["Open Questions"], "the Open Questions section, which the page as read before this run does not carry"),
+    ],
+)
+async def test_a_draft_naming_a_section_twice_or_one_the_page_lacks_is_refused(
+    sandbox: AsyncMonty, headings: list[str], reason: str
+) -> None:
+    stance = _stance("x", record="adr-x")
+    payload: Payload = to_jsonable_python(stance["payload"])
+    stance["payload"] = {**payload, "sections": [section for section in payload["sections"] if section["heading"] != "Open Questions"]}
+    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": stance})
+
+    def change(item: Item) -> dict[str, object]:
+        sections = [Section(heading=heading, level=2, body="Rewritten, resting on `adr-x`.") for heading in headings]
+        return {**_rewritten(item), "changes": {"status": "trying", "summary": "What the system plans.", "sections": sections}}
+
+    state = await _run(sandbox, bases, Scripted(rewrite=change), changed="adr-x")
+
+    assert bases.writes == []
+    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
+    assert [entry["stance_id"] for entry in failed] == ["stance.x"]
+    assert reason in failed[0]["reason"]
 
 
 async def test_a_write_note_refusal_is_reported_not_fatal(sandbox: AsyncMonty) -> None:
@@ -616,6 +700,32 @@ async def test_a_new_draft_is_written_where_its_page_type_places_it(sandbox: Asy
 
     assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("", "stance.agent-memory")]
     assert _value(state, "write_stances") == {"written": ["stance.agent-memory"], "failed": []}
+
+
+async def test_a_new_stance_draft_without_its_page_is_refused(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+
+    def propose_agent_memory(group: Group) -> list[dict[str, str]]:
+        return [
+            {
+                "page_id": page["page_id"],
+                "placement": "new",
+                "stance_id": "stance.agent-memory",
+                "title": "Agent memory",
+                "reason": "No stance covers it.",
+            }
+            for page in group["pages"]
+        ]
+
+    def answer_no_page(item: Item) -> dict[str, object]:
+        return {key: value for key, value in _rewritten(item).items() if key != "payload"}
+
+    state = await _run(sandbox, bases, Scripted(place=propose_agent_memory, rewrite=answer_no_page), changed="adr-1")
+
+    assert bases.writes == []
+    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
+    assert [entry["stance_id"] for entry in failed] == ["stance.agent-memory"]
+    assert "carries no page" in failed[0]["reason"]
 
 
 async def test_a_finding_left_in_unchanged_evidence_reaches_the_judge_and_the_page_still_lands(sandbox: AsyncMonty) -> None:

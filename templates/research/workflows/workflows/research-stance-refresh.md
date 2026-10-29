@@ -2,8 +2,8 @@
 title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
-  under a judge, and writes each page only when its Evidence and Alternatives came through untouched.
-uses: [st.list_stance_changes.v1, st.place_stance_pages.v2, st.refresh_stance.v2, st.check_stances.v1, st.write_stances.v1]
+  under a judge, and merges each rewrite into its page as it was read, so its Evidence and Alternatives never change.
+uses: [st.list_stance_changes.v1, st.place_stance_pages.v2, st.refresh_stance.v3, st.check_stances.v2, st.write_stances.v2]
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -37,8 +37,8 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 2
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each stance they change, judge every draft, then write each page that passes its check against the page as it was read.
+  version: 3
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each stance they change as its changes alone, judge every draft, then merge each rewrite into the page as it was read and write it.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -262,9 +262,13 @@ both maps run over nothing. `group_pages` puts the admitted pages no stance name
 five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
 a new stance, or a skip. `merge_work` makes one item per stance with every page that bears on it, its record among
 them, and one item per proposed new stance, combining the groups that proposed the same id. `refresh_stances` runs
-one worker per item, two at a time, each rewriting its stance or drafting the new one and checking it against the
-base's grammar, naming any finding it left because only a change to Evidence or Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
-empty list is approved without a read. `write_stances` writes each approved page whose id, Evidence and Alternatives
-match the page as it was read, refuses a new stance that takes the id of a stance that exists, catches each refusal,
-and answers which were written and which failed which check.
+one worker per item, two at a time. For an existing stance it answers only its changes: the status, the summary and
+the sections it rewrites among TL;DR, Position, Why and Open Questions, checked against the base's grammar as the
+whole page they make. For a new stance it answers the whole page. Each names any finding it left because only a
+change to Evidence or Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
+empty list is approved without a read. `write_stances` merges each approved rewrite into the page as it was read,
+keeping every section and frontmatter field the rewrite does not name, and writes it to the path it was read from. It
+refuses a rewrite that carries no changes, names a section twice or names one the page does not carry, refuses a new
+stance that carries no page or takes the id of a stance that exists, catches each refusal, and answers which were
+written and which failed which check.
 Three consecutive identical failures in either map abort the run as failed.

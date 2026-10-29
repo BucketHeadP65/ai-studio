@@ -1,7 +1,7 @@
 ---
 title: Refresh one stance
-summary: One stance page rewritten from the records pages that bear on it, or a new stance drafted, checked against the base's grammar and written nowhere.
-version: 2
+summary: The changes one stance page takes from the records pages that bear on it, or a new stance drafted, checked against the base's grammar as a whole page and written nowhere.
+version: 3
 step:
   name: refresh_stance
   instructions: |-
@@ -17,7 +17,7 @@ step:
     - rejected, when an adr at status accepted decides against it, or the adr the stance rests on is superseded with no replacement.
     - Otherwise the status stays as it is.
 
-    When new is false, rewrite the stance from current. You may change only these: the frontmatter summary, the frontmatter status, the TL;DR, Position and Why sections, and the Open Questions a change answers. Keep the Evidence and Alternatives sections byte for byte as current has them. Keep every citation into the research knowledge base byte for byte, in every section. Keep the frontmatter id, type, title and every other field exactly as current has them, and keep the sections in the order current has them. record keeps naming the records page behind the stance's main decision. Name every further records page in the body. current shows a field the page does not carry as null. Leave such a field out of the payload you check and answer.
+    When new is false, rewrite the stance from current, and answer only what you change. You may change only these: the frontmatter summary, the frontmatter status, the TL;DR, Position and Why sections, and the Open Questions a change answers. The page is written from current with your changes put in, so every other section, every frontmatter field and the order of the sections stay as current has them. Keep every citation into the research knowledge base byte for byte in a section you change. record keeps naming the records page behind the stance's main decision. Name every further records page in the body.
 
     When new is true, draft a new stance. Call knowledge_base_profile with `knowledge_base` set to the collection and follow the stance page type's guidance. Its canonical sections, in order, are TL;DR, Position, Why, Evidence, Alternatives and Open Questions. The frontmatter carries id set to the item's stance_id, type stance, title set to the item's title, a summary of one sentence, the status by the rule above, and record set to the page id of the records page behind the main decision. Evidence cites only pages of the research knowledge base that you found with search and read with fetch, each as a wikilink of its full page id, such as [[paper.hipporag2-2025]]. List the same pages in synthesizes, each as a wikilink. When the research knowledge base holds no literature on the topic, Evidence says so in one sentence and Open Questions says so too. Never invent a citation.
 
@@ -25,11 +25,11 @@ step:
 
     Each section carries its heading, its level and its body. A section keeps the level current gives it, and every section of a new stance is level 2.
 
-    Before answering, run check_note with `knowledge_base` set to the collection, `payload` set to the page as a dict with frontmatter and sections as its keys, and `path` set to the item's path. Fix every finding it names and check again. When new is false, a finding that only a change to Evidence or Alternatives would fix, such as a link to a page the research knowledge base no longer holds, is left as it is: keep both sections byte for byte and name the finding in findings_left, in check_note's words. Answer only a page that passes, or whose every remaining finding is named in findings_left. You write nothing.
+    Before answering, check the whole page with check_note, with `knowledge_base` set to the collection, `payload` set to the page as a dict with frontmatter and sections as its keys, and `path` set to the item's path. When new is false, build that page inside run_code from current: set its status and summary, and replace the body of each section you change. current shows a field the page does not carry as null. Leave such a field out of the page you check. Fix every finding check_note names and check again. When new is false, a finding that only a change to Evidence or Alternatives would fix, such as a link to a page the research knowledge base no longer holds, is left as it is: name it in findings_left, in check_note's words. Answer only when the page passes, or when its every remaining finding is named in findings_left. You write nothing.
 
     The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). Build the payload as a Python dict literal, and a link to another page of the research knowledge base as the string '[[page.id]]', brackets included.
 
-    Answer with stance_id, path and new copied from the item, the payload you checked, sources listing the page id of every records page your sentences rest on, and findings_left listing every finding you left as it is, empty when you left none.
+    Answer with stance_id, path and new copied from the item, sources listing the page id of every records page your sentences rest on, and findings_left listing every finding you left as it is, empty when you left none. When new is false, answer changes with the status and the summary the page should carry, changed or not, and sections holding only the sections you changed, each with its heading spelled as current spells it, its level and its new body, and leave payload out. The answer has no place for Evidence or Alternatives, and a section you did not change is not answered. When new is true, answer payload with the whole page you checked, and leave changes out. The answer is the JSON object alone, in one message, with nothing before or after it.
   inputs:
     item: {like: merge_work, element: true}
     collection:
@@ -40,14 +40,36 @@ step:
     json_schema:
       type: object
       title: StanceDraft
-      required: [stance_id, path, new, payload, sources, findings_left]
+      required: [stance_id, path, new, sources, findings_left]
       properties:
         stance_id: {type: string}
         path: {type: string}
         new: {type: boolean}
+        changes:
+          type: object
+          title: StanceRewrite
+          description: What a rewrite of an existing stance changes, answered when new is false and left out when new is true.
+          required: [status, summary, sections]
+          properties:
+            status: {type: string}
+            summary: {type: string}
+            sections:
+              type: array
+              description: Only the sections the rewrite changes. Empty when it changes no section.
+              items:
+                type: object
+                title: ChangedSection
+                required: [heading, level, body]
+                properties:
+                  heading:
+                    type: string
+                    enum: ["TL;DR", Position, Why, Open Questions]
+                  level: {type: integer}
+                  body: {type: string}
         payload:
           type: object
           title: StancePayload
+          description: The whole page of a new stance, answered when new is true and left out when new is false.
           required: [frontmatter, sections]
           properties:
             frontmatter:
@@ -98,7 +120,8 @@ step:
 ---
 
 Use once per item of a stance refresh, inside a map over merge_work, with `collection` and `records` wired from the
-workflow's parameters. It rewrites an existing stance from the records pages that bear on it, or drafts a new one,
-and checks the page against the base's grammar. A finding only a change to an existing stance's Evidence or
-Alternatives would fix is left and named in `findings_left`. It writes nothing: a judge reviews every draft, and a
-later step writes each one that passes its own check against the page as it was read.
+workflow's parameters. For an existing stance it answers only its changes: the status, the summary and the sections
+it rewrites, among TL;DR, Position, Why and Open Questions. It checks the whole page those changes make against the
+base's grammar. For a new stance it answers the whole page. A finding only a change to an existing stance's Evidence
+or Alternatives would fix is left and named in `findings_left`. It writes nothing: a judge reviews every draft, and a
+later step merges each existing stance's changes into the page as it was read and writes it.

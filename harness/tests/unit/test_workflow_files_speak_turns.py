@@ -355,7 +355,7 @@ async def test_importing_every_template_folder_writes_every_step_then_every_work
         "wf.research-compound.v12",
         "wf.research-decision-brief.v1",
         "wf.research-digest.v16",
-        "wf.research-stance-refresh.v2",
+        "wf.research-stance-refresh.v3",
         "wf.docs-notes-to-analysis.v2",
         "wf.docs-promote-initiative.v6",
         "wf.benchmark-digest.v3",

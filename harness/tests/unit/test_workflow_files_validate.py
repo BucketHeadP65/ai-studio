@@ -413,6 +413,16 @@ _STANCE_PAGE: dict[str, object] = {
 }
 """The one page `read_page` answers with, for every id asked."""
 
+_STANCE_SUMMARY = "The system plans two indexes per base."
+"""The summary the one stance draft here answers."""
+
+_STANCE_POSITION: dict[str, object] = {
+    "heading": "Position",
+    "level": 2,
+    "body": "The system plans two indexes per base, per `adr-0030-something`.",
+}
+"""The one section the stance draft here changes."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -472,8 +482,9 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
                 "stance_id": "stance.x",
                 "path": "Wiki/Stances/x.md",
                 "new": False,
-                "payload": {"frontmatter": {**_STANCE_FRONTMATTER, "status": "trying"}, "sections": _STANCE_SECTIONS},
+                "changes": {"status": "trying", "summary": _STANCE_SUMMARY, "sections": [_STANCE_POSITION]},
                 "sources": ["adr-0030-something"],
+                "findings_left": [],
             }
         ],
         "changes": {
@@ -736,7 +747,9 @@ def _assert_docs_pass_programs(ran: dict[str, object], called_by_step: _CalledBy
 
 
 def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
-    """The two stance-refresh programs: a full pass over one pair, then one checked draft landing on its stance's own path.
+    """The two stance-refresh programs: a full pass over one pair, then one draft's changes merged into its stance as read.
+
+    The merged page lands on the stance's own path, with only its status, summary and Position changed.
 
     Every `list_pages` call here answers the same two rows, so the stance listing names two ids and both read back as
     the one stance page `read_page` answers.
@@ -771,7 +784,10 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
             "write_note",
             {
                 "knowledge_base": "research",
-                "payload": {"frontmatter": {**_STANCE_FRONTMATTER, "status": "trying"}, "sections": _STANCE_SECTIONS},
+                "payload": {
+                    "frontmatter": {**_STANCE_FRONTMATTER, "status": "trying", "summary": _STANCE_SUMMARY},
+                    "sections": [_STANCE_POSITION, *_STANCE_SECTIONS[1:]],
+                },
                 "path": "Wiki/Stances/x.md",
             },
         )
