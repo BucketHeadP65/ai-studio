@@ -319,8 +319,12 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   `typesafe` ("Unknown upstream provider: typesafe"), so `gateway/typesafe:jev-latest` does not build either.
   `decision_model` builds pydantic-ai's own `TypeSafeModel` on a `TypeSafeProvider` whose base URL is the gateway base URL
   joined with the gateway's TypeSafe route (`infrastructure.gateway.typesafe_route`, `type-safe` by default) and whose key
-  is the gateway key. The TypeSafe SDK appends `/v1/systemone` itself, so the base URL carries no `/v1`.
+  is the gateway key. The TypeSafe SDK appends `/v1/systemone` itself, so the base URL carries no `/v1`. What a
+  `gateway_provider` route adds is missing from this one: its request hook injects the OpenTelemetry `traceparent`
+  header, so the gateway's trace of a request joins the caller's, and `is_gateway_provider` answers true for it. The hook
+  and the builder that installs it (`_GatewayRequestHook`, `_build_gateway_provider`) are private, so a Jev request
+  carries no `traceparent` and the gateway traces it on its own.
 - **Where:** `core/src/core/ai/decision_models.py`, tests in `core/tests/unit/test_decision_models.py`.
 - **Since:** 2026-10-29.
 - **Upstream candidate:** yes, as an issue: a `typesafe` upstream in `gateway_provider`, so `gateway/typesafe:<model>`
-  reaches Jev on the gateway's TypeSafe route like any other gateway model.
+  reaches Jev on the gateway's TypeSafe route like any other gateway model, trace header included.
