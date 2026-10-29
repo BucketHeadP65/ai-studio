@@ -1,7 +1,7 @@
 ---
 title: Refresh one stance
 summary: One stance page rewritten from the records pages that bear on it, or a new stance drafted, checked against the base's grammar and written nowhere.
-version: 1
+version: 2
 step:
   name: refresh_stance
   instructions: |-
@@ -94,7 +94,7 @@ step:
           items: {type: string}
   tools: [search, fetch, knowledge_base_profile, check_note]
   tier: worker
-  budget: {requests: 40, tool_calls: 80}
+  budget: {requests: 40, tool_calls: 200}
 ---
 
 Use once per item of a stance refresh, inside a map over merge_work, with `collection` and `records` wired from the

@@ -1,7 +1,7 @@
 ---
 title: Place changed pages against the stances
 summary: For each records page of one group, the stance page it changes, a new stance to draft, or a skip with its reason.
-version: 1
+version: 2
 step:
   name: place_stance_pages
   instructions: |-
@@ -54,7 +54,7 @@ step:
               reason: {type: string}
   tools: [search, fetch, knowledge_base_profile]
   tier: worker
-  budget: {requests: 30, tool_calls: 60}
+  budget: {requests: 30, tool_calls: 200}
 ---
 
 Use once per group of a stance refresh, inside a map over group_pages, with `collection` and `records` wired from the

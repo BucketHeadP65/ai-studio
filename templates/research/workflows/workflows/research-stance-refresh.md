@@ -3,7 +3,7 @@ title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
   under a judge, and writes each page only when its Evidence and Alternatives came through untouched.
-uses: [st.list_stance_changes.v1, st.place_stance_pages.v1, st.refresh_stance.v1, st.check_stances.v1, st.write_stances.v1]
+uses: [st.list_stance_changes.v1, st.place_stance_pages.v2, st.refresh_stance.v2, st.check_stances.v1, st.write_stances.v1]
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -37,7 +37,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 1
+  version: 2
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each stance they change, judge every draft, then write each page that passes its check against the page as it was read.
   parameters:
     collection:
