@@ -162,7 +162,7 @@ class TestMessageBusRegistration:
     async def test_a_knowledge_base_less_bus_forwards_each_index_to_the_harness(self, tmp_path: Path):
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         assert [s.name for s in bus.subscriptions_for(PagesLoaded)] == ["harness_index_forward"]
