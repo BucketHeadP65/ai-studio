@@ -71,7 +71,7 @@ class AdminSqlGateway(ReadOnlySqlGateway):
 
 @dataclass(frozen=True)
 class SearchReranking:
-    """The re-ranking studio's searches run through, or `None` when it is off or OpenRouter has no key."""
+    """The re-ranking studio's searches run through, or `None` when it is off or the gateway has no key."""
 
     reranking: Reranking | None
 

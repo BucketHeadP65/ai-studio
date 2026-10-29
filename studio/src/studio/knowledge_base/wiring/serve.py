@@ -361,12 +361,12 @@ def search_reranking_provider(retrieval: RetrievalSettings, infrastructure: Infr
 
     Args:
         retrieval: The retrieval settings whose `rerank` block says how hits are re-ranked.
-        infrastructure: The infrastructure settings whose OpenRouter section holds the key.
+        infrastructure: The infrastructure settings whose gateway section reaches the decision model.
 
     Returns:
-        The re-ranking, which holds `None` when it is off or OpenRouter has no key.
+        The re-ranking, which holds `None` when it is off or the gateway has no key.
     """
-    return SearchReranking(reranking(retrieval.rerank, infrastructure.openrouter))
+    return SearchReranking(reranking(retrieval.rerank, infrastructure.gateway))
 
 
 REGISTRATIONS: list[object] = [

@@ -10,7 +10,7 @@ import pytest
 
 from core.ai.decision_models import DecisionModelQuestions
 from core.ai.embedding import BatchEmbedder
-from core.settings import OpenRouterSettings
+from core.settings import GatewaySettings, OpenRouterSettings
 from core.testing.fakes import FakeDecisionModel
 from engram.config import RerankSettings
 from engram.retrieval.contracts import ReadSurface, RerankedSearch, Reranking, Search, SearchHandler
@@ -170,20 +170,23 @@ async def test_the_code_mode_sandbox_searches_through_the_reranking(tmp_path: Pa
 
 def test_the_provider_answers_no_reranking_when_it_is_disabled() -> None:
     retrieval = RetrievalSettings.model_validate({"rerank": {"enabled": False}})
-    infrastructure = InfrastructureSettings(database=_DATABASE, openrouter=OpenRouterSettings(api_key="a-key"))
+    infrastructure = InfrastructureSettings(database=_DATABASE, gateway=GatewaySettings(api_key="a-key"))
 
     assert search_reranking_provider(retrieval, infrastructure) == SearchReranking(reranking=None)
 
 
-def test_the_provider_answers_no_reranking_when_the_openrouter_key_is_empty() -> None:
+def test_the_provider_answers_no_reranking_when_the_gateway_key_is_empty(caplog: pytest.LogCaptureFixture) -> None:
     retrieval = RetrievalSettings.model_validate({"rerank": {"enabled": True}})
-    infrastructure = InfrastructureSettings(database=_DATABASE, openrouter=OpenRouterSettings(api_key=""))
+    infrastructure = InfrastructureSettings(database=_DATABASE, gateway=GatewaySettings(api_key=""), openrouter=OpenRouterSettings(api_key="an-openrouter-key"))
 
-    assert search_reranking_provider(retrieval, infrastructure) == SearchReranking(reranking=None)
+    with caplog.at_level("WARNING"):
+        assert search_reranking_provider(retrieval, infrastructure) == SearchReranking(reranking=None)
+
+    assert "infrastructure.gateway.api_key" in caplog.text
 
 
 def test_the_provider_answers_a_reranking_when_it_is_enabled_and_the_key_is_set() -> None:
     retrieval = RetrievalSettings.model_validate({"rerank": {"enabled": True}})
-    infrastructure = InfrastructureSettings(database=_DATABASE, openrouter=OpenRouterSettings(api_key="a-key"))
+    infrastructure = InfrastructureSettings(database=_DATABASE, gateway=GatewaySettings(api_key="a-key"))
 
     assert isinstance(search_reranking_provider(retrieval, infrastructure).reranking, Reranking)

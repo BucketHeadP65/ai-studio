@@ -534,7 +534,7 @@ async def _stored_switches(surface: ReadSurface) -> RetrievalSwitches | None:
 
 
 async def _resolve_rerank(container: Resolver) -> Reranking | None:
-    """The re-ranking the container holds, or `None` when it is off or OpenRouter has no key."""
+    """The re-ranking the container holds, or `None` when it is off or the gateway has no key."""
     return (await container.get(SearchReranking)).reranking
 
 
