@@ -984,8 +984,8 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
             request first. Only a host whose protocol can ask sets it.
         wrap_model: What every role's model is put through before this session's step agents are
             built over it. `None` is this deployment: nothing is wrapped and no measurement opens.
-        infrastructure: Where external systems are reached, read for the OpenRouter key decision models use. `None`
-            turns re-ranking and the skill hint off.
+        infrastructure: Where external systems are reached, read for the gateway section decision models are reached through.
+            `None` turns re-ranking and the skill hint off.
         rerank: How search hits are re-ranked. `None` turns re-ranking off.
         skill_hint: Whether the chat agent gets the skill hint. `None` turns it off.
 
@@ -1007,7 +1007,7 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
     # ceiling covers everything this deployment runs rather than tracking two ceilings that each
     # allow half a runaway. The re-ranker's requests run through it too.
     spend = _default_spend_limits(state)
-    reranker = reranking(rerank, infrastructure.openrouter, capabilities=(spend,)) if rerank is not None and infrastructure is not None else None
+    reranker = reranking(rerank, infrastructure.gateway, capabilities=(spend,)) if rerank is not None and infrastructure is not None else None
     reader, disclosure, plugins = await stack.enter_async_context(
         open_read_tools(client=studio_client, reading=reading, patience=BOOT_PATIENCE, current_run=current_run_id, rerank=reranker)
     )
@@ -1141,7 +1141,7 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
     console = RouteConsole(settings=console_settings, records=records, session_log=session_log, sessions=sessions, topics=topics)
     follow_me = FollowMe(verbs=verb_toolset(), acts=act_toolset(console, console, console))
     hint = (
-        skill_hint_capability(skill_hint, infrastructure.openrouter, state=state, project=project, spend=spend)
+        skill_hint_capability(skill_hint, infrastructure.gateway, state=state, project=project, spend=spend)
         if skill_hint is not None and infrastructure is not None
         else None
     )
