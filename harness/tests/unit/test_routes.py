@@ -124,7 +124,7 @@ class TestTheServedRoutes:
         assert sorted(declared) == sorted(set(declared))
 
     def test_the_baseline_was_actually_built(self) -> None:
-        assert len(ROUTE_BASELINE) == 115
+        assert len(ROUTE_BASELINE) == 116
 
     def test_the_baseline_is_written_in_order(self) -> None:
         """Method then path: a new route lands where a reader looks for it, never at the end of a block."""

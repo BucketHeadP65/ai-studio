@@ -125,3 +125,25 @@ class RefreshRunOut(BaseModel):
     """Whether the owner's notification was delivered."""
     armed: list[UUID] = Field(default_factory=list)
     """The schedules that will fire on the next tick."""
+
+
+class IndexRunIn(BaseModel):
+    """One index of a knowledge base with changed pages, as the studio reports it."""
+
+    model_config = ConfigDict(use_attribute_docstrings=True, extra="ignore")
+
+    event_id: UUID
+    """The studio's id for the index. A second report with the same id arms nothing."""
+    knowledge_base: str = Field(min_length=1)
+    """The knowledge base's registry name, the name an on-index cadence holds."""
+    page_ids: list[str] = Field(min_length=1)
+    """The changed pages of the index, at least one."""
+
+
+class IndexRunOut(BaseModel):
+    """What the harness did about one reported index."""
+
+    repeat: bool = False
+    """True when this index was reported before, so nothing was armed."""
+    armed: list[UUID] = Field(default_factory=list)
+    """The schedules whose fire moved to the end of their quiet period and that collected the changed pages."""

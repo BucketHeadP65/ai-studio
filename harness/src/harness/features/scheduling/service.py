@@ -11,7 +11,7 @@ A schedule whose cadence waits for an event rests after it fires, until it is ar
 from __future__ import annotations
 
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
 from core.ai.workflows.contracts import LibraryError, unsatisfied_parameters, validate
@@ -44,6 +44,7 @@ from harness.features.scheduling.exceptions import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from uuid import UUID
 
     from core.ai.workflows.contracts import RunEvidence, StepRegistry, Workflow, WorkflowArguments, WorkflowLibrary
@@ -302,6 +303,32 @@ class Scheduler:
             if knowledge_base in await _selected_by(library, schedule):
                 chosen.append(schedule.id)
         armed = await self._schedules.arm(chosen, at=now, event_id=event_id)
+        if armed.schedule_ids:
+            self._topics.publish("schedules")
+        return armed
+
+    async def arm_after_index(self, *, event_id: UUID, knowledge_base: str, page_ids: Sequence[str], now: datetime) -> Armed:
+        """Arm every enabled on-index schedule whose cadence names `knowledge_base` and give it the index's changed pages, once per index.
+
+        Each armed schedule's fire moves to `now` plus its own quiet period, replacing the fire it held.
+        The event id is recorded even when no schedule matches, so the same index reported again arms nothing.
+        A schedule whose stored cadence no longer parses is skipped.
+
+        Args:
+            event_id: The studio's id for the index.
+            knowledge_base: The registry name of the indexed knowledge base.
+            page_ids: The changed pages of the index.
+            now: The moment each quiet period is counted from.
+
+        Returns:
+            Whether the index was reported before, and which schedules it armed.
+        """
+        fires: dict[UUID, datetime] = {}
+        for schedule in await self._queries.list_all():
+            cadence = _cadence_or_none(schedule.cadence)
+            if schedule.enabled and isinstance(cadence, OnIndexCadence) and cadence.knowledge_base == knowledge_base:
+                fires[schedule.id] = now + timedelta(seconds=cadence.quiet_seconds)
+        armed = await self._schedules.arm_with_pages(fires, event_id=event_id, page_ids=page_ids)
         if armed.schedule_ids:
             self._topics.publish("schedules")
         return armed

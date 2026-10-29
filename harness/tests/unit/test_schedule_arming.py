@@ -118,6 +118,103 @@ async def test_the_fake_stamp_removes_only_the_page_ids_it_passed() -> None:
     assert stored.pending_page_ids == ("c",)
 
 
+async def test_an_index_arms_the_schedules_naming_its_knowledge_base() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on index docs", next_run_at=None)
+    elsewhere = _schedule(cadence="on index other", next_run_at=None)
+    on_refresh = _schedule(cadence="on refresh", next_run_at=None)
+    unreadable = _schedule(cadence="on index Docs!", next_run_at=None)
+    for row in (waiting, elsewhere, on_refresh, unreadable):
+        await schedules.insert(row)
+    topics = FakeBroadcaster()
+    event_id = uuid4()
+
+    armed = await Scheduler(schedules, schedules, topics).arm_after_index(
+        event_id=event_id, knowledge_base="docs", page_ids=["note.b", "note.a"], now=T0
+    )
+
+    assert armed == Armed(schedule_ids=(waiting.id,))
+    assert topics.published == ["schedules"]
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_page_ids) == (T0 + timedelta(seconds=1800), ("note.a", "note.b"))
+    for row in (elsewhere, on_refresh, unreadable):
+        left = await schedules.get(row.id)
+        assert left is not None
+        assert (left.next_run_at, left.pending_page_ids) == (None, ())
+
+
+async def test_each_schedule_takes_its_own_quiet_period() -> None:
+    schedules = FakeSchedules()
+    short = _schedule(cadence="on index docs quiet 1m", next_run_at=None)
+    default = _schedule(cadence="on index docs", next_run_at=None)
+    await schedules.insert(short)
+    await schedules.insert(default)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).arm_after_index(event_id=uuid4(), knowledge_base="docs", page_ids=["note.a"], now=T0)
+
+    first = await schedules.get(short.id)
+    second = await schedules.get(default.id)
+    assert first is not None
+    assert second is not None
+    assert first.next_run_at == T0 + timedelta(seconds=60)
+    assert second.next_run_at == T0 + timedelta(seconds=1800)
+
+
+async def test_a_later_index_moves_the_fire_and_adds_its_pages() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on index docs", next_run_at=None)
+    await schedules.insert(waiting)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    later = T0 + timedelta(minutes=10)
+
+    await scheduler.arm_after_index(event_id=uuid4(), knowledge_base="docs", page_ids=["note.a"], now=T0)
+    await scheduler.arm_after_index(event_id=uuid4(), knowledge_base="docs", page_ids=["note.b", "note.a"], now=later)
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert stored.next_run_at == later + timedelta(seconds=1800), "the fire moved to the later index plus the quiet period"
+    assert stored.pending_page_ids == ("note.a", "note.b")
+
+
+async def test_a_disabled_schedule_collects_nothing() -> None:
+    schedules = FakeSchedules()
+    paused = _schedule(cadence="on index docs", next_run_at=None, enabled=False)
+    await schedules.insert(paused)
+    topics = FakeBroadcaster()
+    event_id = uuid4()
+
+    armed = await Scheduler(schedules, schedules, topics).arm_after_index(
+        event_id=event_id, knowledge_base="docs", page_ids=["note.a"], now=T0
+    )
+
+    assert armed == Armed()
+    assert topics.published == [], "an index that armed nothing announces nothing"
+    assert schedules.received_index == {event_id}, "the index is recorded even when no schedule collects it"
+    stored = await schedules.get(paused.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_page_ids) == (None, ())
+
+
+async def test_an_index_already_recorded_arms_nothing() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on index docs", next_run_at=None)
+    await schedules.insert(waiting)
+    topics = FakeBroadcaster()
+    scheduler = Scheduler(schedules, schedules, topics)
+    event_id = uuid4()
+
+    await scheduler.arm_after_index(event_id=event_id, knowledge_base="docs", page_ids=["note.a"], now=T0)
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["note.a"])
+    again = await scheduler.arm_after_index(event_id=event_id, knowledge_base="docs", page_ids=["note.a"], now=T0 + timedelta(minutes=1))
+
+    assert again == Armed(repeat=True)
+    assert topics.published == ["schedules"], "the repeat announced nothing"
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_page_ids) == (None, ()), "the repeat did not arm the schedule that already fired"
+
+
 async def test_an_armed_on_refresh_schedule_fires_once_and_rests(registry: StepRegistry, tmp_path: Path) -> None:
     store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
     pool = SessionPool(_runtime(registry, store))
