@@ -34,9 +34,8 @@ dependencies = [
     # `core.column_types` binds a `HalfVector` for the asyncpg pgvector codec.
     "pgvector>=0.5.1",
     "pydantic>=2.13.4",
-    "pydantic-ai[retries]>=2.60.0",
-    # `core.ai.decision_models` builds TypeSafe's Jev on pydantic-ai's own TypeSafe model.
-    "pydantic-ai-slim[typesafe]>=2.60.0",
+    # `typesafe`: `core.ai.decision_models` builds TypeSafe's Jev on pydantic-ai's own TypeSafe model.
+    "pydantic-ai[retries,typesafe]>=2.60.0",
     "pydantic-ai-harness>=0.60.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.4",

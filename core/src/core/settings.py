@@ -66,7 +66,7 @@ class LogfireSettings(BaseModel):
 
 
 class GatewaySettings(BaseModel):
-    """The Pydantic AI Gateway that model calls go through: its API key and its regional proxy URL.
+    """The Pydantic AI Gateway that model calls go through: its API key, its regional proxy URL and its TypeSafe route.
 
     An empty key builds, and whoever routes a model through the gateway refuses it at use time.
     """
