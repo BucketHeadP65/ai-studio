@@ -50,6 +50,22 @@ def test_a_retry_shows_in_the_return_that_answers_its_call() -> None:
     assert "retry-prompt" not in get_args(ShowsIn)
 
 
+def test_a_tool_refusal_may_blame_the_signature_the_model_sees() -> None:
+    refused = TAXONOMY.symptom("tool_refused_call")
+    blame = Blame(what=TAXONOMY.root_cause("tool_schema"), where=Surface(kind=SurfaceKind.TOOL, name="search_files"), why="x")
+
+    finding = Finding(symptom=refused, evidence=(A_SPAN,), blames=(blame,), found_by="inspector")
+
+    assert finding.blames == (blame,)
+
+
+def test_the_tool_schema_cause_covers_a_signature_that_accepts_what_the_tool_refuses() -> None:
+    meaning = TAXONOMY.root_cause("tool_schema").meaning
+
+    assert "accepts what the tool then refuses" in meaning
+    assert "leaves out an option the tool's own error names" in meaning
+
+
 def test_agent_reasoning_lands_only_on_the_model_tier() -> None:
     assert TAXONOMY.root_cause("agent_reasoning").fix_lands_on == (SurfaceKind.MODEL_TIER,)
 
