@@ -160,15 +160,17 @@ def test_each_command_routes_to_its_own_handler():
 def test_event_subscriptions_carry_the_qa_subscriber_on_papers_changed():
     qa_subscriber = _StubSubscriber()
     harness_forward = _StubSubscriber()
+    index_forward = _StubSubscriber()
 
-    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward)
+    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward, index_forward=index_forward)
 
     assert set(subscriptions) == {CitingPagesChanged, PagesLoaded, RefreshStarted, RefreshCompleted, RefreshAbandoned}
     assert subscriptions[CitingPagesChanged] == [("qa_generation", qa_subscriber)]
+    assert subscriptions[PagesLoaded] == [("harness_index_forward", index_forward)]
     assert subscriptions[RefreshCompleted] == [("harness_forward", harness_forward)]
     assert subscriptions[RefreshAbandoned] == [("harness_forward", harness_forward)]
     # declared with no subscriber, so the worker knows the type
-    assert [subscriptions[declared] for declared in (PagesLoaded, RefreshStarted)] == [[], []]
+    assert subscriptions[RefreshStarted] == []
 
 
 def test_the_bus_registers_the_qa_subscriber_under_its_declared_name() -> None:
@@ -193,7 +195,10 @@ def test_the_bus_registers_the_qa_subscriber_under_its_declared_name() -> None:
         ),
         {},
     )
-    for event_type, subscriptions in build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=_StubSubscriber()).items():
+    subscriptions_by_type = build_event_subscriptions(
+        qa_subscriber=qa_subscriber, harness_forward=_StubSubscriber(), index_forward=_StubSubscriber()
+    )
+    for event_type, subscriptions in subscriptions_by_type.items():
         for name, subscriber in subscriptions:
             bus.register_subscriber(event_type, subscriber, name=name)
 

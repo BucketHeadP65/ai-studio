@@ -55,13 +55,13 @@ def _router(tmp_path: Path, settings_path: Path, active: Path) -> KnowledgeBaseQ
 
 
 async def _no_forward(event: Event) -> None:
-    """A harness forward that does nothing, because these tests deliver `CitingPagesChanged` only."""
+    """Either harness forward, doing nothing, because these tests deliver `CitingPagesChanged` only."""
     del event
 
 
 def _bus(router: KnowledgeBaseQaRouter, outbox: MemoryOutbox) -> MessageBus:
     """The bus the composition root builds, with the router as the `qa_generation` subscriber."""
-    subscriptions = build_event_subscriptions(qa_subscriber=router, harness_forward=_no_forward)
+    subscriptions = build_event_subscriptions(qa_subscriber=router, harness_forward=_no_forward, index_forward=_no_forward)
     bus = MessageBus({}, {event_type: [] for event_type in subscriptions}, outbox=outbox)
     for event_type, declared in subscriptions.items():
         for name, subscriber in declared:
@@ -207,10 +207,10 @@ class TestKnowledgeBaseQaRouter:
 
 
 class TestDeclaredEventTypes:
-    def test_the_bus_knows_pages_loaded_even_though_nothing_subscribes_to_it(self, tmp_path: Path):
+    def test_the_bus_delivers_pages_loaded_to_the_harness_index_forward_alone(self, tmp_path: Path):
         alpha = _knowledge_base(tmp_path / "alpha", "alpha")
         settings_path = _registry(tmp_path / "application_settings.json", {"alpha": alpha})
         bus = _bus(_router(tmp_path, settings_path, alpha), MemoryOutbox())
 
         assert "PagesLoaded" in bus.event_types()
-        assert bus.subscriptions_for(PagesLoaded) == ()
+        assert [s.name for s in bus.subscriptions_for(PagesLoaded)] == ["harness_index_forward"]

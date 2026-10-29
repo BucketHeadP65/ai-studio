@@ -263,6 +263,7 @@ class FactoryReason(StrEnum):
 # cannot serve. A key the package does not define needs no entry: there is no class here to register.
 _ASSEMBLED: dict[str, FactoryReason] = {
     "studio.knowledge_base.wiring.refresh.harness_refresh_forward_provider": FactoryReason.ASSEMBLED,
+    "studio.knowledge_base.wiring.index_forward.harness_index_forward_provider": FactoryReason.ASSEMBLED,
     "studio.knowledge_base.wiring.conversion.document_converters_provider": FactoryReason.ASSEMBLED,
     "studio.knowledge_base.wiring.sources.connectors_provider": FactoryReason.ASSEMBLED,
     "studio.knowledge_base.wiring.serve.reader_engine_provider": FactoryReason.ASSEMBLED,
