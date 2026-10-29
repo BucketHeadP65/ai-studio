@@ -41,8 +41,8 @@ class IndexRunPayload(TypedDict):
 def registered_knowledge_base_named(settings_path: Path, collection: str) -> str | None:
     """The name of the registered knowledge base whose schema declares `collection`, read from the settings file on every call.
 
-    A settings file that does not read answers `None`, and a registered knowledge base whose schema does not load is skipped,
-    each with a log line. When several declare the collection, the first in the registry answers.
+    A missing settings file registers no knowledge base. A registered knowledge base whose schema does not load is skipped with
+    a log line. When several declare the collection, the first in the registry answers.
 
     Args:
         settings_path: The settings file whose `knowledge_bases` map is the registry of knowledge bases.
@@ -50,14 +50,17 @@ def registered_knowledge_base_named(settings_path: Path, collection: str) -> str
 
     Returns:
         The registered name, or `None` when no registered knowledge base declares that collection.
+
+    Raises:
+        IndexForwardFailedError: The settings file exists but could not be read or parsed, so the answer is unknown.
     """
     try:
         registry, _broken = read_registry(settings_path)
-    except (OSError, ValueError) as exc:
-        _logger.warning(
-            "the harness index forward could not read the registry at {path}: {reason}", path=str(settings_path), reason=str(exc)
-        )
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError) as exc:
+        msg = f"the registry of knowledge bases at {settings_path} could not be read: {exc}"
+        raise IndexForwardFailedError(msg) from exc
     for name, entry in registry.items():
         try:
             schema = load_knowledge_base_schema(entry.path)
@@ -79,10 +82,10 @@ def _delivered_again(status: int) -> bool:
 class HarnessIndexForward:
     """`EventSubscriber` posting each index's changed pages to the harness, under the registered name of the knowledge base indexed.
 
-    An index with no changed pages, or of a collection no registered knowledge base declares, is not posted. A harness that
-    cannot be reached, answers 404, or answers a server error raises `IndexForwardFailedError`, so the event is delivered
-    again. Any other refusal is logged with the harness's own words and counts as delivered, because the same body would be
-    refused again.
+    An index with no changed pages, or of a collection no registered knowledge base declares, is not posted. A registry that
+    could not be read, a harness that cannot be reached, a 404 or a server error raises `IndexForwardFailedError`, so the event
+    is delivered again. Any other refusal is logged with the harness's own words and counts as delivered, because the same body
+    would be refused again.
     """
 
     def __init__(
@@ -98,7 +101,8 @@ class HarnessIndexForward:
         Args:
             base_url: The harness this deployment reports to. Configuration, never a request.
             knowledge_base_named: Answers the registered name of the knowledge base whose schema declares a collection, or
-                `None` when none does. It is asked again for every event.
+                `None` when none does. It is asked again for every event, and raises `IndexForwardFailedError` when the
+                registry could not be read.
             timeout_seconds: How long one request may take before it is refused.
             transport: The transport that carries the request. `None` lets httpx open its own.
         """
@@ -114,7 +118,8 @@ class HarnessIndexForward:
             event: The event being delivered.
 
         Raises:
-            IndexForwardFailedError: The harness could not be reached, has no such route yet, or failed.
+            IndexForwardFailedError: The registry could not be read, or the harness could not be reached, has no such route
+                yet, or failed.
         """
         if not isinstance(event, PagesLoaded) or not event.page_ids:
             return

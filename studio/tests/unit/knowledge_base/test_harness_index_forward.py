@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from functools import partial
 from typing import TYPE_CHECKING
 
 import httpx
@@ -53,6 +54,12 @@ def _knowledge_base(root: Path, collection: str) -> Path:
     }
     (root / "knowledge-base-schema.json").write_text(json.dumps(payload), encoding="utf-8")
     return root
+
+
+def _registry(settings_path: Path, knowledge_bases: dict[str, Path]) -> Path:
+    rows: dict[str, JsonValue] = {name: {"path": str(root), "description": ""} for name, root in knowledge_bases.items()}
+    settings_path.write_text(json.dumps({"knowledge_bases": rows}), encoding="utf-8")
+    return settings_path
 
 
 async def test_an_index_with_changed_pages_is_posted_under_its_registered_name() -> None:
@@ -122,10 +129,36 @@ async def test_the_worker_delivers_again_until_the_harness_answers() -> None:
 def test_registered_knowledge_base_named_reads_the_collection_each_schema_declares(tmp_path: Path) -> None:
     alpha = _knowledge_base(tmp_path / "alpha", "alpha-collection")
     beta = _knowledge_base(tmp_path / "beta", "beta-collection")
-    settings_path = tmp_path / "application_settings.json"
-    rows: dict[str, JsonValue] = {name: {"path": str(root), "description": ""} for name, root in {"alpha": alpha, "beta": beta}.items()}
-    settings_path.write_text(json.dumps({"knowledge_bases": rows}), encoding="utf-8")
+    settings_path = _registry(tmp_path / "application_settings.json", {"alpha": alpha, "beta": beta})
 
     assert registered_knowledge_base_named(settings_path, "alpha-collection") == "alpha"
     assert registered_knowledge_base_named(settings_path, "beta-collection") == "beta"
     assert registered_knowledge_base_named(settings_path, "gamma-collection") is None
+
+
+def test_a_registered_knowledge_base_whose_schema_does_not_load_is_skipped_and_another_still_answers(tmp_path: Path) -> None:
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "knowledge-base-schema.json").write_text("{not json", encoding="utf-8")
+    beta = _knowledge_base(tmp_path / "beta", "beta-collection")
+    settings_path = _registry(tmp_path / "application_settings.json", {"broken": broken, "beta": beta})
+
+    assert registered_knowledge_base_named(settings_path, "beta-collection") == "beta"
+
+
+def test_a_missing_settings_file_names_no_knowledge_base(tmp_path: Path) -> None:
+    assert registered_knowledge_base_named(tmp_path / "absent.json", "docs-collection") is None
+
+
+async def test_an_index_whose_settings_file_does_not_parse_raises_so_the_event_is_delivered_again(tmp_path: Path) -> None:
+    settings_path = tmp_path / "application_settings.json"
+    settings_path.write_text("{not json", encoding="utf-8")
+    seen: list[httpx.Request] = []
+    forward = HarnessIndexForward(
+        HARNESS, knowledge_base_named=partial(registered_knowledge_base_named, settings_path), transport=_answering(200, seen)
+    )
+
+    with pytest.raises(IndexForwardFailedError, match="could not be read"):
+        await forward(_loaded())
+
+    assert seen == []
