@@ -1214,6 +1214,8 @@ POST   /api/schedules/{id}/run-now                                        -> {"o
 POST   /api/schedules/preview    {"cadence": str}                         -> {"next": [iso8601, iso8601, iso8601]} | 400
 POST   /api/schedules/refresh-runs {"event_id", "knowledge_base", "sources_created"?, "requested_by_entry"?}
                                                                             -> {"repeat", "notified", "armed"} | 422 | 503
+POST   /api/schedules/index-runs {"event_id", "knowledge_base", "page_ids"}
+                                                                            -> {"repeat", "armed"} | 422
 ```
 
 `POST /api/schedules/refresh-runs` is the studio's report of an ended refresh run (its `harness_forward` subscriber
@@ -1223,6 +1225,12 @@ event id is recorded in `coordination.event_deliveries` of the workflow library'
 `schedules.on_refresh` in the same transaction as the arm, so a second report of the same run answers
 `"repeat": true` and changes nothing. A run that created nothing answers at once and records nothing. A card the
 library cannot read answers 503, records nothing, and the studio delivers again.
+
+`POST /api/schedules/index-runs` is the studio's report of an index with changed pages (its `harness_index_forward`
+subscriber posts it). `page_ids` holds at least one page id. Every enabled `on index <knowledge base>` schedule naming
+that knowledge base adds the ids to its stored `pending_page_ids`, each id once, and its next fire moves to now plus
+its quiet period. The event id is recorded under `schedules.on_index` in the same transaction, so a second report of
+the same index answers `"repeat": true` and changes nothing. The event id is recorded even when no schedule matches.
 
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
 `gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
@@ -1240,21 +1248,32 @@ fresh the same way as `live` rather than stored. Each counts only a fire whose s
 runner (`"app:schedule:<id>"`): `spend_today_usd` sums since UTC midnight, `spend_week_usd` over the trailing seven
 days, neither a calendar boundary.
 
-**Cadence** is an interval (`"every 30m"`, `"every 2h"`, `"every 1d"`), a 5-field cron expression (`"0 9 * * 1"`, parsed by `croniter`), `"on refresh"` or `"after <workflow name>"`: `POST /api/schedules` and `PATCH /api/schedules/{id}` refuse anything else in
+**Cadence** is an interval (`"every 30m"`, `"every 2h"`, `"every 1d"`), a 5-field cron expression (`"0 9 * * 1"`, parsed by `croniter`), `"on refresh"`, `"after <workflow name>"` or `"on index <knowledge base>"` with an optional `"quiet <N><s|m|h>"`: `POST /api/schedules` and `PATCH /api/schedules/{id}` refuse anything else in
 words, and `POST /api/schedules/preview` walks a candidate cadence forward three fires without storing anything, so a
 cadence can be checked before it is saved. `workflow_id` is revalidated against the process's own environment on
 create and on any patch that changes it. A schedule naming a workflow that does not check out here is refused, not
 saved broken. `arguments` are admitted against the named workflow's own parameters at the same moment, and stored as
 the JSON they were admitted as: see [Run arguments](#run-arguments-typed-json-admitted-once).
 
-**Event cadences.** `on refresh` and `after <workflow name>` never come due by the clock. A schedule holding one
-rests with `next_run_at` null until it is armed: the studio's report of a refresh run that created sources arms
-every enabled `on refresh` schedule whose arguments select that knowledge base, and a run that ends `succeeded` or
-`partial` arms every enabled `after <its name>` schedule that selects a knowledge base the run also selected. A
-schedule's knowledge base is read through its workflow card's knowledge-base selector. The tick fires an armed
-schedule through the same holds as any other, an overlap or a blackout keeps the arm whatever `catch_up` says,
-and the fire leaves it resting. A change that sets an event cadence clears the next fire it held. A schedule
-cannot fire after its own workflow.
+**Event cadences.** `on refresh`, `after <workflow name>` and `on index <knowledge base>` never come due by the
+clock. A schedule holding one rests with `next_run_at` null until it is armed: the studio's report of a refresh run
+that created sources arms every enabled `on refresh` schedule whose arguments select that knowledge base, a run that
+ends `succeeded` or `partial` arms every enabled `after <its name>` schedule that selects a knowledge base the run
+also selected, and the studio's report of an index with changed pages arms every enabled `on index` schedule naming
+that knowledge base. An `on refresh` or `after` schedule's knowledge base is read through its workflow card's
+knowledge-base selector, and an `on index` schedule names its own. The tick fires an armed schedule through the same
+holds as any other, an overlap or a blackout keeps the arm whatever `catch_up` says, and the fire leaves it resting.
+A change that sets an event cadence clears the next fire it held. A schedule cannot fire after its own workflow.
+
+**The on-index cadence** waits for its quiet period, 1800 seconds unless the cadence names one
+(`on index notes quiet 10m`), and each further index moves the fire to that index plus the quiet period, so a burst
+of edits gives one fire. Until the fire, the schedule collects the changed pages of every index in `pending_page_ids`. A fire that
+launches passes them, sorted and comma-separated, to the workflow parameter `changed_page_ids`, and its stamp
+removes exactly the ids it passed. A page an index adds while the fire runs stays pending, and the schedule keeps
+the fire that index gave it. A fire that launches nothing, such as a held one, keeps every id. A fire whose newest
+workflow version declares no `changed_page_ids` stamps `refused: <workflow id> declares no changed_page_ids` and
+rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-index schedule over a workflow
+that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow.
 
 **Gate policy** is `"wait"` (default: a gated fire waits for a person indefinitely) or `"fail_after:<seconds>"`, how
 long **one reach** of a gate waits before nobody deciding counts as a refusal. Such a refusal is recorded with source
