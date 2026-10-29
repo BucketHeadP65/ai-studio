@@ -193,6 +193,62 @@ async function edgeLabelPixels(page: Page): Promise<number> {
   return pixels;
 }
 
+// Edge label pixels along the middle of the line between two points on the page, split by the
+// side of the line they sit on: above it on screen, or below it.
+async function labelSides(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<{ above: number; below: number }> {
+  const container = page.locator(".sigma-container");
+  const png = await container.screenshot();
+  const box = await container.boundingBox();
+  if (box === null) throw new Error("no graph container");
+  return page.evaluate(
+    async ({ data, wanted, start, end }) => {
+      const image = new Image();
+      image.src = `data:image/png;base64,${data}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d");
+      if (context === null) throw new Error("no 2d context");
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const scale = window.devicePixelRatio;
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const length = Math.hypot(dx, dy);
+      // The unit normal that points down the screen.
+      const flip = dx < 0 ? -1 : 1;
+      const normalX = (-dy / length) * flip;
+      const normalY = (dx / length) * flip;
+      let above = 0;
+      let below = 0;
+      for (let offset = 0; offset < pixels.length; offset += 4) {
+        if (!wanted.every((channel, index) => Math.abs(pixels[offset + index] - channel) <= 10)) {
+          continue;
+        }
+        const x = ((offset / 4) % canvas.width) / scale - start.x;
+        const y = Math.floor(offset / 4 / canvas.width) / scale - start.y;
+        const along = (x * dx + y * dy) / (length * length);
+        const across = x * normalX + y * normalY;
+        if (along < 0.2 || along > 0.8 || Math.abs(across) > 16) continue;
+        if (across < -1) above += 1;
+        else if (across > 1) below += 1;
+      }
+      return { above, below };
+    },
+    {
+      data: png.toString("base64"),
+      wanted: EDGE_LABEL_SLATE,
+      start: { x: from.x - box.x, y: from.y - box.y },
+      end: { x: to.x - box.x, y: to.y - box.y },
+    },
+  );
+}
+
 async function openGraph(page: Page) {
   await page.goto("/knowledge-bases/research");
   await expect(page.getByRole("heading", { level: 1, name: "research" })).toBeVisible();
@@ -269,4 +325,33 @@ test("the selected node's label reads above its ring, after a click and after Fi
   await page
     .locator(".sigma-container")
     .screenshot({ path: test.info().outputPath("selected-by-search.png") });
+});
+
+// The edge from Paper A to Concept C runs right to left. Laid from source to target its label
+// would read upside down, and its below-the-line side would face up the screen.
+test("an edge drawn right to left keeps its label upright, just under its line", async ({
+  page,
+}) => {
+  await mockApi(page, { nodes: NODES, edges: EDGES });
+  await openGraph(page);
+  await expect.poll(() => edgeLabelPixels(page), { timeout: 15_000 }).toBeGreaterThan(50);
+
+  // Paper A and Concept C are the topmost node of each colour.
+  await expect
+    .poll(
+      async () => {
+        const paper = await nodeOnPage(page, PAPER_BLUE);
+        const concept = await nodeOnPage(page, CONCEPT_PURPLE);
+        if (concept.x >= paper.x) return "the edge does not run right to left";
+        const { above, below } = await labelSides(page, paper, concept);
+        return below > 40 && above < below / 10
+          ? "under the line"
+          : `${above} above, ${below} below`;
+      },
+      { timeout: 10_000 },
+    )
+    .toBe("under the line");
+  await page
+    .locator(".sigma-container")
+    .screenshot({ path: test.info().outputPath("right-to-left-label.png") });
 });
