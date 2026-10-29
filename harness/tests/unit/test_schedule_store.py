@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
@@ -30,6 +31,9 @@ from harness.features.scheduling.domain import (
     parse_cadence,
     preview_fires,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # --- parse_cadence ----------------------------------------------------------------------------
 
@@ -257,12 +261,21 @@ class FakeSchedules:
         last_outcome: str,
         next_run_at: datetime | None,
         session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
         current = self.rows.get(schedule_id)
         if current is None:
             return False
+        cleared = set(cleared_page_ids)
+        pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
         self.rows[schedule_id] = current.model_copy(
-            update={"last_run_at": last_run_at, "last_outcome": last_outcome, "next_run_at": next_run_at, "session_id": session_id}
+            update={
+                "last_run_at": last_run_at,
+                "last_outcome": last_outcome,
+                "next_run_at": next_run_at,
+                "session_id": session_id,
+                "pending_page_ids": pending,
+            }
         )
         return True
 
@@ -349,7 +362,9 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
     ran_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
     next_at = ran_at + timedelta(hours=2)
 
-    stamped = await store.stamp(schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1")
+    stamped = await store.stamp(
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+    )
 
     assert stamped is True
     after = await store.get(schedule.id)
@@ -362,7 +377,9 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
 
 async def test_stamp_of_an_unknown_id_is_false() -> None:
     assert (
-        await FakeSchedules().stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="")
+        await FakeSchedules().stamp(
+            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=()
+        )
         is False
     )
 

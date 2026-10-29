@@ -572,7 +572,12 @@ class Scheduler:
                 _logger.exception("schedule {schedule} failed to fire", schedule=str(schedule.id))
                 with suppress(Exception):  # a failing stamp must not end the tick either
                     await self._schedules.stamp(
-                        schedule.id, last_run_at=moment, last_outcome=f"failed, {exc}", next_run_at=None, session_id=schedule.session_id
+                        schedule.id,
+                        last_run_at=moment,
+                        last_outcome=f"failed, {exc}",
+                        next_run_at=None,
+                        session_id=schedule.session_id,
+                        cleared_page_ids=(),
                     )
                 self._topics.publish("schedules")
 
@@ -607,7 +612,12 @@ class Scheduler:
             next_run_at = next_after(cadence, moment)
 
         await self._schedules.stamp(
-            schedule.id, last_run_at=moment, last_outcome=outcome, next_run_at=next_run_at, session_id=session.session_id or ""
+            schedule.id,
+            last_run_at=moment,
+            last_outcome=outcome,
+            next_run_at=next_run_at,
+            session_id=session.session_id or "",
+            cleared_page_ids=(),
         )
         self._topics.publish("schedules")
         return outcome

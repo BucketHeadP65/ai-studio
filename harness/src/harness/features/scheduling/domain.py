@@ -318,6 +318,8 @@ class Schedule(BaseModel):
     """What the latest fire did, in free text. Empty until the first fire."""
     next_run_at: datetime | None = None
     paused_at: datetime | None = None
+    pending_page_ids: tuple[str, ...] = ()
+    """The changed pages the on-index arms collected that no launched fire has passed on yet, sorted, each id once."""
 
     @model_validator(mode="after")
     def _stamp_paused_at_when_minted_disabled(self) -> Schedule:
@@ -385,12 +387,12 @@ CHANGED_PAGES_PARAMETER = "changed_page_ids"
 
 
 class Armed(BaseModel, frozen=True):
-    """What one arming did: whether its event was handled before, and which schedules will fire on the next tick."""
+    """What one arming did: whether its event was handled before, and which schedules it armed."""
 
     repeat: bool = False
     """True when the event id was recorded before, so this arming changed nothing."""
     schedule_ids: tuple[UUID, ...] = ()
-    """Every schedule that will fire on the next tick. One that was already armed keeps its earlier time."""
+    """Every schedule this arming armed. An on-index arm moves each one's fire, and any other arm keeps a fire it already held."""
 
 
 NEW_SOURCES_TITLE = "New sources"

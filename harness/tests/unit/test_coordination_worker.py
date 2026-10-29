@@ -45,7 +45,7 @@ from tests.support.fakes.inspection_worker import BlockingReconciliationEvents, 
 from tests.support.state import records_under
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from core.ai.transcripts.contracts import Transcript
@@ -109,13 +109,24 @@ class _Store:
         return []
 
     async def stamp(
-        self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, next_run_at: datetime | None, session_id: str
+        self,
+        schedule_id: UUID,
+        *,
+        last_run_at: datetime,
+        last_outcome: str,
+        next_run_at: datetime | None,
+        session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
-        del schedule_id, last_run_at, last_outcome, next_run_at, session_id
+        del schedule_id, last_run_at, last_outcome, next_run_at, session_id, cleared_page_ids
         return False
 
     async def arm(self, schedule_ids: Sequence[UUID], *, at: datetime, event_id: UUID | None = None) -> Armed:
         del schedule_ids, at, event_id
+        return Armed()
+
+    async def arm_with_pages(self, fires: Mapping[UUID, datetime], *, event_id: UUID, page_ids: Sequence[str]) -> Armed:
+        del fires, event_id, page_ids
         return Armed()
 
 

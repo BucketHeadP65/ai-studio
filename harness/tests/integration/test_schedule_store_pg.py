@@ -17,7 +17,7 @@ import pytest_asyncio
 
 from engram.testing.infrastructure.knowledge_base_db import migrated, pg  # noqa: F401 -- imported to be used as pytest fixtures, never called directly
 
-from harness.features.scheduling.domain import Schedule, ScheduleUpdate
+from harness.features.scheduling.domain import Armed, Schedule, ScheduleUpdate
 from harness.features.scheduling.infrastructure.postgres import PostgresSchedules
 
 if TYPE_CHECKING:
@@ -62,6 +62,7 @@ async def test_insert_then_get_round_trips(store: PostgresSchedules) -> None:
     assert fetched.gate_mode == "wait"
     assert fetched.session_id == ""
     assert fetched.last_outcome == ""
+    assert fetched.pending_page_ids == ()
 
 
 async def test_get_of_an_unknown_id_is_none(store: PostgresSchedules) -> None:
@@ -128,7 +129,9 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
     ran_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
     next_at = ran_at + timedelta(hours=2)
 
-    stamped = await store.stamp(schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1")
+    stamped = await store.stamp(
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+    )
 
     assert stamped is True
     fetched = await store.get(schedule.id)
@@ -140,7 +143,9 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
 
 
 async def test_stamp_of_an_unknown_id_is_false(store: PostgresSchedules) -> None:
-    assert await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="") is False
+    stamped = await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=())
+
+    assert stamped is False
 
 
 async def test_update_flipping_enabled_true_to_false_stamps_paused_at(store: PostgresSchedules) -> None:
@@ -236,7 +241,7 @@ async def test_arm_with_an_event_id_seen_before_arms_nothing(store: PostgresSche
     event_id = uuid4()
 
     first = await store.arm([resting.id], at=at, event_id=event_id)
-    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="")
+    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=())
     second = await store.arm([resting.id], at=at + timedelta(minutes=1), event_id=event_id)
 
     assert first.schedule_ids == (resting.id,)
@@ -255,3 +260,69 @@ async def test_update_that_clears_the_next_fire_writes_null(store: PostgresSched
     fetched = await store.get(held.id)
     assert fetched is not None
     assert (fetched.cadence, fetched.next_run_at) == ("on refresh", None)
+
+
+async def test_arm_with_pages_records_the_event_once(store: PostgresSchedules, migrated: str) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
+    at = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
+    waiting = _schedule(cadence="on index notes")
+    await store.insert(waiting)
+    event_id = uuid4()
+
+    first = await store.arm_with_pages({waiting.id: at}, event_id=event_id, page_ids=["note.a"])
+    second = await store.arm_with_pages({waiting.id: at + timedelta(minutes=5)}, event_id=event_id, page_ids=["note.b"])
+
+    assert first == Armed(schedule_ids=(waiting.id,))
+    assert second == Armed(repeat=True)
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_page_ids) == (at, ("note.a",)), "the repeat changed no row"
+    connection = await asyncpg.connect(_asyncpg_dsn(migrated))
+    try:
+        subscribers = await connection.fetch("SELECT subscriber FROM coordination.event_deliveries WHERE event_id = $1", event_id)
+    finally:
+        await connection.close()
+    assert [row["subscriber"] for row in subscribers] == ["schedules.on_index"]
+
+
+async def test_arm_with_pages_moves_the_fire_and_collects_ids(store: PostgresSchedules) -> None:
+    first_fire = datetime(2026, 10, 29, 12, 30, tzinfo=UTC)
+    second_fire = first_fire + timedelta(minutes=10)
+    waiting = _schedule(cadence="on index notes")
+    await store.insert(waiting)
+
+    await store.arm_with_pages({waiting.id: first_fire}, event_id=uuid4(), page_ids=["note.b", "note.a"])
+    armed = await store.arm_with_pages({waiting.id: second_fire}, event_id=uuid4(), page_ids=["note.c", "note.b"])
+
+    assert armed == Armed(schedule_ids=(waiting.id,))
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert fetched.next_run_at == second_fire, "the latest index moves the fire"
+    assert fetched.pending_page_ids == ("note.a", "note.b", "note.c")
+
+
+async def test_arm_with_pages_skips_a_disabled_schedule(store: PostgresSchedules) -> None:
+    at = datetime(2026, 10, 29, 12, 30, tzinfo=UTC)
+    waiting = _schedule(cadence="on index notes")
+    paused = _schedule(cadence="on index notes", enabled=False)
+    for row in (waiting, paused):
+        await store.insert(row)
+
+    armed = await store.arm_with_pages({waiting.id: at, paused.id: at, uuid4(): at}, event_id=uuid4(), page_ids=["note.a"])
+
+    assert armed == Armed(schedule_ids=(waiting.id,))
+    left = await store.get(paused.id)
+    assert left is not None
+    assert (left.next_run_at, left.pending_page_ids) == (None, ())
+
+
+async def test_stamp_removes_only_the_page_ids_it_passed(store: PostgresSchedules) -> None:
+    at = datetime(2026, 10, 29, 12, 30, tzinfo=UTC)
+    waiting = _schedule(cadence="on index notes", next_run_at=at, pending_page_ids=("a", "b", "c"))
+    await store.insert(waiting)
+
+    stamped = await store.stamp(waiting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+
+    assert stamped is True
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert fetched.pending_page_ids == ("c",)
