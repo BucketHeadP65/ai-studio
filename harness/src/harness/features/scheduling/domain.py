@@ -39,7 +39,7 @@ _ON_INDEX = re.compile(r"^(?i:on\s+index)\s+([a-z0-9]+(?:-[a-z0-9]+)*)(?:\s+(?i:
 _CADENCE_SHAPE = (
     "'every <N><s|m|h|d>' (e.g. 'every 30m'), a 5-field cron expression (e.g. '0 9 * * 1'), "
     "'on refresh', 'after <workflow name>' (e.g. 'after nightly-report'), "
-    "or 'on index <knowledge base>' with an optional 'quiet <N><s|m|h>' (e.g. 'on index repo-docs quiet 10m')"
+    "or 'on index <knowledge base>' with an optional 'quiet <N><s|m|h>' (e.g. 'on index team-notes quiet 10m')"
 )
 
 _WINDOW = re.compile(r"^([0-2]\d):([0-5]\d)-([0-2]\d):([0-5]\d)$")
