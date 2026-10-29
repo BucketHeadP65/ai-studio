@@ -98,6 +98,7 @@ ROUTE_BASELINE: frozenset[tuple[str, str]] = frozenset(
         ("POST", "/api/runs/history/{run_id}/review"),
         ("POST", "/api/save"),
         ("POST", "/api/schedules"),
+        ("POST", "/api/schedules/index-runs"),
         ("POST", "/api/schedules/preview"),
         ("POST", "/api/schedules/refresh-runs"),
         ("POST", "/api/schedules/{schedule_id}/run-now"),

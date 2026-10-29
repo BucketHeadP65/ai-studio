@@ -26,6 +26,7 @@ C4Container
     Rel(studioclient, studioagent, "/api/* (127.0.0.1:8770, no auth), the studio station")
     Rel(studiocorpus, studioagent, "POST /api/runs/history/{run_id}/artifacts/resolve, reads a run's fixed value to keep as a note")
     Rel(studiocorpus, studioagent, "POST /api/schedules/refresh-runs, reports each ended refresh run through its outbox")
+    Rel(studiocorpus, studioagent, "POST /api/schedules/index-runs, reports each index's changed pages through its outbox")
     Rel(studiocorpus, engram, "indexes and queries through the library plugins")
     Rel(studioagent, core, "core.ai.workflows engine + adapters")
     Rel(studiocorpus, corpusdb, "SQLAlchemy 2 async, serve path via corpus_reader")
@@ -70,7 +71,9 @@ Load-bearing properties of this picture:
   Nothing imports a harness module and nothing opens its run store
   ([ADR 0019](../../adr/0019-knowledge-base-reads-a-run-value-over-http.md)).
   The studio also reports each ended refresh run to `POST /api/schedules/refresh-runs` through its outbox, which delivers again until the harness answers
-  ([ADR 0020](../../adr/0020-refresh-runs-arm-schedules.md)). These are the only two edges between the two backends.
+  ([ADR 0020](../../adr/0020-refresh-runs-arm-schedules.md)).
+  It reports the pages each index changed to `POST /api/schedules/index-runs` the same way, and the harness collects them on every enabled `on index <knowledge base>` schedule that names that knowledge base
+  ([ADR 0022](../../adr/0022-index-runs-arm-schedules-with-their-changed-pages.md)). These three routes are the only ones the studio calls on the harness.
 - **Both backends are localhost-only by design.** `studio serve-http` binds
   127.0.0.1:8100 (CORS open exactly to :3031). The agent app binds
   127.0.0.1:8770 (CORS open to exactly the two spellings of the studio's dev

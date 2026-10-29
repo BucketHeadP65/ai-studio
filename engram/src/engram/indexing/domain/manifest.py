@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING
 from engram.indexing.domain.card import content_hash
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable, Mapping
 
 
 class FileType(StrEnum):
@@ -158,6 +158,28 @@ def compute_diff(stored: dict[str, ManifestEntry], current: dict[str, HashedFile
         identity_changed=tuple(sorted(identity_changed)),
         unchanged=tuple(sorted(unchanged)),
     )
+
+
+def changed_page_ids(stored: Mapping[str, ManifestEntry], current: Iterable[ManifestEntry]) -> tuple[str, ...]:
+    """The page ids of the notes in `current` whose file is new to `stored` or whose content hash differs from it.
+
+    A source mirror has no page id and is never listed. An empty `stored` lists nothing.
+
+    Args:
+        stored: The manifest the index started from, keyed by path.
+        current: The manifest entries the index writes.
+
+    Returns:
+        The page ids, sorted and unique.
+    """
+    if not stored:
+        return ()
+    changed: set[str] = set()
+    for entry in current:
+        prior = stored.get(entry.path)
+        if entry.page_id is not None and (prior is None or prior.content_hash != entry.content_hash):
+            changed.add(entry.page_id)
+    return tuple(sorted(changed))
 
 
 def _affected_names(

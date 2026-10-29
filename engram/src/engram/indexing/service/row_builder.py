@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from engram.indexing.domain.embed_strategy import EmbedStrategyUnit, NoteEmbedStrategies, SourceEmbedStrategies
+    from engram.indexing.domain.manifest import ManifestEntry
     from engram.indexing.domain.mirror_chunks import ChunkSizes
     from engram.indexing.domain.models import MirrorDoc, ResolvedClaim, ResolvedEdge, ResolvedLink, ResolvedNote
     from engram.indexing.domain.resolver import ResolveResult
@@ -79,6 +80,30 @@ def page_type_contract_rows(spec: KnowledgeBaseSchema, collection: str) -> list[
         The rows, in the order the schema declares its page types.
     """
     return [{"collection": collection, "page_type": pt.page_type, "contract": pt.model_dump()} for pt in spec.page_types]
+
+
+def manifest_rows(entries: Sequence[ManifestEntry], collection: str) -> list[Row]:
+    """One `kb.index_manifest` row per manifest entry.
+
+    Args:
+        entries: The entries to store.
+        collection: The collection the rows belong to.
+
+    Returns:
+        The rows, in entry order.
+    """
+    return [
+        {
+            "collection": collection,
+            "path": entry.path,
+            "kind": entry.kind.value,
+            "content_hash": entry.content_hash,
+            "identity_hash": entry.identity_hash,
+            "page_id": entry.page_id,
+            "source_key": entry.source_key,
+        }
+        for entry in entries
+    ]
 
 
 def row_ids(rows: list[Row]) -> set[str]:

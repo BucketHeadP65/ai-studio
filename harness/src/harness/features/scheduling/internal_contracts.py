@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from datetime import datetime
     from uuid import UUID
 
@@ -72,7 +72,7 @@ class Schedules(Protocol):
         """
         ...
 
-    async def stamp(
+    async def stamp(  # noqa: PLR0913 (one fire's tick log is one write)
         self,
         schedule_id: UUID,
         *,
@@ -80,15 +80,21 @@ class Schedules(Protocol):
         last_outcome: str,
         next_run_at: datetime | None,
         session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
-        """Record one fire in the tick log, with the runner session that made it.
+        """Record one fire in the tick log, with the runner session that made it, and remove the changed pages it passed on.
+
+        Only the ids in `cleared_page_ids` leave the schedule's pending changed pages, so a page an arm added during the fire stays.
+        When `cleared_page_ids` is not empty and pages stay pending, the schedule keeps the next fire it holds, the one that arm gave it,
+        and `next_run_at` is ignored.
 
         Args:
             schedule_id: The schedule's id.
             last_run_at: When the fire happened.
             last_outcome: What the fire did, in words.
-            next_run_at: When the schedule next comes due, or `None` to stop it coming due.
+            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears pages and others stay pending.
             session_id: The runner session the fire used.
+            cleared_page_ids: The changed pages the fire passed on. Empty when the fire passed none on.
 
         Returns:
             Whether a schedule had that id.
@@ -107,6 +113,22 @@ class Schedules(Protocol):
 
         Returns:
             Whether the event was a repeat, and which schedules will fire on the next tick.
+        """
+        ...
+
+    async def arm_with_pages(self, fires: Mapping[UUID, datetime], *, event_id: UUID, page_ids: Sequence[str]) -> Armed:
+        """Give every enabled schedule among `fires` the next fire it maps to, and add `page_ids` to its pending changed pages.
+
+        The fire given replaces any fire the schedule already holds, and each page id is added once.
+        The event is recorded as handled in the same write, and an event recorded before arms nothing.
+
+        Args:
+            fires: The next fire of each schedule to arm, by schedule id. An id no enabled schedule has is skipped.
+            event_id: The event id of the index this arming answers.
+            page_ids: The changed pages of that index.
+
+        Returns:
+            Whether the event was a repeat, and which schedules it armed.
         """
         ...
 

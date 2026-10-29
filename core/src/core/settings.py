@@ -84,7 +84,7 @@ class OpenRouterSettings(BaseModel):
 
 
 class HarnessServiceSettings(BaseModel):
-    """Where the harness is reached: for the values one of its runs fixed, and to report each ended refresh run.
+    """Where the harness is reached: for a run's fixed values, and to report ended refresh runs and each index's changed pages.
 
     A client never supplies this address. The default is the loopback port the harness serves on.
     """

@@ -24,7 +24,7 @@ import pytest
 
 from core.ai.embedding import BatchEmbedder
 from core.cqrs.contracts import Command, MessageBus, PostgresOutbox
-from engram.indexing.contracts import CitingPagesChanged
+from engram.indexing.contracts import CitingPagesChanged, PagesLoaded
 from engram.retrieval.tools import RetrievalHandlers, RetrievalToolset, build_retrieval_toolset
 from engram.sources.contracts import MirrorStore
 from engram.sources.infrastructure.mirror import ObsidianMirrorStore
@@ -158,6 +158,14 @@ class TestMessageBusRegistration:
         assert [s.name for s in bus.subscriptions_for(RefreshCompleted)] == ["harness_forward"]
         assert [s.name for s in bus.subscriptions_for(RefreshAbandoned)] == ["harness_forward"]
         assert list(bus.subscriptions_for(RefreshStarted)) == []
+
+    async def test_a_knowledge_base_less_bus_forwards_each_index_to_the_harness(self, tmp_path: Path):
+        container = create_container(_settings(tmp_path))
+
+        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+            bus = await container.get(MessageBus)
+
+        assert [s.name for s in bus.subscriptions_for(PagesLoaded)] == ["harness_index_forward"]
 
 
 class TestEvalsDepsContainerWiring:

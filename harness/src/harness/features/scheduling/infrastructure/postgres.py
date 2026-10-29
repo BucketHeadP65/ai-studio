@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING
 from core.db import open_asyncpg_pool
 
 from harness.adapters.contracts import store_writer_pool_terms
-from harness.features.scheduling.domain import ON_REFRESH_SUBSCRIBER, Armed, Schedule
+from harness.features.scheduling.domain import ON_INDEX_SUBSCRIBER, ON_REFRESH_SUBSCRIBER, Armed, Schedule
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from datetime import datetime
     from uuid import UUID
 
@@ -45,12 +45,13 @@ def _schedule_from_row(row: asyncpg.Record) -> Schedule:
         last_outcome=row["last_outcome"],
         next_run_at=row["next_run_at"],
         paused_at=row["paused_at"],
+        pending_page_ids=tuple(sorted(row["pending_page_ids"])),
     )
 
 
 _COLUMNS = """id, workflow_id, arguments, cadence, enabled, gate_policy, gate_mode,
                capacity_key, capacity_limit, blackout, catch_up,
-               session_id, created_at, last_run_at, last_outcome, next_run_at, paused_at"""
+               session_id, created_at, last_run_at, last_outcome, next_run_at, paused_at, pending_page_ids"""
 
 
 class PostgresSchedules:
@@ -77,7 +78,7 @@ class PostgresSchedules:
             f"""
             INSERT INTO public.schedules
               ({_COLUMNS})
-            VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::text[])
             """,
             schedule.id,
             schedule.workflow_id,
@@ -96,6 +97,7 @@ class PostgresSchedules:
             schedule.last_outcome,
             schedule.next_run_at,
             schedule.paused_at,
+            list(schedule.pending_page_ids),
         )
 
     async def get(self, schedule_id: UUID) -> Schedule | None:
@@ -189,7 +191,7 @@ class PostgresSchedules:
         )
         return [_schedule_from_row(row) for row in rows]
 
-    async def stamp(
+    async def stamp(  # noqa: PLR0913 (one fire's tick log is one write)
         self,
         schedule_id: UUID,
         *,
@@ -197,26 +199,42 @@ class PostgresSchedules:
         last_outcome: str,
         next_run_at: datetime | None,
         session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
-        """Update the tick log columns of one row.
+        """Update the tick log columns of one row and remove `cleared_page_ids` from its `pending_page_ids`, in one statement that reads the row it locks.
 
         Args:
             schedule_id: The schedule's id.
             last_run_at: When the fire happened.
             last_outcome: What the fire did, in words.
-            next_run_at: When the schedule next comes due, or `None` to stop it coming due.
+            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears pages and others stay pending.
             session_id: The runner session the fire used.
+            cleared_page_ids: The changed pages the fire passed on. Empty when the fire passed none on.
 
         Returns:
             Whether a row had that id.
         """
         result = await self._pool.execute(
-            "UPDATE public.schedules SET last_run_at = $2, last_outcome = $3, next_run_at = $4, session_id = $5 WHERE id = $1",
+            """
+            UPDATE public.schedules SET
+              last_run_at      = $2,
+              last_outcome     = $3,
+              next_run_at      = CASE
+                                   WHEN cardinality($6::text[]) > 0
+                                    AND EXISTS (SELECT unnest(pending_page_ids) EXCEPT SELECT unnest($6::text[]))
+                                   THEN next_run_at
+                                   ELSE $4::timestamptz
+                                 END,
+              session_id       = $5,
+              pending_page_ids = ARRAY(SELECT unnest(pending_page_ids) EXCEPT SELECT unnest($6::text[]))
+            WHERE id = $1
+            """,
             schedule_id,
             last_run_at,
             last_outcome,
             next_run_at,
             session_id,
+            list(cleared_page_ids),
         )
         return result != "UPDATE 0"
 
@@ -246,6 +264,43 @@ class PostgresSchedules:
                 at,
             )
         return Armed(schedule_ids=tuple(row["id"] for row in rows))
+
+    async def arm_with_pages(self, fires: Mapping[UUID, datetime], *, event_id: UUID, page_ids: Sequence[str]) -> Armed:
+        """Record the event in `coordination.event_deliveries` under the on-index subscriber, then move each fire and add the ids, in one transaction.
+
+        Args:
+            fires: The next fire of each schedule to arm, by schedule id. An id no enabled row has is skipped.
+            event_id: The event id of the index this arming answers.
+            page_ids: The changed pages of that index.
+
+        Returns:
+            Whether the event was a repeat, and which schedules it armed.
+        """
+        armed: list[UUID] = []
+        async with self._pool.acquire() as connection, connection.transaction():
+            recorded = await connection.fetchval(
+                "INSERT INTO coordination.event_deliveries (event_id, subscriber) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING event_id",
+                event_id,
+                ON_INDEX_SUBSCRIBER,
+            )
+            if recorded is None:
+                return Armed(repeat=True)
+            for schedule_id, at in fires.items():
+                updated = await connection.fetchval(
+                    """
+                    UPDATE public.schedules SET
+                      next_run_at      = $2,
+                      pending_page_ids = ARRAY(SELECT DISTINCT unnest(pending_page_ids || $3::text[]))
+                    WHERE id = $1 AND enabled
+                    RETURNING id
+                    """,
+                    schedule_id,
+                    at,
+                    list(page_ids),
+                )
+                if updated is not None:
+                    armed.append(updated)
+        return Armed(schedule_ids=tuple(armed))
 
 
 async def schedule_pool() -> asyncpg.Pool:

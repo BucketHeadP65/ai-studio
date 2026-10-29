@@ -1,4 +1,4 @@
-"""The schedule routes: list, create, change and delete schedules, preview a cadence, fire one now, and hear about a refresh run.
+"""The schedule routes: list, create, change and delete schedules, preview a cadence, fire one now, and hear about a refresh run or an index.
 
 Every route checks a workflow against this process's own default session.
 """
@@ -19,7 +19,16 @@ from wireup.integration.fastapi import WireupRoute
 from harness.adapters.contracts import Notifier
 from harness.domain.contracts import AdmissionRefused, CardUnreadableError
 from harness.features.running.contracts import RunCollaborators, WorkflowNotRunnableError, schedule_spend
-from harness.features.scheduling.api_models import CadenceIn, RefreshRunIn, RefreshRunOut, ScheduleIn, ScheduleOut, SchedulePatch
+from harness.features.scheduling.api_models import (
+    CadenceIn,
+    IndexRunIn,
+    IndexRunOut,
+    RefreshRunIn,
+    RefreshRunOut,
+    ScheduleIn,
+    ScheduleOut,
+    SchedulePatch,
+)
 from harness.features.scheduling.domain import (
     NEW_SOURCES_TITLE,
     UNKNOWN_SCHEDULE,
@@ -185,3 +194,11 @@ class SchedulingController:
         notice = new_sources_notice(body.knowledge_base, body.sources_created, body.requested_by_entry)
         notified = await notifier.notify(NEW_SOURCES_TITLE, notice)
         return JSONResponse(RefreshRunOut(notified=notified, armed=list(armed.schedule_ids)).model_dump(mode="json"))
+
+    @router.post("/index-runs")
+    async def report_index_run(self, body: IndexRunIn) -> JSONResponse:
+        """Hear that a knowledge base was indexed with changed pages, and arm every on-index schedule naming it with those pages, once per index."""
+        armed = await self._scheduler.arm_after_index(
+            event_id=body.event_id, knowledge_base=body.knowledge_base, page_ids=body.page_ids, now=datetime.now(UTC)
+        )
+        return JSONResponse(IndexRunOut(repeat=armed.repeat, armed=list(armed.schedule_ids)).model_dump(mode="json"))

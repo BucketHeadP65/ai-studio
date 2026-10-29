@@ -49,6 +49,7 @@ silence. A future docs indexer walks this file as its root.
 |---|---|
 | [The knowledge base app reads a run's value over HTTP](docs/adr/0019-knowledge-base-reads-a-run-value-over-http.md) | Root ADR 0019: studio resolves a run's artifact through the harness's own read-only route at a configured base URL, imports no harness module and takes no address from a request |
 | [Refresh runs reach the harness and arm schedules](docs/adr/0020-refresh-runs-arm-schedules.md) | Root ADR 0020: studio's harness forward posts each ended refresh run to the harness, which tells the owner and arms on-refresh schedules once per event, and a run that did its work arms the after-run schedules waiting for its workflow |
+| [An index arms on-index schedules with its changed pages](docs/adr/0022-index-runs-arm-schedules-with-their-changed-pages.md) | Root ADR 0022: studio's harness index forward posts each index's changed pages to the harness, which collects them on every on-index schedule naming that knowledge base and fires it once its quiet period passes, with the page ids in the workflow parameter `changed_page_ids` |
 
 ## Retrieval boundaries
 

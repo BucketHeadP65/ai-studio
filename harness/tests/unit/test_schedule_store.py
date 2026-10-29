@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 import pytest
@@ -19,6 +20,7 @@ from harness.features.scheduling.domain import (
     Cadence,
     CronCadence,
     IntervalCadence,
+    OnIndexCadence,
     OnRefreshCadence,
     Schedule,
     ScheduleUpdate,
@@ -29,6 +31,9 @@ from harness.features.scheduling.domain import (
     parse_cadence,
     preview_fires,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # --- parse_cadence ----------------------------------------------------------------------------
 
@@ -52,12 +57,47 @@ def test_a_malformed_event_cadence_is_refused(text: str) -> None:
         parse_cadence(text)
 
 
+def test_the_on_index_cadence_parses_with_its_default_quiet_period() -> None:
+    assert parse_cadence("on index repo-docs") == OnIndexCadence(knowledge_base="repo-docs", quiet_seconds=1800)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("on index repo-docs quiet 10m", OnIndexCadence(knowledge_base="repo-docs", quiet_seconds=600)),
+        ("On Index docs QUIET 45s", OnIndexCadence(knowledge_base="docs", quiet_seconds=45)),
+    ],
+)
+def test_the_on_index_cadence_parses_a_named_quiet_period(text: str, expected: Cadence) -> None:
+    assert parse_cadence(text) == expected
+
+
+@pytest.mark.parametrize("text", ["on index", "on index Repo_Docs", "on index repo-docs quiet 10d", "on index repo-docs soon"])
+def test_a_malformed_on_index_cadence_is_refused(text: str) -> None:
+    with pytest.raises(ValueError, match="is not a cadence"):
+        parse_cadence(text)
+
+
+def test_a_zero_quiet_period_is_refused() -> None:
+    with pytest.raises(ValueError, match="quiet period must be longer than zero"):
+        parse_cadence("on index repo-docs quiet 0m")
+
+
 def test_the_refusal_names_every_cadence_form() -> None:
-    with pytest.raises(ValueError, match="'on refresh', or 'after <workflow name>'"):
+    with pytest.raises(ValueError, match="is not a cadence") as refusal:
         parse_cadence("sometimes")
 
+    message = str(refusal.value)
+    assert "'every <N><s|m|h|d>'" in message
+    assert "a 5-field cron expression" in message
+    assert "'on refresh', 'after <workflow name>'" in message
+    assert "or 'on index <knowledge base>' with an optional 'quiet <N><s|m|h>'" in message
 
-@pytest.mark.parametrize("cadence", [OnRefreshCadence(), AfterRunCadence(workflow_name="nightly-report")])
+
+@pytest.mark.parametrize(
+    "cadence",
+    [OnRefreshCadence(), AfterRunCadence(workflow_name="nightly-report"), OnIndexCadence(knowledge_base="repo-docs", quiet_seconds=1800)],
+)
 def test_an_event_cadence_has_no_next_fire_and_no_preview(cadence: Cadence) -> None:
     now = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -221,12 +261,21 @@ class FakeSchedules:
         last_outcome: str,
         next_run_at: datetime | None,
         session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
         current = self.rows.get(schedule_id)
         if current is None:
             return False
+        cleared = set(cleared_page_ids)
+        pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
         self.rows[schedule_id] = current.model_copy(
-            update={"last_run_at": last_run_at, "last_outcome": last_outcome, "next_run_at": next_run_at, "session_id": session_id}
+            update={
+                "last_run_at": last_run_at,
+                "last_outcome": last_outcome,
+                "next_run_at": next_run_at,
+                "session_id": session_id,
+                "pending_page_ids": pending,
+            }
         )
         return True
 
@@ -313,7 +362,9 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
     ran_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
     next_at = ran_at + timedelta(hours=2)
 
-    stamped = await store.stamp(schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1")
+    stamped = await store.stamp(
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+    )
 
     assert stamped is True
     after = await store.get(schedule.id)
@@ -326,7 +377,9 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
 
 async def test_stamp_of_an_unknown_id_is_false() -> None:
     assert (
-        await FakeSchedules().stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="")
+        await FakeSchedules().stamp(
+            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=()
+        )
         is False
     )
 

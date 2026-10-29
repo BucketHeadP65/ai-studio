@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from harness.features.scheduling.domain import Armed
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from datetime import datetime
     from uuid import UUID
 
@@ -24,6 +24,8 @@ class FakeSchedules:
     """Raised by every `stamp` when set: a store that fails while a fire records its outcome."""
     received: set[UUID] = field(default_factory=set)
     """Every event id `arm` recorded, standing in for `coordination.event_deliveries`."""
+    received_index: set[UUID] = field(default_factory=set)
+    """Every event id `arm_with_pages` recorded, standing in for `coordination.event_deliveries` under the on-index subscriber."""
 
     async def insert(self, schedule: Schedule) -> None:
         self.rows[schedule.id] = schedule
@@ -76,14 +78,24 @@ class FakeSchedules:
         last_outcome: str,
         next_run_at: datetime | None,
         session_id: str,
+        cleared_page_ids: Sequence[str],
     ) -> bool:
         if self.stamp_error is not None:
             raise self.stamp_error
         current = self.rows.get(schedule_id)
         if current is None:
             return False
+        cleared = set(cleared_page_ids)
+        pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
+        keeps_fire = bool(cleared) and bool(pending)
         self.rows[schedule_id] = current.model_copy(
-            update={"last_run_at": last_run_at, "last_outcome": last_outcome, "next_run_at": next_run_at, "session_id": session_id}
+            update={
+                "last_run_at": last_run_at,
+                "last_outcome": last_outcome,
+                "next_run_at": current.next_run_at if keeps_fire else next_run_at,
+                "session_id": session_id,
+                "pending_page_ids": pending,
+            }
         )
         return True
 
@@ -99,5 +111,19 @@ class FakeSchedules:
                 continue
             if row.next_run_at is None:
                 self.rows[schedule_id] = row.model_copy(update={"next_run_at": at})
+            armed.append(schedule_id)
+        return Armed(schedule_ids=tuple(armed))
+
+    async def arm_with_pages(self, fires: Mapping[UUID, datetime], *, event_id: UUID, page_ids: Sequence[str]) -> Armed:
+        if event_id in self.received_index:
+            return Armed(repeat=True)
+        self.received_index.add(event_id)
+        armed: list[UUID] = []
+        for schedule_id, at in fires.items():
+            row = self.rows.get(schedule_id)
+            if row is None or not row.enabled:
+                continue
+            pending = tuple(sorted({*row.pending_page_ids, *page_ids}))
+            self.rows[schedule_id] = row.model_copy(update={"next_run_at": at, "pending_page_ids": pending})
             armed.append(schedule_id)
         return Armed(schedule_ids=tuple(armed))

@@ -21,7 +21,7 @@ from core.ai.workflows.contracts import FromNode, FromParameter, LibraryError, P
 from harness.features.running import service as running_service
 from harness.features.running.contracts import schedule_runner
 from harness.features.running.records import RunCollaborators
-from harness.features.scheduling.domain import Schedule, ScheduleUpdate
+from harness.features.scheduling.domain import CHANGED_PAGES_PARAMETER, Schedule, ScheduleUpdate
 from harness.features.scheduling.exceptions import ScheduleSettingInvalidError
 from harness.features.scheduling.service import CAUGHT_UP_OUTCOME, ENGINE_UNREACHABLE_OUTCOME, MISSED_OUTCOME, Scheduler
 from harness.session import NoSessionLog, Runtime, SessionPool
@@ -795,3 +795,112 @@ async def test_a_fire_whose_arguments_no_longer_fit_is_stamped_rather_than_launc
     assert after.last_outcome.startswith("refused: ")
     assert "knowledge_bases" in after.last_outcome
     assert seen == []
+
+
+# --- on-index fires ---------------------------------------------------------------------------
+
+
+def _sales_taking_pages() -> Workflow:
+    """`_one_node_spec` with the changed pages parameter an on-index schedule passes its pages to."""
+    sales = _one_node_spec()
+    changed_pages = ParameterSpec(description="the changed pages", json_schema={"type": "string"}, required=False)
+    return sales.model_copy(update={"parameters": {**sales.parameters, "changed_page_ids": changed_pages}})
+
+
+def _pages_spec(name: str = "wf-pages") -> Workflow:
+    """A workflow whose one step reads the changed pages a fire passes."""
+    return Workflow(
+        name=name,
+        version=1,
+        description="read the pages an index changed",
+        parameters={CHANGED_PAGES_PARAMETER: ParameterSpec(description="the changed pages", json_schema={"type": "string"}, required=False)},
+        nodes=(RunNode(id="read", work="read_pages", inputs={"changed_page_ids": FromParameter(parameter=CHANGED_PAGES_PARAMETER)}),),
+        output=FromNode(node="read"),
+    )
+
+
+def _pages_registry(seen: list[str], hold: asyncio.Event | None = None) -> StepRegistry:
+    """A registry whose one step records the changed pages a fire handed it, and waits for `hold` when given."""
+    from core.ai.workflows.contracts import StepRegistry as Registry
+
+    registry = Registry()
+
+    async def read_pages(changed_page_ids: str) -> str:
+        seen.append(changed_page_ids)
+        if hold is not None:
+            await hold.wait()
+        return changed_page_ids
+
+    registry.register(read_pages)
+    return registry
+
+
+async def test_an_on_index_fire_passes_the_changed_pages_sorted(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = FakeWorkflowStore(specs={"wf-pages": _pages_spec()})
+    pool = SessionPool(_runtime(_pages_registry(seen), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("b.two", "a.one"))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.last_outcome == "launched"
+    assert (after.next_run_at, after.pending_page_ids) == (None, ()), "the fire rests and every page it passed on leaves the schedule"
+    session = await pool.get(after.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["a.one,b.two"]
+
+
+async def test_a_held_on_index_fire_keeps_its_pages_and_its_fire(tmp_path: Path) -> None:
+    seen: list[str] = []
+    hold = asyncio.Event()
+    store = FakeWorkflowStore(specs={"wf-pages": _pages_spec()})
+    pool = SessionPool(_runtime(_pages_registry(seen, hold), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("a.one",))
+    await schedules.insert(schedule)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+    first_fire = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    second_fire = first_fire + timedelta(minutes=30)
+
+    await scheduler.tick(pool, run=run, now=first_fire)
+    await schedules.arm_with_pages({schedule.id: second_fire}, event_id=uuid4(), page_ids=["c.three"])
+    await scheduler.tick(pool, run=run, now=second_fire)
+
+    held = await schedules.get(schedule.id)
+    assert held is not None
+    assert held.last_outcome == MISSED_OUTCOME
+    assert (held.next_run_at, held.pending_page_ids) == (second_fire, ("c.three",)), "the overlap keeps the arm and the pages it collected"
+    hold.set()
+    session = await pool.get(held.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["a.one"], "only the first fire passed pages on"
+
+
+async def test_a_refused_on_index_fire_keeps_its_pages(registry: StepRegistry, tmp_path: Path) -> None:
+    """The newest version dropped the parameter, so the fire refuses and the pages wait for a fire that can pass them on."""
+    store = FakeWorkflowStore(
+        specs={"wf.pages.v1": _pages_spec("pages"), "wf.pages.v2": _one_node_spec("pages")}, newest={"wf.pages.v1": "wf.pages.v2"}
+    )
+    pool = SessionPool(_runtime(registry, store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf.pages.v1", cadence="on index notes", pending_page_ids=("a.one",))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    outcome = await Scheduler(schedules, schedules, FakeBroadcaster()).run_now(pool, schedule.id, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    assert outcome.startswith("refused: ")
+    assert outcome == "refused: wf.pages.v2 declares no changed_page_ids"
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert (after.next_run_at, after.pending_page_ids) == (None, ("a.one",)), "the schedule rests and keeps its pages"
+    session = await pool.get(after.session_id)
+    assert session.active.task is None, "nothing was launched"

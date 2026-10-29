@@ -83,6 +83,32 @@ describe("cadenceWords", () => {
   it("names a cron expression as its own schedule, not pretending to translate it", () => {
     expect(cadenceWords("0 9 * * 1")).toBe("on cron schedule 0 9 * * 1");
   });
+
+  it("names the on refresh cadence in words", () => {
+    expect(cadenceWords("on refresh")).toBe("after each refresh");
+  });
+
+  it("names the workflow an after cadence waits for", () => {
+    expect(cadenceWords("after digest")).toBe("after each digest run");
+  });
+
+  it("names the knowledge base of an on index cadence and its default quiet period", () => {
+    expect(cadenceWords("on index repo-docs")).toBe(
+      "after each index of repo-docs, once 30 minutes pass quietly",
+    );
+  });
+
+  it("names the quiet period an on index cadence sets", () => {
+    expect(cadenceWords("on index docs quiet 10m")).toBe(
+      "after each index of docs, once 10 minutes pass quietly",
+    );
+  });
+
+  it("reads a quiet period of one unit in the singular", () => {
+    expect(cadenceWords("on index docs quiet 1h")).toBe(
+      "after each index of docs, once 1 hour passes quietly",
+    );
+  });
 });
 
 describe("formatNextRun", () => {

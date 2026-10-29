@@ -59,13 +59,19 @@ It then dispatches `IndexKnowledgeBase` incremental, with embeddings on and no s
   untouched this run), `cut_plans` (the cut plans reused and chosen and the heading sections filled, see
   [The chunk planner and cut plans](#the-chunk-planner-and-cut-plans)), and a `dry_run` preview
   (`DryRunPreview`, `None` on a real run). Internal stage models: `RawDocument`, `ResolvedNote`, `IndexedPage`.
-- **Events:** the handler emits the pipeline `Event`s as it advances. After `PagesLoaded`
-  it emits `CitingPagesChanged{page_ids}` (`src/engram/indexing/domain/models.py`), consumed by the
-  evals QA-generation subscriber to enqueue papers whose datasets may need
-  (re)generation, see [evals.md](evals.md). On an incremental run the set is **narrowed**
-  to only the `page_type == "paper"` pages whose indexed output changed. A full rebuild or a
-  cold start still emits every paper id (the precise changed-set feeds Vibe RAG Phase 6
-  freshness, ADR [`0019`](../adr/0019-true-incremental-ingestion.md)).
+- **Events:** the handler emits the pipeline `Event`s as it advances. The load transaction records
+  two more (`src/engram/indexing/domain/models.py`), which commit with the rows they describe.
+  `PagesLoaded{collection, pages, sections, claims, edges, pruned, page_ids}` carries the row counts and
+  the run's changed pages. `page_ids` lists, sorted and unique, each note whose file is new to the index
+  manifest the run started from or whose content hash differs from it. A page loaded again only to
+  resolve its links, or only to embed rows that lacked an embedding, is not listed, and neither is a
+  source mirror. A full index reads the stored manifest before it writes the new one and applies the
+  same rule, so a full index forced by an indexer version change lists only the edited notes. A first
+  index, an index of a root that took over the collection, and a dry run list none.
+  `CitingPagesChanged{page_ids}` names every digest page the run loaded (a page whose type is a value of
+  the schema's `sources.digest_types`), and the evals QA-generation subscriber enqueues the ones whose
+  datasets may need generating again, see [evals.md](evals.md). An incremental run names the digest
+  pages in its dirty set, and a full index names every digest page.
 - **Ports:** `KnowledgeBaseReader` and `BatchEmbedder` protocols (`domain.py`) decouple
   the handler from the filesystem and the embedding provider.
 - **Invariants:** **incremental equals full**, an incremental run is meant to leave every
@@ -113,7 +119,7 @@ flowchart TD
     R --> V[validate: lint to ValidationReport]
     V --> L([ValidationCompleted])
     L --> LD[load: hash-gated upsert to IndexedPage rows]
-    LD --> PL([PagesLoaded])
+    LD --> PL([PagesLoaded with counts and page_ids])
     PL -.-> PC([CitingPagesChanged to evals QA-gen subscriber])
     PL --> E[embed: hash-gated BatchEmbedder]
     E --> ER([EmbeddingsRefreshed])

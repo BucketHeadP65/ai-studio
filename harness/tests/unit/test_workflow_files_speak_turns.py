@@ -244,7 +244,7 @@ async def test_every_template_workflow_is_described_well_enough_to_keep(tmp_path
         )
         assert readiness.described, f"{name}: " + "; ".join(f"{f.field}: {f.message}" for f in readiness.errors())
         assert readiness.executable, f"{name} does not execute on this app's own steps"
-    assert checked == 9, f"expected the nine shipped template workflows, walked {checked}"
+    assert checked == 10, f"expected the ten shipped template workflows, walked {checked}"
 
 
 async def test_a_summary_repeating_the_spec_description_is_advice_and_not_a_refusal(tmp_path: Path) -> None:
@@ -355,6 +355,7 @@ async def test_importing_every_template_folder_writes_every_step_then_every_work
         "wf.research-compound.v12",
         "wf.research-decision-brief.v1",
         "wf.research-digest.v16",
+        "wf.research-stance-refresh.v1",
         "wf.docs-notes-to-analysis.v2",
         "wf.docs-promote-initiative.v6",
         "wf.benchmark-digest.v3",

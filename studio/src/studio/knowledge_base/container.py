@@ -51,6 +51,7 @@ from engram.indexing.contracts import (
 from engram.sources.contracts import MultiConnectorSync, ScanWatchList, ScanWatchListHandler, SyncMirrors
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from studio.knowledge_base.indexing.infrastructure.harness_forward import HarnessIndexForward
 from studio.knowledge_base.qa_routing import KnowledgeBaseQaRouter, pending_pages_queues
 from studio.knowledge_base.refresh.contracts import RefreshAbandoned, RefreshCompleted, RefreshStarted
 from studio.knowledge_base.refresh.infrastructure.harness_forward import HarnessRefreshForward
@@ -62,7 +63,19 @@ from studio.knowledge_base.settings import (
     default_settings_path,
     fetch_application_settings,
 )
-from studio.knowledge_base.wiring import conversion, evals, export, indexing, mirror, refresh, serve, sources, sync, watch_list
+from studio.knowledge_base.wiring import (
+    conversion,
+    evals,
+    export,
+    index_forward,
+    indexing,
+    mirror,
+    refresh,
+    serve,
+    sources,
+    sync,
+    watch_list,
+)
 from studio.knowledge_base.wiring.contracts import ReaderEngine
 
 if TYPE_CHECKING:
@@ -78,6 +91,7 @@ _logger = get_logger(__name__)
 
 WIRING_MODULES: tuple[ModuleType, ...] = (
     indexing,
+    index_forward,
     serve,
     conversion,
     sources,
@@ -153,7 +167,7 @@ def build_command_routes(
 
 
 def build_event_subscriptions(
-    *, qa_subscriber: EventSubscriber, harness_forward: EventSubscriber
+    *, qa_subscriber: EventSubscriber, harness_forward: EventSubscriber, index_forward: EventSubscriber
 ) -> dict[type[Event], list[tuple[str, EventSubscriber]]]:
     """Build the declarative event subscription table, each subscriber under the name its deliveries are recorded by.
 
@@ -164,13 +178,14 @@ def build_event_subscriptions(
     Args:
         qa_subscriber: The QA-generation subscriber observing `CitingPagesChanged`.
         harness_forward: The subscriber posting each ended refresh run to the harness.
+        index_forward: The subscriber posting each index's changed pages to the harness.
 
     Returns:
         The full event subscription table the bus is constructed from.
     """
     return {
         CitingPagesChanged: [("qa_generation", qa_subscriber)],
-        PagesLoaded: [],
+        PagesLoaded: [("harness_index_forward", index_forward)],
         RefreshStarted: [],
         RefreshCompleted: [("harness_forward", harness_forward)],
         RefreshAbandoned: [("harness_forward", harness_forward)],
@@ -212,6 +227,7 @@ def bus_provider(
     rollback_handler: RollbackPolicyHandler,
     qa_subscriber: KnowledgeBaseQaRouter,
     harness_forward: HarnessRefreshForward,
+    index_forward: HarnessIndexForward,
 ) -> MessageBus:
     """Provide the full `MessageBus`, every command routed, for a container built with a knowledge base.
 
@@ -237,11 +253,12 @@ def bus_provider(
         rollback_handler: Handles `RollbackPolicy`.
         qa_subscriber: The QA-generation subscriber observing `CitingPagesChanged`.
         harness_forward: The subscriber posting each ended refresh run to the harness.
+        index_forward: The subscriber posting each index's changed pages to the harness.
 
     Returns:
         The bus with every command route and every event subscription in place.
     """
-    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward)
+    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward, index_forward=index_forward)
     bus = MessageBus(
         build_command_routes(
             index_handler=index_handler,
@@ -314,7 +331,7 @@ def qa_router_for_registry(evals: EvalsSettings) -> KnowledgeBaseQaRouter:
 
 @wireup.injectable
 def registry_bus_provider(
-    engine: AsyncEngine, qa_subscriber: KnowledgeBaseQaRouter, harness_forward: HarnessRefreshForward
+    engine: AsyncEngine, qa_subscriber: KnowledgeBaseQaRouter, harness_forward: HarnessRefreshForward, index_forward: HarnessIndexForward
 ) -> MessageBus:
     """Provide the `MessageBus` for a container with no knowledge base of its own.
 
@@ -326,11 +343,12 @@ def registry_bus_provider(
         engine: The admin engine the outbox writes through.
         qa_subscriber: The QA-generation subscriber observing `CitingPagesChanged`.
         harness_forward: The subscriber posting each ended refresh run to the harness.
+        index_forward: The subscriber posting each index's changed pages to the harness.
 
     Returns:
         The bus with no command route and every event subscription in place.
     """
-    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward)
+    subscriptions = build_event_subscriptions(qa_subscriber=qa_subscriber, harness_forward=harness_forward, index_forward=index_forward)
     bus = MessageBus({}, {event_type: [] for event_type in subscriptions}, outbox=PostgresOutbox(engine))
     for event_type, declared in subscriptions.items():
         for name, subscriber in declared:

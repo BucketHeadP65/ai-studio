@@ -1304,3 +1304,66 @@ class TestDuration:
         report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
 
         assert report.duration_seconds == pytest.approx(2.5)
+
+
+def _last_pages_loaded(uow: FakeKnowledgeBaseUnitOfWork) -> PagesLoaded:
+    """The `PagesLoaded` the latest load transaction recorded."""
+    return [event for event in uow.coordination.events if isinstance(event, PagesLoaded)][-1]
+
+
+class TestChangedPages:
+    """`PagesLoaded.page_ids` on the full path and the dry run: the notes whose file content changed."""
+
+    async def test_a_full_rebuild_lists_only_edited_notes(self, tmp_path: Path):
+        knowledge_base = _build_knowledge_base(tmp_path)
+        uow = FakeKnowledgeBaseUnitOfWork()
+        handler = _handler(knowledge_base, uow=uow)
+        await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+        _seed_stored_state_from_full_run(uow)
+        stored = uow.fingerprint.stored
+        assert isinstance(stored, StoredFingerprint)
+        uow.fingerprint.stored = replace(stored, indexer_version="1")
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Wiki/Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
+
+        report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+
+        assert report.mode == "full"
+        assert _last_pages_loaded(uow).page_ids == ("ent.lightrag",)
+
+    async def test_a_first_index_lists_no_pages(self, tmp_path: Path):
+        knowledge_base = _build_knowledge_base(tmp_path)
+        uow = FakeKnowledgeBaseUnitOfWork()
+        handler = _handler(knowledge_base, uow=uow)
+
+        await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+
+        assert _last_pages_loaded(uow).page_ids == ()
+
+    async def test_a_root_that_took_over_the_collection_lists_no_pages(self, tmp_path: Path):
+        knowledge_base = _build_knowledge_base(tmp_path)
+        uow = FakeKnowledgeBaseUnitOfWork()
+        handler = _handler(knowledge_base, uow=uow)
+        await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+        _seed_stored_state_from_full_run(uow)
+        stored = uow.fingerprint.stored
+        assert isinstance(stored, StoredFingerprint)
+        uow.fingerprint.stored = replace(stored, knowledge_base_root="/their/knowledge_base")
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Wiki/Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
+
+        report = await handler.handle(IndexKnowledgeBase(collection="research", embed=False, collection_named=True))
+
+        assert report.mode == "full"
+        assert _last_pages_loaded(uow).page_ids == ()
+
+    async def test_a_dry_run_records_no_pages(self, tmp_path: Path):
+        knowledge_base = _build_knowledge_base(tmp_path)
+        uow = FakeKnowledgeBaseUnitOfWork()
+        handler = _handler(knowledge_base, uow=uow)
+        await handler.handle(IndexKnowledgeBase(collection="research", embed=False))
+        _seed_stored_state_from_full_run(uow)
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document("Wiki/Entities", "lightrag", _ENTITY.replace("graph-indexed", "graph-indexed (revised)"))
+
+        await handler.handle(IndexKnowledgeBase(collection="research", embed=False, dry_run=True))
+
+        loaded = next(event for event in handler.events if isinstance(event, PagesLoaded))
+        assert loaded.page_ids == ()

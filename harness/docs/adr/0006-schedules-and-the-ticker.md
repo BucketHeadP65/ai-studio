@@ -28,6 +28,10 @@ changing one.
 wait for an event (`on refresh`, `after <workflow name>`), armed by a refresh run's report or a run's ending, and
 resting between fires.
 
+**Extended:** on 2026-10-28 by root [ADR 0022](../../../docs/adr/0022-index-runs-arm-schedules-with-their-changed-pages.md),
+a third event cadence (`on index <knowledge base>`), armed by an index with changed pages after a quiet period, whose
+fire passes those pages to the workflow parameter `changed_page_ids`.
+
 ## Context
 
 The owner ruled that scheduled workflows are specced now, at professional grade, not deferred.

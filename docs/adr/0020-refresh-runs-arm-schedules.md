@@ -33,6 +33,7 @@ that knowledge base.
 D3. **A run's end arms the schedules waiting for it.** A run that ends `succeeded` or `partial` arms every enabled
 `after <workflow name>` schedule over a shared knowledge base. The fire runs with the schedule's own stored
 arguments. Nothing passes the ids of what the run wrote.
+The on-index cadence passes the pages an index changed, as [ADR 0022](0022-index-runs-arm-schedules-with-their-changed-pages.md) decides.
 
 D4. **The event id is recorded with the arm.** It is written to `coordination.event_deliveries` of
 `engram_workflows` in the same transaction as the arm, so a report delivered twice arms nothing the second time.
