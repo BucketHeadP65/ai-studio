@@ -57,18 +57,18 @@ from .envelope import (
 )
 from .infrastructure.gateway import read_snapshot
 from .queries import expansion_hops, graph_next_steps, paths_next_steps, route_hops, routed_graph_paths, routed_graph_result
-from .query_embedding import keyword_only_note
+from .query_embedding import keyword_only_wording
 from .sql_tools import DESCRIBE_SCHEMA_DESCRIPTION, RUN_SQL_DESCRIPTION, make_describe_schema, make_run_sql, tooling_instructions
 from .tools import (
     DATE_RANGE_CLAUSE,
     FIND_PATHS_DESCRIPTION,
     GRAPH_EXPAND_DESCRIPTION,
+    KEYWORD_FALLBACK_SENTENCE,
     RefRefusal,
     bound_search_result,
     declared_facets_clause,
     document_clause,
     elide_k,
-    keyword_only_reason,
     leveled_fetch,
     no_map_refusal,
     no_unit_refusal,
@@ -79,6 +79,7 @@ from .tools import (
     search_next_steps,
     search_result_status,
     shared_hits_per_document,
+    why_keyword_only,
 )
 
 if TYPE_CHECKING:
@@ -489,7 +490,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
         hybrid: bool,
         dated: bool,
         filtered: bool,
-        skipped: tuple[str, ...] = (),
+        skipped: Mapping[str, str] | None = None,
     ) -> SearchResult:
         """One `search` answer: status, next move, the stamp when a single surface answered, its map ref when `fetch` opens one, and why any vector leg was skipped."""
         status = search_result_status(hits)
@@ -510,7 +511,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 filtered=filtered,
             ),
             knowledge_base=stamp,
-            note=keyword_only_note(" and ".join(dict.fromkeys(skipped))) if skipped else None,
+            keyword_only_reason=_keyword_only_reason(skipped or {}, several=sole is None),
         )
 
     async def _dialed_defs(self, _ctx: RunContext[AgentDepsT], tool_defs: list[ToolDefinition]) -> list[ToolDefinition]:
@@ -600,7 +601,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                     hybrid=all(found.hybrid for found in ranked),
                     dated=first is not None or last is not None,
                     filtered=bool(facets),
-                    skipped=tuple(reason for found in ranked for reason in found.skipped),
+                    skipped={name: reason for found in ranked for name, reason in found.skipped.items()},
                 )
 
         if (resolve_k := self.k_source) is not None:
@@ -973,7 +974,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
     def _library_search_description(self, *, hybrid: bool, default_name: str | None = None) -> str:
         """The `search` description with several knowledge bases: the same text, plus `knowledge_base`."""
         ranking = "semantic + keyword ranking, fused" if hybrid else "keyword ranking"
-        fallback = " When the query cannot be embedded, the search runs keyword only and the result's `note` says why." if hybrid else ""
+        fallback = f" {KEYWORD_FALLBACK_SENTENCE}" if hybrid else ""
         return (
             f"Search your knowledge bases ({ranking}): returns the top-`k` "
             "ranked hits (a page, a section within one, or a smaller unit) as a list, each with its "
@@ -1131,16 +1132,29 @@ class _SurfaceHits:
 
     hits: tuple[SearchHit, ...]
     hybrid: bool
-    skipped: tuple[str, ...]
+    skipped: Mapping[str, str]
+    """The surface's name mapped to why its query was not embedded, empty when its vector leg ran as meant."""
 
 
 async def _surface_search(surface: ReadSurface, message: Search) -> _SurfaceHits:
     """One surface's ranked hits for `message`, each stamped with the legs that selected it and the surface's name."""
     result = await surface.handlers.search(message)
-    reason = keyword_only_reason(result)
+    reason = why_keyword_only(result)
     hybrid = message.hybrid and reason is None
     hits = search_hits(result.rows, collection=surface.collection, knowledge_base=surface.name, hybrid=hybrid)
-    return _SurfaceHits(hits=hits, hybrid=hybrid, skipped=() if reason is None else (reason,))
+    return _SurfaceHits(hits=hits, hybrid=hybrid, skipped={} if reason is None else {surface.name: reason})
+
+
+def _keyword_only_reason(skipped: Mapping[str, str], *, several: bool) -> str | None:
+    """Why the vector leg was skipped, naming the knowledge bases it was skipped in when the search read `several`."""
+    if not skipped:
+        return None
+    if not several:
+        return keyword_only_wording(next(iter(skipped.values())))
+    by_reason: dict[str, list[str]] = {}
+    for name, reason in skipped.items():
+        by_reason.setdefault(reason, []).append(name)
+    return " ".join(keyword_only_wording(reason, knowledge_bases=names) for reason, names in by_reason.items())
 
 
 def _guidance(surface: ReadSurface) -> str | None:

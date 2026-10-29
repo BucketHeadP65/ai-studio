@@ -280,7 +280,7 @@ def evals_run_cmd(
     resume: bool = typer.Option(
         default=False,
         help="Continue the --results file: keep every case that did not fail transiently (a connection error or request timeout "
-        "from a model or embedding endpoint, an HTTP 429 or 5xx from one, a refused or closed database connection, or a "
+        "from a model or embedding endpoint, a search's query embedding included, an HTTP 429 or 5xx from one, a refused or closed database connection, or a "
         "statement or lock timeout), run only the missing cases and those, and rewrite the file under the earlier header. A file "
         "written with other settings, on another index build or under another source scoring version is refused before any "
         "case runs. With no file there yet, every case runs.",

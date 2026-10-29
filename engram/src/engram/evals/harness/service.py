@@ -383,6 +383,7 @@ async def run_traced_eval_on_dataset(
     envelope_handler = await container.get(EnvelopeHandler) if config.disclosure else None
     # The cap on hits per document is read once, so every case's `search` description states the same cap.
     hits_per_document = await read_hits_per_document(await container.get(SearchHandler), knowledge_base=schema.slug, collection=collection)
+    # A case whose query cannot be embedded fails, transiently when the endpoint's error is, so no keyword hit is scored as a hybrid one.
     toolset: RetrievalToolset = build_retrieval_toolset(
         resolved_handlers,
         only=profile.tools,
@@ -394,6 +395,7 @@ async def run_traced_eval_on_dataset(
         pinned=config.pinned_search,
         facet_keys=tuple(facet.key for facet in schema.facets),
         hits_per_document=hits_per_document,
+        keyword_fallback=False,
     )
     collections_read: dict[str, set[str]] = {}
     capabilities: list[AbstractCapability] = [ProgressiveDisclosure()] if config.disclosure else []

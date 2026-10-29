@@ -1,7 +1,7 @@
 """The rule for a search query that cannot be embedded: the search runs keyword only, and its answer says why.
 
 `run_sql` and `search` both follow it. An embedding that raises, or that runs past its deadline, leaves the search
-on its BM25 leg alone, and the answer carries `keyword_only_note`, naming the deadline or the error's own text.
+on its BM25 leg alone, and the answer carries `keyword_only_wording`, naming the deadline or the error's own text.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from core.observability import get_logger
 from .exceptions import QueryNotEmbeddedError
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
 _logger = get_logger(__name__)
 
@@ -26,16 +26,18 @@ NO_EMBEDDER_REASON = "embedding not configured for this server"
 """Why a search ran keyword only on a server that has no embedder."""
 
 
-def keyword_only_note(reason: str) -> str:
-    """The note an answer carries when its search ran keyword only.
+def keyword_only_wording(reason: str, *, knowledge_bases: Sequence[str] = ()) -> str:
+    """The words an answer carries when its search ran keyword only, `run_sql`'s `note` among them.
 
     Args:
         reason: Why the query was not embedded.
+        knowledge_bases: The knowledge bases that ran keyword only, named when a search read several. Empty names none.
 
     Returns:
-        The note, naming `reason`.
+        The words, naming `reason` and any knowledge bases.
     """
-    return f"(embedding unavailable, ran BM25-only: {reason})"
+    where = f" in {', '.join(knowledge_bases)}" if knowledge_bases else ""
+    return f"(embedding unavailable, ran BM25-only{where}: {reason})"
 
 
 async def embed_within[T](embed: Callable[[], Awaitable[T]], *, deadline: float) -> T:

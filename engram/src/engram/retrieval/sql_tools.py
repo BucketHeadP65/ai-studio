@@ -34,7 +34,7 @@ from .budget import clip_text, fits_budget
 from .domain import DescribeSchema
 from .exceptions import DescribeSchemaRefusedError, QueryNotEmbeddedError
 from .infrastructure.gateway import STATEMENT_ERRORS
-from .query_embedding import EMBED_DEADLINE_SECONDS, NO_EMBEDDER_REASON, embed_within, keyword_only_note
+from .query_embedding import EMBED_DEADLINE_SECONDS, NO_EMBEDDER_REASON, embed_within, keyword_only_wording
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -358,11 +358,11 @@ async def _expand_vector_query(sql: str, embed_query: QueryEmbedder | None, dead
     if not rewrite.texts:
         return sql, None
     if embed_query is None:
-        return rewrite.render(None), keyword_only_note(NO_EMBEDDER_REASON)
+        return rewrite.render(None), keyword_only_wording(NO_EMBEDDER_REASON)
     try:
         vectors = await embed_within(lambda: asyncio.gather(*(embed_query(text) for text in rewrite.texts)), deadline=deadline)
     except QueryNotEmbeddedError as exc:
-        return rewrite.render(None), keyword_only_note(exc.reason)
+        return rewrite.render(None), keyword_only_wording(exc.reason)
     return rewrite.render(vectors, model=query_model_of(embed_query)), None
 
 

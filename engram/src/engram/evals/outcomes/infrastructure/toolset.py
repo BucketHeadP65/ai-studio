@@ -251,8 +251,8 @@ def _without_withheld_folded(hit: SearchHit, withheld: WithheldRefs) -> SearchHi
 
 
 def _ran_hybrid(value: SearchResult, scrub: _Scrub) -> bool:
-    """Whether this search ran the vector leg: never when its note says it ran keyword only, else from the fixed leg, the call's arguments, then the hits."""
-    if value.note is not None:
+    """Whether this search ran the vector leg: never when it says it ran keyword only, else from the fixed leg, the call's arguments, then the hits."""
+    if value.keyword_only_reason is not None:
         return False
     if scrub.search_hybrid is not None:
         return scrub.search_hybrid

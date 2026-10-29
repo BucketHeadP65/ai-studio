@@ -279,7 +279,7 @@ class SearchHandler:
         result = await self._gateway.rows(SEARCH_SQL, params, cap=query.k)
         if skipped is None:
             return result
-        return KeywordOnlyResult(rows=result.rows, columns=result.columns, truncated_message=result.truncated_message, reason=skipped)
+        return KeywordOnlyResult.model_validate({**dict(result), "reason": skipped})
 
     async def hits_per_document(self, collection: str) -> int:
         """Read the most hits one document of a knowledge base keeps in this handler's search, as its search tuning sets it.

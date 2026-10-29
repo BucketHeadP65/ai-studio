@@ -94,6 +94,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable, Mapping, Sequence
     from pathlib import Path
 
+    from core.ai.embedding import Embeddings
     from core.thinking import Thinking
     from pydantic_ai.capabilities import AbstractCapability
     from pydantic_ai.messages import ModelMessage, ModelRequestPart
@@ -395,6 +396,7 @@ def _spy_on_build_retrieval_toolset(monkeypatch: pytest.MonkeyPatch) -> list[tup
         pinned: bool = False,
         facet_keys: tuple[str, ...] = (),
         hits_per_document: int = 0,
+        keyword_fallback: bool = True,
     ) -> RetrievalToolset:
         captured.append((descriptions, collection))
         return real_build(
@@ -408,6 +410,7 @@ def _spy_on_build_retrieval_toolset(monkeypatch: pytest.MonkeyPatch) -> list[tup
             pinned=pinned,
             facet_keys=facet_keys,
             hits_per_document=hits_per_document,
+            keyword_fallback=keyword_fallback,
         )
 
     monkeypatch.setattr(service, "build_retrieval_toolset", _spy)
@@ -2166,6 +2169,26 @@ def _endpoint_connection_error(path: str) -> ModelAPIError:
     return error
 
 
+class _UnreachableEmbedder(FakeEmbedding):
+    """An embedder whose endpoint never opened a connection."""
+
+    async def embed_batch(self, texts: Sequence[str]) -> Embeddings:
+        del texts
+        failure = _endpoint_connection_error("embeddings")
+        raise failure
+
+
+def _searching_then_answering() -> FunctionModel:
+    """A model that searches once, then answers `yes`."""
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if _tool_calls_made(messages) == 0:
+            return ModelResponse(parts=[ToolCallPart("search", {"query": "anything"})])
+        return _answer_part(info, "yes", ["note.alpha"])
+
+    return FunctionModel(respond)
+
+
 class TestAFailedConnectionNamesTheService(_ResetsLogfire):
     @pytest.mark.parametrize("guarded", [False, True])
     @pytest.mark.parametrize(
@@ -2195,6 +2218,21 @@ class TestAFailedConnectionNamesTheService(_ResetsLogfire):
         assert [failed.error_message for failed in run.report.failures] == [error]
         _header, lines = _read_results(results)
         assert (lines["case-b"]["failed"], lines["case-b"]["transient"], lines["case-b"]["error"]) == (True, True, error)
+
+    async def test_a_case_whose_query_embedding_failed_stays_transient_and_never_ran_keyword_only(self, tmp_path: Path):
+        results = tmp_path / "results.jsonl"
+        config = EvaluationRunConfig(model_spec="test-model", instructions="Cite.", results_path=results)
+        gateway = FakeSqlGateway()
+        handlers = replace(_handlers_over(gateway), search=SearchHandler(gateway, _UnreachableEmbedder()))
+
+        await run_traced_eval_on_dataset(
+            FakeContainer(handlers=handlers), config=config, dataset=_named_dataset(_RESUMED_CASES[0]), model=_searching_then_answering()
+        )
+
+        _header, lines = _read_results(results)
+        assert (lines["case-a"]["failed"], lines["case-a"]["transient"]) == (True, True)
+        assert lines["case-a"]["error"] == "ServiceConnectionError: embedding endpoint example.openai.azure.com: Connection error."
+        assert not [call for call in gateway.rows_calls if "api.search(" in call.sql], "an evaluation case never runs keyword only"
 
     async def test_a_failure_that_came_from_no_connection_keeps_its_own_text(self, tmp_path: Path):
         results = tmp_path / "results.jsonl"

@@ -1,8 +1,8 @@
 """A `search` whose query cannot be embedded runs keyword only and says why, the way `run_sql` does.
 
 The handler stays strict unless the search asks for the fallback, so a caller that scores the hybrid leg still sees
-the failure. Every `search` tool asks for it: the toolset's, the MCP server's, the routed one and the read
-capability's. Each answers the keyword hits with `run_sql`'s own note.
+the failure. Every served `search` tool asks for it: the toolset's, the MCP server's, the routed one and the read
+capability's. Each answers the keyword hits with `run_sql`'s own wording. A toolset built for an evaluation does not.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from engram.retrieval.envelope import EnvelopeHandler
 from engram.retrieval.infrastructure.embedded import slug_only_stamp
 from engram.retrieval.infrastructure.mcp_server import create_mcp_server
 from engram.retrieval.queries import DescribeSchemaHandler, FetchHandler, GraphExpandHandler, GraphPathsHandler, SearchHandler
-from engram.retrieval.tools import RetrievalHandlers, build_retrieval_toolset
+from engram.retrieval.tools import KEYWORD_FALLBACK_SENTENCE, RetrievalHandlers, build_retrieval_toolset
 from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 
@@ -39,11 +39,12 @@ if TYPE_CHECKING:
 
 _COLLECTION = "research"
 _EMBEDDINGS_URL = "https://example.openai.azure.com/openai/deployments/embed/embeddings"
-_REFUSED_NOTE = "(embedding unavailable, ran BM25-only: Connection error.)"
+_REFUSED = "(embedding unavailable, ran BM25-only: Connection error.)"
 _ROWS = SqlResult(
     rows=({"id": "paper.graph", "hit_level": "card", "page_title": "Graph", "snippet": "graph evidence", "score": 0.5, "lexical_rank": 1},),
     columns=("id", "hit_level", "page_title", "snippet", "score", "lexical_rank"),
 )
+_TRUNCATED = _ROWS.model_copy(update={"truncated_message": "… 3 more rows"})
 
 
 class _RefusingEmbedder(FakeEmbedding):
@@ -96,14 +97,14 @@ class TestTheHandler:
             await handler(Search(query="graph evidence", collection=_COLLECTION))
 
     async def test_a_refused_embedding_runs_keyword_only_and_names_the_error(self):
-        gateway = FakeSqlGateway(result=_ROWS)
+        gateway = FakeSqlGateway(result=_TRUNCATED)
         handler = SearchHandler(gateway, _RefusingEmbedder())
 
         result = await handler(Search(query="graph evidence", collection=_COLLECTION, keyword_fallback=True))
 
         assert isinstance(result, KeywordOnlyResult)
         assert result.reason == "Connection error."
-        assert result.rows == _ROWS.rows
+        assert result.model_dump(exclude={"reason"}) == _TRUNCATED.model_dump()
         assert _search_params(gateway)["qvec"] is None
         assert _search_params(gateway)["query_model"] is None
 
@@ -128,7 +129,7 @@ class TestTheHandler:
 
 
 class TestTheSearchTools:
-    async def test_the_toolset_search_answers_the_keyword_hits_with_run_sqls_note(self):
+    async def test_the_toolset_search_answers_the_keyword_hits_with_run_sqls_wording(self):
         toolset = build_retrieval_toolset(_handlers(FakeSqlGateway(result=_ROWS), _RefusingEmbedder()), search_hybrid=True, collection=_COLLECTION)
         ctx = _ctx()
         tools = await toolset.get_tools(ctx)
@@ -136,11 +137,30 @@ class TestTheSearchTools:
         result = await toolset.call_tool("search", {"query": "graph evidence"}, ctx, tools["search"])
 
         assert isinstance(result, SearchResult)
-        assert result.note == _REFUSED_NOTE
+        assert result.keyword_only_reason == _REFUSED
         assert [hit.answered_by for hit in result.hits] == ["lexical"]
         assert result.next_steps.summary.endswith("Answered by lexical.")
 
-    async def test_a_search_that_ran_as_asked_carries_no_note(self):
+    async def test_a_toolset_built_without_the_fallback_raises_the_embedding_error_and_promises_nothing(self):
+        gateway = FakeSqlGateway(result=_ROWS)
+        toolset = build_retrieval_toolset(_handlers(gateway, _RefusingEmbedder()), search_hybrid=True, collection=_COLLECTION, keyword_fallback=False)
+        ctx = _ctx()
+        tools = await toolset.get_tools(ctx)
+
+        with pytest.raises(APIConnectionError):
+            await toolset.call_tool("search", {"query": "graph evidence"}, ctx, tools["search"])
+
+        assert KEYWORD_FALLBACK_SENTENCE not in (tools["search"].tool_def.description or "")
+        assert not [call for call in gateway.rows_calls if "api.search(" in call.sql]
+
+    async def test_a_served_toolset_promises_the_fallback(self):
+        toolset = build_retrieval_toolset(_handlers(FakeSqlGateway(), FakeEmbedding()), search_hybrid=True, collection=_COLLECTION)
+
+        tools = await toolset.get_tools(_ctx())
+
+        assert KEYWORD_FALLBACK_SENTENCE in (tools["search"].tool_def.description or "")
+
+    async def test_a_search_that_ran_as_asked_carries_no_reason(self):
         toolset = build_retrieval_toolset(_handlers(FakeSqlGateway(result=_ROWS), FakeEmbedding()), search_hybrid=True, collection=_COLLECTION)
         ctx = _ctx()
         tools = await toolset.get_tools(ctx)
@@ -148,9 +168,9 @@ class TestTheSearchTools:
         result = await toolset.call_tool("search", {"query": "graph evidence"}, ctx, tools["search"])
 
         assert isinstance(result, SearchResult)
-        assert result.note is None
+        assert result.keyword_only_reason is None
 
-    async def test_the_mcp_search_answers_the_keyword_hits_with_the_note(self):
+    async def test_the_mcp_search_answers_the_keyword_hits_with_the_reason(self):
         gateway = FakeSqlGateway(result=_ROWS)
         server = create_mcp_server(
             gateway,
@@ -167,10 +187,10 @@ class TestTheSearchTools:
 
         assert not result.is_error
         answer = json.loads(_text(result))
-        assert answer["note"] == _REFUSED_NOTE
+        assert answer["keyword_only_reason"] == _REFUSED
         assert [hit["id"] for hit in answer["hits"]] == ["paper.graph"]
 
-    async def test_the_routed_mcp_search_answers_the_keyword_hits_with_the_note(self):
+    async def test_the_routed_mcp_search_answers_the_keyword_hits_with_the_reason(self):
         gateway = FakeSqlGateway(result=_ROWS)
         surface = ReadSurface(
             name=_COLLECTION,
@@ -186,9 +206,9 @@ class TestTheSearchTools:
             result = await client.call_tool("search", {"query": "graph evidence"})
 
         assert not result.is_error
-        assert json.loads(_text(result))["note"] == _REFUSED_NOTE
+        assert json.loads(_text(result))["keyword_only_reason"] == _REFUSED
 
-    async def test_the_read_capability_search_answers_the_keyword_hits_with_the_note(self):
+    async def test_the_read_capability_search_answers_the_keyword_hits_with_the_reason(self):
         gateway = FakeSqlGateway(result=_ROWS)
         surface = ReadSurface(
             name=_COLLECTION,
@@ -202,10 +222,10 @@ class TestTheSearchTools:
         result = await knowledge_base.direct_call_tool("search", {"query": "graph evidence"})
 
         assert isinstance(result, SearchResult)
-        assert result.note == _REFUSED_NOTE
+        assert result.keyword_only_reason == _REFUSED
         assert result.next_steps.summary.endswith("Answered by lexical.")
 
-    async def test_a_search_over_several_bases_names_why_the_vector_leg_was_skipped(self):
+    async def test_a_search_over_several_bases_names_the_ones_that_ran_keyword_only(self):
         refused = ReadSurface(
             name="research",
             collection="research",
@@ -225,4 +245,5 @@ class TestTheSearchTools:
         result = await knowledge_base.direct_call_tool("search", {"query": "graph evidence"})
 
         assert isinstance(result, SearchResult)
-        assert result.note == _REFUSED_NOTE
+        assert result.keyword_only_reason == "(embedding unavailable, ran BM25-only in research: Connection error.)"
+        assert {hit.knowledge_base: hit.answered_by for hit in result.hits} == {"research": "lexical", "notes": "lexical"}
