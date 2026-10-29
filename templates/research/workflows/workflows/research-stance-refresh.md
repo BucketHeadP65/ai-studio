@@ -26,7 +26,7 @@ presentation:
     once: such a run keeps none of them, and a full pass started by hand covers them instead.
   inputs:
     - {key: collection, label: Knowledge base holding the stances, control: knowledge-base}
-    - {key: records, label: Knowledge base the stances follow, control: knowledge-base}
+    - {key: records, label: Knowledge base the stances follow, control: text}
     - {key: progress, label: Page types and statuses that count, control: text}
     - {key: changed_page_ids, label: Only these changed pages, control: text}
   result_fields:
@@ -42,7 +42,7 @@ workflow:
       description: The knowledge base holding the stance pages, by name.
       json_schema: {type: string, minLength: 1}
     records:
-      description: The knowledge base the stances follow, by name.
+      description: The knowledge base the stances follow, named by its registered name.
       json_schema: {type: string, minLength: 1}
     progress:
       description: Which page types at which status count, as comma-separated type:status pairs.
