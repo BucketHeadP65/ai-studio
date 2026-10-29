@@ -22,7 +22,7 @@ live in the apps' `docs/reference/` docs. Decision rationale lives in the ADRs
 and [explanation docs](../explanation/tech-stack.md). The entry point to
 everything is [CONTEXT-MAP.md](../../CONTEXT-MAP.md).
 
-Sections: 7 · whole document ≈ 6,603 tokens.
+Sections: 7 · whole document ≈ 6,667 tokens.
 
 ### 01 — System context
 [sections/01-system-context.md](sections/01-system-context.md) · ~444 tokens
@@ -30,7 +30,7 @@ Sections: 7 · whole document ≈ 6,603 tokens.
 - **Load when:** system context, what is this repo, external systems, integrations, personas, C4 L1
 
 ### 02 — Containers & data flow
-[sections/02-containers-data-flow.md](sections/02-containers-data-flow.md) · ~1,266 tokens
+[sections/02-containers-data-flow.md](sections/02-containers-data-flow.md) · ~1,330 tokens
 - **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over three libraries (engram, core, engram-connectors), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
 - **Load when:** containers, deployment, databases, local Postgres, ParadeDB, ports, data flow, C4 L2, connectors, templates
 
