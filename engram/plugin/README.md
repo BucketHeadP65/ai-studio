@@ -177,7 +177,7 @@ Both `plugin/.claude-plugin/plugin.json` and `plugin/.codex-plugin/plugin.json` 
 
 Run `engram/.venv/bin/pytest` from the monorepo root with `-c engram/pyproject.toml engram/tests/unit/engram/plugin engram/tests/unit/engram/test_skills_shipped.py`, or run the same tests from the `engram/` project. Verify the installed copy with Codex's `/mcp`, skill picker, and `/hooks` as well.
 
-The generic Codex plugin/skill validators flag the existing Claude-only frontmatter on `designing-note-writing` (`disable-model-invocation`, `tags`, and `argument-hint`). These fields are retained for Claude compatibility. Codex 0.154 loads the skill successfully and uses its `agents/openai.yaml` invocation policy. This local export directory is runtime-tested, not a claim of public-directory submission validation.
+The generic Codex plugin/skill validators flag the existing Claude-only frontmatter on `designing-note-writing` (`disable-model-invocation` and `tags`). These fields are retained for Claude compatibility. Its argument hint lives on the `design-note-writing` command, since the harness's skills capability warns on every run that mounts a skill carrying `argument-hint`. Codex 0.154 loads the skill successfully and uses its `agents/openai.yaml` invocation policy. This local export directory is runtime-tested, not a claim of public-directory submission validation.
 
 ---
 
