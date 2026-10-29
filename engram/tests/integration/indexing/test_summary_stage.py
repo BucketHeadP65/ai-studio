@@ -11,6 +11,7 @@ its connection back to the pool.
 import pytest
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.pool import QueuePool
 
 from engram.indexing.contracts import SummaryStage
 from engram.indexing.infrastructure import orm
@@ -95,6 +96,8 @@ async def test_a_run_whose_summarizer_raises_leaves_no_connection_checked_out(mi
         with pytest.raises(RuntimeError, match="did not answer"):
             await stage.run("alpha")
 
-        assert engine.pool.checkedout() == 0
+        pool = engine.pool
+        assert isinstance(pool, QueuePool)
+        assert pool.checkedout() == 0
     finally:
         await engine.dispose()
