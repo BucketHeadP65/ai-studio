@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from core.ai.retrieval.contracts import Row, Search, SqlResult, SupportsFetch, SupportsSearch
-    from core.settings import OpenRouterSettings
+    from core.settings import GatewaySettings
     from pydantic_ai.capabilities import AbstractCapability
 
     from engram.config import PassageText, RerankSettings
@@ -140,15 +140,15 @@ class RerankedSearch[S: Search]:
 
 
 def reranking(
-    settings: RerankSettings, openrouter: OpenRouterSettings, *, capabilities: Sequence[AbstractCapability[None]] = ()
+    settings: RerankSettings, gateway: GatewaySettings, *, capabilities: Sequence[AbstractCapability[None]] = ()
 ) -> Reranking | None:
-    """The re-ranking `settings` describe, or `None` when they turn it off or OpenRouter has no key.
+    """The re-ranking `settings` describe, or `None` when they turn it off or the gateway has no key.
 
     A missing key logs one warning naming the setting.
 
     Args:
         settings: The `retrieval.rerank` block.
-        openrouter: The OpenRouter section of the infrastructure settings.
+        gateway: The gateway section of the infrastructure settings, which reaches the decision model.
         capabilities: What every decision model request runs through, such as the process's spend limits.
 
     Returns:
@@ -156,11 +156,11 @@ def reranking(
     """
     if not settings.enabled:
         return None
-    if not openrouter.api_key:
-        _logger.warning("search re-ranking is on, and infrastructure.openrouter.api_key is empty, so search answers in its own order")
+    if not gateway.api_key:
+        _logger.warning("search re-ranking is on, and infrastructure.gateway.api_key is empty, so search answers in its own order")
         return None
     questions = DecisionModelQuestions(
-        decision_model(settings.model, openrouter),
+        decision_model(settings.model, gateway),
         capabilities=capabilities,
         max_concurrent_requests=settings.max_concurrent_requests,
     )

@@ -10,7 +10,7 @@ import pytest
 
 from core.ai.decision_models import DecisionModelQuestions
 from core.ai.retrieval.contracts import SqlResult
-from core.settings import OpenRouterSettings
+from core.settings import GatewaySettings
 from core.testing.fakes import FakeDecisionModel
 from pydantic_ai.exceptions import ModelAPIError
 from pydantic_ai.models import override_allow_model_requests
@@ -201,13 +201,24 @@ async def test_two_hits_with_one_id_each_keep_their_own_probability() -> None:
     assert [row["snippet"] for row in result.rows] == ["boot", "spend"]
 
 
-def test_reranking_is_off_when_disabled_or_without_a_key() -> None:
-    assert reranking(RerankSettings(enabled=False), OpenRouterSettings(api_key="k")) is None
-    assert reranking(RerankSettings(), OpenRouterSettings()) is None
+def test_reranking_is_off_when_disabled_or_without_a_gateway_key() -> None:
+    assert reranking(RerankSettings(enabled=False), GatewaySettings(api_key="k")) is None
+    assert reranking(RerankSettings(), GatewaySettings()) is None
+
+
+def test_without_a_gateway_key_reranking_warns_naming_the_key(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level("WARNING"):
+        reranking(RerankSettings(), GatewaySettings())
+
+    assert "infrastructure.gateway.api_key" in caplog.text
+
+
+def test_reranking_asks_jev_latest_by_default() -> None:
+    assert RerankSettings().model == "jev-latest"
 
 
 def test_reranking_carries_the_settings() -> None:
-    built = reranking(RerankSettings(passage="chunk", requests="all_hits", deadline_seconds=2.0), OpenRouterSettings(api_key="k"))
+    built = reranking(RerankSettings(passage="chunk", requests="all_hits", deadline_seconds=2.0), GatewaySettings(api_key="k"))
 
     assert built is not None
     assert (built.passage, built.requests, built.deadline_seconds) == ("chunk", "all_hits", 2.0)
