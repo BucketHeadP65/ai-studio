@@ -38,6 +38,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.runtime import a_runtime
+from tests.support.spend import free_spend
 from tests.support.state import a_state, a_throwaway_state, a_transcript, records_under
 from tests.support.streaming import streaming_function_model
 from tests.unit.test_followme_slice import FakeConsole
@@ -94,6 +95,7 @@ def _build(
         project=project,
         tiers=ModelTiers(state=a_state(tmp_path), models=ModelList(listing=None), build=_fake_build) if delegation else None,
         follow_me=follow_me,
+        spend=free_spend(),
     )
 
 

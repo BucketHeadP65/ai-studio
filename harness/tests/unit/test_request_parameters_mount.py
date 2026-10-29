@@ -23,6 +23,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.runtime import a_runtime
+from tests.support.spend import free_spend
 from tests.support.state import a_throwaway_state, records_under
 
 if TYPE_CHECKING:
@@ -84,6 +85,7 @@ def _build(store: InMemoryStepStore, parameters: FakeRequestParametersSink) -> A
         store=store,
         parameters=parameters,
         external_agents=dict,
+        spend=free_spend(),
     )
 
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import fnmatch
 
 from dataclasses import dataclass
-from decimal import Decimal
 from pathlib import Path
 from types import NoneType
 from typing import TYPE_CHECKING
@@ -23,7 +22,6 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCall
 from pydantic_ai.models.test import TestModel
 from pydantic_ai_harness import DynamicWorkflow
 from pydantic_ai_harness.pydantic_ai_docs import PydanticAIDocs
-from pydantic_ai_harness.spend import Budget, SpendLimits
 from pydantic_core import to_jsonable_python
 
 from harness.adapters.environment import COMMAND_ENV_NAMES, content_cache, step_shell, step_workspace, workspace_env
@@ -46,6 +44,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.runtime import a_runtime
+from tests.support.spend import free_spend
 from tests.support.state import a_state, a_transcript, records_under
 from tests.support.streaming import streaming_function_model
 
@@ -98,6 +97,7 @@ def _chat_agent(
         _NoReads(),
         state=a_state(tmp_path),
         custom=tmp_path / "custom",
+        spend=free_spend(),
         web_search=WebSearchSettings(),
         store=a_transcript(tmp_path),
         parameters=FakeRequestParametersSink(),
@@ -164,7 +164,7 @@ class _RecordingBuild:
 def _parent(tmp_path: Path, workspace: Path, worker_model: Model, *, checkout: Path | None = None) -> Agent[Runtime, str]:
     """A parent holding only its own workspace and the delegate door, so the worker is the one under test."""
     state = a_state(tmp_path)
-    spend = SpendLimits[Runtime](budgets=[Budget(usd=Decimal(5), window="run")])
+    spend = free_spend()
     tiers = ModelTiers(state=state, models=ModelList(listing=None), build=_RecordingBuild(worker_model))
     delegate, _ = workers.delegation_plugins(
         tiers=tiers,
@@ -255,7 +255,7 @@ class TestDelegateWorkspace:
 
     def test_a_checkout_outside_the_workspace_leaves_the_delegate_no_files_plugin(self, tmp_path: Path) -> None:
         state = a_state(tmp_path)
-        spend = SpendLimits[Runtime](budgets=[Budget(usd=Decimal(5), window="run")])
+        spend = free_spend()
 
         worker = workers.worker_agent(
             "worker",
@@ -285,7 +285,7 @@ class TestDelegateWorkspace:
 class TestDelegateWithoutAWorkspace:
     async def test_a_worker_run_alone_fails_at_run_start(self, tmp_path: Path) -> None:
         state = a_state(tmp_path)
-        spend = SpendLimits[Runtime](budgets=[Budget(usd=Decimal(5), window="run")])
+        spend = free_spend()
         worker = workers.worker_agent("worker", model=TestModel(), settings=None, description="d", reads=None, spend=spend, state=state)
 
         with pytest.raises(UserError, match="needs a workspace"):
@@ -369,7 +369,7 @@ class TestDocsThroughFormatMaps:
 def _scripts_parent(tmp_path: Path, workspace: Path, worker_model: Model, *, environ: Mapping[str, str]) -> Agent[Runtime, str]:
     """A parent holding its own workspace and the agent-scripts door, which starts every tier worker without a workspace."""
     state = a_state(tmp_path)
-    spend = SpendLimits[Runtime](budgets=[Budget(usd=Decimal(5), window="run")])
+    spend = free_spend()
     tiers = ModelTiers(state=state, models=ModelList(listing=None), build=_RecordingBuild(worker_model))
     _, scripts = workers.delegation_plugins(
         tiers=tiers, reads=None, spend=spend, state=state, workspace=workspace, checkout=workspace / "checkout", environ=environ

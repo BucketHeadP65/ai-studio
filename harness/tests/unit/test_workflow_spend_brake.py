@@ -7,7 +7,7 @@ through the `spend=` parameter `build_environment` and `build_agent` both take f
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -35,6 +35,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.runtime import a_runtime
+from tests.support.spend import free
 from tests.support.state import a_state, a_transcript, records_under
 from tests.support.streaming import streaming_function_model
 
@@ -138,7 +139,8 @@ class TestTheSharedDayBudget:
 class TestTheDayCeilingSurvivesARestart:
     async def test_a_restarted_process_counts_the_request_a_step_made_before_it(self, tmp_path: Path) -> None:
         state = a_state(tmp_path)
-        environment = await world_over(streaming_function_model(_finishes_at_once), spend=_default_spend_limits(state))
+        # The deployment's brake, its store and budgets as they are, pricing the test model at nothing.
+        environment = await world_over(streaming_function_model(_finishes_at_once), spend=replace(_default_spend_limits(state), price=free))
         ready = prepare(spec_for(defined_step(tools=())), environment)
         implementation = ready.registry.get("dig")
         assert implementation is not None
