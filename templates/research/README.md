@@ -20,6 +20,10 @@ from this template can register its own vocabulary for any research domain.
 - `workflows/workflows/research-decision-brief.md`, "Settle one decision from the reading": turns one decision
   question into a brief a second reviewer has checked against its own sources, plus a proposed question note nothing
   writes until you say so.
+- `workflows/workflows/research-stance-refresh.md`, "Refresh stances from the docs": rewrites the stance pages a changed
+  records page bears on, started by an `on index repo-docs` schedule with `collection=research`, `records=repo-docs`
+  and `progress=adr:accepted, adr:superseded, architecture:current, spec-doc:approved, spec-doc:executed`, or by hand
+  with `changed_page_ids` empty for a full pass.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.

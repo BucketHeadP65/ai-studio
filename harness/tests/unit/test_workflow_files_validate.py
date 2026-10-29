@@ -56,6 +56,7 @@ WORKFLOWS = (
     "research-digest",
     "research-compound",
     "research-decision-brief",
+    "research-stance-refresh",
     "docs-notes-to-analysis",
     "docs-promote-initiative",
     "source-remove",
@@ -69,6 +70,7 @@ _WORKFLOW_DIR = {
     "research-digest": RESEARCH_WORKFLOWS,
     "research-compound": RESEARCH_WORKFLOWS,
     "research-decision-brief": RESEARCH_WORKFLOWS,
+    "research-stance-refresh": RESEARCH_WORKFLOWS,
     "docs-notes-to-analysis": REPO_DOCS_WORKFLOWS,
     "docs-promote-initiative": REPO_DOCS_WORKFLOWS,
     "source-remove": WORKFLOW_FILES,
@@ -130,11 +132,18 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `excise_source`, `check_excision` and `removal_report` type against `plan_items` and
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
+    `place_stance_pages` and `refresh_stance` type against `group_pages` and `merge_work`, defined only inside
+    `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
     """
     glue: dict[str, InlineStep] = {}
-    for path in (WORKFLOW_FILES / "workflows" / "source-remove.md", RESEARCH_WORKFLOWS / "workflows" / "research-compound.md"):
+    glued = (
+        WORKFLOW_FILES / "workflows" / "source-remove.md",
+        RESEARCH_WORKFLOWS / "workflows" / "research-compound.md",
+        RESEARCH_WORKFLOWS / "workflows" / "research-stance-refresh.md",
+    )
+    for path in glued:
         text = path.read_text(encoding="utf-8")
         glue.update({task.name: task for task in load_spec_document(text).workflow.inline})
     return {**steps, **glue}
@@ -238,6 +247,11 @@ async def test_every_step_file_loads_and_asks_only_for_tools_this_app_offers() -
         "count_digests",
         "link_entities",
         "relate_digest",
+        "list_stance_changes",
+        "place_stance_pages",
+        "refresh_stance",
+        "check_stances",
+        "write_stances",
     }
     offered = set(await app_grants())
     for step in steps.values():
@@ -376,6 +390,29 @@ _BRIEF: dict[str, object] = {
 }
 """One reviewed brief, shaped the way `draft_decision_brief` answers, for the renderer to join."""
 
+_STANCE_SECTIONS: list[dict[str, object]] = [
+    {"heading": "Position", "level": 2, "body": "The system keeps one index per base."},
+    {"heading": "Evidence", "level": 2, "body": "[[paper.a]] measures it."},
+    {"heading": "Alternatives", "level": 2, "body": "A shared index, passed over in [[paper.b]]."},
+]
+"""The sections of the one stance page here, Evidence and Alternatives among them."""
+
+_STANCE_FRONTMATTER: dict[str, object] = {
+    "id": "stance.x",
+    "type": "stance",
+    "title": "X",
+    "status": "considering",
+    "record": "adr-0030-something",
+}
+"""The one stance page's frontmatter, as `read_page` answers it."""
+
+_STANCE_PAGE: dict[str, object] = {
+    "page_id": "stance.x",
+    "path": "Wiki/Stances/x.md",
+    "payload": {"frontmatter": _STANCE_FRONTMATTER, "sections": _STANCE_SECTIONS, "claims": []},
+}
+"""The one page `read_page` answers with, for every id asked."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -428,6 +465,34 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "fold_report": {"written": [{"folder": "initiatives/2026-08-29-x", "page_id": "bs.x", "resolved": 1}]},
     "render_decision_brief": {"brief": _BRIEF},
     "pending_designs": {"collection": "research"},
+    "list_stance_changes": {"collection": "research", "records": "repo-docs", "progress": "adr:accepted", "changed_page_ids": ""},
+    "write_stances": {
+        "drafts": [
+            {
+                "stance_id": "stance.x",
+                "path": "Wiki/Stances/x.md",
+                "new": False,
+                "payload": {"frontmatter": {**_STANCE_FRONTMATTER, "status": "trying"}, "sections": _STANCE_SECTIONS},
+                "sources": ["adr-0030-something"],
+            }
+        ],
+        "changes": {
+            "admitted": [{"page_id": "adr-0030-something", "page_type": "adr", "status": "accepted", "title": "Something"}],
+            "stances": [
+                {
+                    "stance_id": "stance.x",
+                    "title": "X",
+                    "status": "considering",
+                    "path": "Wiki/Stances/x.md",
+                    "record": "adr-0030-something",
+                    "payload": {"frontmatter": _STANCE_FRONTMATTER, "sections": _STANCE_SECTIONS},
+                }
+            ],
+            "qualified": 1,
+            "capped": False,
+        },
+        "collection": "research",
+    },
     "write_adrs": {
         "drafts": [
             {
@@ -487,6 +552,7 @@ _TOOL_ANSWERS: dict[str, object] = {
     "list_undigested": _UNDIGESTED,
     "read_notes": {"path": "", "exists": True, "text": "# Design\n", "threads": [_OPEN_THREAD]},
     "resolve_note": "resolved",
+    "read_page": _STANCE_PAGE,
     "list_pages": [
         {"page_id": "adr-0030-something", "page_type": "adr", "title": "Something", "status": "accepted"},
         {"page_id": "engram-adr-0044-elsewhere", "page_type": "adr", "title": "Elsewhere", "status": "accepted"},
@@ -667,6 +733,47 @@ def _assert_docs_pass_programs(ran: dict[str, object], called_by_step: _CalledBy
     }
 
 
+def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
+    """The two stance-refresh programs: a full pass over one pair, then one checked draft landing on its stance's own path.
+
+    Every `list_pages` call here answers the same two rows, so the stance listing names two ids and both read back as
+    the one stance page `read_page` answers.
+    """
+    changes = to_jsonable_python(ran["list_stance_changes"])
+    assert changes["admitted"] == [
+        {"page_id": "adr-0030-something", "page_type": "adr", "status": "accepted", "title": "Something"},
+        {"page_id": "engram-adr-0044-elsewhere", "page_type": "adr", "status": "accepted", "title": "Elsewhere"},
+    ]
+    assert (changes["qualified"], changes["capped"]) == (2, False)
+    stances = changes["stances"]
+    assert [stance["stance_id"] for stance in stances] == ["adr-0030-something", "engram-adr-0044-elsewhere"]
+    assert {(stance["title"], stance["status"], stance["path"], stance["record"]) for stance in stances} == {
+        ("X", "considering", "Wiki/Stances/x.md", "adr-0030-something")
+    }
+    assert stances[0]["payload"]["sections"] == _STANCE_SECTIONS
+    assert [name for name, _ in called_by_step["list_stance_changes"]] == ["list_pages", "list_pages", "read_page", "read_page"]
+    assert called_by_step["list_stance_changes"][0][1] == {
+        "knowledge_base": "repo-docs",
+        "page_type": "adr",
+        "status": "accepted",
+        "limit": 1000,
+    }
+    assert called_by_step["list_stance_changes"][1][1] == {"knowledge_base": "research", "page_type": "stance", "limit": 1000}
+    assert called_by_step["list_stance_changes"][2][1] == {"knowledge_base": "research", "page_id": "adr-0030-something"}
+
+    assert to_jsonable_python(ran["write_stances"]) == {"written": ["stance.x"], "failed": []}
+    assert [(name, to_jsonable_python(args)) for name, args in called_by_step["write_stances"]] == [
+        (
+            "write_note",
+            {
+                "knowledge_base": "research",
+                "payload": {"frontmatter": {**_STANCE_FRONTMATTER, "status": "trying"}, "sections": _STANCE_SECTIONS},
+                "path": "Wiki/Stances/x.md",
+            },
+        )
+    ]
+
+
 def _assert_source_remove_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
     """The one source-removal program among the library files: pure arithmetic, no tool calls of its own.
 
@@ -774,12 +881,15 @@ async def test_every_shipped_program_runs_in_the_real_sandbox_and_calls_the_tool
         "removal_report",
         "render_decision_brief",
         "count_digests",
+        "list_stance_changes",
+        "write_stances",
     }
     _assert_research_pass_programs(ran, called_by_step)
     _assert_benchmark_pass_programs(ran, called_by_step)
     _assert_docs_pass_programs(ran, called_by_step)
     _assert_source_remove_programs(ran, called_by_step)
     _assert_decision_brief_renderer(ran, called_by_step)
+    _assert_stance_refresh_programs(ran, called_by_step)
 
 
 async def test_find_undigested_with_picked_sources_answers_exactly_those_off_the_undigested_list(sandbox: AsyncMonty) -> None:
