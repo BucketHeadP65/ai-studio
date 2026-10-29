@@ -15,7 +15,7 @@ step:
         payload = draft["payload"]
         page_id = payload["frontmatter"]["id"]
         before = read.get(stance_id)
-        path = draft["path"]
+        path = ""
         problem = ""
         if draft["new"] and page_id != stance_id:
             problem = "the page id " + page_id + " is not the proposed id " + stance_id
@@ -74,6 +74,7 @@ Use as the tail of a stance refresh, after a judge has reviewed the drafts, with
 list_stance_changes. An existing stance is written to the path it was read from, and only when its page id is
 unchanged and its Evidence and Alternatives sections are byte for byte the page as it was read before the run. A new
 stance must keep the id it was proposed under, and is refused when that id is the id of any stance the run listed,
-read or not. A draft that fails a check is not written, and a page write_note refuses is caught. Both are answered
+read or not. It is written with no path, so write_note places it in the stance page type's own folder, and the path
+a draft answers is never used. A draft that fails a check is not written, and a page write_note refuses is caught. Both are answered
 in `failed` with the reason, and every other draft still lands. A frontmatter field the draft holds as null is left
 out of the page.

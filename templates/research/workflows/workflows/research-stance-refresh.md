@@ -16,10 +16,12 @@ presentation:
     run card lists the stances written, the ones refused with the check each failed, where every changed page was
     placed, every stance as it was before the run, and every stance the run could not read with the reason.
   owner_participation: >-
-    Nothing during a run. A schedule starts it when the records knowledge base is indexed, and you start a full pass
-    by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite whose sentences no records page
-    supports or whose status the records do not give. Every rewrite lands directly. To undo one, put the page back
-    from the run's stances as they were before it.
+    Nothing during a run, unless the judge cannot decide. A schedule starts it when the records knowledge base is
+    indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
+    whose sentences no records page supports or whose status the records do not give. A judge that cannot decide asks
+    you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
+    wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
+    they were before it.
   not_for: >-
     Not for adding literature to a stance, which comes from the digests and the flag pass. Not for editing a
     stance's Evidence or Alternatives, which this run never changes. Not for more than twenty-five changed pages at
@@ -252,15 +254,15 @@ Use on an `on index` schedule over the records knowledge base, with `collection`
 `changed_page_ids` empty for a full pass. Not for editing a stance's evidence, which the digests and the flag pass
 grow.
 
-The stages: `list_changes` reads each changed records page and keeps the ones `progress` admits, or lists every
-admitted page for a full pass, and reads every stance page as it stands. A stance it cannot read, or one carrying a
+The stages: `list_changes` lists every records page `progress` admits and keeps the changed ones, or every one for
+a full pass, and reads every stance page as it stands. A stance it cannot read, or one carrying a
 field it does not declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so
 both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups of
 five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
 a new stance, or a skip. `merge_work` makes one item per stance with every page that bears on it, its record among
 them, and one item per proposed new stance, combining the groups that proposed the same id. `refresh_stances` runs
 one worker per item, two at a time, each rewriting its stance or drafting the new one and checking it against the
-base's grammar. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
+base's grammar, naming any finding it left because only a change to Evidence or Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
 empty list is approved without a read. `write_stances` writes each approved page whose id, Evidence and Alternatives
 match the page as it was read, refuses a new stance that takes the id of a stance that exists, catches each refusal,
 and answers which were written and which failed which check.

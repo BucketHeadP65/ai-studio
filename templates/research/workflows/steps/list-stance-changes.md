@@ -1,6 +1,6 @@
 ---
 title: List stance changes
-summary: The records pages at a status that counts, read from the changed ids or listed whole, beside every stance page as it stood before the run and the stances it could not read.
+summary: The records pages at a status that counts, listed whole or narrowed to the changed ids, beside every stance page as it stood before the run and the stances it could not read.
 version: 1
 step:
   name: list_stance_changes
@@ -9,25 +9,18 @@ step:
     for entry in progress.split(","):
         if ":" in entry:
             page_type, status = entry.split(":", 1)
-            pairs.append(page_type.strip() + ":" + status.strip())
+            pair = page_type.strip() + ":" + status.strip()
+            if pair not in pairs:
+                pairs.append(pair)
     wanted = []
     for page_id in changed_page_ids.split(","):
         if page_id.strip() and page_id.strip() not in wanted:
             wanted.append(page_id.strip())
     admitted = []
-    if wanted:
-        for page_id in wanted:
-            try:
-                page = await read_page(knowledge_base=records, page_id=page_id)
-            except Exception:
-                continue
-            front = page["payload"]["frontmatter"]
-            if str(front.get("type")) + ":" + str(front.get("status")) in pairs:
-                admitted.append({"page_id": page_id, "page_type": front["type"], "status": front["status"], "title": str(front.get("title", ""))})
-    else:
-        for pair in pairs:
-            page_type, status = pair.split(":", 1)
-            for row in await list_pages(knowledge_base=records, page_type=page_type, status=status, limit=1000):
+    for pair in pairs:
+        page_type, status = pair.split(":", 1)
+        for row in await list_pages(knowledge_base=records, page_type=page_type, status=status, limit=1000):
+            if not wanted or row["page_id"] in wanted:
                 admitted.append({"page_id": row["page_id"], "page_type": row["page_type"], "status": row["status"], "title": row["title"]})
     qualified = len(admitted)
     capped = len(wanted) > 0 and qualified > 25
@@ -148,10 +141,12 @@ step:
 ---
 
 Use at the head of a stance refresh. `progress` names the page types and statuses that count, as comma-separated
-`type:status` pairs. With `changed_page_ids` set, it reads exactly those pages of `records` and keeps the ones whose
-type and status form a pair, skipping a page read_page cannot find. Past twenty-five kept pages it keeps none and
+`type:status` pairs, and a pair named twice is listed once. It lists every page of `records` at each pair and reads no
+records page file. With `changed_page_ids` set, it keeps only the listed pages those ids name, so a changed page at no
+pair, or one the records knowledge base does not hold, is not kept. Past twenty-five kept pages it keeps none and
 answers `capped` true with the count in `qualified`, so the run touches nothing and a full pass is started by hand.
-With `changed_page_ids` empty, it lists every page of every pair, with no cap. Beside them it reads every stance page
+With `changed_page_ids` empty, it keeps every listed page, with no cap. A `records` name list_pages refuses fails the
+run. Beside them it reads every stance page
 of `collection` whole, as it stands before the run, so a later step can check a rewrite against it and the run keeps
 it. `stance_ids` names every stance listed, read or not. A stance read_page refuses, or one carrying a frontmatter
 field this step does not declare, is left out of `stances` and named in `unread` with the reason, because its
