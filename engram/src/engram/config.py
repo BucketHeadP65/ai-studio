@@ -61,8 +61,8 @@ class RerankSettings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = True
-    model: str = "jev-1.13"
-    """The name the System One API serves the decision model under."""
+    model: str = "jev-latest"
+    """The name TypeSafe serves the decision model under, such as `jev-latest` or a versioned id."""
     passage: PassageText = "snippet"
     """What the model reads for each hit: the snippet the hit carries, or the hit's whole text cut to fit."""
     requests: RequestShape = "per_hit"

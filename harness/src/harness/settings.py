@@ -418,8 +418,8 @@ class SkillHintSettings(BaseModel):
     """Whether the chat agent is told which skill a decision model picks for each turn, by which model, and how sure the pick must be."""
 
     enabled: bool = True
-    model: str = "jev-1.13"
-    """The name the System One API serves the decision model under."""
+    model: str = "jev-latest"
+    """The name TypeSafe serves the decision model under, such as `jev-latest` or a versioned id."""
     threshold: float = Field(default=0.6, ge=0, le=1)
     """The least averaged probability a pick needs before the hint names it."""
     deadline_seconds: float = Field(default=2.0, gt=0, le=30)

@@ -17,7 +17,7 @@ from pydantic_ai_harness.step_persistence import ContinuableSnapshot
 
 from harness.adapters import models
 from harness.adapters.model_tiers import tier_context_window
-from harness.adapters.models import ModelRoute, response_cost
+from harness.adapters.models import ModelRoute, priced_cost, response_cost
 from harness.features.sessions.api_models import ContextVitals, SessionSummary, UsageTotals
 from harness.features.sessions.controller import _summary
 from harness.features.sessions.read_models import SessionRow
@@ -72,6 +72,22 @@ def test_an_openrouter_response_without_its_own_figure_is_priced_under_its_provi
         usage=RequestUsage(input_tokens=11_265, output_tokens=96),
     )
     assert response_cost(response) > Decimal(0)
+
+
+def test_a_typesafe_jev_response_is_priced_under_the_version_it_answers_as() -> None:
+    """The gateway's `jev-latest` answers as a versioned id, and the registry prices that id under `typesafe`."""
+    response = ModelResponse(
+        parts=[TextPart("ok")],
+        model_name="jev-1.14.0",
+        provider_name="typesafe",
+        provider_url="https://gateway-eu.pydantic.dev/proxy/type-safe",
+        usage=RequestUsage(input_tokens=332, output_tokens=22),
+    )
+
+    cost = priced_cost(response)
+
+    assert cost is not None
+    assert cost > Decimal(0)
 
 
 async def test_the_context_reading_lands_on_the_answering_session(tmp_path: Path) -> None:

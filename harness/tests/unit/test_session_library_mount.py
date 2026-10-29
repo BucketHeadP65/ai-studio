@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, NoReturn
 import httpx
 import pytest
 
-from core.settings import DatabaseSettings, InfrastructureSettings, OpenRouterSettings
+from core.settings import DatabaseSettings, GatewaySettings, InfrastructureSettings
 from engram.config import RerankSettings
 from engram.retrieval.contracts import Reranking
 
@@ -291,7 +291,7 @@ class TestTheRerankingReachesTheMount:
     """The session opens its knowledge bases with the re-ranking its settings describe, or none."""
 
     async def test_settings_with_a_key_mount_a_reranking(self, studio_client: httpx.AsyncClient, tmp_path: Path) -> None:
-        infrastructure = InfrastructureSettings(database=_A_DATABASE, openrouter=OpenRouterSettings(api_key="k"))
+        infrastructure = InfrastructureSettings(database=_A_DATABASE, gateway=GatewaySettings(api_key="k"))
         session = _a_session(studio_client, tmp_path, infrastructure=infrastructure, rerank=RerankSettings())
 
         _positional, keyword = await _mounted_with(session)
@@ -304,7 +304,7 @@ class TestTheRerankingReachesTheMount:
         assert keyword.get("rerank") is None
 
     async def test_a_disabled_block_mounts_none(self, studio_client: httpx.AsyncClient, tmp_path: Path) -> None:
-        infrastructure = InfrastructureSettings(database=_A_DATABASE, openrouter=OpenRouterSettings(api_key="k"))
+        infrastructure = InfrastructureSettings(database=_A_DATABASE, gateway=GatewaySettings(api_key="k"))
         session = _a_session(studio_client, tmp_path, infrastructure=infrastructure, rerank=RerankSettings(enabled=False))
 
         _positional, keyword = await _mounted_with(session)

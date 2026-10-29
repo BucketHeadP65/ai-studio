@@ -66,21 +66,21 @@ class LogfireSettings(BaseModel):
 
 
 class GatewaySettings(BaseModel):
-    """The Pydantic AI Gateway that model calls go through: its API key and its regional proxy URL.
+    """The Pydantic AI Gateway that model calls go through: its API key, its regional proxy URL and its TypeSafe route.
 
     An empty key builds, and whoever routes a model through the gateway refuses it at use time.
     """
 
     api_key: str = ""
     base_url: str = "https://gateway-eu.pydantic.dev/proxy"
+    typesafe_route: str = "type-safe"
+    """The gateway route that reaches TypeSafe, which serves the decision models."""
 
 
 class OpenRouterSettings(BaseModel):
-    """OpenRouter, for the models served only there. An empty key means none is on file."""
+    """OpenRouter, for the chat models served only there. An empty key means none is on file."""
 
     api_key: str = ""
-    base_url: str = "https://openrouter.ai/api/v1"
-    """Where decision models are reached. Chat models served by OpenRouter ignore it."""
 
 
 class HarnessServiceSettings(BaseModel):

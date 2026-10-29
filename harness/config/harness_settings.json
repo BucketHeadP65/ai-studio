@@ -61,7 +61,7 @@
     "job_poll_seconds": 1.0,
     "batch": 200
   },
-  "skill_hint": {"enabled": true, "model": "jev-1.13", "threshold": 0.6, "deadline_seconds": 2.0},
+  "skill_hint": {"enabled": true, "model": "jev-latest", "threshold": 0.6, "deadline_seconds": 2.0},
   "logging": {
     "service_name": "harness",
     "service_version": "0.0.0",

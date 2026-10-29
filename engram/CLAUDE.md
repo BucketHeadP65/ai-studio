@@ -266,9 +266,10 @@ version names the chunk sizes, the chunk planner and its ceiling, so changing an
 judges them likely to help answer the query. It drops no hit, each hit keeps its fused `score` and gains `rerank_score`, its
 probability, and a search over several knowledge bases merges by that probability when every hit has one, else rank by rank. The shared
 settings file's `retrieval.rerank` block (`RerankSettings`) turns it on and picks the model, the text judged (`snippet` or
-`chunk`) and the request shape (`per_hit` or `all_hits`). `reranking(settings, openrouter)` answers `None` when it is off
-or OpenRouter has no key, and a failed or late re-rank returns the search's own result. The model is reached through
-core's `decision_model` over `infrastructure.openrouter`.
+`chunk`) and the request shape (`per_hit` or `all_hits`). `reranking(settings, gateway)` answers `None` when it is off
+or the gateway has no key, and a failed or late re-rank returns the search's own result. The model is TypeSafe's Jev
+(`jev-latest` by default), which core's `decision_model` reaches on the gateway's TypeSafe route
+(`infrastructure.gateway.typesafe_route`) with `infrastructure.gateway.api_key`.
 
 ## Type Hints
 

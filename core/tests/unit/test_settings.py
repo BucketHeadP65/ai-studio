@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.settings import InfrastructureSettings, OpenRouterSettings, read_infrastructure
+from core.settings import GatewaySettings, InfrastructureSettings, read_infrastructure
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -52,5 +52,5 @@ def test_a_missing_file_raises_os_error(tmp_path: Path) -> None:
         read_infrastructure(tmp_path / "absent.json")
 
 
-def test_openrouter_has_a_base_url_defaulting_to_openrouters_own() -> None:
-    assert OpenRouterSettings().base_url == "https://openrouter.ai/api/v1"
+def test_the_gateway_reaches_typesafe_on_its_type_safe_route_by_default() -> None:
+    assert GatewaySettings().typesafe_route == "type-safe"

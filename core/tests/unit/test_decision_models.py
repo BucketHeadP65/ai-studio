@@ -8,11 +8,11 @@ import pytest
 
 from pydantic_ai.exceptions import ModelAPIError, UnexpectedModelBehavior
 from pydantic_ai.models.decision import ChoiceQuestion
-from pydantic_ai.models.system_one import SystemOneModel
+from pydantic_ai.models.typesafe import TypeSafeModel
 from pydantic_ai_harness.spend import SpendLimitExceeded
 
 from core.ai.decision_models import DecisionModelQuestions, decision_model
-from core.settings import OpenRouterSettings
+from core.settings import GatewaySettings
 from core.testing.fakes import FakeDecisionModel
 
 if TYPE_CHECKING:
@@ -20,17 +20,24 @@ if TYPE_CHECKING:
     from pydantic_ai.models.decision import DecisionRequest
 
 
-def test_decision_model_reaches_the_system_one_api_at_openrouters_address() -> None:
-    model = decision_model("jev-1.13", OpenRouterSettings(api_key="k"))
+def test_decision_model_is_typesafes_model_on_the_gateways_typesafe_route_with_the_gateway_key() -> None:
+    model = decision_model("jev-latest", GatewaySettings(api_key="gateway-key", base_url="https://gateway.test/proxy/"))
 
-    assert isinstance(model, SystemOneModel)
-    assert model.model_name == "jev-1.13"
-    assert model.base_url == "https://openrouter.ai/api/v1"
+    assert isinstance(model, TypeSafeModel)
+    assert model.model_name == "jev-latest"
+    assert model.base_url == "https://gateway.test/proxy/type-safe"
+    assert model.client._config.api_key == "gateway-key"
 
 
-def test_decision_model_refuses_an_empty_key() -> None:
-    with pytest.raises(ValueError, match=r"infrastructure\.openrouter\.api_key"):
-        decision_model("jev-1.13", OpenRouterSettings())
+def test_decision_model_takes_the_route_the_gateway_settings_name() -> None:
+    model = decision_model("jev-latest", GatewaySettings(api_key="k", base_url="https://gateway.test/proxy", typesafe_route="jev-route"))
+
+    assert model.base_url == "https://gateway.test/proxy/jev-route"
+
+
+def test_decision_model_refuses_an_empty_gateway_key() -> None:
+    with pytest.raises(ValueError, match=r"infrastructure\.gateway\.api_key"):
+        decision_model("jev-latest", GatewaySettings())
 
 
 _PASSAGES = {

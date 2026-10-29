@@ -350,14 +350,6 @@ def test_an_openrouter_deepseek_response_prices_on_the_openrouter_route() -> Non
     assert price > 0
 
 
-def test_the_registry_cannot_price_a_dated_wire_name_on_its_own() -> None:
-    """Why the snapshot date is dropped: the registry tracks a model family, never each snapshot."""
-    usage = RequestUsage(input_tokens=1_000, output_tokens=500)
-
-    with pytest.raises(LookupError):
-        calc_price(usage, model_ref="deepseek/deepseek-v4-pro-0813", provider_id="openrouter")
-
-
 def test_a_wire_name_outside_the_catalog_is_left_to_the_registry() -> None:
     """A prefix strip that finds no catalog entry must not price a model this deployment does not build."""
     response = ModelResponse(

@@ -42,7 +42,8 @@ already built. The next turn or the next step picks up a change.
 `.state/model-tiers.json`, beside the transcript, holds only what the owner has set by hand: a JSON object keyed by tier
 name, each entry a model id and a thinking level, written atomically so a concurrent reader never sees a half-written
 file. A tier the owner has never touched, or has cleared, has no entry at all and runs on its default, `glm-5.3-flash`
-at `xhigh`.
+at `xhigh`. `glm-5.3-flash` is reachable through OpenRouter only, so a tier on its default needs
+`infrastructure.openrouter.api_key`.
 
 **The stand-aside rule.** Reading a tier (`tier_in_effect`) checks the stored entry's model against the model list. When
 the model is still listed, the owner's entry stands. When it is not, meaning the model has dropped off the deployment's
@@ -127,7 +128,9 @@ the same shape with `worker` back on its default.
 This is the state with an OpenRouter key on file, the route every pinned id with an OpenRouter wire name resolves to
 (`_pinned` in `adapters/model_list.py` decides every pinned entry's route from the same one condition, whether the
 deployment holds an OpenRouter key, so a single list never splits pinned entries between routes). With no key on file,
-every pinned entry answers route `"gateway"` instead, and the search runs over the pinned catalog alone.
+every pinned entry answers route `"gateway"` instead, and the search runs over the pinned catalog alone. That route is
+the list's label only: the model factory refuses a Z.ai id such as `glm-5.3-flash` with no OpenRouter key, because Z.ai's
+models are reachable through OpenRouter only.
 
 ## The model list
 
