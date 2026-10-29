@@ -8,10 +8,11 @@ reaches a real knowledge base.
 What the cases cover: a stance whose record changed is rewritten and written to its own path, a rewrite that alters
 Evidence is refused at landing, a refused write is reported beside the written one, more than twenty-five changed
 pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop, two groups proposing
-the same new stance make one item, a changed page that cannot be read leaves its stance alone, and a full pass lists
-every pair with no cap. Then the stances the run cannot read: one read_page refuses and one carrying a field the
-workflow does not declare are both named and left alone while the run carries on, and a new draft never takes the
-id of a stance that exists.
+the same new stance make one item, a changed page the records base does not list leaves its stance alone, a changed
+page whose file lies outside the records base's root is still admitted, a repeated pair is listed once, and a full
+pass lists every pair with no cap. Then the stances the run cannot read: one read_page refuses and one carrying a
+field the workflow does not declare are both named and left alone while the run carries on, and a new draft never
+takes the id of a stance that exists or a path the model chose.
 """
 
 from __future__ import annotations
@@ -148,20 +149,25 @@ class Bases:
     """The records base and the research base the programs read and write, scripted.
 
     `records` holds each records page's frontmatter by id, and `stances` each stance page as read_page answers it.
-    A records page missing from `records` is one read_page cannot find. `unreadable` names stance ids list_pages lists
-    and read_page refuses. `refusing` names the stance ids write_note refuses. `writes` and `listed` record every
-    write_note and list_pages call, in order.
+    A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
+    names records pages whose file lies in an app's own docs folder, beyond the records base's root, which list_pages
+    lists and read_page refuses the way the real tool does. `unreadable` names stance ids list_pages lists and
+    read_page refuses. `refusing` names the stance ids write_note refuses. `writes`, `listed` and `reads` record every
+    write_note, list_pages and read_page call, in order.
     """
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
     stances: dict[str, dict[str, object]] = field(default_factory=dict)
+    outside_root: frozenset[str] = frozenset()
     unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
     writes: list[WriteCall] = field(default_factory=list)
     listed: list[dict[str, object]] = field(default_factory=list)
+    reads: list[tuple[str, str]] = field(default_factory=list)
 
     async def call(self, name: str, args: dict[str, object], /) -> object:
         if name == "read_page":
+            self.reads.append((str(args["knowledge_base"]), str(args["page_id"])))
             return self._read(str(args["knowledge_base"]), str(args["page_id"]))
         if name == "list_pages":
             self.listed.append(dict(args))
@@ -178,6 +184,9 @@ class Bases:
         raise AssertionError(msg)
 
     def _read(self, knowledge_base: str, page_id: str) -> object:
+        if knowledge_base == "repo-docs" and page_id in self.outside_root:
+            msg = f"path '../harness/docs/adr/{page_id}.md' resolves outside the knowledge base root"
+            raise ModelRetry(msg)
         if knowledge_base == "repo-docs" and page_id in self.records:
             payload = {
                 "frontmatter": self.records[page_id],
@@ -247,6 +256,7 @@ def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
         "new": item["new"],
         "payload": {"frontmatter": frontmatter, "sections": sections},
         "sources": [page["page_id"] for page in item["pages"]],
+        "findings_left": [],
     }
 
 
@@ -300,9 +310,9 @@ async def _registry(sandbox: AsyncMonty, bases: Bases) -> StepRegistry:
     )
 
 
-async def _run(sandbox: AsyncMonty, bases: Bases, scripted: Scripted, *, changed: str) -> WorkflowState:
+async def _run(sandbox: AsyncMonty, bases: Bases, scripted: Scripted, *, changed: str, progress: str = PROGRESS) -> WorkflowState:
     """One whole run of the shipped workflow, as the schedule starts it with `changed` as its changed page ids."""
-    params = {"collection": "research", "records": "repo-docs", "progress": PROGRESS, "changed_page_ids": changed}
+    params = {"collection": "research", "records": "repo-docs", "progress": progress, "changed_page_ids": changed}
     state = WorkflowState(params=dict(params))
     graph = build_graph(_spec(), await _registry(sandbox, bases), approval=NoPerson(), executor=scripted)
     await graph.run(state=state)
@@ -461,6 +471,31 @@ async def test_a_stance_whose_record_is_missing_is_left_alone(sandbox: AsyncMont
     assert _outcome(state) == "noop"
 
 
+async def test_a_changed_page_outside_the_records_root_is_admitted_through_list_pages(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-0049-rerank": _record("adr-0049-rerank")},
+        stances={"stance.x": _stance("x", record="adr-0049-rerank")},
+        outside_root=frozenset({"adr-0049-rerank"}),
+    )
+
+    state = await _run(sandbox, bases, Scripted(), changed="adr-0049-rerank")
+
+    assert _value(state, "list_changes")["admitted"] == [_listed("adr-0049-rerank")]
+    assert [page_id for knowledge_base, page_id in bases.reads if knowledge_base == "repo-docs"] == [], "no records page file is read"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+
+
+@pytest.mark.parametrize("changed", ["adr-x", ""])
+async def test_a_repeated_pair_is_listed_once(sandbox: AsyncMonty, changed: str) -> None:
+    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": _stance("x", record="adr-other")})
+
+    state = await _run(sandbox, bases, Scripted(), changed=changed, progress="adr:accepted, adr: accepted ,adr:accepted")
+
+    assert _value(state, "list_changes")["admitted"] == [_listed("adr-x")]
+    listed = [(call["page_type"], call["status"]) for call in bases.listed if call["knowledge_base"] == "repo-docs"]
+    assert listed == [("adr", "accepted")]
+
+
 async def test_a_full_pass_lists_every_pair_and_keeps_past_twenty_five(sandbox: AsyncMonty) -> None:
     records = {f"adr-{number}": _record(f"adr-{number}") for number in range(1, 28)}
     records["spec-a"] = _record("spec-a", status="executed", page_type="spec-doc")
@@ -557,3 +592,43 @@ async def test_a_new_draft_taking_an_existing_stance_id_is_never_written(sandbox
     failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
     assert [entry["stance_id"] for entry in failed] == ["stance.broken"]
     assert "existing stance stance.broken" in failed[0]["reason"]
+
+
+async def test_a_new_draft_is_written_where_its_page_type_places_it(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+
+    def propose_agent_memory(group: Group) -> list[dict[str, str]]:
+        return [
+            {
+                "page_id": page["page_id"],
+                "placement": "new",
+                "stance_id": "stance.agent-memory",
+                "title": "Agent memory",
+                "reason": "No stance covers it.",
+            }
+            for page in group["pages"]
+        ]
+
+    def aim_at_an_existing_file(item: Item) -> dict[str, object]:
+        return {**_rewritten(item), "path": "Wiki/Stances/x.md"}
+
+    state = await _run(sandbox, bases, Scripted(place=propose_agent_memory, rewrite=aim_at_an_existing_file), changed="adr-1")
+
+    assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("", "stance.agent-memory")]
+    assert _value(state, "write_stances") == {"written": ["stance.agent-memory"], "failed": []}
+
+
+async def test_a_finding_left_in_unchanged_evidence_reaches_the_judge_and_the_page_still_lands(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": _stance("x", record="adr-x")})
+    left = "Evidence links [[paper.gone]], which no page of the knowledge base carries"
+
+    def leave_the_evidence_finding(item: Item) -> dict[str, object]:
+        return {**_rewritten(item), "findings_left": [left]}
+
+    scripted = Scripted(rewrite=leave_the_evidence_finding)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x")
+
+    reviewed: list[dict[str, object]] = to_jsonable_python(scripted.reviewed[0])
+    assert [draft["findings_left"] for draft in reviewed] == [[left]], "the judge reads the finding the worker left"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}

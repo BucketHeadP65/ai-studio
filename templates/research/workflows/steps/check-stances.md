@@ -5,7 +5,7 @@ version: 1
 step:
   name: check_stances
   instructions: |-
-    You are handed drafts, the stance pages refresh workers rewrote or drafted. The `collection` input names the research knowledge base that holds the stances. The `records` input names the records knowledge base they follow. Each draft carries stance_id, path, new, payload and sources.
+    You are handed drafts, the stance pages refresh workers rewrote or drafted. The `collection` input names the research knowledge base that holds the stances. The `records` input names the records knowledge base they follow. Each draft carries stance_id, path, new, payload, sources and findings_left, the check_note findings its worker left because only a change to Evidence or Alternatives would fix them.
 
     When drafts is an empty list, answer outcome approve with the feedback Nothing to review. Call no tool first.
 
@@ -26,6 +26,8 @@ step:
     - is a new stance that duplicates an existing one. Search the collection for its topic, and list the stance pages with list_pages, with `knowledge_base` set to the collection and page_type stance, to compare ids and titles.
     - is a new stance whose Evidence or synthesizes cites a page the research knowledge base does not hold. Fetch every cited page id in the collection.
 
+    Never reject a draft for a finding that sits inside the Evidence or Alternatives section it kept unchanged, such as one named in its findings_left.
+
     Approve the rest. Answer cannot_judge when what you were handed is cut off or is not stance drafts, and say what you saw. Your feedback is read by the refresh workers on their next attempt, so name each draft by its stance_id, say what to change, and say which drafts already pass. You write nothing and you do not edit a draft. Your only answer is the outcome and the feedback.
   inputs:
     drafts: {like: refresh_stance, many: true}
@@ -43,7 +45,7 @@ step:
       required: [outcome, feedback]
   tools: [search, fetch, list_pages]
   tier: orchestrator
-  budget: {requests: 8, tool_calls: 24}
+  budget: {requests: 40, tool_calls: 160}
 ---
 
 Use as the judge after a map of refresh_stance, with `collection` and `records` wired from the workflow's parameters.

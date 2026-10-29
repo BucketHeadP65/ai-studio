@@ -25,11 +25,11 @@ step:
 
     Each section carries its heading, its level and its body. A section keeps the level current gives it, and every section of a new stance is level 2.
 
-    Before answering, run check_note with `knowledge_base` set to the collection, `payload` set to the page as a dict with frontmatter and sections as its keys, and `path` set to the item's path. Fix every finding it names and check again. Answer only a page that passes. You write nothing.
+    Before answering, run check_note with `knowledge_base` set to the collection, `payload` set to the page as a dict with frontmatter and sections as its keys, and `path` set to the item's path. Fix every finding it names and check again. When new is false, a finding that only a change to Evidence or Alternatives would fix, such as a link to a page the research knowledge base no longer holds, is left as it is: keep both sections byte for byte and name the finding in findings_left, in check_note's words. Answer only a page that passes, or whose every remaining finding is named in findings_left. You write nothing.
 
     The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). Build the payload as a Python dict literal, and a link to another page of the research knowledge base as the string '[[page.id]]', brackets included.
 
-    Answer with stance_id, path and new copied from the item, the payload you checked, and sources listing the page id of every records page your sentences rest on.
+    Answer with stance_id, path and new copied from the item, the payload you checked, sources listing the page id of every records page your sentences rest on, and findings_left listing every finding you left as it is, empty when you left none.
   inputs:
     item: {like: merge_work, element: true}
     collection:
@@ -40,7 +40,7 @@ step:
     json_schema:
       type: object
       title: StanceDraft
-      required: [stance_id, path, new, payload, sources]
+      required: [stance_id, path, new, payload, sources, findings_left]
       properties:
         stance_id: {type: string}
         path: {type: string}
@@ -88,6 +88,10 @@ step:
         sources:
           type: array
           items: {type: string}
+        findings_left:
+          type: array
+          description: Each check_note finding left as it is because only a change to Evidence or Alternatives would fix it, in check_note's words. Empty when none was left.
+          items: {type: string}
   tools: [search, fetch, knowledge_base_profile, check_note]
   tier: worker
   budget: {requests: 40, tool_calls: 80}
@@ -95,5 +99,6 @@ step:
 
 Use once per item of a stance refresh, inside a map over merge_work, with `collection` and `records` wired from the
 workflow's parameters. It rewrites an existing stance from the records pages that bear on it, or drafts a new one,
-and checks the page against the base's grammar. It writes nothing: a judge reviews every draft, and a later step
-writes each one that passes its own check against the page as it was read.
+and checks the page against the base's grammar. A finding only a change to an existing stance's Evidence or
+Alternatives would fix is left and named in `findings_left`. It writes nothing: a judge reviews every draft, and a
+later step writes each one that passes its own check against the page as it was read.
