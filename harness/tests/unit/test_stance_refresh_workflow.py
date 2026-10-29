@@ -12,7 +12,8 @@ section twice or one the page lacks, is refused, a refused write is reported bes
 twenty-five changed pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop,
 two groups proposing the same new stance make one item, a changed page the records base does not list leaves its
 stance alone, a changed page whose file lies outside the records base's root is still admitted, a repeated pair is
-listed once, and a full pass lists every pair with no cap. Then the stances the run cannot read: one read_page refuses
+listed once, a full pass lists every pair with no cap, and the refresh worker is granted read_page to patch the stance
+it reads. Then the stances the run cannot read: one read_page refuses
 and one carrying a field the workflow does not declare are both named and left alone while the run carries on, and a
 new draft never takes the id of a stance that exists or a path the model chose, and is refused without its page.
 """
@@ -27,6 +28,7 @@ import pytest
 import yaml
 
 from core.ai.workflows.contracts import (
+    Briefing,
     StepRegistry,
     Workflow,
     WorkflowState,
@@ -350,6 +352,14 @@ def _outcome(state: WorkflowState) -> str:
         gate_generations=state.gate_generations,
     )
     return checked_outcome(ended).status
+
+
+async def test_the_refresh_worker_is_granted_read_page_to_patch_the_stance_in_code() -> None:
+    refresh = next(step for step in _spec().inline if step.name == "refresh_stance")
+    assert isinstance(refresh, Briefing)
+    assert {"read_page", "check_note"} <= set(refresh.tools)
+    assert set(refresh.tools) <= set(await app_grants()), "every tool the refresh worker names is one this app grants a step"
+    assert "read_page(" in refresh.instructions, "the worker is told to load the stance inside run_code rather than retype it"
 
 
 async def test_a_stance_whose_record_changed_is_rewritten_and_written(sandbox: AsyncMonty) -> None:
