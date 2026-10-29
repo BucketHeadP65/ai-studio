@@ -251,7 +251,8 @@ workflow:
 
 Use on an `on index` schedule over the records knowledge base, with `collection` set to the research knowledge base,
 `records` to the records one and `progress` to the page types and statuses that count. Use by hand with
-`changed_page_ids` empty for a full pass. Not for editing a stance's evidence, which the digests and the flag pass
+`changed_page_ids` empty for a full pass. Run now on that schedule while it has collected no changed page passes an
+empty `changed_page_ids` too, so it also starts a full pass. Not for editing a stance's evidence, which the digests and the flag pass
 grow.
 
 The stages: `list_changes` lists every records page `progress` admits and keeps the changed ones, or every one for

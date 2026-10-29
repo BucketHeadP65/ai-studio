@@ -1267,13 +1267,17 @@ A change that sets an event cadence clears the next fire it held. A schedule can
 
 **The on-index cadence** waits for its quiet period, 1800 seconds unless the cadence names one
 (`on index notes quiet 10m`), and each further index moves the fire to that index plus the quiet period, so a burst
-of edits gives one fire. Until the fire, the schedule collects the changed pages of every index in `pending_page_ids`. A fire that
+of edits gives one fire. A quiet period is at most 86400 seconds (24 hours), and a cadence naming a longer one is
+refused. Until the fire, the schedule collects the changed pages of every index in `pending_page_ids`. A fire that
 launches passes them, sorted and comma-separated, to the workflow parameter `changed_page_ids`, and its stamp
 removes exactly the ids it passed. A page an index adds while the fire runs stays pending, and the schedule keeps
 the fire that index gave it. A fire that launches nothing, such as a held one, keeps every id. A fire whose newest
 workflow version declares no `changed_page_ids` stamps `refused: <workflow id> declares no changed_page_ids` and
 rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-index schedule over a workflow
-that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow.
+that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow. A
+patch that gives the schedule another cadence clears its `pending_page_ids`, so no page collected under the old one
+rides a later fire. `POST /api/schedules/{id}/run-now` on an on-index schedule that has collected nothing passes an
+empty `changed_page_ids`, and a workflow that reads an empty value as every page then runs a full pass.
 
 **Gate policy** is `"wait"` (default: a gated fire waits for a person indefinitely) or `"fail_after:<seconds>"`, how
 long **one reach** of a gate waits before nobody deciding counts as a refusal. Such a refusal is recorded with source

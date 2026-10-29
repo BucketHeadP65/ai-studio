@@ -232,3 +232,19 @@ TD-46 onward came from the close of the code standard refactor on
   row holds one `embedding` and its id is `<page-id>#<section-path>`, so the parts need rows of their own or a table of section
   part vectors, and search has to fold a part's hit back onto its section.
 - **Found:** 2026-09-30, in the review of the change that splits a raw mirror's long section within the embed budget.
+
+## TD-81. The run card looks a recorded result field up by its whole path, so every template's field reads not recorded
+
+- **Where:** `studio-client/src/app/workflows/[id]/page.tsx`, the `recorded` result fields, which read
+  `activeValues?.[field.path]`.
+- **What is wrong:** a run's recorded values are keyed by bare node id (`write_stances`), while every template's
+  `result_fields` declares its path as `values.<node>` or `values.<node>.<field>` (`values.write_stances`,
+  `values.report.written`). The lookup takes the whole path as one key, so it never finds the value.
+- **Why it is debt:** the recorded fields are the author's own words for what a run produced, and the card shows "not
+  recorded" for each of them across every template workflow, so it says a run recorded nothing it did record.
+- **Cost while it stands:** the owner cannot read a run's result off its card, such as the stances a refresh wrote or
+  each stance as it was before the run, and has to open the run's values panel instead.
+- **Paying it off:** resolve `field.path` against the run's values: drop the leading `values` segment, look up the node
+  id, then walk the remaining dotted segments, keeping "not recorded" for a path that resolves to nothing. Cover it with
+  a component test over a template-shaped path.
+- **Found:** 2026-10-29, in the final review of the stance refresh change.
