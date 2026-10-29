@@ -226,6 +226,29 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `UnexpectedModelBehavior` escapes, not the `RuntimeError`. The control case proves it is not ordinary context-manager
   behaviour: a `RuntimeError` raised in the same position after a run that succeeded escapes normally.
 
+## UB-9. `_utils.gather` leaves the coroutines it never started unawaited when it is cancelled
+
+- **Library:** pydantic-ai 2.60.0 with anyio 4.15.1 (`pydantic_ai/_utils.py`, `gather`, lines 276-309).
+- **Symptom:** `RuntimeWarning: coroutine '...' was never awaited` when a run is cancelled while it resolves its capabilities, for
+  `AbstractCapability.for_run` and for `gather.<locals>._run`. In the harness it shows when a chat run's outcome turn (the
+  headless turn `settled_turn` starts) is still resolving its capabilities as the event loop closes: in the tests that ended
+  before that turn did, and in production when the harness shuts down during an outcome turn.
+- **Cause:** `gather` is an `async def` that takes the job coroutines as arguments and hands each to
+  `tg.start_soon(_run, i, coro)` only once its body runs. Cancelled before that, or with its task group cancelled before a
+  `_run` starts, it never awaits or closes those coroutines. `asyncio.gather` is a plain function that wraps every job in a task
+  at call time, so it leaves nothing behind. The helper breaks the rule that whoever takes a coroutine awaits or closes it, and its
+  docstring says it matches `asyncio.gather`'s shape.
+- **Grade:** cosmetic. A job that never started has no side effect and opens nothing, so the warning is the only effect.
+- **Found:** 2026-10-29, Task 47, clearing the harness unit tier's warnings: a forced `gc.collect()` after each test named the
+  four tests that left an outcome turn in flight.
+- **What we did:** a chat run's delivery task is on the session (`session.active.delivery`), and those tests await it, so no
+  outcome turn is cancelled mid-flight (`harness/tests/unit/test_chat_run_visibility.py`, `test_run_launch_events.py`,
+  `test_restore_every_session.py`). Production shutdown is unchanged.
+- **Upstream state:** present in 2.60.0. The ask is that `gather` close every coroutine it never started.
+- **Issue:** not filed.
+- **Repro:** create two job coroutines, wrap `pydantic_ai._utils.gather(*jobs)` in a task, cancel it before it first runs, and
+  collect garbage: two "coroutine 'job' was never awaited" warnings. The same with `asyncio.gather` gives none.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
