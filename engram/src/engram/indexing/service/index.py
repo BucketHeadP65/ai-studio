@@ -492,6 +492,7 @@ class IndexKnowledgeBaseHandler:
             # for a path this rebuild did not read is deleted, so no stale row outlives a full rebuild.
             await uow.link_refs.replace_for_sources(state.link_ref_rows, page_ids, collection=collection)
             await uow.validation_store.replace_all(state.validation_rows, collection=collection)
+            # The stored manifest is read before the upsert below. Read after it, every full index lists no changed pages.
             stored_manifest = await uow.manifest.load(collection)
             starting_manifest = stored_manifest if self._is_own_root(await uow.fingerprint.get(collection)) else {}
             await uow.manifest.upsert_many(manifest_rows(state.manifest_entries, collection), collection=collection)
