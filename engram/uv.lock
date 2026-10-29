@@ -354,9 +354,8 @@ dependencies = [
     { name = "openai" },
     { name = "pgvector" },
     { name = "pydantic" },
-    { name = "pydantic-ai", extra = ["retries"] },
+    { name = "pydantic-ai", extra = ["retries", "typesafe"] },
     { name = "pydantic-ai-harness" },
-    { name = "pydantic-ai-slim", extra = ["typesafe"] },
     { name = "pyyaml" },
     { name = "referencing" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -377,9 +376,8 @@ requires-dist = [
     { name = "openai", specifier = ">=1.60.0" },
     { name = "pgvector", specifier = ">=0.5.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
-    { name = "pydantic-ai", extras = ["retries"], specifier = ">=2.60.0" },
+    { name = "pydantic-ai", extras = ["retries", "typesafe"], specifier = ">=2.60.0" },
     { name = "pydantic-ai-harness", specifier = ">=0.60.0" },
-    { name = "pydantic-ai-slim", extras = ["typesafe"], specifier = ">=2.60.0" },
     { name = "pydantic-graph", marker = "extra == 'workflows'", specifier = ">=2.49.0" },
     { name = "pydantic-graph", marker = "extra == 'workflows-temporal'", specifier = ">=2.49.0" },
     { name = "pydantic-handlebars", marker = "extra == 'workflows'", specifier = ">=0.2.1" },
@@ -710,15 +708,15 @@ wheels = [
 
 [[package]]
 name = "genai-prices"
-version = "0.1.13"
+version = "0.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx2" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ad/de/119c7ba00b9ddbf629de34cf390ab472da6d7bc5df0c51cdbec900280a74/genai_prices-0.1.13.tar.gz", hash = "sha256:76c9e2dd3917fdacdf3bc562297c4591384142ea2283c477e1512fafa4e3a384", size = 134622, upload-time = "2026-10-15T09:47:04.739Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/93/95297c8b37f0deec1780d7579e85915fd7fe4dbe0da38cb79bc0fcc16a2a/genai_prices-0.2.0.tar.gz", hash = "sha256:a0e92059e96492f2ffe55fa708908fe2fc0afe11d111f8051106d52ae8fd9c12", size = 159032, upload-time = "2026-10-29T14:41:09.524Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/5a/b6b7d55148d367d07bcd3efdf24e3086ad199ea5109d0c335a872dfaac95/genai_prices-0.1.13-py3-none-any.whl", hash = "sha256:6d2b40760a2f7f5e207bac9b98de0af80e60c58ead497872a5331a7cee610477", size = 142541, upload-time = "2026-10-15T09:47:03.424Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/2a/c2369565aa7dde5ea33de724acae7cc753f9d19239daea0000779102f4b5/genai_prices-0.2.0-py3-none-any.whl", hash = "sha256:21ede75742043b3489a6cec3ad5722782640b34676563c6c755b52061812e6a3", size = 168199, upload-time = "2026-10-29T14:41:08.104Z" },
 ]
 
 [[package]]
@@ -1641,6 +1639,9 @@ wheels = [
 [package.optional-dependencies]
 retries = [
     { name = "pydantic-ai-slim", extra = ["retries"] },
+]
+typesafe = [
+    { name = "pydantic-ai-slim", extra = ["typesafe"] },
 ]
 
 [[package]]
