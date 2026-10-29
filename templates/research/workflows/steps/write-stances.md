@@ -17,10 +17,12 @@ step:
         before = read.get(stance_id)
         path = draft["path"]
         problem = ""
-        if before is None and not draft["new"]:
-            problem = "no stance " + stance_id + " was read before this run, so its page cannot be checked"
-        elif before is None and page_id != stance_id:
+        if draft["new"] and page_id != stance_id:
             problem = "the page id " + page_id + " is not the proposed id " + stance_id
+        elif draft["new"] and stance_id in changes["stance_ids"]:
+            problem = "a new stance may not take the id of the existing stance " + stance_id
+        elif before is None and not draft["new"]:
+            problem = "no stance " + stance_id + " was read before this run, so its page cannot be checked"
         elif before is not None:
             path = before["path"]
             was_id = before["payload"]["frontmatter"]["id"]
@@ -71,6 +73,7 @@ step:
 Use as the tail of a stance refresh, after a judge has reviewed the drafts, with `changes` wired from the same run's
 list_stance_changes. An existing stance is written to the path it was read from, and only when its page id is
 unchanged and its Evidence and Alternatives sections are byte for byte the page as it was read before the run. A new
-stance must keep the id it was proposed under and may not take the id of a stance that exists. A draft that fails a
-check is not written, and a page write_note refuses is caught. Both are answered in `failed` with the reason, and
-every other draft still lands. A frontmatter field the draft holds as null is left out of the page.
+stance must keep the id it was proposed under, and is refused when that id is the id of any stance the run listed,
+read or not. A draft that fails a check is not written, and a page write_note refuses is caught. Both are answered
+in `failed` with the reason, and every other draft still lands. A frontmatter field the draft holds as null is left
+out of the page.

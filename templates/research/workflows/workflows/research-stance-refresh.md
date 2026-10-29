@@ -14,7 +14,7 @@ presentation:
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
     it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers gets a new stance page. The
     run card lists the stances written, the ones refused with the check each failed, where every changed page was
-    placed, and every stance as it was before the run.
+    placed, every stance as it was before the run, and every stance the run could not read with the reason.
   owner_participation: >-
     Nothing during a run. A schedule starts it when the records knowledge base is indexed, and you start a full pass
     by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite whose sentences no records page
@@ -26,12 +26,12 @@ presentation:
     once: such a run keeps none of them, and a full pass started by hand covers them instead.
   inputs:
     - {key: collection, label: Knowledge base holding the stances, control: knowledge-base}
-    - {key: records, label: Knowledge base the stances follow, control: knowledge-base}
+    - {key: records, label: Knowledge base the stances follow, control: text}
     - {key: progress, label: Page types and statuses that count, control: text}
     - {key: changed_page_ids, label: Only these changed pages, control: text}
   result_fields:
     - {label: Stances written and refused (recorded), path: values.write_stances}
-    - {label: Stances as they were before the run (recorded), path: values.list_changes}
+    - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
@@ -42,7 +42,7 @@ workflow:
       description: The knowledge base holding the stance pages, by name.
       json_schema: {type: string, minLength: 1}
     records:
-      description: The knowledge base the stances follow, by name.
+      description: The knowledge base the stances follow, named by its registered name.
       json_schema: {type: string, minLength: 1}
     progress:
       description: Which page types at which status count, as comma-separated type:status pairs.
@@ -54,7 +54,7 @@ workflow:
   inline:
     - name: group_pages
       source: |
-        named = [stance["record"] for stance in changes["stances"] if stance["record"]]
+        named = [stance["record"] for stance in [*changes["stances"], *changes["unread"]] if stance["record"]]
         loose = [page for page in changes["admitted"] if page["page_id"] not in named]
         groups = []
         start = 0
@@ -253,13 +253,15 @@ Use on an `on index` schedule over the records knowledge base, with `collection`
 grow.
 
 The stages: `list_changes` reads each changed records page and keeps the ones `progress` admits, or lists every
-admitted page for a full pass, and reads every stance page as it stands. Past twenty-five changed pages it keeps
-none, so both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups
-of five. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
+admitted page for a full pass, and reads every stance page as it stands. A stance it cannot read, or one carrying a
+field it does not declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so
+both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups of
+five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
 a new stance, or a skip. `merge_work` makes one item per stance with every page that bears on it, its record among
 them, and one item per proposed new stance, combining the groups that proposed the same id. `refresh_stances` runs
 one worker per item, two at a time, each rewriting its stance or drafting the new one and checking it against the
 base's grammar. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
 empty list is approved without a read. `write_stances` writes each approved page whose id, Evidence and Alternatives
-match the page as it was read, catching each refusal, and answers which were written and which failed which check.
+match the page as it was read, refuses a new stance that takes the id of a stance that exists, catches each refusal,
+and answers which were written and which failed which check.
 Three consecutive identical failures in either map abort the run as failed.

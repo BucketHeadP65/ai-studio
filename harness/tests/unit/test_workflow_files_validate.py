@@ -488,6 +488,8 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
                     "payload": {"frontmatter": _STANCE_FRONTMATTER, "sections": _STANCE_SECTIONS},
                 }
             ],
+            "stance_ids": ["stance.x"],
+            "unread": [],
             "qualified": 1,
             "capped": False,
         },
@@ -745,6 +747,8 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
         {"page_id": "engram-adr-0044-elsewhere", "page_type": "adr", "status": "accepted", "title": "Elsewhere"},
     ]
     assert (changes["qualified"], changes["capped"]) == (2, False)
+    assert changes["stance_ids"] == ["adr-0030-something", "engram-adr-0044-elsewhere"]
+    assert changes["unread"] == []
     stances = changes["stances"]
     assert [stance["stance_id"] for stance in stances] == ["adr-0030-something", "engram-adr-0044-elsewhere"]
     assert {(stance["title"], stance["status"], stance["path"], stance["record"]) for stance in stances} == {

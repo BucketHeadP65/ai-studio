@@ -1,6 +1,6 @@
 ---
 title: List stance changes
-summary: The records pages at a status that counts, read from the changed ids or listed whole, beside every stance page as it stood before the run.
+summary: The records pages at a status that counts, read from the changed ids or listed whole, beside every stance page as it stood before the run and the stances it could not read.
 version: 1
 step:
   name: list_stance_changes
@@ -35,17 +35,22 @@ step:
         admitted = []
     carried = ["id", "type", "title", "summary", "status", "record", "synthesizes", "recommends", "advises_against", "aliases", "superseded_by", "decision_reason"]
     stances = []
+    stance_ids = []
+    unread = []
     for row in await list_pages(knowledge_base=collection, page_type="stance", limit=1000):
+        stance_ids.append(row["page_id"])
         try:
             page = await read_page(knowledge_base=collection, page_id=row["page_id"])
-        except Exception:
+        except Exception as error:
+            unread.append({"stance_id": row["page_id"], "record": "", "reason": "read_page refused the page: " + str(error)})
             continue
         front = page["payload"]["frontmatter"]
         others = [key for key in front if key not in carried]
         if others:
-            raise RuntimeError(row["page_id"] + " carries frontmatter this workflow cannot write back unchanged: " + ", ".join(others))
+            unread.append({"stance_id": row["page_id"], "record": str(front.get("record") or ""), "reason": "Its frontmatter carries " + ", ".join(others) + ", which this workflow cannot write back unchanged."})
+            continue
         stances.append({"stance_id": row["page_id"], "title": front["title"], "status": front["status"], "path": page["path"], "record": front.get("record") or "", "payload": {"frontmatter": front, "sections": page["payload"]["sections"]}})
-    {"admitted": admitted, "stances": stances, "qualified": qualified, "capped": capped}
+    {"admitted": admitted, "stances": stances, "stance_ids": stance_ids, "unread": unread, "qualified": qualified, "capped": capped}
   inputs:
     collection:
       json_schema: {type: string}
@@ -59,7 +64,7 @@ step:
     json_schema:
       type: object
       title: StanceChanges
-      required: [admitted, stances, qualified, capped]
+      required: [admitted, stances, stance_ids, unread, qualified, capped]
       properties:
         admitted:
           type: array
@@ -124,6 +129,19 @@ step:
                         heading: {type: string}
                         level: {type: integer}
                         body: {type: string}
+        stance_ids:
+          type: array
+          items: {type: string}
+        unread:
+          type: array
+          items:
+            type: object
+            title: UnreadStance
+            required: [stance_id, record, reason]
+            properties:
+              stance_id: {type: string}
+              record: {type: string}
+              reason: {type: string}
         qualified: {type: integer}
         capped: {type: boolean}
   tools: [read_page, list_pages]
@@ -135,5 +153,7 @@ type and status form a pair, skipping a page read_page cannot find. Past twenty-
 answers `capped` true with the count in `qualified`, so the run touches nothing and a full pass is started by hand.
 With `changed_page_ids` empty, it lists every page of every pair, with no cap. Beside them it reads every stance page
 of `collection` whole, as it stands before the run, so a later step can check a rewrite against it and the run keeps
-it. A stance carrying a frontmatter field this step does not declare fails the run naming it, because its rewrite
-could not keep that field.
+it. `stance_ids` names every stance listed, read or not. A stance read_page refuses, or one carrying a frontmatter
+field this step does not declare, is left out of `stances` and named in `unread` with the reason, because its
+rewrite could not be checked or could not keep that field. Its `record` is given when the page was read and is
+empty when read_page refused it.

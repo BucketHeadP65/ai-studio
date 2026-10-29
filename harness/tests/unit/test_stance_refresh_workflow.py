@@ -9,7 +9,9 @@ What the cases cover: a stance whose record changed is rewritten and written to 
 Evidence is refused at landing, a refused write is reported beside the written one, more than twenty-five changed
 pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop, two groups proposing
 the same new stance make one item, a changed page that cannot be read leaves its stance alone, and a full pass lists
-every pair with no cap.
+every pair with no cap. Then the stances the run cannot read: one read_page refuses and one carrying a field the
+workflow does not declare are both named and left alone while the run carries on, and a new draft never takes the
+id of a stance that exists.
 """
 
 from __future__ import annotations
@@ -121,8 +123,8 @@ def _listed(page_id: str, status: str = "accepted", page_type: str = "adr") -> P
     return {"page_id": page_id, "page_type": page_type, "status": status, "title": f"Title of {page_id}"}
 
 
-def _stance(slug: str, record: str) -> dict[str, object]:
-    """One stance page the way read_page answers it."""
+def _stance(slug: str, record: str, **fields: object) -> dict[str, object]:
+    """One stance page the way read_page answers it, carrying `fields` in its frontmatter beside its own."""
     frontmatter: dict[str, object] = {
         "id": f"stance.{slug}",
         "type": "stance",
@@ -131,6 +133,7 @@ def _stance(slug: str, record: str) -> dict[str, object]:
         "status": "considering",
         "record": record,
         "synthesizes": ["[[paper.a]]"],
+        **fields,
     }
     sections = [{"heading": heading, "level": 2, "body": f"{heading} of {slug}, citing [[paper.a]]."} for heading in SECTIONS]
     return {
@@ -145,12 +148,14 @@ class Bases:
     """The records base and the research base the programs read and write, scripted.
 
     `records` holds each records page's frontmatter by id, and `stances` each stance page as read_page answers it.
-    A records page missing from `records` is one read_page cannot find. `refusing` names the stance ids write_note
-    refuses. `writes` and `listed` record every write_note and list_pages call, in order.
+    A records page missing from `records` is one read_page cannot find. `unreadable` names stance ids list_pages lists
+    and read_page refuses. `refusing` names the stance ids write_note refuses. `writes` and `listed` record every
+    write_note and list_pages call, in order.
     """
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
     stances: dict[str, dict[str, object]] = field(default_factory=dict)
+    unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
     writes: list[WriteCall] = field(default_factory=list)
     listed: list[dict[str, object]] = field(default_factory=list)
@@ -182,6 +187,11 @@ class Bases:
             return {"page_id": page_id, "path": f"adr/{page_id}.md", "payload": payload}
         if knowledge_base == "research" and page_id in self.stances:
             return self.stances[page_id]
+        if knowledge_base == "research" and page_id in self.unreadable:
+            msg = (
+                f"{page_id} at Wiki/Stances/{page_id.removeprefix('stance.')}.md cannot be read as a payload: text before the first heading"
+            )
+            raise ModelRetry(msg)
         msg = f"no indexed page {page_id!r} in knowledge base {knowledge_base!r}, list_pages and search answer the page ids it holds"
         raise ModelRetry(msg)
 
@@ -189,7 +199,8 @@ class Bases:
         if knowledge_base == "research":
             assert page_type == "stance"
             return [
-                {"page_id": stance_id, "page_type": "stance", "title": stance_id, "status": "considering"} for stance_id in self.stances
+                {"page_id": stance_id, "page_type": "stance", "title": stance_id, "status": "considering"}
+                for stance_id in [*self.stances, *sorted(self.unreadable)]
             ]
         return [
             {"page_id": page_id, "page_type": front["type"], "title": front["title"], "status": front["status"]}
@@ -468,3 +479,81 @@ async def test_a_full_pass_lists_every_pair_and_keeps_past_twenty_five(sandbox: 
         ("spec-doc", "approved"),
         ("spec-doc", "executed"),
     ]
+
+
+async def test_an_unreadable_stance_is_named_and_another_stance_is_still_refreshed(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-b": _record("adr-b")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        unreadable=frozenset({"stance.broken"}),
+    )
+
+    def place_on_the_unread_stance(group: Group) -> list[dict[str, str]]:
+        return [
+            {
+                "page_id": page["page_id"],
+                "placement": "stance",
+                "stance_id": "stance.broken",
+                "title": "Broken",
+                "reason": "It changes that stance.",
+            }
+            for page in group["pages"]
+        ]
+
+    scripted = Scripted(place=place_on_the_unread_stance)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-b")
+
+    changes = _value(state, "list_changes")
+    assert changes["stance_ids"] == ["stance.x", "stance.broken"]
+    unread: list[dict[str, str]] = to_jsonable_python(changes["unread"])
+    assert [(entry["stance_id"], entry["record"]) for entry in unread] == [("stance.broken", "")]
+    assert "cannot be read as a payload" in unread[0]["reason"], "the refusal's own words reach the run card"
+    assert [item["stance_id"] for item in scripted.items] == ["stance.x"], "a placement on a stance the run could not read makes no item"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+
+
+async def test_a_stance_with_an_undeclared_frontmatter_field_is_named_and_the_run_succeeds(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-t": _record("adr-t")}, stances={"stance.tagged": _stance("tagged", record="adr-t", tags=["retrieval"])})
+    scripted = Scripted()
+
+    state = await _run(sandbox, bases, scripted, changed="adr-t")
+
+    changes = _value(state, "list_changes")
+    assert changes["stances"] == []
+    assert changes["stance_ids"] == ["stance.tagged"]
+    unread: list[dict[str, str]] = to_jsonable_python(changes["unread"])
+    assert [(entry["stance_id"], entry["record"]) for entry in unread] == [("stance.tagged", "adr-t")]
+    assert "tags" in unread[0]["reason"]
+    assert scripted.groups == [], "the page an unread stance names as its record is not placed as uncovered"
+    assert scripted.items == []
+    assert bases.writes == []
+    assert _outcome(state) == "noop"
+
+
+async def test_a_new_draft_taking_an_existing_stance_id_is_never_written(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, unreadable=frozenset({"stance.broken"})
+    )
+
+    def propose_the_unread_id(group: Group) -> list[dict[str, str]]:
+        return [
+            {
+                "page_id": page["page_id"],
+                "placement": "new",
+                "stance_id": "stance.broken",
+                "title": "Broken",
+                "reason": "No stance covers it.",
+            }
+            for page in group["pages"]
+        ]
+
+    scripted = Scripted(place=propose_the_unread_id)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert [(item["stance_id"], item["new"]) for item in scripted.items] == [("stance.broken", True)]
+    assert bases.writes == []
+    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
+    assert [entry["stance_id"] for entry in failed] == ["stance.broken"]
+    assert "existing stance stance.broken" in failed[0]["reason"]
