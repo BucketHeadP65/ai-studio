@@ -19,6 +19,7 @@ from core.ai.inspection.domain.taxonomy import (
     Symptom,
     Taxonomy,
 )
+from core.ai.inspection.views import root_causes
 from core.ai.transcripts.contracts import Span
 
 A_SPAN = Span(step=0, message=1, part=0)
@@ -59,11 +60,12 @@ def test_a_tool_refusal_may_blame_the_signature_the_model_sees() -> None:
     assert finding.blames == (blame,)
 
 
-def test_the_tool_schema_cause_covers_a_signature_that_accepts_what_the_tool_refuses() -> None:
-    meaning = TAXONOMY.root_cause("tool_schema").meaning
+def test_the_inspector_reading_a_tool_refusal_is_offered_the_tools_schema_as_a_candidate() -> None:
+    schema = TAXONOMY.root_cause("tool_schema")
 
-    assert "accepts what the tool then refuses" in meaning
-    assert "leaves out an option the tool's own error names" in meaning
+    candidates = root_causes(TAXONOMY.symptom("tool_refused_call")).splitlines()
+
+    assert f"- tool_schema: {schema.meaning} Fix lands on: tool." in candidates
 
 
 def test_agent_reasoning_lands_only_on_the_model_tier() -> None:
