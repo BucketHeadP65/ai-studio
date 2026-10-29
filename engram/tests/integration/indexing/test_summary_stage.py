@@ -61,6 +61,8 @@ async def test_two_collections_with_the_same_unit_id_summarize_independently(mig
         # against), so the same UoW instance reads post-commit state correctly.
         alpha_after = await uow.pending_units("alpha")
         beta_after = await uow.pending_units("beta")
+        # The two reads opened a transaction. Ending it gives the session's connection back to the pool before the engine goes.
+        await uow.commit()
         assert alpha_after == []  # alpha's own current summary now covers it
         assert {u.unit_id for u in beta_after} == {"shared.id"}  # beta's page is still unsummarized
     finally:
