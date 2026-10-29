@@ -8,12 +8,11 @@ from typing import TYPE_CHECKING
 
 from core.ai.evaluation.contracts import TaskDataset, require_unique
 from core.files import atomic_create
-from pydantic_evals import Dataset
 
 from harness.features.evals.domain.benchmark import BenchmarkCustody, BenchmarkTrialRecord
 from harness.features.evals.domain.outcomes import DevelopmentDatasetStamp, WorkflowAutomationDataset, require_stamped
 from harness.features.evals.domain.pilot import PilotTrial
-from harness.features.evals.domain.step_evaluation import OutcomeMatches
+from harness.features.evals.domain.step_evaluation import OutcomeMatches, StepDataset
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
     from harness.features.evals.domain.benchmark import OutcomeStateReport
 
 
-def load_dataset(path: Path) -> Dataset:
+def load_dataset(path: Path) -> StepDataset:
     """The step dataset at `path`, with `OutcomeMatches` registered as the evaluator its cases name.
 
     Args:
@@ -30,7 +29,7 @@ def load_dataset(path: Path) -> Dataset:
     Returns:
         The dataset.
     """
-    return Dataset.from_file(path, custom_evaluator_types=[OutcomeMatches])
+    return StepDataset.from_file(path, custom_evaluator_types=[OutcomeMatches])
 
 
 def load_workflow_automation_dataset(path: Path) -> WorkflowAutomationDataset:

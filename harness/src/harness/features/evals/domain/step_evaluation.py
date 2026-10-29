@@ -1,16 +1,20 @@
-"""The one dataset-level evaluator a step's cases name: does its verdict match the expected one."""
+"""A step's dataset, and the one dataset-level evaluator its cases name: does its verdict match the expected one."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pydantic import JsonValue
+from pydantic_evals import Dataset
 from pydantic_evals.evaluators import EvaluationReason, Evaluator
 
 if TYPE_CHECKING:
-    from pydantic_evals import Dataset
     from pydantic_evals.evaluators import EvaluatorContext
     from pydantic_evals.reporting import EvaluationReport
+
+StepDataset = Dataset[dict[str, JsonValue], dict[str, JsonValue], dict[str, JsonValue]]
+"""A step's dataset: each case's inputs are the step's arguments, its expected output a mapping holding the expected `outcome`."""
 
 
 @dataclass
