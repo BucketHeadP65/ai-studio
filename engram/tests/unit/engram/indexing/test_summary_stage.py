@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from sqlalchemy.dialects import postgresql
 
 from engram.indexing.contracts import SummaryStage, SummaryUnit
@@ -59,7 +61,27 @@ async def test_stage_writes_pending_rows_via_summarizer() -> None:
     assert uow.upserts[0]["summary"] == "Summary of X."
     assert uow.upserts[0]["status"] == "pending"
     assert uow.upserts[0]["model"] == "fake-summarizer"
-    assert uow.committed
+    assert (uow.committed, uow.closed) == (True, True)
+
+
+class _RaisingSummarizer(FakeSummarizer):
+    """A summarizer whose model call fails."""
+
+    async def summarize(self, *, title: str, body: str) -> str:
+        del title, body
+        msg = "the summary model did not answer"
+        raise RuntimeError(msg)
+
+
+async def test_a_run_whose_summarizer_raises_closes_its_unit_of_work_uncommitted() -> None:
+    unit = SummaryUnit(unit_id="mu.x", unit_type="page", title="X", body="Body.", source_hash="h1")
+    uow = FakeSummaryUow([unit])
+    stage = SummaryStage(lambda: uow, _RaisingSummarizer())
+
+    with pytest.raises(RuntimeError, match="did not answer"):
+        await stage.run("workdocs")
+
+    assert (uow.committed, uow.closed) == (False, True)
 
 
 async def test_stage_writes_nothing_when_no_units_are_pending() -> None:
