@@ -31,8 +31,7 @@ presentation:
     - {key: changed_page_ids, label: Only these changed pages, control: text}
   result_fields:
     - {label: Stances written and refused (recorded), path: values.write_stances}
-    - {label: Stances as they were before the run (recorded), path: values.list_changes}
-    - {label: Stances this run could not read (recorded), path: values.list_changes.unread}
+    - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
