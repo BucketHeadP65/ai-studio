@@ -6,6 +6,7 @@ A held fire on capacity always retries on the next tick.
 A fire held by overlap or blackout skips to the next turn of the cadence, unless `catch_up` is set or the cadence waits for an event, which has no next turn and keeps its arm.
 With `catch_up`, the first fire after the hold clears runs at once and is stamped "caught up".
 A schedule whose cadence waits for an event rests after it fires, until it is armed again.
+An on-index fire passes the changed pages it collected to the workflow's `changed_page_ids` parameter, and a fire that launches nothing keeps them.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from pydantic import ValidationError
 from harness.domain.contracts import AdmissionRefused, SessionRenamed, admitted_arguments, presentation_of, selected_knowledge_bases
 from harness.features.running import contracts as running
 from harness.features.scheduling.domain import (
+    CHANGED_PAGES_PARAMETER,
     AfterRunCadence,
     Armed,
     BlackoutWindow,
@@ -124,24 +126,25 @@ async def current_version(library: WorkflowLibrary, workflow_id: str) -> str:
         return workflow_id
 
 
-async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollaborators) -> str:
-    """Validate the newest version of the schedule's workflow in the session's environment and launch it, or say why not."""
+async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollaborators, changed_pages: tuple[str, ...] | None) -> str:
+    """Validate the newest version of the schedule's workflow and launch it, passing `changed_pages` on unless it is `None`, or say why not."""
     workflow_id = await current_version(session.library, schedule.workflow_id)
     try:
         spec = await _checked_workflow(session.library, session.registry, workflow_id)
-        _require_parameters(workflow_id, spec, schedule.arguments)
-    except WorkflowUnavailableError as exc:
-        return f"refused: {exc.reason}"
-    except (running.WorkflowNotRunnableError, WorkflowParametersMissingError) as exc:
+    except (WorkflowUnavailableError, running.WorkflowNotRunnableError) as exc:
         return f"refused: {exc}"
+    if changed_pages is not None and CHANGED_PAGES_PARAMETER not in spec.parameters:
+        return f"refused: {workflow_id} declares no {CHANGED_PAGES_PARAMETER}"
+    arguments = schedule.arguments if changed_pages is None else {**schedule.arguments, CHANGED_PAGES_PARAMETER: ",".join(changed_pages)}
     try:
+        _require_parameters(workflow_id, spec, arguments)
         params = await admitted_arguments(
             spec,
-            schedule.arguments,
+            arguments,
             presentation=await presentation_of(session.library, workflow_id),
             names=run.knowledge_bases,
         )
-    except AdmissionRefused as exc:
+    except (WorkflowParametersMissingError, *AdmissionRefused) as exc:
         return f"refused: {exc}"
     _logger.info(
         "launching {workflow} from schedule {schedule}: gate_mode={mode}",
@@ -196,21 +199,30 @@ def _after_itself(workflow_name: str) -> str:
     return f"a schedule of {workflow_name!r} cannot fire after {workflow_name!r}, because every run that succeeds would fire it again"
 
 
-async def _refuse_firing_after_itself(
+def _refuse_index_cadence_without_pages(workflow_id: str, spec: Workflow, cadence: Cadence) -> None:
+    """Refuse an on-index cadence over a workflow that declares no parameter for the changed pages."""
+    if isinstance(cadence, OnIndexCadence) and CHANGED_PAGES_PARAMETER not in spec.parameters:
+        msg = f"an on-index schedule passes the changed pages to {CHANGED_PAGES_PARAMETER}, and {workflow_id} declares no such parameter"
+        raise ScheduleSettingInvalidError(msg)
+
+
+async def _refuse_event_cadence_change(
     library: WorkflowLibrary, registry: StepRegistry, held: Schedule, changes: ScheduleUpdate, cadence: Cadence | None
 ) -> None:
-    """Refuse a change that leaves an after-run cadence naming the workflow the schedule runs."""
+    """Refuse a change that leaves an after-run cadence naming the schedule's own workflow, or an on-index cadence over a workflow without the changed pages."""
     if changes.cadence is None and changes.workflow_id is None:
         return
     try:
         effective = cadence if cadence is not None else parse_cadence(held.cadence)
     except ValueError:
         return
-    if not isinstance(effective, AfterRunCadence):
+    if not isinstance(effective, AfterRunCadence | OnIndexCadence):
         return
-    spec = await _checked_workflow(library, registry, changes.workflow_id or held.workflow_id)
-    if effective.workflow_name == spec.name:
+    workflow_id = changes.workflow_id or held.workflow_id
+    spec = await _checked_workflow(library, registry, workflow_id)
+    if isinstance(effective, AfterRunCadence) and effective.workflow_name == spec.name:
         raise ScheduleSettingInvalidError(_after_itself(spec.name))
+    _refuse_index_cadence_without_pages(workflow_id, spec, effective)
 
 
 async def _checked_workflow(library: WorkflowLibrary, registry: StepRegistry, workflow_id: str) -> Workflow:
@@ -431,7 +443,8 @@ class Scheduler:
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
-                schedule's own workflow, or the gate mode is `orchestrate` on Temporal.
+                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, or the gate
+                mode is `orchestrate` on Temporal.
         """
         spec = await _checked_workflow(library, registry, workflow_id)
         _require_parameters(workflow_id, spec, arguments)
@@ -445,6 +458,7 @@ class Scheduler:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         if isinstance(parsed_cadence, AfterRunCadence) and parsed_cadence.workflow_name == spec.name:
             raise ScheduleSettingInvalidError(_after_itself(spec.name))
+        _refuse_index_cadence_without_pages(workflow_id, spec, parsed_cadence)
         _refuse_orchestrate_on_temporal(gate_mode, run_engine)
         schedule = Schedule(
             workflow_id=workflow_id,
@@ -500,7 +514,8 @@ class Scheduler:
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
-                schedule's own workflow, or the change sets gate mode `orchestrate` on Temporal.
+                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, or the change
+                sets gate mode `orchestrate` on Temporal.
         """
         held = await self._schedules.get(schedule_id)
         if held is None:
@@ -515,7 +530,7 @@ class Scheduler:
         except ValueError as exc:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         _refuse_orchestrate_on_temporal(changes.gate_mode, run_engine)
-        await _refuse_firing_after_itself(library, registry, held, changes, cadence)
+        await _refuse_event_cadence_change(library, registry, held, changes, cadence)
         rests = isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
         moment = now if now is not None else datetime.now(UTC)
         resolved = changes.model_copy(
@@ -614,11 +629,13 @@ class Scheduler:
         return sum(1 for row in siblings if live_phase(pool, row.session_id) is not None)
 
     async def _fire(self, pool: Sessions, schedule: Schedule, *, run: running.RunCollaborators, moment: datetime) -> str:
-        """Fire one schedule, or record the first hold among overlap, capacity and blackout, then stamp the tick log."""
+        """Fire one schedule, or record the first hold among overlap, capacity and blackout, then stamp the tick log and clear the pages a launch passed on."""
         session = await _runner_session(pool, schedule)
         cadence = parse_cadence(schedule.cadence)
         windows = parse_blackout(schedule.blackout) if schedule.blackout else ()
         keeps_held_fire = schedule.catch_up or isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
+        changed_pages = tuple(sorted(schedule.pending_page_ids)) if isinstance(cadence, OnIndexCadence) else None
+        cleared_page_ids: tuple[str, ...] = ()
 
         if running.run_phase(session) is not None:
             outcome = MISSED_OUTCOME
@@ -634,9 +651,11 @@ class Scheduler:
             outcome = f"blacked out until {window_end.strftime('%H:%M')}"
             next_run_at = schedule.next_run_at if keeps_held_fire else _next_outside_blackout(cadence, windows, moment)
         else:
-            launched = await _launch(session, schedule, run)
+            launched = await _launch(session, schedule, run, changed_pages)
             outcome = CAUGHT_UP_OUTCOME if schedule.catch_up and launched == "launched" and _held_before(schedule.last_outcome) else launched
             next_run_at = next_after(cadence, moment)
+            if launched == "launched" and changed_pages is not None:
+                cleared_page_ids = changed_pages
 
         await self._schedules.stamp(
             schedule.id,
@@ -644,7 +663,7 @@ class Scheduler:
             last_outcome=outcome,
             next_run_at=next_run_at,
             session_id=session.session_id or "",
-            cleared_page_ids=(),
+            cleared_page_ids=cleared_page_ids,
         )
         self._topics.publish("schedules")
         return outcome

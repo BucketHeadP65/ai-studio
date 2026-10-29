@@ -201,13 +201,13 @@ class PostgresSchedules:
         session_id: str,
         cleared_page_ids: Sequence[str],
     ) -> bool:
-        """Update the tick log columns of one row and remove `cleared_page_ids` from its `pending_page_ids`, in one statement.
+        """Update the tick log columns of one row and remove `cleared_page_ids` from its `pending_page_ids`, in one statement that reads the row it locks.
 
         Args:
             schedule_id: The schedule's id.
             last_run_at: When the fire happened.
             last_outcome: What the fire did, in words.
-            next_run_at: When the schedule next comes due, or `None` to stop it coming due.
+            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears pages and others stay pending.
             session_id: The runner session the fire used.
             cleared_page_ids: The changed pages the fire passed on. Empty when the fire passed none on.
 
@@ -219,7 +219,12 @@ class PostgresSchedules:
             UPDATE public.schedules SET
               last_run_at      = $2,
               last_outcome     = $3,
-              next_run_at      = $4,
+              next_run_at      = CASE
+                                   WHEN cardinality($6::text[]) > 0
+                                    AND EXISTS (SELECT unnest(pending_page_ids) EXCEPT SELECT unnest($6::text[]))
+                                   THEN next_run_at
+                                   ELSE $4::timestamptz
+                                 END,
               session_id       = $5,
               pending_page_ids = ARRAY(SELECT unnest(pending_page_ids) EXCEPT SELECT unnest($6::text[]))
             WHERE id = $1

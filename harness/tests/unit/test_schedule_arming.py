@@ -118,6 +118,32 @@ async def test_the_fake_stamp_removes_only_the_page_ids_it_passed() -> None:
     assert stored.pending_page_ids == ("c",)
 
 
+async def test_the_fake_stamp_keeps_the_fire_an_index_set_while_ids_remain_pending() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on index notes", next_run_at=T0, pending_page_ids=("a", "b"))
+    await schedules.insert(waiting)
+    armed_fire = T0 + timedelta(minutes=30)
+    await schedules.arm_with_pages({waiting.id: armed_fire}, event_id=uuid4(), page_ids=["c"])
+
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_page_ids) == (armed_fire, ("c",)), "the page the arm added fires on the arm's fire"
+
+
+async def test_the_fake_stamp_that_passed_no_pages_applies_its_next_fire() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on index notes", next_run_at=T0, pending_page_ids=("a",))
+    await schedules.insert(waiting)
+
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=())
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_page_ids) == (None, ("a",)), "a refused fire rests and keeps its pages"
+
+
 async def test_an_index_arms_the_schedules_naming_its_knowledge_base() -> None:
     schedules = FakeSchedules()
     waiting = _schedule(cadence="on index docs", next_run_at=None)

@@ -87,11 +87,12 @@ class FakeSchedules:
             return False
         cleared = set(cleared_page_ids)
         pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
+        keeps_fire = bool(cleared) and bool(pending)
         self.rows[schedule_id] = current.model_copy(
             update={
                 "last_run_at": last_run_at,
                 "last_outcome": last_outcome,
-                "next_run_at": next_run_at,
+                "next_run_at": current.next_run_at if keeps_fire else next_run_at,
                 "session_id": session_id,
                 "pending_page_ids": pending,
             }

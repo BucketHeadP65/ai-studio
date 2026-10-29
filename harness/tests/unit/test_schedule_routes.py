@@ -33,7 +33,7 @@ from tests.support.fakes.sessions import APool
 from tests.support.fakes.spend import FakeSpendLog
 from tests.support.state import a_state, records_under
 from tests.unit.test_run_spend import _response
-from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _schedule, _typed_registry, _typed_spec
+from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _sales_taking_pages, _schedule, _typed_registry, _typed_spec
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -514,6 +514,49 @@ async def test_a_schedule_cannot_fire_after_its_own_workflow(registry: StepRegis
     assert "cannot fire after" in created.json()["message"]
     assert patched.status_code == 400
     assert "cannot fire after" in patched.json()["message"]
+
+
+async def test_an_on_index_schedule_over_a_workflow_without_changed_page_ids_is_refused(registry: StepRegistry, tmp_path: Path) -> None:
+    schedules = FakeSchedules()
+    async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), schedules, tmp_path, registry=registry) as (client, _):
+        created = await client.post(
+            "/api/schedules", json={"workflow_id": "wf-sales", "arguments": {"quarter": "Q1"}, "cadence": "on index notes"}
+        )
+
+    assert created.status_code == 400
+    assert created.json()["message"] == (
+        "an on-index schedule passes the changed pages to changed_page_ids, and wf-sales declares no such parameter"
+    )
+    assert await schedules.list_all() == [], "a refused schedule is never stored"
+
+
+async def test_changing_a_cadence_to_on_index_checks_the_parameter(registry: StepRegistry, tmp_path: Path) -> None:
+    schedules = FakeSchedules()
+    held = _schedule()
+    await schedules.insert(held)
+    async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), schedules, tmp_path, registry=registry) as (client, _):
+        patched = await client.patch(f"/api/schedules/{held.id}", json={"cadence": "on index notes"})
+
+    assert patched.status_code == 400
+    assert "changed_page_ids" in patched.json()["message"]
+    kept = await schedules.get(held.id)
+    assert kept is not None
+    assert kept.cadence == "every 30m"
+
+
+async def test_pointing_an_on_index_schedule_at_a_workflow_without_changed_page_ids_is_refused(registry: StepRegistry, tmp_path: Path) -> None:
+    store = FakeWorkflowStore(specs={"wf-pages": _sales_taking_pages(), "wf-sales": _one_node_spec()})
+    schedules = FakeSchedules()
+    held = _schedule(workflow_id="wf-pages", cadence="on index notes", next_run_at=None)
+    await schedules.insert(held)
+    async with _studio(store, schedules, tmp_path, registry=registry) as (client, _):
+        patched = await client.patch(f"/api/schedules/{held.id}", json={"workflow_id": "wf-sales"})
+
+    assert patched.status_code == 400
+    assert "wf-sales declares no such parameter" in patched.json()["message"]
+    kept = await schedules.get(held.id)
+    assert kept is not None
+    assert kept.workflow_id == "wf-pages"
 
 
 async def test_preview_of_an_event_cadence_lists_no_fires(tmp_path: Path) -> None:

@@ -36,7 +36,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.runtime import a_runtime
 from tests.support.state import a_throwaway_state, records_under
-from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _schedule, _typed_registry, _typed_spec
+from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _sales_taking_pages, _schedule, _typed_registry, _typed_spec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -315,3 +315,34 @@ async def test_schedule_workflow_names_the_required_parameters_left_unfilled(reg
 
     with pytest.raises(ModelRetry, match=r"^cannot schedule wf-sales\. fill in: quarter$"):
         await schedule_workflow(Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-sales", "every 30m", run_engine="in_process")
+
+
+async def test_schedule_workflow_refuses_an_on_index_cadence_without_the_parameter(registry: StepRegistry) -> None:
+    session = _world(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), registry=registry).default
+
+    with pytest.raises(
+        ModelRetry, match=r"^an on-index schedule passes the changed pages to changed_page_ids, and wf-sales declares no such parameter$"
+    ):
+        await schedule_workflow(
+            Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()),
+            _ctx(session),
+            "wf-sales",
+            "on index notes",
+            arguments={"quarter": "Q1"},
+            run_engine="in_process",
+        )
+
+
+async def test_schedule_workflow_says_an_on_index_schedule_rests_until_an_index_arms_it(registry: StepRegistry) -> None:
+    session = _world(FakeWorkflowStore(specs={"wf-sales": _sales_taking_pages()}), registry=registry).default
+
+    report = await schedule_workflow(
+        Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()),
+        _ctx(session),
+        "wf-sales",
+        "on index notes",
+        arguments={"quarter": "Q1"},
+        run_engine="in_process",
+    )
+
+    assert report.endswith("It rests until a refresh run, a workflow run or an index arms it, never by the clock.")

@@ -99,6 +99,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
             (once after a run of that workflow over the same knowledge base ends succeeded or partial), or
             `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` (once after that knowledge base
             is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further index).
+            An on-index fire passes the changed pages to the workflow's `changed_page_ids` parameter, which the workflow must declare.
         run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
         arguments: The workflow's parameters, one per declared parameter, each as the JSON value
             that parameter's own type asks for.
@@ -116,7 +117,8 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
 
     Raises:
         ModelRetry: `workflow_id` does not check out here, an argument is not what its parameter
-            declares, `cadence`, `gate_policy`, or `blackout` is not one of its own shapes, or
+            declares, `cadence`, `gate_policy`, or `blackout` is not one of its own shapes, an
+            `on index` cadence names a workflow without a `changed_page_ids` parameter, or
             `gate_mode` is `orchestrate` on a deployment that runs on Temporal.
     """
     now = datetime.now(UTC)
@@ -151,7 +153,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         raise ModelRetry(str(exc)) from exc
     fires = preview_fires(parse_cadence(cadence), since=now)
     if not fires:
-        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run or a workflow run arms it, never by the clock."
+        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run, a workflow run or an index arms it, never by the clock."
     when = ", ".join(moment.isoformat() for moment in fires)
     return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. Next three fires. {when}."
 
@@ -203,7 +205,8 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
     Raises:
         ModelRetry: `schedule_id` names no schedule, `workflow_id` does not check out here, an
             argument is not what its parameter declares, `cadence`, `gate_policy`, or `blackout`
-            is not one of its own shapes, or `gate_mode` is `orchestrate` on a deployment that runs
+            is not one of its own shapes, an `on index` cadence names a workflow without a
+            `changed_page_ids` parameter, or `gate_mode` is `orchestrate` on a deployment that runs
             on Temporal.
     """
     schedule_uuid = _parse_id(schedule_id)

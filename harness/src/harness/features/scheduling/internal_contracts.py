@@ -85,12 +85,14 @@ class Schedules(Protocol):
         """Record one fire in the tick log, with the runner session that made it, and remove the changed pages it passed on.
 
         Only the ids in `cleared_page_ids` leave the schedule's pending changed pages, so a page an arm added during the fire stays.
+        When `cleared_page_ids` is not empty and pages stay pending, the schedule keeps the next fire it holds, the one that arm gave it,
+        and `next_run_at` is ignored.
 
         Args:
             schedule_id: The schedule's id.
             last_run_at: When the fire happened.
             last_outcome: What the fire did, in words.
-            next_run_at: When the schedule next comes due, or `None` to stop it coming due.
+            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears pages and others stay pending.
             session_id: The runner session the fire used.
             cleared_page_ids: The changed pages the fire passed on. Empty when the fire passed none on.
 

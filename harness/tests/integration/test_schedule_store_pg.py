@@ -326,3 +326,29 @@ async def test_stamp_removes_only_the_page_ids_it_passed(store: PostgresSchedule
     fetched = await store.get(waiting.id)
     assert fetched is not None
     assert fetched.pending_page_ids == ("c",)
+
+
+async def test_stamp_keeps_the_fire_an_index_set_while_ids_remain_pending(store: PostgresSchedules) -> None:
+    fired_at = datetime(2026, 10, 29, 12, 30, tzinfo=UTC)
+    armed_fire = fired_at + timedelta(minutes=30)
+    waiting = _schedule(cadence="on index notes", next_run_at=fired_at, pending_page_ids=("a", "b"))
+    await store.insert(waiting)
+    await store.arm_with_pages({waiting.id: armed_fire}, event_id=uuid4(), page_ids=["c"])
+
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_page_ids) == (armed_fire, ("c",)), "the page the arm added fires on the arm's fire"
+
+
+async def test_stamp_that_passed_no_pages_applies_its_next_fire(store: PostgresSchedules) -> None:
+    fired_at = datetime(2026, 10, 29, 12, 30, tzinfo=UTC)
+    waiting = _schedule(cadence="on index notes", next_run_at=fired_at, pending_page_ids=("a",))
+    await store.insert(waiting)
+
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=[])
+
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_page_ids) == (None, ("a",)), "a refused fire rests and keeps its pages"
