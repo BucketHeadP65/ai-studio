@@ -537,7 +537,7 @@ async def _build_mcp_server(
     read_only: bool = False,
     role_unchecked: bool = False,
 ) -> MCPServer:
-    """Resolve everything the MCP server needs on this loop and build it, with no write tool when `read_only` or `role_unchecked`."""
+    """Resolve everything the MCP server needs on this loop and build it, with no write tool and no index-reading stamp when `read_only` or `role_unchecked`."""
     configure_logging(logging_settings)
     reader_gateway = await container.get(ReaderSqlGateway)
     describe_handler = await container.get(DescribeSchemaHandler)
@@ -579,14 +579,15 @@ async def _build_mcp_server(
     # One read route per knowledge base this server may reach: the one it serves, then every registered
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
     # `admin_gateway`, which the reader role cannot see, and is read again on every tool call. A read-only
-    # server has no such gateway, so its stamps name the knowledge base alone.
+    # server, and one whose role could not be checked at launch, has no such gateway, so its stamps name
+    # the knowledge base alone.
     read_notes: list[str] = []
     surfaces = _read_surfaces(
         knowledge_base_settings.path,
         schema,
         settings_path,
         reader_gateway,
-        None if read_only else await container.get(AdminSqlGateway),
+        None if read_only or role_unchecked else await container.get(AdminSqlGateway),
         await container.get(BatchEmbedder),
         active_hybrid=profile.search_hybrid is not False,
         notes=read_notes,
@@ -665,9 +666,9 @@ async def _build_mcp_server(
         hits_per_document=surfaces[0].hits_per_document,
         database=redact_db(database.reader_url),
     )
-    # The admin engine pools connections and `stamp` reads through it, except on a read-only server, whose
-    # stamp reads nothing. Disposing it before this loop closes makes the served loop open fresh connections
-    # instead of reusing ones bound to this loop.
+    # The admin engine pools connections and `stamp` reads through it, except on a read-only server or one
+    # whose role went unchecked, whose stamp reads nothing. Disposing it before this loop closes makes the
+    # served loop open fresh connections instead of reusing ones bound to this loop.
     engine = await container.get(AsyncEngine)
     await engine.dispose()
     if doc_engine is not None:
