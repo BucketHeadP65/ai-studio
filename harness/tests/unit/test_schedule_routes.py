@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.ai.workflows.contracts import StepRegistry
+from core.ai.workflows.contracts import ParameterSpec, StepRegistry
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
@@ -482,6 +482,21 @@ async def test_patching_a_schedule_to_an_event_cadence_clears_the_next_fire_it_h
     assert patched.status_code == 200
     assert patched.json()["schedule"]["next_run_at"] is None
     assert enabled.json()["schedule"]["next_run_at"] is None, "turning it on brings back no fire by the clock"
+
+
+async def test_patching_a_schedule_to_an_on_index_cadence_clears_the_next_fire_it_held(registry: StepRegistry, tmp_path: Path) -> None:
+    sales = _one_node_spec()
+    changed_pages = ParameterSpec(description="the changed pages", json_schema={"type": "string"}, required=False)
+    taking_pages = sales.model_copy(update={"parameters": {**sales.parameters, "changed_page_ids": changed_pages}})
+    store = FakeWorkflowStore(specs={"wf-sales": taking_pages})
+    schedules = FakeSchedules()
+    held = _schedule(next_run_at=datetime(2026, 8, 28, 7, 0, tzinfo=UTC))
+    await schedules.insert(held)
+    async with _studio(store, schedules, tmp_path, registry=registry) as (client, _):
+        patched = await client.patch(f"/api/schedules/{held.id}", json={"cadence": "on index notes quiet 10m"})
+
+    assert patched.status_code == 200
+    assert patched.json()["schedule"]["next_run_at"] is None
 
 
 async def test_a_schedule_cannot_fire_after_its_own_workflow(registry: StepRegistry, tmp_path: Path) -> None:

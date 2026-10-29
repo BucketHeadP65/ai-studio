@@ -23,7 +23,8 @@ class ScheduleIn(BaseModel):
     the row is written. Text under a parameter that cannot hold it is read as JSON once, so a
     client with nothing but strings still writes a schedule that fires."""
     cadence: str
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, or `after <workflow name>`."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
+    with an optional `quiet <N><s, m, or h>`."""
     gate_policy: str = "wait"
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
     gate_mode: GateMode = "wait"
@@ -46,7 +47,8 @@ class SchedulePatch(BaseModel):
     workflow_id: str | None = None
     arguments: WorkflowArguments | None = None
     cadence: str | None = None
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, or `after <workflow name>`."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
+    with an optional `quiet <N><s, m, or h>`."""
     enabled: bool | None = None
     gate_policy: str | None = None
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
@@ -66,7 +68,8 @@ class CadenceIn(BaseModel):
     """The cadence text the preview route parses without keeping anything."""
 
     cadence: str
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, or `after <workflow name>`."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
+    with an optional `quiet <N><s, m, or h>`."""
 
 
 class ScheduleOut(BaseModel):

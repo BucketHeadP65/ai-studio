@@ -8,6 +8,8 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+import pytest
+
 from harness.features.running.records import RunCollaborators
 from harness.features.scheduling.service import MISSED_OUTCOME, Scheduler
 from harness.session import SessionPool
@@ -128,11 +130,12 @@ async def test_an_overlap_keeps_the_arm_without_catch_up_and_two_arms_fire_once(
     await second_session.active.task
 
 
-async def test_a_blackout_keeps_the_arm_without_catch_up(registry: StepRegistry, tmp_path: Path) -> None:
+@pytest.mark.parametrize("cadence", ["on refresh", "on index notes"])
+async def test_a_blackout_keeps_the_arm_without_catch_up(cadence: str, registry: StepRegistry, tmp_path: Path) -> None:
     store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
     pool = SessionPool(_runtime(registry, store))
     schedules = FakeSchedules()
-    schedule = _schedule(cadence="on refresh", blackout="11:00-13:00", catch_up=False, next_run_at=T0)
+    schedule = _schedule(cadence=cadence, blackout="11:00-13:00", catch_up=False, next_run_at=T0)
     await schedules.insert(schedule)
     run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
 

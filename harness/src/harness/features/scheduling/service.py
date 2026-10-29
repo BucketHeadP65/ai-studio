@@ -25,6 +25,7 @@ from harness.features.scheduling.domain import (
     Armed,
     BlackoutWindow,
     Cadence,
+    OnIndexCadence,
     OnRefreshCadence,
     Schedule,
     ScheduleUpdate,
@@ -488,7 +489,7 @@ class Scheduler:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         _refuse_orchestrate_on_temporal(changes.gate_mode, run_engine)
         await _refuse_firing_after_itself(library, registry, held, changes, cadence)
-        rests = isinstance(cadence, OnRefreshCadence | AfterRunCadence)
+        rests = isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
         moment = now if now is not None else datetime.now(UTC)
         resolved = changes.model_copy(
             update={
@@ -585,7 +586,7 @@ class Scheduler:
         session = await _runner_session(pool, schedule)
         cadence = parse_cadence(schedule.cadence)
         windows = parse_blackout(schedule.blackout) if schedule.blackout else ()
-        keeps_held_fire = schedule.catch_up or isinstance(cadence, OnRefreshCadence | AfterRunCadence)
+        keeps_held_fire = schedule.catch_up or isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
 
         if running.run_phase(session) is not None:
             outcome = MISSED_OUTCOME

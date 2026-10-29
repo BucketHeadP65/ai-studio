@@ -95,8 +95,10 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         ctx: The run context, checked against this session's own registered workflows.
         workflow_id: A library id this session's own environment can run.
         cadence: `every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh` (once after each refresh
-            of the knowledge base the arguments select that brought in new sources), or `after <workflow name>`
-            (once after a run of that workflow over the same knowledge base ends succeeded or partial).
+            of the knowledge base the arguments select that brought in new sources), `after <workflow name>`
+            (once after a run of that workflow over the same knowledge base ends succeeded or partial), or
+            `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` (once after that knowledge base
+            is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further index).
         run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
         arguments: The workflow's parameters, one per declared parameter, each as the JSON value
             that parameter's own type asks for.
