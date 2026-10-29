@@ -46,6 +46,8 @@ never read as a button run's. When the settlement answers, one headless turn of 
 agent (`feedback.settled_turn`) carries the outcome sentence — finished with its gate account,
 failed, stopped, or paused — back into the conversation. Unlike a rejection turn, the settled
 turn waits out a busy session rather than skipping: the outcome is owed to the conversation.
+The task that delivers that turn is exposed as `session.active.delivery` beside the settlement, and
+the button path nulls it at launch too.
 
 A failed run is prompt text now, not a `ModelRetry` — there is no open tool call left to retry
 into. The three cancellation arms (pause, stop, outside cancellation) stay, read at settle time.
@@ -61,3 +63,6 @@ into. The three cancellation arms (pause, stop, outside cancellation) stay, read
   next transcript read, not as a live stream.
 - Anything needing to observe the closed book awaits `session.active.settlement` (tests, chiefly);
   the ending itself never depends on a listener.
+- Anything needing to observe the outcome turn finished awaits `session.active.delivery`. A test that
+  starts a chat run awaits it before it ends, so no outcome turn is cancelled mid-flight
+  ([upstream-bugs.md](../../../docs/explanation/upstream-bugs.md) UB-9).
