@@ -1,7 +1,8 @@
 r"""The retrieval read-side contract: the generic messages plus engram's facet and collection extensions.
 
 `Search` and `Graph` extend their generic counterparts in `core.ai.retrieval.contracts` with a knowledge base's
-facets and collection. Every other message, result model and the `SqlGateway` port are re-exported unchanged.
+facets and collection, and `KeywordOnlyResult` extends `SqlResult` for a search that ran keyword only. Every other
+message, result model and the `SqlGateway` port are re-exported unchanged.
 Result field names such as `page_id`, `hit_level` and `provenance_claim` are a stable contract.
 """
 
@@ -62,6 +63,7 @@ __all__ = [
     "GraphPaths",
     "GraphPathsResult",
     "GraphResult",
+    "KeywordOnlyResult",
     "LookupValue",
     "NextSteps",
     "ObjectInfo",
@@ -154,6 +156,8 @@ class Search(_Search):
     set. A raw chunk passes `facets` and the range only when a current page made from its source passes them.
     `hybrid=False` skips the query embedding and runs the BM25-only RRF leg (a NULL `query_vec`), and `k` is the
     requested row count (the server hard-caps it at 50, the client also rides it as the row cap).
+    `keyword_fallback` makes a hybrid search whose query cannot be embedded run that BM25-only leg instead of raising,
+    and answer a `KeywordOnlyResult` naming why.
     """
 
     level: str | None = None
@@ -161,11 +165,18 @@ class Search(_Search):
     collection: str | None
     since: date | None = None
     until: date | None = None
+    keyword_fallback: bool = False
 
     @property
     def is_dated(self) -> bool:
         """Whether a date range narrows this search."""
         return self.since is not None or self.until is not None
+
+
+class KeywordOnlyResult(SqlResult):
+    """A hybrid search's rows when its query could not be embedded, so the search ran keyword only."""
+
+    reason: str = Field(description="Why the query was not embedded: the deadline it ran past, or the embedder's error text.")
 
 
 class Graph(_Graph):

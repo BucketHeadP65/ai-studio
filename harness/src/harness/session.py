@@ -154,6 +154,10 @@ class ActiveRun:
     session's result line. `None` for a run a button or a schedule started, whose own `run_graph`
     settles it inline. Await it to observe the run settled. The run's ending never depends on
     anyone awaiting it."""
+    delivery: asyncio.Task[None] | None = None
+    """The chat entry's delivery task: it awaits `settlement`, then runs the settled turn that tells
+    the conversation how the run ended. `None` for a run a button or a schedule started. Await it to
+    observe the outcome turn finished. Nothing else waits for it."""
     stopping: bool = False
     """Set by `service.stop` before it cancels `task`, so the handler that catches the cancellation
     can tell a stop from a pause. Reset to `False` at every launch, never carried over from a

@@ -110,10 +110,7 @@ class TestContainerWiring:
     async def test_resolving_the_handler_routes_both_commands_on_the_shared_bus(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=_knowledge_base(tmp_path))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             handler = await container.get(MultiConnectorSync)
             bus = await container.get(MessageBus)
 
@@ -124,10 +121,7 @@ class TestContainerWiring:
     async def test_handler_is_a_singleton_so_the_route_registers_once(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=_knowledge_base(tmp_path))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             first = await container.get(MultiConnectorSync)
             second = await container.get(MultiConnectorSync)
 

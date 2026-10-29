@@ -458,10 +458,21 @@ def _registered_schema(name: str, root: Path, *, notes: list[str]) -> KnowledgeB
 def _index_stamp(
     admin_gateway: SqlGateway, reader: FilesystemKnowledgeBaseReader, *, slug: str, collection: str
 ) -> Callable[[], Awaitable[KnowledgeBaseStamp]]:
-    """A stamp that reads the last index and the files moved since it through the admin gateway, on every answer."""
+    """A stamp reading the last index and the files moved since it, naming the knowledge base alone once Postgres refuses that read."""
+    slug_only = slug_only_stamp(slug)
+    refused = False
 
     async def stamp() -> KnowledgeBaseStamp:
-        return await read_stamp(admin_gateway, reader, slug=slug, collection=collection)
+        nonlocal refused
+        if refused:
+            return await slug_only()
+        try:
+            return await read_stamp(admin_gateway, reader, slug=slug, collection=collection)
+        except DBAPIError as error:
+            if not is_permission_refusal(error):
+                raise
+            refused = True
+            return await slug_only()
 
     return stamp
 
@@ -578,8 +589,8 @@ async def _build_mcp_server(
 
     # One read route per knowledge base this server may reach: the one it serves, then every registered
     # one that is shared. Each route's freshness stamp reads the `kb` database schema through
-    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call. A read-only
-    # server has no such gateway, so its stamps name the knowledge base alone.
+    # `admin_gateway`, which the reader role cannot see, and is read again on every tool call until Postgres
+    # refuses it. A read-only server has no such gateway, so its stamps name the knowledge base alone.
     read_notes: list[str] = []
     surfaces = _read_surfaces(
         knowledge_base_settings.path,

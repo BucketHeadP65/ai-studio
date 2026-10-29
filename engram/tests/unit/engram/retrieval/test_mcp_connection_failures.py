@@ -12,10 +12,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import httpx2
-
 from mcp.client import Client
-from openai import APIConnectionError
 from sqlalchemy.exc import DBAPIError
 
 from engram.retrieval.capability import ReadSurface
@@ -29,10 +26,9 @@ from engram.testing.fakes.embedding import FakeEmbedding
 from engram.testing.fakes.gateway import FakeSqlGateway
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Mapping, Sequence
+    from collections.abc import AsyncGenerator, Mapping
     from pathlib import Path
 
-    from core.ai.embedding import Embeddings
     from mcp.server.mcpserver import MCPServer
     from mcp.types import CallToolResult
 
@@ -41,7 +37,6 @@ if TYPE_CHECKING:
 _DATABASE = "postgresql+asyncpg://kb:***@db.example:5432/kb"
 _COLLECTION = "research"
 _REFUSED = "[Errno 61] Connect call failed ('10.0.0.5', 5432)"
-_EMBEDDINGS_URL = "https://example.openai.azure.com/openai/deployments/embed/embeddings"
 
 
 @dataclass
@@ -55,24 +50,16 @@ class _UnreachableGateway(FakeSqlGateway):
         raise self.failure or ConnectionRefusedError(61, "Connect call failed ('10.0.0.5', 5432)")
 
 
-class _UnreachableEmbedder(FakeEmbedding):
-    """An embedder whose endpoint refuses the connection."""
-
-    async def embed_batch(self, texts: Sequence[str]) -> Embeddings:
-        del texts
-        raise APIConnectionError(request=httpx2.Request("POST", _EMBEDDINGS_URL))
-
-
 def _schema() -> DescribeSchemaHandler:
     objects = (ObjectInfo(name="api.cards", kind="view", comment="Cards.", columns=(ColumnInfo(name="id", data_type="text", comment="Id."),)),)
     return DescribeSchemaHandler(FakeSqlGateway(schema=SchemaDescription(objects=objects)))
 
 
-def _flat_server(gateway: FakeSqlGateway, embedder: FakeEmbedding | None = None, *, database: str | None = _DATABASE) -> MCPServer:
+def _flat_server(gateway: FakeSqlGateway, *, database: str | None = _DATABASE) -> MCPServer:
     return create_mcp_server(
         gateway,
         _schema(),
-        search_handler=SearchHandler(gateway, embedder or FakeEmbedding()),
+        search_handler=SearchHandler(gateway, FakeEmbedding()),
         fetch_handler=FetchHandler(gateway, _COLLECTION),
         graph_expand_handler=GraphExpandHandler(gateway, _COLLECTION),
         find_paths_handler=GraphPathsHandler(gateway, _COLLECTION),
@@ -98,12 +85,6 @@ class TestTheFlatServer:
 
         assert result.is_error
         assert _text(result) == f"Error executing tool search: database {_DATABASE}: {_REFUSED}"
-
-    async def test_a_search_whose_embedding_endpoint_is_unreachable_names_the_endpoint(self):
-        result = await _call(_flat_server(FakeSqlGateway(), _UnreachableEmbedder()), "search", {"query": "graph evidence"})
-
-        assert result.is_error
-        assert _text(result) == "Error executing tool search: embedding endpoint example.openai.azure.com: Connection error."
 
     async def test_a_statement_whose_connection_drops_names_the_database_not_the_read_only_hint(self):
         reset = ConnectionResetError(54, "Connection reset by peer")

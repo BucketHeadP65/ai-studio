@@ -154,3 +154,7 @@ class SqlAlchemySummaryUnitOfWork:
     async def commit(self) -> None:
         """Persist every upsert made through this unit of work's session."""
         await self._session.commit()
+
+    async def close(self) -> None:
+        """Close this unit of work's session, which gives its connection back to the pool."""
+        await self._session.close()

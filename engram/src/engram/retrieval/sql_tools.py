@@ -32,8 +32,9 @@ from pydantic_core import to_jsonable_python
 
 from .budget import clip_text, fits_budget
 from .domain import DescribeSchema
-from .exceptions import DescribeSchemaRefusedError
+from .exceptions import DescribeSchemaRefusedError, QueryNotEmbeddedError
 from .infrastructure.gateway import STATEMENT_ERRORS
+from .query_embedding import EMBED_DEADLINE_SECONDS, NO_EMBEDDER_REASON, embed_within, keyword_only_wording
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -59,12 +60,6 @@ _logger = get_logger(__name__)
 
 # The hard row cap: run_sql never returns more than this, whatever the agent asks for.
 MAX_ROWS = 50
-
-EMBED_DEADLINE_SECONDS = 10.0
-"""The longest one statement's `vector_query` texts may take to embed, all of them together."""
-
-# The note returned when a `vector_query` could not be embedded and the search ran BM25-only.
-_EMBED_FALLBACK_NOTE = "(embedding unavailable, ran BM25-only: {reason})"
 
 # The describe_schema description. It says how to query, never what the knowledge base is about, and it
 # must not steer the agent to read api.about's body as orientation.
@@ -363,17 +358,11 @@ async def _expand_vector_query(sql: str, embed_query: QueryEmbedder | None, dead
     if not rewrite.texts:
         return sql, None
     if embed_query is None:
-        return rewrite.render(None), _EMBED_FALLBACK_NOTE.format(reason="embedding not configured for this server")
+        return rewrite.render(None), keyword_only_wording(NO_EMBEDDER_REASON)
     try:
-        async with asyncio.timeout(deadline):
-            vectors = await asyncio.gather(*(embed_query(text) for text in rewrite.texts))
-    except TimeoutError:
-        _logger.info("vector_query embedding ran past {seconds}s, degrading to BM25-only", seconds=deadline)
-        return rewrite.render(None), _EMBED_FALLBACK_NOTE.format(reason=f"embedding took longer than {deadline:g} seconds")
-    except Exception as exc:  # noqa: BLE001 (any embed failure degrades to BM25 rather than crashing the tool)
-        _logger.info("vector_query embedding failed ({problem}), degrading to BM25-only", problem=exc.__class__.__name__)
-        reason = str(exc).strip() or exc.__class__.__name__
-        return rewrite.render(None), _EMBED_FALLBACK_NOTE.format(reason=reason)
+        vectors = await embed_within(lambda: asyncio.gather(*(embed_query(text) for text in rewrite.texts)), deadline=deadline)
+    except QueryNotEmbeddedError as exc:
+        return rewrite.render(None), keyword_only_wording(exc.reason)
     return rewrite.render(vectors, model=query_model_of(embed_query)), None
 
 

@@ -33,9 +33,10 @@ from pydantic import BaseModel, ConfigDict
 from engram.indexing.contracts import Severity
 
 from .budget import clip_text, fits_budget, longest_fitting, with_fallback_steps
-from .domain import GraphEdge, GraphNode, GraphPath, GraphResult, NextSteps, SqlResult, StatusReport
+from .domain import GraphEdge, GraphNode, GraphPath, GraphResult, KeywordOnlyResult, NextSteps, SqlResult, StatusReport
 from .envelope import qualify_ref
-from .exceptions import DescribeSchemaRefusedError
+from .exceptions import DescribeSchemaRefusedError, QueryNotEmbeddedError
+from .query_embedding import EMBED_DEADLINE_SECONDS, embed_within
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -237,18 +238,22 @@ class SearchHandler:
 
     With `hybrid=False` the vector is NULL, so every row carries a `lexical_rank` and no `vector_rank`.
     A hybrid search names the embedder's `model_id` as the query's model, and an empty one names none.
+    A hybrid search raises what its embedding raises, unless it sets `keyword_fallback`: it then runs keyword only
+    when the embedding fails or runs past the deadline, and answers a `KeywordOnlyResult` naming why.
     Rows come back exactly as `api.search` ranked them.
     """
 
-    def __init__(self, gateway: SqlGateway, embedder: BatchEmbedder) -> None:
+    def __init__(self, gateway: SqlGateway, embedder: BatchEmbedder, *, embed_deadline: float = EMBED_DEADLINE_SECONDS) -> None:
         """Create the handler.
 
         Args:
             gateway: The read-only SQL gateway.
             embedder: The embedder the query is embedded with when hybrid.
+            embed_deadline: The longest a `keyword_fallback` search's embedding may take, in seconds, before it runs keyword only.
         """
         self._gateway = gateway
         self._embedder = embedder
+        self._embed_deadline = embed_deadline
 
     async def __call__(self, query: Search) -> SqlResult:
         """Embed the query once (when hybrid), then run `api.search` with the row cap = `k`.
@@ -257,21 +262,24 @@ class SearchHandler:
             query: The search to run.
 
         Returns:
-            The ranked hits.
+            The ranked hits, as a `KeywordOnlyResult` when a `keyword_fallback` search could not embed its query.
         """
-        query_vec = halfvec_literal(await self._embed_once(query.query)) if query.hybrid else None
+        vector, skipped = await self._query_vector(query)
         params = {
-            "query_model": (self._embedder.model_id or None) if query.hybrid else None,
+            "query_model": (self._embedder.model_id or None) if vector is not None else None,
             "q": query.query,
             "k": query.k,
-            "qvec": query_vec,
+            "qvec": None if vector is None else halfvec_literal(vector),
             "level": query.level,
             "facets": json.dumps(query.facets),
             "collection": query.collection,
             "since": query.since,
             "until": query.until,
         }
-        return await self._gateway.rows(SEARCH_SQL, params, cap=query.k)
+        result = await self._gateway.rows(SEARCH_SQL, params, cap=query.k)
+        if skipped is None:
+            return result
+        return KeywordOnlyResult.model_validate({**dict(result), "reason": skipped})
 
     async def hits_per_document(self, collection: str) -> int:
         """Read the most hits one document of a knowledge base keeps in this handler's search, as its search tuning sets it.
@@ -285,6 +293,17 @@ class SearchHandler:
         result = await self._gateway.rows(HITS_PER_DOCUMENT_SQL, {"collection": collection}, cap=1)
         value = result.rows[0].get("hits_per_document") if result.rows else None
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+    async def _query_vector(self, query: Search) -> tuple[list[float] | None, str | None]:
+        """The query's vector, or none and why it was skipped when a `keyword_fallback` search could not embed it."""
+        if not query.hybrid:
+            return None, None
+        if not query.keyword_fallback:
+            return await self._embed_once(query.query), None
+        try:
+            return await embed_within(lambda: self._embed_once(query.query), deadline=self._embed_deadline), None
+        except QueryNotEmbeddedError as exc:
+            return None, exc.reason
 
     async def _embed_once(self, query: str) -> list[float]:
         """Embed the single query string (one `embed_batch` call, one returned vector)."""

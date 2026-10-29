@@ -416,6 +416,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
         await settled_turn(session, workflow=requested.source, prompt=_settled_prompt(requested.source, answer), sessions=run.sessions)
 
     delivery = asyncio.create_task(deliver())
+    session.active.delivery = delivery
     _DELIVERIES.add(delivery)
     delivery.add_done_callback(_DELIVERIES.discard)
     return _started(requested.source, requested.spec, run_id)

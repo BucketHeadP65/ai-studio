@@ -250,3 +250,13 @@ class TestListSkills:
         reply = await toolset.list_skills()
 
         assert reply == list_skills_lines(CHECKOUT, ProjectConfig())
+
+
+class TestEverySkillASeatMayName:
+    async def test_carries_only_frontmatter_the_skills_capability_acts_on(self) -> None:
+        # A field the capability does not act on makes every run that mounts the skill warn.
+        catalog = await Skills((SKILLS, ENGRAM_SKILLS)).load(LocalWorkspaceBackend("/"))
+
+        ignored = {skill.name: skill.ignored_behavioral_fields for skill in catalog.skills if skill.ignored_behavioral_fields}
+
+        assert ignored == {}

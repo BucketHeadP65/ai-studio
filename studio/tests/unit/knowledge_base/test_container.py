@@ -127,7 +127,7 @@ class TestMessageBusRegistration:
         # `_refuse_knowledge_base_settings` raises on: this succeeding is the proof none was touched.
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         assert isinstance(bus.outbox, PostgresOutbox)
@@ -135,7 +135,7 @@ class TestMessageBusRegistration:
     async def test_a_knowledge_base_less_bus_routes_no_command(self, tmp_path: Path):
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         with pytest.raises(KeyError, match="_UnroutedCommand"):
@@ -144,7 +144,7 @@ class TestMessageBusRegistration:
     async def test_a_knowledge_base_less_bus_still_carries_the_qa_generation_subscription(self, tmp_path: Path):
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         assert [s.name for s in bus.subscriptions_for(CitingPagesChanged)] == ["qa_generation"]
@@ -152,7 +152,7 @@ class TestMessageBusRegistration:
     async def test_a_knowledge_base_less_bus_forwards_both_refresh_endings_to_the_harness(self, tmp_path: Path):
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         assert [s.name for s in bus.subscriptions_for(RefreshCompleted)] == ["harness_forward"]
@@ -162,7 +162,7 @@ class TestMessageBusRegistration:
     async def test_a_knowledge_base_less_bus_forwards_each_index_to_the_harness(self, tmp_path: Path):
         container = create_container(_settings(tmp_path))
 
-        with container.override.injectable(target=AsyncEngine, new=_StubEngine()):
+        with container.override({AsyncEngine: _StubEngine()}):
             bus = await container.get(MessageBus)
 
         assert [s.name for s in bus.subscriptions_for(PagesLoaded)] == ["harness_index_forward"]
@@ -174,10 +174,7 @@ class TestEvalsDepsContainerWiring:
     async def test_resolves_the_retrieval_handlers_bundle(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=ReaderSqlGateway, new=FakeSqlGateway()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({ReaderSqlGateway: FakeSqlGateway(), BatchEmbedder: FakeEmbedding()}):
             group = await container.get(RetrievalHandlers)
 
         assert isinstance(group, RetrievalHandlers)
@@ -189,10 +186,7 @@ class TestEvalsDepsContainerWiring:
         # container-wired handlers yield the four single-source tools the toolset exposes.
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=ReaderSqlGateway, new=FakeSqlGateway()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({ReaderSqlGateway: FakeSqlGateway(), BatchEmbedder: FakeEmbedding()}):
             group = await container.get(RetrievalHandlers)
 
         toolset: RetrievalToolset = build_retrieval_toolset(group, collection="workdocs")

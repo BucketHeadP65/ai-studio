@@ -3,7 +3,6 @@ name: designing-note-writing
 description: "Use when a knowledge base needs its own note-writing logic, co-designs and scaffolds a custom, per-knowledge-base skill that turns this knowledge base's raw markdown notes into validated engram notes and indexes them. Triggers: /knowledge-base:design-note-writing, 'design note writing', 'build a note-writing skill for this knowledge base', and at the end of /knowledge-base:init."
 tags: [workflow]
 disable-model-invocation: true
-argument-hint: "[redesign | sample <folder>]"
 ---
 
 # Designing Note Writing

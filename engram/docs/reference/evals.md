@@ -92,7 +92,10 @@ a statement, or a database shutting down or starting up. It is matched by the er
 by SQLAlchemy) and by asyncio's text for a failed connection attempt, such as
 `OSError: Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 5434)`.
 A tool-call limit, a refused answer, any other error an SQL statement causes (a syntax error,
-an undefined column, a refused permission) and every other error are not transient. The rule lives in
+an undefined column, a refused permission) and every other error are not transient. An evaluation run's `search`
+never runs keyword only in place of a query it could not embed, as a served `search` does: the embedding's error fails
+the case, so a connection error, a timeout, a 429 or a 5xx from the embedding endpoint is a transient failure that
+`--resume` runs again. The rule lives in
 `engram.evals.harness.transient_failures`, which reads database connection failures, statement
 timeouts and lock timeouts through `core.connection_failures`.
 

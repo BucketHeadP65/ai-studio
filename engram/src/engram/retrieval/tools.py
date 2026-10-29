@@ -11,7 +11,8 @@ registered knowledge bases, routing each read by its collection.
 
 `search_hits`, `search_result_status` and `bound_search_result` assemble a `search` answer. The
 answer never exceeds `SEARCH_RESULT_CHARS`. Display text shortens before a hit is dropped, and an id
-or a ref is never shortened.
+or a ref is never shortened. A served `search` whose query cannot be embedded runs keyword only, and its answer's
+`keyword_only_reason` says why (`why_keyword_only`). An evaluation's toolset builds its `search` with no such fallback.
 
 No database access or other I/O happens here. The handlers own the gateway.
 """
@@ -53,7 +54,19 @@ from pydantic_ai.exceptions import ModelRetry
 
 # These domain types are constructed at runtime by the tools below.
 from .budget import fits_budget, longest_fitting, with_fallback_steps
-from .domain import FetchResult, FoldedUnit, NextSteps, Period, Row, Search, SearchHit, SearchResult, period_end, period_start
+from .domain import (
+    FetchResult,
+    FoldedUnit,
+    KeywordOnlyResult,
+    NextSteps,
+    Period,
+    Row,
+    Search,
+    SearchHit,
+    SearchResult,
+    period_end,
+    period_start,
+)
 from .envelope import EnvelopeHandler, fetchable_forms, normalize_ref, parse_ref, qualify_ref
 from .envelope import fetch_description as leveled_fetch_description
 from .exceptions import _REGROUND_WITH_SEARCH, BadRefError, RefRefusedError, WrongCollectionError
@@ -61,6 +74,7 @@ from .infrastructure.gateway import read_snapshot
 
 # The search description takes its list of `hit_level` values from this schema.
 from .knowledge_base_schema import KB_SEARCH_SCHEMA
+from .query_embedding import keyword_only_wording
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -72,6 +86,7 @@ if TYPE_CHECKING:
     from engram.indexing.contracts import RetrievalSwitches
 
     from .capability import EnvelopeQueries, ReadSurface
+    from .domain import SqlResult
 
     Refuse = Callable[[str], Exception]
     """How the surface being registered on reports a refusal: `ToolError` on MCP, `ModelRetry` in a toolset."""
@@ -81,6 +96,7 @@ __all__ = [
     "FETCH",
     "FIND_PATHS",
     "GRAPH_EXPAND",
+    "KEYWORD_FALLBACK_SENTENCE",
     "RUN_SQL",
     "SEARCH",
     "SEARCH_RESULT_CHARS",
@@ -332,11 +348,20 @@ def _pinned_description(description: str) -> str:
     return text
 
 
+KEYWORD_FALLBACK_SENTENCE = "When the query cannot be embedded, the search runs keyword only and the result's `keyword_only_reason` says why."
+"""What a served hybrid `search` description says about a query that cannot be embedded."""
+
+
+def _without_keyword_fallback(description: str) -> str:
+    """A search description without the sentence promising a keyword-only answer when the query cannot be embedded."""
+    return description.replace(f" {KEYWORD_FALLBACK_SENTENCE}", "")
+
+
 SEARCH_DESCRIPTION = (
     "Hybrid search over the knowledge base (semantic vector similarity + BM25 keyword matching, fused): "
     "returns the top-`k` ranked hits, each with its `id`, "
     f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
-    "`query` is the search text (the server embeds it for the vector leg unless `bm25_only`). `k` "
+    f"`query` is the search text (the server embeds it for the vector leg unless `bm25_only`). {KEYWORD_FALLBACK_SENTENCE} `k` "
     "caps the hits (default 12). Set `bm25_only=true` "
     f"for keyword-only ranking. {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to find candidate sources, then "
     "`fetch` a hit's full text by its `id`."
@@ -353,7 +378,8 @@ SEARCH_DESCRIPTION_HYBRID = (
     "on the vector leg: feed both. Returns the top-`k` ranked "
     "hits, each with its `id`, "
     f"`hit_level` ({_HIT_LEVEL_CLAUSE}), `page_id`/`page_title`, a `snippet`, and a relevance `score`. "
-    f"`query` is the search text (the server embeds it for the vector leg). `k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
+    f"`query` is the search text (the server embeds it for the vector leg). {KEYWORD_FALLBACK_SENTENCE} "
+    f"`k` caps the hits (default 12). {DATE_RANGE_CLAUSE} {_COLLECTION_CLAUSE} Start here to "
     "find candidate sources, then `fetch` a hit's full "
     "text by `id`."
     " Read the result's `status` for what this search actually found, its `window` for whether "
@@ -584,6 +610,7 @@ def _final_descriptions(
     collection: str | None = None,
     served: str | None = None,
     hits_per_document: int = 0,
+    keyword_fallback: bool = True,
 ) -> dict[str, str]:
     """Each tool's description after any override: `facets_clause` `None` takes no `facets`, `served` names the one collection searched."""
     can_search = SEARCH in selected
@@ -597,6 +624,8 @@ def _final_descriptions(
     search_default = _with_document_clause(search_default, hits_per_document, can_fetch=can_fetch)
     if not can_fetch:
         search_default = _without_fetch(search_default)
+    if not keyword_fallback:
+        search_default = _without_keyword_fallback(search_default)
     if not can_sql:
         search_default = _without_sql_plane(search_default)
     if facets_clause is not None:
@@ -759,12 +788,14 @@ def _windowed(
     next_steps: NextSteps,
     knowledge_base: KnowledgeBaseStamp | None,
     retrieved: int,
+    keyword_only_reason: str | None = None,
 ) -> SearchResult:
     """The result `hits` would make if nothing further were added: the window says what was left out."""
     omitted = retrieved - len(hits)
     return SearchResult(
         hits=hits,
         status=status,
+        keyword_only_reason=keyword_only_reason,
         window=ResultWindow(
             returned_items=len(hits), omitted_items=omitted, truncated=omitted > 0, reason=_TRUNCATION_REASON if omitted else None
         ),
@@ -790,11 +821,12 @@ def _fitted(
     knowledge_base: KnowledgeBaseStamp | None,
     retrieved: int,
     max_chars: int,
+    keyword_only_reason: str | None = None,
 ) -> SearchHit | None:
     """The longest form of `candidate` that keeps the whole result within `max_chars`, or `None` when none fits."""
 
     def fits(hit: SearchHit) -> bool:
-        result = _windowed((*kept, hit), status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=retrieved)
+        result = _windowed((*kept, hit), status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=retrieved, keyword_only_reason=keyword_only_reason)
         return fits_budget(result, max_chars)
 
     return longest_fitting(candidate, shorten=_shortened, fits=fits, longest=max(len(candidate.page_title or ""), len(candidate.snippet or "")))
@@ -833,11 +865,12 @@ def _without_folded_units_past_the_budget(
     next_steps: NextSteps,
     knowledge_base: KnowledgeBaseStamp | None,
     max_chars: int,
+    keyword_only_reason: str | None = None,
 ) -> tuple[SearchHit, ...]:
     """`hits` with folded units cut to the longest snippet that fits, else dropped, from the lowest-ranked hit's last one up."""
 
     def fits_whole(candidate: tuple[SearchHit, ...]) -> bool:
-        whole = _windowed(candidate, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
+        whole = _windowed(candidate, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits), keyword_only_reason=keyword_only_reason)
         return fits_budget(whole, max_chars)
 
     trimmed = hits
@@ -858,6 +891,7 @@ def bound_search_result(
     next_steps: NextSteps,
     knowledge_base: KnowledgeBaseStamp | None,
     max_chars: int = SEARCH_RESULT_CHARS,
+    keyword_only_reason: str | None = None,
 ) -> SearchResult:
     """The largest prefix of `hits` whose complete serialized result fits `max_chars`.
 
@@ -874,15 +908,26 @@ def bound_search_result(
         next_steps: The next move these hits offer, naming the top hit's own ref.
         knowledge_base: The stamp of the knowledge base that answered, or `None` when unstamped.
         max_chars: The longest complete serialized result to answer with.
+        keyword_only_reason: Why the search ran keyword only although its tool runs the vector leg too, or `None` when it
+            ran as asked. It counts toward `max_chars`.
 
     Returns:
         The bounded result, its window saying how much of the retrieved list it carries.
     """
-    hits = _without_folded_units_past_the_budget(hits, status=status, next_steps=next_steps, knowledge_base=knowledge_base, max_chars=max_chars)
+    hits = _without_folded_units_past_the_budget(
+        hits, status=status, next_steps=next_steps, knowledge_base=knowledge_base, max_chars=max_chars, keyword_only_reason=keyword_only_reason
+    )
     kept: tuple[SearchHit, ...] = ()
     for candidate in hits:
         fitted = _fitted(
-            kept, candidate, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits), max_chars=max_chars
+            kept,
+            candidate,
+            status=status,
+            next_steps=next_steps,
+            knowledge_base=knowledge_base,
+            retrieved=len(hits),
+            max_chars=max_chars,
+            keyword_only_reason=keyword_only_reason,
         )
         if fitted is None:
             break
@@ -891,12 +936,13 @@ def bound_search_result(
         refused = SearchResult(
             hits=(),
             status="budget_refused",
+            keyword_only_reason=keyword_only_reason,
             window=ResultWindow(returned_items=0, omitted_items=len(hits), truncated=True, refused=True, reason=_REFUSAL_REASON),
             next_steps=_REFUSAL_STEPS,
             knowledge_base=knowledge_base,
         )
         return with_fallback_steps(refused, max_chars, steps=_MINIMAL_STEPS)
-    windowed = _windowed(kept, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits))
+    windowed = _windowed(kept, status=status, next_steps=next_steps, knowledge_base=knowledge_base, retrieved=len(hits), keyword_only_reason=keyword_only_reason)
     return with_fallback_steps(windowed, max_chars, steps=_MINIMAL_STEPS)
 
 
@@ -1060,6 +1106,7 @@ async def _run_search(
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
     can_fetch: bool = True,
+    keyword_fallback: bool = True,
 ) -> SearchResult:
     """Run one search into a bounded result: `pinned` ignores a passed collection, otherwise one unlike `default_collection` is refused."""
     if pinned:
@@ -1069,19 +1116,21 @@ async def _run_search(
     if facets:
         _refuse_undeclared_facets(facets, facet_keys, refuse, owner=facet_owner)
     scoped = default_collection
-    hybrid = not bm25_only
     message = search_type(
         query=query,
         k=k,
-        hybrid=hybrid,
+        hybrid=not bm25_only,
         collection=scoped,
         since=None if since is None else period_start(since),
         until=None if until is None else period_end(until),
         facets=dict(facets or {}),
+        keyword_fallback=keyword_fallback,
     )
     async with read_snapshot():
         result = await handlers.search(message)
         knowledge_base = await stamp() if stamp is not None else None
+    skipped = why_keyword_only(result)
+    hybrid = message.hybrid and skipped is None
     hits = search_hits(result.rows, collection=scoped, knowledge_base=scoped, hybrid=hybrid)
     status = search_result_status(hits)
     return bound_search_result(
@@ -1099,7 +1148,20 @@ async def _run_search(
             can_fetch=can_fetch,
         ),
         knowledge_base=knowledge_base,
+        keyword_only_reason=None if skipped is None else keyword_only_wording(skipped),
     )
+
+
+def why_keyword_only(result: SqlResult) -> str | None:
+    """Why a search ran keyword only when it asked to run its vector leg too, or `None` when it ran as asked.
+
+    Args:
+        result: What the search handler answered.
+
+    Returns:
+        The reason a `KeywordOnlyResult` names, else `None`.
+    """
+    return result.reason if isinstance(result, KeywordOnlyResult) else None
 
 
 def _foreign_collection_refusal(collection: str) -> str:
@@ -1142,6 +1204,7 @@ def _build_search_fn(
     refuse: Refuse = ModelRetry,
     browsable: bool = True,
     can_fetch: bool = True,
+    keyword_fallback: bool = True,
 ) -> Callable[..., Awaitable[SearchResult]]:
     """Build the `search` closure: `k_source` drops `k`, `search_hybrid` drops `bm25_only`, `pinned` ignores `collection`, `browsable` offers the map."""
 
@@ -1172,6 +1235,7 @@ def _build_search_fn(
             refuse=refuse,
             browsable=browsable,
             can_fetch=can_fetch,
+            keyword_fallback=keyword_fallback,
         )
 
     if search_hybrid is None:
@@ -1248,6 +1312,7 @@ def _add_search_tool(
     facet_keys: tuple[str, ...] = (),
     browsable: bool = True,
     can_fetch: bool = True,
+    keyword_fallback: bool = True,
 ) -> None:
     """Register engram's own `search` on the pydantic-ai `toolset`, a pinned one offering no collection (see `_build_search_fn`)."""
     search = _build_search_fn(
@@ -1261,6 +1326,7 @@ def _add_search_tool(
         facet_keys=facet_keys,
         browsable=browsable,
         can_fetch=can_fetch,
+        keyword_fallback=keyword_fallback,
     )
     toolset.add_function(
         search,
@@ -1610,6 +1676,7 @@ def build_retrieval_toolset(
     pinned: bool = False,
     facet_keys: tuple[str, ...] = (),
     hits_per_document: int = 0,
+    keyword_fallback: bool = True,
 ) -> RetrievalToolset:
     """Build a pydantic-ai `FunctionToolset` of engram's retrieval tools, or a subset of them.
 
@@ -1649,6 +1716,9 @@ def build_retrieval_toolset(
             Empty (the default) refuses every key, saying the knowledge base declares no facets.
         hits_per_document: The most hits one document keeps, as the knowledge base's search tuning sets it, which the shipped
             `search` description states. 0 (the default) keeps every hit and states nothing about documents.
+        keyword_fallback: Whether a hybrid `search` whose query cannot be embedded runs keyword only and says why. `True`
+            (the default) serves it so. `False` raises the embedding's error instead and drops the sentence from the
+            description, for an evaluation that must not score keyword hits as hybrid ones.
 
     Returns:
         A `FunctionToolset` exposing the selected subset of `search` / `fetch` / `graph_expand` /
@@ -1670,6 +1740,7 @@ def build_retrieval_toolset(
         collection=collection,
         served=collection,
         hits_per_document=hits_per_document,
+        keyword_fallback=keyword_fallback,
     )
     # `SEARCH` and `FETCH` are always withheld from the shared builder. engram registers them below, so
     # every search result carries `next_steps` and `fetch` reads every id form the other tools hand out.
@@ -1696,6 +1767,7 @@ def build_retrieval_toolset(
             facet_keys=facet_keys,
             browsable=fetch_opens_map(envelope, selected),
             can_fetch=FETCH in selected,
+            keyword_fallback=keyword_fallback,
         )
     if leveled and envelope is not None:
         toolset.add_function(

@@ -19,6 +19,7 @@ from core.ai.inspection.domain.taxonomy import (
     Symptom,
     Taxonomy,
 )
+from core.ai.inspection.views import root_causes
 from core.ai.transcripts.contracts import Span
 
 A_SPAN = Span(step=0, message=1, part=0)
@@ -48,6 +49,23 @@ def test_a_retry_shows_in_the_return_that_answers_its_call() -> None:
     assert (rejected.shows_in, rejected.caught_by) == ("tool-return", "rule")
     assert (refused.shows_in, refused.caught_by, refused.horizon) == ("tool-return", "rule", "moment")
     assert "retry-prompt" not in get_args(ShowsIn)
+
+
+def test_a_tool_refusal_may_blame_the_signature_the_model_sees() -> None:
+    refused = TAXONOMY.symptom("tool_refused_call")
+    blame = Blame(what=TAXONOMY.root_cause("tool_schema"), where=Surface(kind=SurfaceKind.TOOL, name="search_files"), why="x")
+
+    finding = Finding(symptom=refused, evidence=(A_SPAN,), blames=(blame,), found_by="inspector")
+
+    assert finding.blames == (blame,)
+
+
+def test_the_inspector_reading_a_tool_refusal_is_offered_the_tools_schema_as_a_candidate() -> None:
+    schema = TAXONOMY.root_cause("tool_schema")
+
+    candidates = root_causes(TAXONOMY.symptom("tool_refused_call")).splitlines()
+
+    assert f"- tool_schema: {schema.meaning} Fix lands on: tool." in candidates
 
 
 def test_agent_reasoning_lands_only_on_the_model_tier() -> None:

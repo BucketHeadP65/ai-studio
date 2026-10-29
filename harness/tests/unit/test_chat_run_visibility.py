@@ -74,10 +74,14 @@ async def _delivered(prompts: list[str]) -> str:
 
 
 async def _settled(session: Runtime) -> str:
-    """Await the run's own book-closer; every after-the-run assertion reads a closed book."""
+    """Await the run's own book-closer and the outcome turn it hands back. Every after-the-run assertion reads a closed book."""
     settlement = session.active.settlement
     assert settlement is not None, "run_workflow left no settlement task behind"
-    return await settlement
+    answer = await settlement
+    delivery = session.active.delivery
+    assert delivery is not None, "run_workflow left no delivery task behind"
+    await delivery
+    return answer
 
 
 def _ctx(session: Runtime) -> RunContext[Runtime]:
@@ -148,6 +152,22 @@ async def test_a_chat_run_runs_under_the_gate_mode_it_was_asked_for(quarterly_re
     (evidence,) = [event for event in await records.evidence.events_for("draft") if isinstance(event, RunEvidence)]
     assert evidence.gates_auto, "the gates passed with nobody asked"
     assert evidence.gates_approved == (), "an automatic pass is never a person's approval"
+
+
+async def test_whoever_started_a_chat_run_can_wait_out_its_outcome_turn(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+    """The delivery task is on the session, so the outcome turn ends before anyone moves on, never mid-run."""
+    agent, prompts = _capturing_agent()
+    session = _session(registry, tmp_path, agent)
+    session.conversation.last_workflow = quarterly_report
+    run = RunCollaborators(records=records_under(tmp_path), run_settings=RunSettings(), sessions=APool(SessionPool(session)), topics=FakeBroadcaster())
+
+    await run_workflow(_ctx(session), "draft", {"quarter": "Q2"}, run=run, gate_mode="auto")
+    delivery = session.active.delivery
+    assert delivery is not None
+    await delivery
+
+    assert len(prompts) == 1
+    assert "finished" in prompts[0], "the outcome turn did not carry the finished run"
 
 
 async def test_a_chat_run_logs_the_gate_settings_and_runner_it_runs_with(

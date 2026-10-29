@@ -58,7 +58,7 @@ def database_url() -> Iterator[str]:
         return
     if not _docker_available():
         pytest.skip("Docker unavailable: skipping the integration tests")
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
 
     container = PostgresContainer(POSTGRES_IMAGE, username="core", password="core", dbname="core", driver=None)
     container.start()

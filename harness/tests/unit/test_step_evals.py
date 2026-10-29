@@ -7,6 +7,8 @@ here a fake, in `harness evals run` the environment's own `registry.perform`.
 
 from __future__ import annotations
 
+import warnings
+
 from typing import TYPE_CHECKING
 
 import pytest
@@ -125,6 +127,14 @@ class TestLoadDataset:
         ]
         assert len(dataset.evaluators) == 1
         assert isinstance(dataset.evaluators[0], OutcomeMatches)
+
+    def test_reads_with_the_dataset_types_named_so_nothing_warns(self) -> None:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            dataset = load_dataset(DATASET_PATH)
+
+        assert [str(warning.message) for warning in caught] == []
+        assert dataset.cases[0].inputs["collection"] == "repo-docs"
 
 
 class TestDatasetPath:

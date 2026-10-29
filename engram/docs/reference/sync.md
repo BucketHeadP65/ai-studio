@@ -178,7 +178,7 @@ See the glossary at `../../CONTEXT.md` for slice, port, and mirror definitions.
   (`wiring/sources.py`), `document_converters_provider` (`wiring/conversion.py`) and
   `mirror_store_provider` (`wiring/mirror.py`) resolve the ports, the first two through
   `engram.sources.registry`. Tests inject fakes or
-  use `container.override.injectable(...)`.
+  use `container.override({Target: fake})`.
 - **`ctx.obj` factory seam**. The CLI resolves its container from a `ctx.obj`
   factory when set (`CliRunner.invoke(..., obj=...)`), the env-backed default
   otherwise, no monkeypatching.

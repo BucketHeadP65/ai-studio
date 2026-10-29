@@ -637,10 +637,7 @@ class TestGeneratePathContainerWiring:
     async def test_resolving_the_handler_routes_the_generate_command_on_the_shared_bus(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             handler = await container.get(GenerateEvalDatasetHandler)
             bus = await container.get(MessageBus)
 
@@ -650,10 +647,7 @@ class TestGeneratePathContainerWiring:
     async def test_handler_is_a_singleton_so_the_route_registers_once(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             first = await container.get(GenerateEvalDatasetHandler)
             second = await container.get(GenerateEvalDatasetHandler)
 
@@ -662,10 +656,7 @@ class TestGeneratePathContainerWiring:
     async def test_resolving_the_coverage_handler_routes_the_command_on_the_shared_bus(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             handler = await container.get(ComputeCoverageHandler)
             bus = await container.get(MessageBus)
 
@@ -675,10 +666,7 @@ class TestGeneratePathContainerWiring:
     async def test_resolving_the_freshness_handler_routes_the_command_on_the_shared_bus(self, tmp_path: Path):
         container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-        with (
-            container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
             handler = await container.get(CheckFreshnessHandler)
             bus = await container.get(MessageBus)
 

@@ -60,6 +60,7 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.runtime import a_runtime
+from tests.support.spend import free_spend
 from tests.support.state import a_state, a_throwaway_state, a_transcript, records_under
 from tests.support.streaming import streaming_function_model
 
@@ -92,6 +93,7 @@ def _build(
     delegation: bool = False,
     save_capability_id: str | None = None,
     skill_hint: AbstractCapability[Runtime] | None = None,
+    deployment_spend: bool = False,
 ) -> Agent[Runtime, str | DeferredToolRequests]:
     port = WorkflowContract[Runtime](
         source=folder_toolset(tmp_path / "workflows"),
@@ -114,6 +116,7 @@ def _build(
         project=project,
         tiers=ModelTiers(state=a_state(tmp_path), models=ModelList(listing=None), build=_fake_build) if delegation else None,
         skill_hint=skill_hint,
+        spend=None if deployment_spend else free_spend(),
     )
 
 
@@ -427,7 +430,7 @@ class TestDelegationMount:
             assert not _in_code_mode(name, _always), name
 
     def test_the_workers_share_the_agents_own_spend_brake(self, tmp_path: Path) -> None:
-        agent = _build(ProjectConfig(), tmp_path, delegation=True)
+        agent = _build(ProjectConfig(), tmp_path, delegation=True, deployment_spend=True)
         agent_brakes: list[SpendLimits[Runtime]] = []
         agent._root_capability.apply(lambda cap: agent_brakes.append(cap) if isinstance(cap, SpendLimits) else None)
         delegate = _switched(agent)["delegate"].wrapped
@@ -663,6 +666,7 @@ class TestRunCodeCatalogSize:
             project=ProjectConfig(),
             memory=mem,
             tiers=ModelTiers(state=a_state(tmp_path), models=ModelList(listing=None), build=_fake_build),
+            spend=free_spend(),
         )
         await _run(agent)
 

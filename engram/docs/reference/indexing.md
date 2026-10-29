@@ -351,7 +351,8 @@ and leaves every `memory.*` table, `index_manifest` included, byte-identical.
 the embed stage: for every page and section of `--collection` whose `body_hash` has no matching
 `active`/`pending` `kb.unit_summaries` row yet, it calls the injected `Summarizer` port and
 writes a `status='pending'` row (the same hash-gated "needs work" shape `EmbedStage` uses for its
-`embedding IS NULL` queues, applied to summaries instead of vectors). A summary this stage writes
+`embedding IS NULL` queues, applied to summaries instead of vectors). The run commits once at the end and closes its
+unit of work whatever happens, so a summarizer that raises leaves no connection checked out. A summary this stage writes
 is **never disclosed** until a human reviews it, `EnvelopeHandler`
 ([serve.md](serve.md#public-contract)) reads `unit_summaries` filtered to `status = 'active'` in
 the join predicate, so a `pending` row falls back to the page's own frontmatter `summary`, never

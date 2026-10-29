@@ -393,9 +393,10 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
     session.active.auto_gates = approval.auto_gates
     session.active.orchestrated_gates = approval.orchestrated_gates
     session.active.conversations.reset()
-    # This launch's `run_graph` settles its own run, so a chat-started predecessor's settlement task
-    # must not read as this run's.
+    # This launch's `run_graph` settles its own run, so a chat-started predecessor's settlement and
+    # delivery tasks must not read as this run's.
     session.active.settlement = None
+    session.active.delivery = None
     for node_id in run_log.state.memo:
         session.active.progress.replayed(node_id)  # the prefix is settled before the task even starts
     session.active.task = asyncio.create_task(run_graph())

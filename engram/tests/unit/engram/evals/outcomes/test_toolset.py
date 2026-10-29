@@ -648,6 +648,18 @@ class TestNothingNamesAWithheldReference:
         assert value.next_steps == expected
         assert "Answered by hybrid" in value.next_steps.summary
 
+    async def test_a_forced_hybrid_search_that_ran_keyword_only_rebuilds_its_block_as_lexical(self, tmp_path: Path):
+        # The query could not be embedded, so the search ran keyword only and says why.
+        trial = Trial(tmp_path, withheld=frozenset({_WITHHELD}), search_hybrid=True)
+        searched = _search_result((_WITHHELD, _SAFE), semantic=False, hybrid=False)
+        trial.tools.search_result = searched.model_copy(update={"keyword_only_reason": "(embedding unavailable, ran BM25-only: Connection error.)"})
+
+        value = await trial.call("search", query="anything")
+
+        assert isinstance(value, SearchResult)
+        assert "Answered by lexical" in value.next_steps.summary
+        assert value.keyword_only_reason == "(embedding unavailable, ran BM25-only: Connection error.)"
+
     async def test_a_toolset_told_no_leg_reads_it_off_the_hits(self, tmp_path: Path):
         # Without the run's own answer there is only the hits' evidence, which is what the search the
         # model steers carries in its arguments instead.

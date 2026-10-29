@@ -250,14 +250,16 @@ def _without_withheld_folded(hit: SearchHit, withheld: WithheldRefs) -> SearchHi
     return hit if len(kept) == len(hit.folded_units) else hit.model_copy(update={"folded_units": kept})
 
 
-def _ran_hybrid(hits: tuple[SearchHit, ...], scrub: _Scrub) -> bool:
-    """Whether this search ran the vector leg, from the fixed leg, then the call's arguments, then the hits."""
+def _ran_hybrid(value: SearchResult, scrub: _Scrub) -> bool:
+    """Whether this search ran the vector leg: never when it says it ran keyword only, else from the fixed leg, the call's arguments, then the hits."""
+    if value.keyword_only_reason is not None:
+        return False
     if scrub.search_hybrid is not None:
         return scrub.search_hybrid
     bm25_only = scrub.tool_args.get("bm25_only")
     if isinstance(bm25_only, bool):
         return not bm25_only
-    return any(hit.answered_by == "hybrid" for hit in hits)
+    return any(hit.answered_by == "hybrid" for hit in value.hits)
 
 
 def _search_without_withheld(value: SearchResult, scrub: _Scrub) -> SearchResult:
@@ -276,7 +278,7 @@ def _search_without_withheld(value: SearchResult, scrub: _Scrub) -> SearchResult
                 kept,
                 query=scrub.text_argument("query"),
                 knowledge_base=collection,
-                hybrid=_ran_hybrid(value.hits, scrub),
+                hybrid=_ran_hybrid(value, scrub),
                 status=status,
                 map_collection=collection if scrub.browsable else None,
                 can_fetch=FETCH in scrub.served_tools,

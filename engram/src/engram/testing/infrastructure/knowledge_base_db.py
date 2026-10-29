@@ -106,7 +106,7 @@ def pg() -> Iterator[str]:
     if not _docker_available():
         pytest.skip("Docker unavailable: skipping the integration tests")
 
-    from testcontainers.postgres import PostgresContainer
+    from testcontainers.community.postgres import PostgresContainer
 
     container = PostgresContainer(_BED_IMAGE, username="kb", password="kb", dbname="kb", driver="asyncpg")
     container.start()

@@ -35,7 +35,7 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
 | HTTP | `GET /api/graph` (the client's Graph station read, the only HTTP route) | `studio/src/studio/knowledge_base/http/api.py` |
 | Bus | `Search`, `Fetch`, `Graph`, `GraphExpand`, `GraphPaths`, `DescribeSchema`, `Status`, `LookupValue` | `src/engram/retrieval/queries.py` |
 | MCP | `describe_schema`, `run_sql`, `graph_expand`, `find_paths` tools. `run_sql` checks each statement with the SQL guard, runs it as `SELECT * FROM (<statement>) AS q LIMIT n`, and replaces each `vector_query => '<text>'` inside `api.search(...)` with a server-side-embedded `query_vec` and the `query_model` that made it. It runs BM25 only, with a note, when no embedder is wired or the embedding fails or runs past 10 s (ADR-0047). `graph_expand` / `find_paths` walk the knowledge base graph one hop at a time over the set of reached nodes (ADR-0007, ADR-0049) | `src/engram/retrieval/infrastructure/mcp_server.py` |
-| MCP | `search`, `fetch`, the **single-source** structured retrieval tools (ADR-0011 / D1), registered when the whole retrieval handler set is wired. They are the same functions the eval agent binds, so evaluating the in-process agent evaluates this surface | `src/engram/retrieval/infrastructure/mcp_server.py`, `tools.py` |
+| MCP | `search`, `fetch`, the **single-source** structured retrieval tools (ADR-0011 / D1), registered when the whole retrieval handler set is wired. They are the same functions the eval agent binds, so evaluating the in-process agent evaluates this surface. A served `search` whose query cannot be embedded (the embedder fails or runs past 10 s) runs BM25 only by `run_sql`'s rule, and its answer's `keyword_only_reason` carries `run_sql`'s wording naming why, and over several knowledge bases the ones that ran BM25 only. The read capability's `search` does the same. The eval agent's `search` is built without the fallback (`build_retrieval_toolset(keyword_fallback=False)`), so an embedding failure fails the case instead | `src/engram/retrieval/infrastructure/mcp_server.py`, `tools.py` |
 | MCP | `fetch` (leveled), when an `EnvelopeHandler` is wired, `fetch` stops being a flat full-text read and becomes the progressive-disclosure read (`core.ai.disclosure` provider conformance): `fetch(unit_id)` renders one `DisclosureEnvelope` from `EnvelopeHandler`, the unit's own content plus one-line summaries of everything directly inside it. There is no separate `disclose` tool. Leveling rides `fetch`'s own registration on the SAME open-surface gate as `graph_expand`/`find_paths` (no separate opt-in token or profile widening) | `src/engram/retrieval/infrastructure/mcp_server.py`, `envelope.py`, `tools.py` |
 | MCP (opt-in) | `propose_eval_seeds`, `submit_eval_cases`, eval-authoring tools (gold-from-seed dataset generation, ADR-0016), registered **only** under `studio mcp --authoring` and gated exactly like `run_code`. The default surface exposes neither. Owned + documented in [evals.md](evals.md) | `src/engram/retrieval/infrastructure/mcp_server.py` |
 | MCP (opt-in) | `diagnose`, `evaluate_policy`, `submit_tuning`, the tuning loop (Claude Code hill-climbs a retrieval policy by hand, ADR-0018), same `--authoring` opt-in on its own deps-presence gate. Owned + documented in [evals.md](evals.md) | `src/engram/retrieval/infrastructure/mcp_server.py` |
@@ -47,10 +47,14 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
 - **Inputs:** the frozen query messages `Search` / `Fetch` / `Graph` / `GraphExpand` /
   `GraphPaths` / `DescribeSchema` / `Status` / `LookupValue` (`src/engram/retrieval/domain.py`).
   `Search` carries the query, `k` (server hard-caps at 50), `hybrid`, and the facet pre-filters
-  (`level`/`task`/`stage`/`domain`/`collection`). `GraphExpand` / `GraphPaths` carry the
+  (`level`/`task`/`stage`/`domain`/`collection`). With `keyword_fallback` set, a hybrid search whose query cannot be
+  embedded runs BM25 only and answers a `KeywordOnlyResult` naming why, instead of raising. Every served `search` tool
+  sets it. The eval agent's `search` and the search scoring leave it off, so a failed embedding fails their case and
+  is never scored as a hybrid one. `GraphExpand` / `GraphPaths` carry the
   seed/endpoint ids, the hop bound (`hops`, at most 6, or `max_hops`, at most 8), an optional
   `rel_types` filter, `include_superseded`, and `k`.
-- **Outputs:** `SqlResult`, `SearchHit` (its fused `score`, `rerank_score` when a model
+- **Outputs:** `SqlResult` (a `KeywordOnlyResult` for a search that ran BM25 only), `SearchResult` (its
+  `keyword_only_reason` set when the search ran BM25 only), `SearchHit` (its fused `score`, `rerank_score` when a model
   re-ranked it, and `folded_units`, the other matching units of its document as `FoldedUnit`s, each with a short snippet), `FetchResult`, `GraphResult` (+ `GraphNode` / `GraphEdge`), `GraphPath` and
   `GraphPathsResult` (ranked multi-hop routes from `find_paths`), `GraphReach` (how far a walk's
   seeds reach, carried on graph results as `reach`), `SchemaDescription` (+ `ObjectInfo` /

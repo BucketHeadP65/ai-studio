@@ -226,14 +226,13 @@ class TestEveryRegistrationIsResolvable:
         # the same URLs (engine construction never connects); everything downstream still
         # resolves for real and merely stores them.
         database = settings.infrastructure.database
-        with (
-            container.override.injectable(target=AsyncEngine, new=create_async_engine(database.url)),
-            container.override.injectable(
-                target=ReaderEngine, new=ReaderEngine(create_async_engine(database.reader_url, poolclass=NullPool))
-            ),
-            container.override.injectable(target=ReaderSqlGateway, new=FakeSqlGateway()),
-            container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-        ):
+        overrides = {
+            AsyncEngine: create_async_engine(database.url),
+            ReaderEngine: ReaderEngine(create_async_engine(database.reader_url, poolclass=NullPool)),
+            ReaderSqlGateway: FakeSqlGateway(),
+            BatchEmbedder: FakeEmbedding(),
+        }
+        with container.override(overrides):
             for key in sorted(keys, key=lambda klass: klass.__name__):
                 resolved = await container.get(key)
                 assert resolved is not None, f"nothing resolved for registered key {key.__name__}"

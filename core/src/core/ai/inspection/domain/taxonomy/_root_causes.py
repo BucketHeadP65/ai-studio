@@ -27,8 +27,10 @@ TOOL_DESCRIPTION = RootCause(
 TOOL_SCHEMA = RootCause(
     name="tool_schema",
     meaning=(
-        "The signature the model sees demanded a shape stricter or harder than the tool needs: a literal narrower than the "
-        "tool accepts, a required field the tool defaults, nesting or formats models get wrong, a name that promises another type."
+        "The signature the model sees does not fit what the tool takes. It demands a shape stricter or harder than the tool "
+        "needs (a literal narrower than the tool accepts, a required field the tool defaults, nesting or formats models get "
+        "wrong, a name that promises another type), it accepts what the tool then refuses, or it leaves out an option the "
+        "tool's own error names."
     ),
     fix_lands_on=(SurfaceKind.TOOL,),
 )

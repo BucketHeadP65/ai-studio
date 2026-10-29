@@ -31,7 +31,7 @@ class SummaryStage:
     async def run(self, collection: str) -> int:
         """Summarize every unit `collection` has pending and write each as a `status='pending'` row.
 
-        It never promotes a summary to `active`. The run commits once, at the end.
+        It never promotes a summary to `active`. The run commits once, at the end, and closes its unit of work whatever happens.
 
         Args:
             collection: The knowledge base whose units are summarized.
@@ -40,23 +40,26 @@ class SummaryStage:
             The number of summaries written.
         """
         uow = self._uow_factory()
-        units = await uow.pending_units(collection)
-        written = 0
-        for unit in units:
-            summary = await self._summarizer.summarize(title=unit.title, body=unit.body)
-            await uow.upsert_summary(
-                {
-                    "unit_id": unit.unit_id,
-                    "unit_kind": unit.unit_type,
-                    "collection": collection,
-                    "summary": summary,
-                    "status": "pending",
-                    "model": self._summarizer.model_id,
-                    "source_hash": unit.source_hash,
-                }
-            )
-            written += 1
-        await uow.commit()
+        try:
+            units = await uow.pending_units(collection)
+            written = 0
+            for unit in units:
+                summary = await self._summarizer.summarize(title=unit.title, body=unit.body)
+                await uow.upsert_summary(
+                    {
+                        "unit_id": unit.unit_id,
+                        "unit_kind": unit.unit_type,
+                        "collection": collection,
+                        "summary": summary,
+                        "status": "pending",
+                        "model": self._summarizer.model_id,
+                        "source_hash": unit.source_hash,
+                    }
+                )
+                written += 1
+            await uow.commit()
+        finally:
+            await uow.close()
         return written
 
 

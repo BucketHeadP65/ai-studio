@@ -895,9 +895,9 @@ class CutPlanQueries(Protocol):
 
 
 class SummaryUnitOfWork(Protocol):
-    """The transaction `SummaryStage` drives: read the pending units, write rows, commit once.
+    """The transaction `SummaryStage` drives: read the pending units, write rows, commit once, then close.
 
-    It is no context manager. One instance serves exactly one `run()` call.
+    It is no context manager. One instance serves exactly one `run()` call, which closes it whatever happens.
     """
 
     async def pending_units(self, collection: str) -> Sequence[SummaryUnit]:
@@ -921,4 +921,8 @@ class SummaryUnitOfWork(Protocol):
 
     async def commit(self) -> None:
         """Persist every `upsert_summary` call made through this UoW."""
+        ...
+
+    async def close(self) -> None:
+        """Give back the connection this UoW holds, rolling back anything not committed."""
         ...

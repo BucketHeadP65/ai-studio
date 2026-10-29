@@ -20,6 +20,7 @@ class FakeSummaryUow:
         self.units = units
         self.upserts: list[SummaryUpsertRow] = []
         self.committed = False
+        self.closed = False
 
     async def pending_units(self, collection: str) -> list[SummaryUnit]:
         """Return the scripted `units` for any collection.
@@ -44,3 +45,7 @@ class FakeSummaryUow:
     async def commit(self) -> None:
         """Record that the run committed."""
         self.committed = True
+
+    async def close(self) -> None:
+        """Record that the run closed this unit of work."""
+        self.closed = True

@@ -4,14 +4,30 @@
 two collections may legally share a bare unit id. `pending_pages_statement` /
 `pending_sections_statement` pair the `unit_summaries` join on `(collection, unit_id)`, not
 `unit_id` alone — this is the regression test for that fix: two collections indexing the same
-page id must each queue and clear their own pending summary independently.
+page id must each queue and clear their own pending summary independently. A run whose summarizer raises still gives
+its connection back to the pool.
 """
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+import pytest
 
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.pool import QueuePool
+
+from engram.indexing.contracts import SummaryStage
 from engram.indexing.infrastructure import orm
 from engram.indexing.infrastructure.repository import Pages
 from engram.indexing.infrastructure.summary_uow import SqlAlchemySummaryUnitOfWork
+
+
+class _RaisingSummarizer:
+    """A summarizer whose model call fails."""
+
+    model_id = "raising-summarizer"
+
+    async def summarize(self, *, title: str, body: str) -> str:
+        del title, body
+        msg = "the summary model did not answer"
+        raise RuntimeError(msg)
 
 
 def _page(page_id: str, collection: str) -> dict[str, object]:
@@ -61,7 +77,27 @@ async def test_two_collections_with_the_same_unit_id_summarize_independently(mig
         # against), so the same UoW instance reads post-commit state correctly.
         alpha_after = await uow.pending_units("alpha")
         beta_after = await uow.pending_units("beta")
+        await uow.close()
         assert alpha_after == []  # alpha's own current summary now covers it
         assert {u.unit_id for u in beta_after} == {"shared.id"}  # beta's page is still unsummarized
+    finally:
+        await engine.dispose()
+
+
+async def test_a_run_whose_summarizer_raises_leaves_no_connection_checked_out(migrated: str) -> None:
+    engine: AsyncEngine = create_async_engine(migrated)
+    await orm.register_pgvector(engine)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as session:
+            await Pages(session).upsert_many([_page("shared.id", "alpha")])
+            await session.commit()
+        stage = SummaryStage(lambda: SqlAlchemySummaryUnitOfWork(engine), _RaisingSummarizer())
+
+        with pytest.raises(RuntimeError, match="did not answer"):
+            await stage.run("alpha")
+
+        pool = engine.pool
+        assert isinstance(pool, QueuePool)
+        assert pool.checkedout() == 0
     finally:
         await engine.dispose()

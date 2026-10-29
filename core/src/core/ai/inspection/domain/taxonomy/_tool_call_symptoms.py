@@ -90,7 +90,7 @@ TOOL_REFUSED_CALL = Symptom(
     ),
     caught_by="rule",
     horizon="moment",
-    possible_root_causes=(TOOL_DESCRIPTION, INSTRUCTIONS_SAY_NOTHING, INSTRUCTIONS_SAY_WRONG, AGENT_REASONING, MODEL_TIER),
+    possible_root_causes=(TOOL_SCHEMA, TOOL_DESCRIPTION, INSTRUCTIONS_SAY_NOTHING, INSTRUCTIONS_SAY_WRONG, AGENT_REASONING, MODEL_TIER),
 )
 VALID_BUT_WRONG_ARGUMENTS = Symptom(
     name="valid_but_wrong_arguments",

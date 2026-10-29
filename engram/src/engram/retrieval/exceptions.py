@@ -1,4 +1,4 @@
-"""The errors the read side raises on a refused ref or a refused schema ask."""
+"""The errors the read side raises on a refused ref, a refused schema ask or a query it could not embed."""
 
 from __future__ import annotations
 
@@ -62,3 +62,16 @@ class ReaderRoleOverprivilegedError(RuntimeError):
 
     The message names the role, every privilege it holds beyond that, and the setting to change.
     """
+
+
+class QueryNotEmbeddedError(RuntimeError):
+    """A search's query could not be embedded: the embedder raised, or it ran past its deadline."""
+
+    def __init__(self, reason: str) -> None:
+        """Name why the query was not embedded.
+
+        Args:
+            reason: Why, as a search's note names it: the deadline it ran past, or the error's own text.
+        """
+        super().__init__(reason)
+        self.reason = reason
