@@ -167,7 +167,7 @@ async def test_whoever_started_a_chat_run_can_wait_out_its_outcome_turn(quarterl
     await delivery
 
     assert len(prompts) == 1
-    assert "finished" in prompts[0], "the outcome turn ran to its end before the delivery task did"
+    assert "finished" in prompts[0], "the outcome turn did not carry the finished run"
 
 
 async def test_a_chat_run_logs_the_gate_settings_and_runner_it_runs_with(
