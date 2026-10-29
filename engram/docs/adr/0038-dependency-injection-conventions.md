@@ -99,7 +99,7 @@ resolve-time connection; the gate documents it and overrides both engines in its
 ### 5. Test overrides
 
 - **Unit, real graph:** build the real `create_container` from fully explicit settings and use the
-  context-managed `container.override.injectable(target=…, new=…)` on the IO leaves. Override the
+  context-managed `container.override({Target: fake})` on the IO leaves. Override the
   **target itself**, never its leaf dependencies — a resolved singleton is cached, so leaf-dep
   overrides go order-dependent across tests.
 - **e2e:** the real container with `container.override.set(…)` for the leaves that must stay inert
