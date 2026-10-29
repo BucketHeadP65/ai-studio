@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, StructuredDict
 from pydantic_ai.exceptions import AgentRunError, UnexpectedModelBehavior
-from pydantic_ai.models.system_one import SystemOneModel
-from pydantic_ai.providers.system_one import SystemOneProvider
+from pydantic_ai.models.typesafe import TypeSafeModel
+from pydantic_ai.providers.typesafe import TypeSafeProvider
 
 from core.observability import get_logger
 
@@ -24,26 +24,27 @@ if TYPE_CHECKING:
     from pydantic_ai.messages import ModelResponse
     from pydantic_ai.models.decision import DecisionModel
 
-    from core.settings import OpenRouterSettings
+    from core.settings import GatewaySettings
 
 
-def decision_model(model_name: str, openrouter: OpenRouterSettings) -> SystemOneModel:
-    """The decision model `model_name`, reached over the System One API at OpenRouter's address with its key.
+def decision_model(model_name: str, gateway: GatewaySettings) -> TypeSafeModel:
+    """TypeSafe's decision model `model_name`, reached through the gateway's TypeSafe route with the gateway key.
 
     Args:
-        model_name: The name the API serves the model under, such as `jev-1.13`.
-        openrouter: The OpenRouter section of the infrastructure settings.
+        model_name: The name TypeSafe serves the model under, such as `jev-latest`.
+        gateway: The gateway section of the infrastructure settings.
 
     Returns:
         The model.
 
     Raises:
-        ValueError: The OpenRouter section carries no key.
+        ValueError: The gateway section carries no key.
     """
-    if not openrouter.api_key:
-        msg = f"decision model {model_name!r} is reached through OpenRouter, and infrastructure.openrouter.api_key is empty"
+    if not gateway.api_key:
+        msg = f"decision model {model_name!r} is reached through the gateway, and infrastructure.gateway.api_key is empty"
         raise ValueError(msg)
-    return SystemOneModel(model_name, provider=SystemOneProvider(base_url=openrouter.base_url, api_key=openrouter.api_key))
+    base_url = f"{gateway.base_url.rstrip('/')}/{gateway.typesafe_route.strip('/')}"
+    return TypeSafeModel(model_name, provider=TypeSafeProvider(base_url=base_url, api_key=gateway.api_key))
 
 
 type RequestShape = Literal["per_hit", "all_hits"]

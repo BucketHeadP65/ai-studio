@@ -73,14 +73,14 @@ class GatewaySettings(BaseModel):
 
     api_key: str = ""
     base_url: str = "https://gateway-eu.pydantic.dev/proxy"
+    typesafe_route: str = "type-safe"
+    """The gateway route that reaches TypeSafe, which serves the decision models."""
 
 
 class OpenRouterSettings(BaseModel):
-    """OpenRouter, for the models served only there. An empty key means none is on file."""
+    """OpenRouter, for the chat models served only there. An empty key means none is on file."""
 
     api_key: str = ""
-    base_url: str = "https://openrouter.ai/api/v1"
-    """Where decision models are reached. Chat models served by OpenRouter ignore it."""
 
 
 class HarnessServiceSettings(BaseModel):

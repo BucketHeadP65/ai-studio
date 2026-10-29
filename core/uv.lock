@@ -289,6 +289,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-ai", extra = ["retries"] },
     { name = "pydantic-ai-harness" },
+    { name = "pydantic-ai-slim", extra = ["typesafe"] },
     { name = "pyyaml" },
     { name = "referencing" },
     { name = "sqlalchemy", extra = ["asyncio"] },
@@ -338,6 +339,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-ai", extras = ["retries"], specifier = ">=2.60.0" },
     { name = "pydantic-ai-harness", specifier = ">=0.60.0" },
+    { name = "pydantic-ai-slim", extras = ["typesafe"], specifier = ">=2.60.0" },
     { name = "pydantic-graph", marker = "extra == 'workflows'", specifier = ">=2.49.0" },
     { name = "pydantic-graph", marker = "extra == 'workflows-temporal'", specifier = ">=2.49.0" },
     { name = "pydantic-handlebars", marker = "extra == 'workflows'", specifier = ">=0.2.1" },
@@ -1397,6 +1399,9 @@ retries = [
     { name = "httpx" },
     { name = "tenacity" },
 ]
+typesafe = [
+    { name = "typesafe-sdk" },
+]
 web = [
     { name = "starlette" },
     { name = "uvicorn" },
@@ -1901,6 +1906,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/e1/6c/e3e5b3e10bc328126a39637c138f9ebfd734bf14342b9f3540039b4ab995/types_protobuf-7.35.1.20260906.tar.gz", hash = "sha256:efd1a3862d4c967dad5512ef8d56b1530ac84f182c41735b94004756518c4998", size = 69895, upload-time = "2026-09-06T06:35:28.308Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/44/4e/f63e826c68f77ef875506d72f225918800346545ee99847bc28f3394f18d/types_protobuf-7.35.1.20260906-py3-none-any.whl", hash = "sha256:5155e48569e0dabff303fdf578db96cd31ea9a4a63b18018a4ceac6b0ae17462", size = 86419, upload-time = "2026-09-06T06:35:27.247Z" },
+]
+
+[[package]]
+name = "typesafe-sdk"
+version = "0.7.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx2" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "pydantic-core" },
+    { name = "tenacity" },
+    { name = "truststore", marker = "sys_platform != 'emscripten'" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/4d/383aa14f4cfe5fb41023ea1cab52d7f79cc31ab200ee7314317cf89db744/typesafe_sdk-0.7.5.tar.gz", hash = "sha256:1eeeb0dc80a7161d84896db42a5016dc0a7c8872fa16540b70163e5357b6d398", size = 34152, upload-time = "2026-10-14T21:21:42.837Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/f6/bee4c3b49570c2d312057c9e37c1446cf37eb1b86bf5872f7a797e803326/typesafe_sdk-0.7.5-py3-none-any.whl", hash = "sha256:967a8b61494d536abb55ee3f3a2b10e81685cb6baad6ccdcab588bdc6c9b86d2", size = 49948, upload-time = "2026-10-14T21:21:41.337Z" },
 ]
 
 [[package]]
