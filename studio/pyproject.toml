@@ -33,15 +33,15 @@ dependencies = [
     # available to resolve, whichever names a schema declares. `testing` (fakes/factories) rides
     # the test dependency group instead, alongside `engram[testing]` below.
     "engram-connectors[conversion,source-queue,x,youtube,zotero]",
-    "fastapi>=0.143.2",
+    "fastapi>=0.162.0",
     # The app's own HTTP client. It reads one first-party endpoint at a configured, trusted base
     # URL: the harness's artifact resolver, which a retained note's origin is fetched from.
     "httpx>=0.28.1",
     # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
-    "pydantic-ai>=2.60.0",
+    "pydantic-ai>=2.61.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.16.0",
-    "sqlalchemy[asyncio]>=2.1.4",
+    "sqlalchemy[asyncio]>=2.1.6",
     "typer>=0.27.3",
     "uvicorn>=0.54.0",
     "wireup>=2.12.1",
@@ -71,7 +71,7 @@ test = [
     # wiring and integration tests import, carrying polyfactory only.
     "engram-connectors[testing]",
     "pytest (>=9.1.1,<10.0.0)",
-    "pytest-asyncio (>=1.4.0,<2.0.0)",
+    "pytest-asyncio>=1.4.1,<2.0.0",
     # Bounds the pty session's close()-ordering race test: a reintroduced deadlock in that
     # ordering must fail the test, not hang the whole gate run indefinitely.
     "pytest-timeout (>=2.3.1,<3.0.0)",
