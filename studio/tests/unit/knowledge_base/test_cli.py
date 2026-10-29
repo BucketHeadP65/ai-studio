@@ -30,17 +30,19 @@ import typer
 
 from asyncpg.exceptions import InsufficientPrivilegeError
 from core.ai.embedding import BatchEmbedder
+from core.ai.retrieval.contracts import KnowledgeBaseStamp
 from engram.evals.commands import KnowledgeBaseGatewayFactory, PolicyEvaluatorFactory, SeedRepositoryFactory
 from engram.evals.generation.contracts import GenerationConfig
 from engram.evals.recommendation.infrastructure.mcp_recommendation import DIAGNOSE_STRUCTURE, SUBMIT_RECOMMENDATION, WHAT_IF_EDGES
 from engram.evals.shared.contracts import Archetype
 from engram.evals.shared.domain import DEFAULT_DIFFICULTY_THRESHOLDS
 from engram.evals.tuning.policy import RetrievalPolicy, save_policy
-from engram.indexing.contracts import KnowledgeBaseReader
+from engram.indexing.contracts import FilesystemKnowledgeBaseReader, KnowledgeBaseReader
 from engram.retrieval.envelope import EnvelopeHandler
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, SUBMIT_CASES
 from engram.retrieval.queries import DescribeSchemaHandler, FetchHandler, GraphExpandHandler, GraphPathsHandler, SearchHandler
 from engram.testing.fakes.embedding import FakeEmbedding
+from engram.testing.fakes.gateway import FakeSqlGateway
 from engram.testing.fakes.knowledge_base_reader import FakeKnowledgeBaseReader
 from engram.testing.fakes.recommendation import FakeKnowledgeBaseGateway
 from engram.testing.specs import research_spec
@@ -50,7 +52,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from typer.testing import CliRunner
 
-from studio.knowledge_base.cli import _STUDIO_BIN, _build_mcp_server, _mcp_server_after_identity, app
+from studio.knowledge_base.cli import _STUDIO_BIN, _build_mcp_server, _index_stamp, _mcp_server_after_identity, app
 from studio.knowledge_base.cli_support import ActiveKnowledgeBase
 from studio.knowledge_base.settings import ApplicationSettings, DatabaseSettings, EvalsSettings, KnowledgeBaseSettings, RetrievalSettings
 from studio.knowledge_base.wiring.contracts import AdminSqlGateway, ReaderSqlGateway, SearchReranking
@@ -642,6 +644,50 @@ class TestMcpServesReadOnlyWhenTheRoleMayNotReadTheIndexState:
         assert lines[0].startswith("knowledge base ")
         assert lines[1] == "database: this role may not read the index state, so it is not shown. Serving read-only."
         assert server is not None
+
+
+class _CountingAdminGateway(_RefusingAdminGateway):
+    """A refusing `AdminSqlGateway` that counts its reads, or raises `failure` in place of the refusal when one is set."""
+
+    def __init__(self, failure: Exception | None = None) -> None:
+        super().__init__()
+        self.reads = 0
+        self.failure = failure
+
+    async def rows(self, sql: str, params: Mapping[str, object] | None = None, *, cap: int = 50) -> SqlResult:
+        self.reads += 1
+        if self.failure is not None:
+            raise self.failure
+        return await super().rows(sql, params, cap=cap)
+
+
+class TestTheIndexStamp:
+    """A served answer's stamp reads freshness through the admin gateway, and names the knowledge base alone once Postgres refuses that read."""
+
+    async def test_a_refused_read_names_the_knowledge_base_alone_and_is_asked_once(self, tmp_path: Path):
+        gateway = _CountingAdminGateway()
+        stamp = _index_stamp(gateway, FilesystemKnowledgeBaseReader(tmp_path, note_folders=()), slug="served", collection="served")
+
+        first = await stamp()
+        second = await stamp()
+
+        assert first == second == KnowledgeBaseStamp(slug="served")
+        assert gateway.reads == 1
+
+    async def test_a_read_that_answers_stamps_how_many_files_moved(self, tmp_path: Path):
+        stamp = _index_stamp(FakeSqlGateway(), FilesystemKnowledgeBaseReader(tmp_path, note_folders=()), slug="served", collection="served")
+
+        assert await stamp() == KnowledgeBaseStamp(slug="served", changed_since=0)
+
+    async def test_a_failed_connection_raises_and_the_next_answer_reads_again(self, tmp_path: Path):
+        gateway = _CountingAdminGateway(failure=ConnectionRefusedError(61, "Connect call failed"))
+        stamp = _index_stamp(gateway, FilesystemKnowledgeBaseReader(tmp_path, note_folders=()), slug="served", collection="served")
+
+        for _ in range(2):
+            with pytest.raises(ConnectionRefusedError):
+                await stamp()
+
+        assert gateway.reads == 2
 
 
 class TestMcpSaysNothingOnStdoutBeforeServing:
