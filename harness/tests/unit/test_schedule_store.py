@@ -83,6 +83,17 @@ def test_a_zero_quiet_period_is_refused() -> None:
         parse_cadence("on index repo-docs quiet 0m")
 
 
+@pytest.mark.parametrize("text", ["on index docs quiet 25h", "on index docs quiet 86401s", "on index docs quiet 99999999h"])
+def test_a_quiet_period_over_a_day_is_refused(text: str) -> None:
+    with pytest.raises(ValueError, match=r"quiet period must be at most 24 hours \(86400 seconds\)"):
+        parse_cadence(text)
+
+
+@pytest.mark.parametrize("text", ["on index docs quiet 24h", "on index docs quiet 1440m", "on index docs quiet 86400s"])
+def test_a_quiet_period_of_a_day_is_accepted(text: str) -> None:
+    assert parse_cadence(text) == OnIndexCadence(knowledge_base="docs", quiet_seconds=86400)
+
+
 def test_the_refusal_names_every_cadence_form() -> None:
     with pytest.raises(ValueError, match="is not a cadence") as refusal:
         parse_cadence("sometimes")

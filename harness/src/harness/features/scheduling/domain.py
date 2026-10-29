@@ -132,7 +132,8 @@ def parse_cadence(text: str) -> Cadence:
         The parsed cadence.
 
     Raises:
-        ValueError: `text` is none of these shapes, or it names a quiet period of zero. The message says what a cadence looks like.
+        ValueError: `text` is none of these shapes, or it names a quiet period of zero or one over `INDEX_QUIET_CEILING_SECONDS`.
+            The message says what a cadence looks like, or the bound the quiet period broke.
     """
     stripped = text.strip()
     if (match := _INTERVAL.match(stripped)) is not None:
@@ -149,6 +150,9 @@ def parse_cadence(text: str) -> Cadence:
         quiet_seconds = int(count) * _UNIT_SECONDS[unit.lower()]
         if quiet_seconds == 0:
             msg = f"{text!r} is not a cadence. A quiet period must be longer than zero"
+            raise ValueError(msg)
+        if quiet_seconds > INDEX_QUIET_CEILING_SECONDS:
+            msg = f"{text!r} is not a cadence. A quiet period must be at most 24 hours ({INDEX_QUIET_CEILING_SECONDS} seconds)"
             raise ValueError(msg)
         return OnIndexCadence(knowledge_base=knowledge_base, quiet_seconds=quiet_seconds)
     if len(stripped.split()) == 5 and croniter.is_valid(stripped):  # noqa: PLR2004 (a cron expression has 5 fields)
@@ -371,6 +375,8 @@ class ScheduleUpdate(BaseModel):
     """The pause stamp, written only together with `enabled`."""
     clears_next_fire: bool = False
     """Set when the change makes the schedule rest: the next fire is cleared in the same write and `next_run_at` is ignored."""
+    clears_pending_page_ids: bool = False
+    """Set when the change gives the schedule another cadence: its pending changed pages are cleared in the same write."""
 
 
 ON_REFRESH_SUBSCRIBER = "schedules.on_refresh"
@@ -378,6 +384,9 @@ ON_REFRESH_SUBSCRIBER = "schedules.on_refresh"
 
 INDEX_QUIET_SECONDS = 1800
 """The quiet period of an on-index cadence that names none, in seconds."""
+
+INDEX_QUIET_CEILING_SECONDS = 86400
+"""The longest quiet period an on-index cadence may name, in seconds."""
 
 ON_INDEX_SUBSCRIBER = "schedules.on_index"
 """The subscriber name an index's event id is recorded under in `coordination.event_deliveries` once the scheduler armed for it."""

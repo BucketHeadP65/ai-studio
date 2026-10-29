@@ -122,7 +122,9 @@ class PostgresSchedules:
         return [_schedule_from_row(row) for row in rows]
 
     async def update(self, schedule_id: UUID, changes: ScheduleUpdate) -> bool:
-        """Update the set fields in one statement, writing `paused_at` as given whenever `enabled` is set and clearing the next fire when asked.
+        """Update the set fields in one statement, writing `paused_at` as given whenever `enabled` is set.
+
+        The next fire and the pending changed pages are cleared in the same statement when `changes` asks for it.
 
         Args:
             schedule_id: The schedule's id.
@@ -145,7 +147,8 @@ class PostgresSchedules:
               blackout           = COALESCE($10, blackout),
               catch_up           = COALESCE($11, catch_up),
               next_run_at        = CASE WHEN $14 THEN NULL ELSE COALESCE($13, next_run_at) END,
-              paused_at          = CASE WHEN $5 IS NULL THEN paused_at ELSE $12::timestamptz END
+              paused_at          = CASE WHEN $5 IS NULL THEN paused_at ELSE $12::timestamptz END,
+              pending_page_ids   = CASE WHEN $15 THEN '{}'::text[] ELSE pending_page_ids END
             WHERE id = $1
             """,
             schedule_id,
@@ -162,6 +165,7 @@ class PostgresSchedules:
             changes.paused_at,
             changes.next_run_at,
             changes.clears_next_fire,
+            changes.clears_pending_page_ids,
         )
         return result != "UPDATE 0"
 

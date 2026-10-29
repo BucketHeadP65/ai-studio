@@ -40,6 +40,7 @@ class Schedules(Protocol):
         When `changes` sets `enabled`, its `paused_at` is saved as given in the same write, so `None` clears it.
         A change that leaves `enabled` unset leaves `paused_at` alone.
         When `changes.clears_next_fire` is set, the next fire is cleared in the same write and `changes.next_run_at` is ignored.
+        When `changes.clears_pending_page_ids` is set, the pending changed pages are cleared in the same write.
 
         Args:
             schedule_id: The schedule's id.

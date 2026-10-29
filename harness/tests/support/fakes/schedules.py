@@ -58,6 +58,8 @@ class FakeSchedules:
             updates["paused_at"] = changes.paused_at
         if changes.clears_next_fire:
             updates["next_run_at"] = None
+        if changes.clears_pending_page_ids:
+            updates["pending_page_ids"] = ()
         self.rows[schedule_id] = current.model_copy(update=updates)
         return True
 

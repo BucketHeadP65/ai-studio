@@ -97,7 +97,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         cadence: `every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh` (once after each refresh
             of the knowledge base the arguments select that brought in new sources), `after <workflow name>`
             (once after a run of that workflow over the same knowledge base ends succeeded or partial), or
-            `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` (once after that knowledge base
+            `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` of at most 24 hours (once after that knowledge base
             is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further index).
             An on-index fire passes the changed pages to the workflow's `changed_page_ids` parameter, which the workflow must declare.
         run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
@@ -187,7 +187,7 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         schedule_id: The schedule's own id, as shown by `schedules`.
         run_engine: The engine this deployment runs workflows on. Temporal refuses a change to gate mode `orchestrate`.
         workflow_id: Point the schedule at a different saved workflow.
-        cadence: Change how it fires, in any form `schedule_workflow` takes.
+        cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages the schedule collected.
         arguments: Replace the workflow's parameters, each as the JSON value that parameter's own
             type asks for.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.

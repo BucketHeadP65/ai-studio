@@ -899,3 +899,42 @@ async def test_a_refused_on_index_fire_keeps_its_pages(registry: StepRegistry, t
     assert (after.next_run_at, after.pending_page_ids) == (None, ("a.one",)), "the schedule rests and keeps its pages"
     session = await pool.get(after.session_id)
     assert session.active.task is None, "nothing was launched"
+
+
+async def test_a_cadence_change_clears_the_pending_pages() -> None:
+    """Pages collected under one cadence never ride a fire of another, such as one watching another knowledge base."""
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("a.one",))
+    await schedules.insert(schedule)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        FakeWorkflowStore(specs={"wf-pages": _pages_spec()}),
+        _pages_registry([]),
+        schedule.id,
+        ScheduleUpdate(cadence="on index other"),
+        names=None,
+        run_engine="in_process",
+    )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert (after.cadence, after.pending_page_ids) == ("on index other", ())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [ScheduleUpdate(enabled=False), ScheduleUpdate(cadence="on index notes"), ScheduleUpdate(cadence="On Index notes")],
+    ids=["no cadence", "the same cadence", "the same cadence spelled otherwise"],
+)
+async def test_a_change_that_keeps_the_cadence_keeps_the_pending_pages(changes: ScheduleUpdate) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("a.one",))
+    await schedules.insert(schedule)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        FakeWorkflowStore(specs={"wf-pages": _pages_spec()}), _pages_registry([]), schedule.id, changes, names=None, run_engine="in_process"
+    )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.pending_page_ids == ("a.one",)

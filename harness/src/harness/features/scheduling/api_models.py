@@ -24,7 +24,7 @@ class ScheduleIn(BaseModel):
     client with nothing but strings still writes a schedule that fires."""
     cadence: str
     """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>`."""
+    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
     gate_policy: str = "wait"
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
     gate_mode: GateMode = "wait"
@@ -48,7 +48,7 @@ class SchedulePatch(BaseModel):
     arguments: WorkflowArguments | None = None
     cadence: str | None = None
     """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>`."""
+    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
     enabled: bool | None = None
     gate_policy: str | None = None
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
@@ -69,7 +69,7 @@ class CadenceIn(BaseModel):
 
     cadence: str
     """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>`."""
+    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
 
 
 class ScheduleOut(BaseModel):

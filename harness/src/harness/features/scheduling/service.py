@@ -493,6 +493,7 @@ class Scheduler:
         The arguments are written only when `changes` sets them.
         A schedule with no next fire, such as one whose fire failed, gets its next fire from its cadence again.
         A change that sets a cadence waiting for an event clears the next fire, so the schedule rests until something arms it.
+        A change to another cadence clears the changed pages the schedule collected, so none rides a fire of the new cadence.
         Turning the schedule off stamps it paused at `now`, and turning it on clears the stamp.
 
         Args:
@@ -538,6 +539,7 @@ class Scheduler:
                 "arguments": patched,
                 "next_run_at": None if rests else _restored_next_fire(held, changes, moment),
                 "clears_next_fire": rests,
+                "clears_pending_page_ids": cadence is not None and cadence != _cadence_or_none(held.cadence),
                 "paused_at": held.paused_at_after(enabled=changes.enabled, now=moment),
             }
         )

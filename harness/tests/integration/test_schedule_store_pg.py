@@ -262,6 +262,28 @@ async def test_update_that_clears_the_next_fire_writes_null(store: PostgresSched
     assert (fetched.cadence, fetched.next_run_at) == ("on refresh", None)
 
 
+async def test_update_that_clears_the_pending_pages_writes_an_empty_array(store: PostgresSchedules) -> None:
+    held = _schedule(cadence="on index notes", pending_page_ids=("note.a", "note.b"))
+    await store.insert(held)
+
+    assert await store.update(held.id, ScheduleUpdate(cadence="on index other", clears_pending_page_ids=True)) is True
+
+    fetched = await store.get(held.id)
+    assert fetched is not None
+    assert (fetched.cadence, fetched.pending_page_ids) == ("on index other", ())
+
+
+async def test_update_that_leaves_the_pending_pages_keeps_them(store: PostgresSchedules) -> None:
+    held = _schedule(cadence="on index notes", pending_page_ids=("note.a",))
+    await store.insert(held)
+
+    assert await store.update(held.id, ScheduleUpdate(enabled=False)) is True
+
+    fetched = await store.get(held.id)
+    assert fetched is not None
+    assert fetched.pending_page_ids == ("note.a",)
+
+
 async def test_arm_with_pages_records_the_event_once(store: PostgresSchedules, migrated: str) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
     at = datetime(2026, 10, 29, 12, 0, tzinfo=UTC)
     waiting = _schedule(cadence="on index notes")
