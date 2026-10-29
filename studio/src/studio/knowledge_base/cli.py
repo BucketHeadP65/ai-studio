@@ -458,11 +458,7 @@ def _registered_schema(name: str, root: Path, *, notes: list[str]) -> KnowledgeB
 def _index_stamp(
     admin_gateway: SqlGateway, reader: FilesystemKnowledgeBaseReader, *, slug: str, collection: str
 ) -> Callable[[], Awaitable[KnowledgeBaseStamp]]:
-    """A stamp that reads the last index and the files moved since it through the admin gateway, on every answer.
-
-    Once Postgres refuses that read for want of a privilege, as it does the reader role, every later answer names the
-    knowledge base alone and reads nothing. Any other error is raised, and the next answer reads again.
-    """
+    """A stamp reading the last index and the files moved since it, naming the knowledge base alone once Postgres refuses that read."""
     slug_only = slug_only_stamp(slug)
     refused = False
 
