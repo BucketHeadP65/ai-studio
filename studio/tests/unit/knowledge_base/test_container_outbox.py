@@ -42,10 +42,7 @@ def _settings(tmp_path: Path) -> ApplicationSettings:
 async def test_the_production_bus_uses_the_postgres_outbox(tmp_path: Path) -> None:
     container = create_container(_settings(tmp_path), knowledge_base=KnowledgeBaseSettings(path=_knowledge_base_root(tmp_path)))
 
-    with (
-        container.override.injectable(target=AsyncEngine, new=_StubEngine()),
-        container.override.injectable(target=BatchEmbedder, new=FakeEmbedding()),
-    ):
+    with container.override({AsyncEngine: _StubEngine(), BatchEmbedder: FakeEmbedding()}):
         bus = await container.get(MessageBus)
 
     assert isinstance(bus.outbox, PostgresOutbox)
