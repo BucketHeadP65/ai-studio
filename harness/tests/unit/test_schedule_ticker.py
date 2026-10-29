@@ -906,8 +906,9 @@ async def test_a_refused_on_index_fire_keeps_its_pages(registry: StepRegistry, t
     assert session.active.task is None, "nothing was launched"
 
 
-async def test_a_cadence_change_clears_the_pending_pages() -> None:
-    """Pages collected under one cadence never ride a fire of another, such as one watching another knowledge base."""
+@pytest.mark.parametrize("cadence", ["on index other", "every 30m"], ids=["another knowledge base", "a cadence that is not on index"])
+async def test_a_cadence_change_clears_the_pending_pages(cadence: str) -> None:
+    """Pages collected from one knowledge base's indexes never ride a fire of another knowledge base or of the clock."""
     schedules = FakeSchedules()
     schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("a.one",))
     await schedules.insert(schedule)
@@ -916,22 +917,28 @@ async def test_a_cadence_change_clears_the_pending_pages() -> None:
         FakeWorkflowStore(specs={"wf-pages": _pages_spec()}),
         _pages_registry([]),
         schedule.id,
-        ScheduleUpdate(cadence="on index other"),
+        ScheduleUpdate(cadence=cadence),
         names=None,
         run_engine="in_process",
     )
 
     after = await schedules.get(schedule.id)
     assert after is not None
-    assert (after.cadence, after.pending_page_ids) == ("on index other", ())
+    assert (after.cadence, after.pending_page_ids) == (cadence, ())
 
 
 @pytest.mark.parametrize(
     "changes",
-    [ScheduleUpdate(enabled=False), ScheduleUpdate(cadence="on index notes"), ScheduleUpdate(cadence="On Index notes")],
-    ids=["no cadence", "the same cadence", "the same cadence spelled otherwise"],
+    [
+        ScheduleUpdate(enabled=False),
+        ScheduleUpdate(cadence="on index notes"),
+        ScheduleUpdate(cadence="On Index notes"),
+        ScheduleUpdate(cadence="on index notes quiet 10m"),
+    ],
+    ids=["no cadence", "the same cadence", "the same cadence spelled otherwise", "only another quiet period"],
 )
-async def test_a_change_that_keeps_the_cadence_keeps_the_pending_pages(changes: ScheduleUpdate) -> None:
+async def test_a_change_that_keeps_the_knowledge_base_keeps_the_pending_pages(changes: ScheduleUpdate) -> None:
+    """A change that still waits on the same knowledge base's indexes, such as one of its quiet period alone, keeps what it collected."""
     schedules = FakeSchedules()
     schedule = _schedule(workflow_id="wf-pages", arguments={}, cadence="on index notes", pending_page_ids=("a.one",))
     await schedules.insert(schedule)

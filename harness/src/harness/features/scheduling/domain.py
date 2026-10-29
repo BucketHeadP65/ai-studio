@@ -376,7 +376,8 @@ class ScheduleUpdate(BaseModel):
     clears_next_fire: bool = False
     """Set when the change makes the schedule rest: the next fire is cleared in the same write and `next_run_at` is ignored."""
     clears_pending_page_ids: bool = False
-    """Set when the change gives the schedule another cadence: its pending changed pages are cleared in the same write."""
+    """Set when the change gives the schedule another cadence, unless both are on index over the same knowledge base: its pending
+    changed pages are cleared in the same write."""
 
 
 ON_REFRESH_SUBSCRIBER = "schedules.on_refresh"

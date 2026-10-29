@@ -187,7 +187,8 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         schedule_id: The schedule's own id, as shown by `schedules`.
         run_engine: The engine this deployment runs workflows on. Temporal refuses a change to gate mode `orchestrate`.
         workflow_id: Point the schedule at a different saved workflow.
-        cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages the schedule collected.
+        cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages the schedule collected,
+            unless it is `on index` over the same knowledge base, so a change of the quiet period alone keeps them.
         arguments: Replace the workflow's parameters, each as the JSON value that parameter's own
             type asks for.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.

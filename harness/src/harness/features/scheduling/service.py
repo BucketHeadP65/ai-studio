@@ -266,6 +266,16 @@ def _cadence_or_none(text: str) -> Cadence | None:
         return None
 
 
+def _clears_pending_page_ids(held: Schedule, cadence: Cadence | None) -> bool:
+    """Whether a new cadence drops the collected pages, which it does unless it waits on the same knowledge base's indexes."""
+    if cadence is None:
+        return False
+    stored = _cadence_or_none(held.cadence)
+    if isinstance(cadence, OnIndexCadence) and isinstance(stored, OnIndexCadence):
+        return cadence.knowledge_base != stored.knowledge_base
+    return cadence != stored
+
+
 async def _selected_by(library: WorkflowLibrary, schedule: Schedule) -> frozenset[str]:
     """The knowledge bases a schedule's arguments select, read off the card of the version it fires."""
     workflow_id = await current_version(library, schedule.workflow_id)
@@ -494,6 +504,7 @@ class Scheduler:
         A schedule with no next fire, such as one whose fire failed, gets its next fire from its cadence again.
         A change that sets a cadence waiting for an event clears the next fire, so the schedule rests until something arms it.
         A change to another cadence clears the changed pages the schedule collected, so none rides a fire of the new cadence.
+        An on-index cadence over the same knowledge base keeps them, so a change of its quiet period alone loses no page.
         Turning the schedule off stamps it paused at `now`, and turning it on clears the stamp.
 
         Args:
@@ -539,7 +550,7 @@ class Scheduler:
                 "arguments": patched,
                 "next_run_at": None if rests else _restored_next_fire(held, changes, moment),
                 "clears_next_fire": rests,
-                "clears_pending_page_ids": cadence is not None and cadence != _cadence_or_none(held.cadence),
+                "clears_pending_page_ids": _clears_pending_page_ids(held, cadence),
                 "paused_at": held.paused_at_after(enabled=changes.enabled, now=moment),
             }
         )

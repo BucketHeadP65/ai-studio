@@ -1276,7 +1276,8 @@ workflow version declares no `changed_page_ids` stamps `refused: <workflow id> d
 rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-index schedule over a workflow
 that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow. A
 patch that gives the schedule another cadence clears its `pending_page_ids`, so no page collected under the old one
-rides a later fire. `POST /api/schedules/{id}/run-now` on an on-index schedule that has collected nothing passes an
+rides a later fire. A patch to another `on index` cadence over the same knowledge base keeps them, so a change of the
+quiet period alone loses no page. `POST /api/schedules/{id}/run-now` on an on-index schedule that has collected nothing passes an
 empty `changed_page_ids`, and a workflow that reads an empty value as every page then runs a full pass.
 
 **Gate policy** is `"wait"` (default: a gated fire waits for a person indefinitely) or `"fail_after:<seconds>"`, how
