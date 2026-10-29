@@ -69,9 +69,7 @@ async def test_a_chat_run_records_its_launch_and_its_finish(registry: StepRegist
 
     await run_workflow(_ctx(session), "draft", {"quarter": "Q2"}, run=_collaborators(session, tmp_path))
     run_id = session.active.run_id or ""
-    settlement = session.active.settlement
-    assert settlement is not None
-    await settlement
+    await _settled(session)
 
     assert _launches(log) == [session_events.RunLaunched(workflow_id="draft", run_id=run_id)]
     assert [entry.event for entry in run_events.events_for(session.state, run_id)] == [
@@ -101,12 +99,20 @@ async def test_a_paused_chat_run_records_its_launch_and_no_finish(call_log: Call
             break
         await asyncio.sleep(0.01)
     assert await service.pause(session)
-    settlement = session.active.settlement
-    assert settlement is not None
-    await settlement
+    await _settled(session)
 
     assert _launches(log) == [session_events.RunLaunched(workflow_id="draft", run_id=run_id)]
     assert [entry.event for entry in run_events.events_for(session.state, run_id)] == [RunLaunched(run_id=run_id, workflow_id="draft")]
+
+
+async def _settled(session: Runtime) -> None:
+    """Await the chat run's settlement and the outcome turn it hands back, so nothing runs past the test."""
+    settlement = session.active.settlement
+    assert settlement is not None
+    await settlement
+    delivery = session.active.delivery
+    assert delivery is not None
+    await delivery
 
 
 class _FinishedHandle:

@@ -501,6 +501,11 @@ async def test_a_poisoned_cadence_fails_only_that_schedule_and_the_ticker_surviv
     still_poisoned = await schedules.get(poisoned.id)
     assert still_poisoned is not None
     assert still_poisoned.last_run_at == poisoned_after.last_run_at, "no next_run_at means it never comes due again on its own"
+    relaunched = await schedules.get(healthy.id)
+    assert relaunched is not None
+    second = (await pool.get(relaunched.session_id)).active.task
+    assert second is not None
+    await second
 
 
 # --- shared capacity pools -----------------------------------------------------------------

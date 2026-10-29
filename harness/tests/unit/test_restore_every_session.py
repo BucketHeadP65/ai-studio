@@ -697,6 +697,9 @@ async def test_a_chat_launch_over_a_restart_paused_run_is_refused_until_it_is_st
     assert not runtime.active.paused_by_restart
     await _until(lambda: _gate_is_open(runtime), what="the chat run never reached its gate")
     assert await service.stop(runtime, records=records_under(after))
+    delivery = runtime.active.delivery
+    assert delivery is not None
+    await delivery
 
     assert service.run_phase(runtime) is None
     pool.evict_idle(older_than_minutes=0)

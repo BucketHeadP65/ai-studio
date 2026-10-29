@@ -566,6 +566,7 @@ async def test_a_run_name_at_the_bound_still_launches(tmp_path: Path) -> None:
         assert started.status_code == 200, started.text
         session = await pool.get(started.json()["session_id"])
         assert session.active.run_title == name
+        await _finished(pool, started.json()["session_id"])
 
 
 async def test_a_launch_that_names_no_run_leaves_the_record_untitled(tmp_path: Path) -> None:
