@@ -379,3 +379,42 @@ test("an edge drawn right to left keeps its label upright, just under its line",
     .locator(".sigma-container")
     .screenshot({ path: test.info().outputPath("right-to-left-label.png") });
 });
+
+// A node picked by a click stays selected after the pointer leaves, and its edges keep their
+// labels, even where the camera flies so close that the node at the other end is off screen.
+test("a selected node keeps its edge labels after the pointer leaves", async ({ page }) => {
+  await mockApi(page, { nodes: NODES, edges: EDGES });
+  await openGraph(page);
+  await expect.poll(() => edgeLabelPixels(page), { timeout: 15_000 }).toBeGreaterThan(50);
+
+  // Paper B and Concept D are the lowest node of each colour, joined by Paper B's "defines" edge.
+  const paper = await nodeOnPage(page, PAPER_BLUE, "bottom");
+  const concept = await nodeOnPage(page, CONCEPT_PURPLE, "bottom");
+  await page.mouse.click(paper.x, paper.y);
+  await page.mouse.move(0, 0);
+  await expect(page.getByText("Paper B").last()).toBeVisible();
+  await expect
+    .poll(() => selectedLabelPixels(page, PAPER_BLUE), { timeout: 10_000 })
+    .toBeGreaterThan(40);
+
+  // The camera lands Paper B at the canvas center at twice the zoom, which puts Concept D off
+  // screen. The label sits beside the middle of the line, clear of the highlighted line itself.
+  const origin = await canvasOrigin(page);
+  const box = await page.locator(".sigma-container").boundingBox();
+  if (box === null) throw new Error("no graph container");
+  const center = { x: origin.x + box.width / 2, y: origin.y + box.height / 2 };
+  const end = { x: center.x + 2 * (concept.x - paper.x), y: center.y + 2 * (concept.y - paper.y) };
+  const measured = `beside the edge from the lowest blue node ${at(paper)}, taken as Paper B, to the lowest purple node ${at(concept)}, taken as Concept D`;
+  await expect
+    .poll(
+      async () => {
+        const { above, below } = await labelSides(page, center, end, 3);
+        return above + below > 40 ? "labelled" : `${above + below} label pixels ${measured}`;
+      },
+      { timeout: 5_000 },
+    )
+    .toBe("labelled");
+  await page
+    .locator(".sigma-container")
+    .screenshot({ path: test.info().outputPath("selected-keeps-edge-labels.png") });
+});

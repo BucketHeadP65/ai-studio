@@ -65,7 +65,10 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
     // ego-network at a time, and the selected node is ringed and always labelled
     // so the reader can find what they searched for. A node raised to the top
     // layer raises its label too: sigma draws the ring by depth and the label by
-    // labelDepth, so a label left below would sit under its own ring.
+    // labelDepth, so a label left below would sit under its own ring. Every edge of
+    // the hovered or selected node shows its label, even when the node at its other
+    // end is off screen: sigma itself labels an edge only when both its nodes show
+    // their labels or one of them is hovered.
     nodeReducer: (node, _data, _attributes, _state, _graphState, graph) => {
       const { hovered, selectedId } = focus.current;
       const center = hovered ?? selectedId;
@@ -88,7 +91,7 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
       const center = hovered ?? selectedId;
       if (center === null) return {};
       if (graph.source(edge) === center || graph.target(edge) === center) {
-        return { color: "#94a3b8", depth: "topEdges" };
+        return { color: "#94a3b8", depth: "topEdges", labelVisibility: "visible" as const };
       }
       return { color: MUTED, label: "" };
     },
