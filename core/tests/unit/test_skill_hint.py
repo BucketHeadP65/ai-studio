@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelAPIError
-from pydantic_ai.messages import ImageUrl, ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.messages import ImageUrl, ModelMessage, ModelResponse, SystemPromptPart, TextPart, ToolCallPart
 from pydantic_ai.models.decision import ChoiceQuestion
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -55,7 +55,7 @@ async def test_the_hint_names_the_pick_on_the_first_request() -> None:
     assert said.startswith("<system-reminder>")
 
 
-async def test_the_hint_reaches_the_model_and_is_never_saved() -> None:
+async def test_the_hint_reaches_the_model_once_and_is_saved_for_its_own_request_only() -> None:
     seen: list[list[ModelMessage]] = []
 
     def _answer(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
@@ -78,7 +78,10 @@ async def test_the_hint_reaches_the_model_and_is_never_saved() -> None:
 
     assert _HINT in str(seen[0]), "the first request carries the hint"
     assert _HINT not in str(seen[1]), "the second request does not, not even in the history it re-sends"
-    assert _HINT not in str(result.all_messages()), "the saved history never holds it"
+    saved = [part for message in result.all_messages() for part in message.parts if _HINT in str(part)]
+    assert [(type(part), getattr(part, "scope", None)) for part in saved] == [(SystemPromptPart, "request")], (
+        "the history holds it once, scoped to the request it was sent on"
+    )
 
 
 async def test_a_later_request_gets_no_hint() -> None:
