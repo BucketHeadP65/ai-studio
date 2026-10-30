@@ -248,8 +248,9 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 ### UE-19. `SkillHint` (core): a dynamic reminder naming the skill a decision model picks
 
 - **What:** a `SystemReminders` dynamic reminder that asks a decision model which mounted skill a run's prompt needs, on the
-  run's first model request only, and names it in one line when the averaged probability clears a threshold. It is never
-  saved to the history. A missing prompt, no unloaded skill, a "(none)" pick, a weak pick or a failed model all answer nothing.
+  run's first model request only, and names it in one line when the averaged probability clears a threshold. Since
+  pydantic-ai-harness 0.62 the history holds it once, as a system prompt part scoped to that request, which no later
+  request sends again. A missing prompt, no unloaded skill, a "(none)" pick, a weak pick or a failed model all answer nothing.
 - **Where:** `core/src/core/ai/skill_hint.py`, tests in `core/tests/unit/test_skill_hint.py`, mounted on the harness chat
   agent by `harness/src/harness/features/authoring/skill_hint.py`.
 - **Since:** 2026-10-06.

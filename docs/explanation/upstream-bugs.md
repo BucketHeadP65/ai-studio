@@ -244,10 +244,33 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** a chat run's delivery task is on the session (`session.active.delivery`), and those tests await it, so no
   outcome turn is cancelled mid-flight (`harness/tests/unit/test_chat_run_visibility.py`, `test_run_launch_events.py`,
   `test_restore_every_session.py`). Production shutdown is unchanged.
-- **Upstream state:** present in 2.60.0. The ask is that `gather` close every coroutine it never started.
+- **Upstream state:** present in 2.60.0, and `gather` is unchanged in 2.63.0. The ask is that `gather` close every coroutine it
+  never started.
 - **Issue:** not filed.
 - **Repro:** create two job coroutines, wrap `pydantic_ai._utils.gather(*jobs)` in a task, cancel it before it first runs, and
   collect garbage: two "coroutine 'job' was never awaited" warnings. The same with `asyncio.gather` gives none.
+
+## UB-10. `sanitize_messages` warns about the message id `load_messages` wrote itself
+
+- **Library:** pydantic-ai 2.61.0 to 2.63.0 (`pydantic_ai/messages.py`, `sanitize_messages`. `pydantic_ai/ui/_utils.py`,
+  `set_ui_message_id`).
+- **Symptom:** `UserWarning: Framework-reserved __pydantic_ai__ metadata was dropped from 1 client-submitted message(s)` on
+  every chat turn, for a request whose messages carry no metadata at all.
+- **Cause:** `VercelAIAdapter.load_messages`, a public classmethod, keeps each UI message's id in the reserved
+  `__pydantic_ai__` namespace of the message it builds. Since 2.61 the public `sanitize_messages` drops that namespace from
+  client messages and warns each time. The adapter's own `UIAdapter.sanitize_messages` sets the id aside first, through the
+  private helpers `get_ui_message_id`, `without_ui_message_id` and `set_ui_message_id`, so it never warns. A caller that loads
+  client messages with the public classmethod and sanitizes them with the public function, as the docstrings of both suggest
+  for client-held history, gets the warning and loses the id.
+- **Grade:** cosmetic for us. The turn reads only the typed text, so the lost id changes nothing.
+- **Found:** 2026-10-30, Task 49, the harness unit tier on 2.63: 53 warnings, all from `harness.features.authoring.wire`.
+- **What we did:** `messages_of` drops every client message's metadata before `sanitize_messages`, so nothing reserved is left
+  to drop (`34e13af`).
+- **Upstream state:** present in 2.63.0. The ask is that `sanitize_messages` keep or silently drop the UI message id that
+  `load_messages` wrote, or that the three helpers be public.
+- **Issue:** not filed.
+- **Repro:** `sanitize_messages(VercelAIAdapter.load_messages([UIMessage(id="m-1", role="user", parts=[TextUIPart(text="hi")])]))`
+  under `warnings.simplefilter("error")` raises the `UserWarning` above.
 
 ## Upstream changes that required adaptation (not bugs)
 
@@ -314,3 +337,32 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **The files plugin's refusal of a note sidecar** reached the model as a retry in 2.59 and still does in 2.60, now as
   a retried return with the cause `model_retry`. The 2.60 trial saw a raised `PermissionError` only because the test's
   model never recognised the new retry part, kept calling, and spent the tool's one retry.
+- **`CapabilityStore.write` keeps a validated version when new code fails, and `_upsert` is gone** (pydantic-ai-harness
+  0.61.0). Code that fails validation over a version that validated replaces nothing: the store keeps `<name>.py` and its
+  manifest entry, saves the rejected code as `<name>.rejected.py`, returns a record that is not in the manifest, and tells
+  the model the previous version is unchanged. Writes and `disable` hold a lock per directory. `FileCustomCapabilities.write`
+  lands a written entry disabled through the store's own `disable`, and leaves a rejected rewrite as the store leaves it:
+  the kept version keeps its status and nothing is recorded (`34e13af`).
+- **`SystemReminders` keeps a reminder in the history as a request-scoped system prompt** (pydantic-ai-harness 0.62.0).
+  A dynamic reminder is a `SystemPromptPart(scope='request')` in a request of its own, sent with the request it was made
+  for and never again. The skill hint (UE-19) is therefore in each run's messages and in the conversation record, which
+  keeps the scope through its JSON form, so a later turn does not send it again. Its test expects it there once
+  (`c78d246`).
+- **`CodeMode` defaults to `dynamic_catalog=True`** (pydantic-ai-harness 0.63.0). The catalog of sandboxed functions moves
+  from `run_code`'s description into an instruction block that is appended to when a tool is revealed. The chat agent, a
+  workflow step's worker, a turn worker and the evaluation agent pass `dynamic_catalog=False`, so the catalog stays in
+  `run_code`'s description (`34e13af`, `160cf10`). Taking the new default is open: each conversation misses the prompt
+  cache once, and evaluation results stop comparing with earlier runs.
+- **`GraphBuilder` starts broadcast branches in `.to()` order** (pydantic-graph 2.62.0). They used to start reversed. The
+  in-process engine's run log is keyed by node id, so a finished node stays finished across a restart, and only the order
+  in which parallel branches run changes. The restore test that holds one branch mid-flight holds the right branch, which
+  now runs last (`34e13af`). Upstream warns that a durable workflow paused across the upgrade may not replay, which
+  concerns a Temporal run waiting inside parallel branches at the restart.
+- **Messages dump three new fields** (pydantic-ai 2.61.0 to 2.63.0): `ModelResponse.canonical_system`,
+  `TextPart.citations` and `CompactionPart.metadata`, `null` by default, and `ModelRequestParameters` gains
+  `instruction_visibility`. Message keys do not change, since they are built from timestamps and part names. The record
+  stores a message re-sent under 2.63 as a new form, once per message, and a request's parameters as a new set, which costs
+  space, never correctness. A checkpoint committed before the upgrade digests differently after it, so on the Temporal
+  engine a step conversation in flight across the restart is refused with `ContinuationUnsafeReplayError`. Nothing was
+  moved forward: the in-process engine never reads a checkpoint, and no durable run may be in flight when the harness
+  restarts.

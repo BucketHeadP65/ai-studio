@@ -48,6 +48,10 @@ through `check_draft` to `save_workflow`, with the same lineage and evidence. Se
 harness-side store instead of the vendor's default one. The vendor's `CapabilityStore.write()` activates a validated
 capability the moment it lands. `FileCustomCapabilities.write()` overrides that single method to land every entry
 `disabled` regardless of whether it validated. Pending is the only landing state, not a fallback for a broken one.
+A rewrite that fails validation over a version that validated lands nothing: the vendor store keeps that version's file
+and manifest entry, saves the rejected code beside it as `<name>.rejected.py`, and tells the agent the previous version is
+unchanged. The kept version keeps its status, active or pending, and nothing is recorded, since the reviewed code is still
+the code that runs.
 
 `activate(name)` / `deactivate(name)` are `harness`'s own acts. `disable(name)` is the agent's own
 `disable_custom_capability` tool, reused from the vendor toolset, attested with `via="agent"` rather than
