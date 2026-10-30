@@ -14,8 +14,9 @@ two groups proposing the same new stance make one item, a changed page the recor
 stance alone, a changed page whose file lies outside the records base's root is still admitted, a repeated pair is
 listed once, a full pass lists every pair with no cap, and the refresh worker is granted read_page to patch the stance
 it reads. Then the stances the run cannot read: one read_page refuses
-and one carrying a field the workflow does not declare are both named and left alone while the run carries on, and a
-new draft never takes the id of a stance that exists or a path the model chose, and is refused without its page.
+and one carrying a field the workflow does not declare are both named and left alone while the run carries on, while
+one carrying the `created` date write_note stamps is read and written back with it, and a new draft never takes the
+id of a stance that exists or a path the model chose, and is refused without its page.
 """
 
 from __future__ import annotations
@@ -435,7 +436,11 @@ async def test_an_existing_stance_draft_without_its_changes_is_refused(sandbox: 
 
     def answer_the_whole_page(item: Item) -> dict[str, object]:
         draft = {key: value for key, value in _rewritten(item).items() if key != "changes"}
-        return {**draft, "payload": item["current"]}
+        current = item["current"]
+        assert current is not None
+        # A whole page answered as a draft takes the new stance's shape, which declares no created.
+        frontmatter = {key: value for key, value in current["frontmatter"].items() if key != "created"}
+        return {**draft, "payload": {**current, "frontmatter": frontmatter}}
 
     state = await _run(sandbox, bases, Scripted(rewrite=answer_the_whole_page), changed="adr-x")
 
@@ -658,6 +663,21 @@ async def test_a_stance_with_an_undeclared_frontmatter_field_is_named_and_the_ru
     assert scripted.items == []
     assert bases.writes == []
     assert _outcome(state) == "noop"
+
+
+async def test_a_stance_carrying_created_is_read_and_written_back_with_it(sandbox: AsyncMonty) -> None:
+    stance = _stance("x", record="adr-x", created="2026-10-29")
+    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": stance})
+
+    state = await _run(sandbox, bases, Scripted(), changed="adr-x")
+
+    changes = _value(state, "list_changes")
+    assert changes["unread"] == [], "the date write_note stamps on every page it writes keeps no page out of the next run"
+    kept: list[StanceAsRead] = to_jsonable_python(changes["stances"])
+    assert [stance["stance_id"] for stance in kept] == ["stance.x"]
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
+    assert bases.writes[0]["payload"]["frontmatter"]["created"] == "2026-10-29", "the page keeps the date it was first written on"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
 
 
 async def test_a_new_draft_taking_an_existing_stance_id_is_never_written(sandbox: AsyncMonty) -> None:

@@ -1,7 +1,7 @@
 ---
 title: List stance changes
 summary: The records pages at a status that counts, listed whole or narrowed to the changed ids, beside every stance page as it stood before the run and the stances it could not read.
-version: 1
+version: 2
 step:
   name: list_stance_changes
   source: |
@@ -26,7 +26,7 @@ step:
     capped = len(wanted) > 0 and qualified > 25
     if capped:
         admitted = []
-    carried = ["id", "type", "title", "summary", "status", "record", "synthesizes", "recommends", "advises_against", "aliases", "superseded_by", "decision_reason"]
+    carried = ["id", "type", "title", "summary", "status", "record", "synthesizes", "recommends", "advises_against", "aliases", "superseded_by", "decision_reason", "created"]
     stances = []
     stance_ids = []
     unread = []
@@ -112,6 +112,7 @@ step:
                         items: {type: string}
                       superseded_by: {type: string}
                       decision_reason: {type: string}
+                      created: {type: string}
                   sections:
                     type: array
                     items:
@@ -151,4 +152,5 @@ of `collection` whole, as it stands before the run, so a later step can check a 
 it. `stance_ids` names every stance listed, read or not. A stance read_page refuses, or one carrying a frontmatter
 field this step does not declare, is left out of `stances` and named in `unread` with the reason, because its
 rewrite could not be checked or could not keep that field. Its `record` is given when the page was read and is
-empty when read_page refused it.
+empty when read_page refused it. The fields it declares include `created`, the date write_note stamps on a page
+written without one, answered as the page carries it and null when the page carries none.
