@@ -58,7 +58,8 @@ def build_agent(
     if code_mode:
         from engram.evals.harness.code_mode import ModelCallsCodeMode  # noqa: PLC0415 (lazy: it loads the Monty sandbox)
 
-        capabilities.append(ModelCallsCodeMode())
+        # The function catalog stays in `run_code`'s description. Moved into the instructions, results stop comparing with earlier runs.
+        capabilities.append(ModelCallsCodeMode(dynamic_catalog=False))
     if extra_capabilities:
         capabilities.extend(extra_capabilities)
     return Agent(

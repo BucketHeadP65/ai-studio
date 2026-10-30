@@ -40,8 +40,8 @@ dependencies = [
     "openai>=1.60.0",
     "pgvector>=0.5.1",
     "pydantic>=2.13.4",
-    "pydantic-ai>=2.60.0",
-    "pydantic-ai-harness[code-mode]>=0.60.0",
+    "pydantic-ai>=2.63.0",
+    "pydantic-ai-harness[code-mode]>=0.63.0",
     "pydantic-evals>=2.0.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.4",
@@ -82,6 +82,7 @@ testpaths        = ["tests/unit", "tests/integration"]
 python_classes   = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode     = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts          = ["--verbose", "--tb=short"]
 filterwarnings   = ["module::DeprecationWarning"]
 
