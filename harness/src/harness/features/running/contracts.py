@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from core.lazy_imports import lazy_module_attributes
 
 from harness.features.running.api_models import AutomodeRequest, Decision, ResumeRequest
-from harness.features.running.conversations import StepConversation, StepConversations, conversation_key
+from harness.features.running.conversations import DroppedAttempt, StepConversation, StepConversations, conversation_key
 from harness.features.running.domain.progress import GateVerdict, LiveProgress, PendingReview
 from harness.features.running.exceptions import (
     AutomodeUnavailableError,
@@ -46,6 +46,7 @@ __all__ = [
     "AutomodeRequest",
     "AutomodeUnavailableError",
     "Decision",
+    "DroppedAttempt",
     "DurableTurns",
     "GateAsker",
     "GateVerdict",

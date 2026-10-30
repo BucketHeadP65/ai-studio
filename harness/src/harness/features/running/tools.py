@@ -386,9 +386,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
                     spec=requested.spec,
                     params=dict(requested.arguments),
                     values=run_log.state.values,
-                    conversations={
-                        name: conversation.messages for name, conversation in session.active.conversations.conversations.items()
-                    },
+                    conversations=session.active.conversations.archived(),
                     gates_approved=gates_approved,
                     gates_rejected=gates_rejected,
                     gates_auto=auto,

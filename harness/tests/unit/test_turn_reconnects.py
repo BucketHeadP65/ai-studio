@@ -1,0 +1,244 @@
+"""What a step's line keeps when an attempt at its turn loses its model connection.
+
+The engine performs such a turn again from the history it began with. The line keeps every broken
+attempt apart from that history: the run archive still files what each attempt exchanged, each
+attempt's model responses reach the run's spend rows, and a steer the broken attempt had already
+taken in reaches the next attempt. Every test drives one map item through `build_environment`'s own
+`run_defined_step`, with `FunctionModel` standing in for the provider.
+"""
+
+from __future__ import annotations
+
+import json
+
+from dataclasses import replace
+from typing import TYPE_CHECKING, Any, cast
+
+from core.ai.workflows.contracts import (
+    Briefing,
+    FromNode,
+    FromParameter,
+    MapNode,
+    Outcome,
+    ParameterSpec,
+    Shape,
+    StepRegistry,
+    Workflow,
+    WorkflowArguments,
+    run_workflow,
+)
+from pydantic_ai.exceptions import ModelConnectionError
+from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+
+from harness.composition import build_environment
+from harness.features.running.service import archive_run
+from harness.session import ActiveRun, NoSessionLog, Runtime
+from harness.settings import WebSearchSettings
+from tests.conftest import ApproveAll
+from tests.support.environment import fake_engram
+from tests.support.fakes.spend import FakeSpendLog
+from tests.support.state import a_state, records_under
+from tests.support.tiers import tiers_under
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator, Sequence
+    from pathlib import Path
+
+    from pydantic_ai.messages import ModelMessage
+    from pydantic_ai.models.function import AgentInfo, DeltaToolCalls
+
+    from harness.features.running.contracts import RunRecords, StepConversation
+    from harness.features.running.spend import SpendRow
+
+ITEM_SCHEMA = {"type": "object", "title": "Digest", "properties": {"title": {"type": "string"}}, "required": ["title"]}
+WORKING = "Working on it."
+HALF_SAID = "half an answer"
+STEER = "Use the short title."
+
+DIGEST = Briefing(
+    name="digest",
+    instructions="Read the item and answer with its title, exactly as the item gives it.",
+    inputs={"item": Shape(json_schema=ITEM_SCHEMA)},
+    output=Shape(json_schema=ITEM_SCHEMA),
+)
+SPEC = Workflow(
+    name="digest-each",
+    version=1,
+    description="One worker per item answers with the item's title.",
+    parameters={"items": ParameterSpec(description="items to digest", json_schema={"type": "array", "items": ITEM_SCHEMA})},
+    inline=(DIGEST,),
+    nodes=(MapNode(id="each_item", turns=("digest",), over=FromParameter(parameter="items"), each="item", on_error="skip"),),
+    output=FromNode(node="each_item"),
+)
+ITEMS: WorkflowArguments = {"items": [{"title": "quantum computing"}]}
+
+
+class FiledRows(FakeSpendLog):
+    """A spend ledger that keeps every row a step files, in order."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[SpendRow] = []
+
+    def record(self, run_id: str, workflow_id: str, rows: Sequence[SpendRow]) -> None:
+        del run_id, workflow_id
+        self.rows.extend(rows)
+
+
+async def _no_wait(seconds: float) -> None:
+    del seconds
+
+
+def _answer(info: AgentInfo) -> DeltaToolCalls:
+    """The item's title, through the turn's own output tool."""
+    return {0: DeltaToolCall(name=info.output_tools[0].name, json_args=json.dumps({"title": "quantum computing"}))}
+
+
+def _broken() -> ModelConnectionError:
+    model_name = "test-model"
+    return ModelConnectionError(model_name, "Connection error.", phase="read", in_stream=True)
+
+
+def _the_items_line(active: ActiveRun) -> StepConversation:
+    (line,) = [held for (node, _), held in active.conversations.conversations.items() if node == "each_item"]
+    return line
+
+
+def _active_run() -> ActiveRun:
+    active = ActiveRun()
+    active.run_id, active.workflow_id = "run-1", "wf.digest-each"
+    return active
+
+
+async def _environment(model: FunctionModel, active: ActiveRun, tmp_path: Path, records: RunRecords) -> StepRegistry:
+    return await build_environment(
+        model,
+        engram=fake_engram(),
+        active=active,
+        external_agents=dict,
+        session_log=NoSessionLog(),
+        custom=tmp_path / "custom",
+        records=records,
+        web_search=WebSearchSettings(),
+        tiers=tiers_under(tmp_path),
+    )
+
+
+def _kinds(messages: Sequence[ModelMessage]) -> list[str]:
+    return [message.kind for message in messages]
+
+
+def _user_prompts(messages: Sequence[ModelMessage]) -> list[str]:
+    return [str(part.content) for message in messages for part in message.parts if isinstance(part, UserPromptPart)]
+
+
+async def test_an_item_that_lost_all_three_attempts_archives_what_each_attempt_exchanged(tmp_path: Path) -> None:
+    """Each attempt answers in text, is told to use its output tool, and loses its connection part way through the next answer."""
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        del info
+        calls.append(list(messages))
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            yield WORKING
+            return
+        yield HALF_SAID
+        raise _broken()
+
+    active = _active_run()
+    records = replace(records_under(tmp_path), spend=FiledRows())
+    environment = await _environment(FunctionModel(stream_function=stream), active, tmp_path, records)
+
+    result = await run_workflow(SPEC, environment, params=ITEMS, approval=ApproveAll(), sleep=_no_wait)
+
+    assert result == []
+    assert len(calls) == 6, "two requests in each of three attempts"
+    line = _the_items_line(active)
+    assert line.messages == [], "no attempt settled, and none is fed to a later one"
+    exchanged = active.conversations.archived()[next(iter(active.conversations.conversations))]
+    assert _kinds(exchanged) == ["request", "response", "request", "response"] * 3
+    assert len(_user_prompts(exchanged)) == 3
+    texts = [part.content for message in exchanged for part in message.parts if isinstance(part, TextPart)]
+    assert texts == [WORKING, HALF_SAID] * 3, "each attempt's answer, and what it said before the break"
+
+    session = Runtime(registry=StepRegistry(), library=cast("Any", None), agent=cast("Any", None), session_log=NoSessionLog(), state=a_state(tmp_path))
+    session.active.workflow_id, session.active.started_at = "wf.digest-each", "2026-10-30T00:00:00+00:00"
+    archive_run(
+        session,
+        archive=records.archive,
+        outcome="completed",
+        failure="",
+        runner="app:harness",
+        spec=SPEC,
+        params=dict(ITEMS),
+        values={},
+        conversations=active.conversations.archived(),
+        gates_approved=(),
+        gates_rejected={},
+        gates_auto=(),
+        result=Outcome(status="unknown", summary="no result declared"),
+    )
+    record = records.archive.get(records.archive.recent(1)[0].run_id)
+    assert record is not None
+    ((key, filed),) = record.conversations.items()
+    assert key.startswith("each_item[")
+    assert [entry["kind"] for entry in filed] == ["request", "response", "request", "response"] * 3
+
+
+async def test_a_dropped_attempts_responses_reach_the_spend_rows(tmp_path: Path) -> None:
+    """The first attempt's answer and its broken answer are filed although that attempt failed, and so is the second attempt's."""
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == 1:
+            yield WORKING
+            return
+        if len(calls) == 2:
+            yield HALF_SAID
+            raise _broken()
+        yield _answer(info)
+
+    active = _active_run()
+    ledger = FiledRows()
+    records = replace(records_under(tmp_path), spend=ledger)
+    environment = await _environment(FunctionModel(stream_function=stream), active, tmp_path, records)
+
+    result = await run_workflow(SPEC, environment, params=ITEMS, approval=ApproveAll(), sleep=_no_wait)
+
+    assert isinstance(result, list)
+    assert len(result) == 1, "the item settled on its second attempt"
+    assert len(calls) == 3
+    assert [row.step for row in ledger.rows] == ["digest"] * 3, "the dropped attempt's two responses, then the answer"
+    assert all(row.output_tokens > 0 for row in ledger.rows)
+
+
+async def test_a_steer_the_broken_attempt_took_in_reaches_the_next_attempt(tmp_path: Path) -> None:
+    """The steer lands while the first attempt answers. Its next request takes it in, then breaks."""
+    active = _active_run()
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == 1:
+            _the_items_line(active).steer_inbox.append(STEER)
+            yield WORKING
+            return
+        if len(calls) == 2:
+            yield HALF_SAID
+            raise _broken()
+        yield _answer(info)
+
+    environment = await _environment(FunctionModel(stream_function=stream), active, tmp_path, replace(records_under(tmp_path), spend=FiledRows()))
+
+    await run_workflow(SPEC, environment, params=ITEMS, approval=ApproveAll(), sleep=_no_wait)
+
+    def steered(messages: Sequence[ModelMessage]) -> bool:
+        return any(isinstance(message, ModelRequest) and STEER in _user_prompts([message]) for message in messages)
+
+    assert len(calls) == 3
+    assert steered(calls[1]), "the broken attempt took the steer in"
+    assert not any(isinstance(message, ModelResponse) for message in calls[2]), "the next attempt starts from the turn's own start"
+    assert steered(calls[2]), "and the steer reaches it again"
+    assert _the_items_line(active).steer_inbox == []

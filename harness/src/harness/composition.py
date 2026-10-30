@@ -122,6 +122,7 @@ from harness.features.followme.contracts import FollowMe, act_toolset, verb_tool
 from harness.features.projects.contracts import memory_mounts, sanitize_segment
 from harness.features.running import contracts as running
 from harness.features.running.contracts import (
+    DroppedAttempt,
     RunGraphRefusedError,
     RunRecords,
     RunStateRefusedError,
@@ -258,12 +259,22 @@ def _repair_asked_for(prompt: str) -> str:
 
 
 @contextmanager
-def _keeping_a_stopped_turn(line: StepConversation) -> Generator[None]:
-    """Write what a failed or cut-off turn exchanged onto `line` for the next call, unless a `ModelConnectionError` ended it."""
+def _keeping_a_stopped_turn(
+    line: StepConversation,
+    *,
+    history: Sequence[ModelMessage],
+    steering: StepSteerDelivery,
+    billed: Callable[[Sequence[ModelMessage]], None],
+) -> Generator[None]:
+    """Write a failed or cut-off turn onto `line`, an attempt a `ModelConnectionError` ended apart from its history, billed, its steers put back."""
     with capture_run_messages() as messages:
         try:
             yield
         except ModelConnectionError:
+            added = tuple(messages[len(history) :])
+            line.dropped_attempts.append(DroppedAttempt(after=len(history), last_given=history[-1] if history else None, messages=added))
+            line.steer_inbox[:0] = steering.delivered
+            billed(added)
             raise
         except BaseException:
             line.messages = list(messages)
@@ -647,9 +658,13 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
             prompt = briefing or "You have no inputs. Work from your instructions alone."
             prompt = _repair_asked_for(prompt)
             prompt += "\n\n" + _budget_line(budget, tool_calls)
+            steering = StepSteerDelivery(line)
+            stopped = _keeping_a_stopped_turn(
+                line, history=(), steering=steering, billed=lambda produced: _record_spend(current, task.name, produced, records.spend)
+            )
             try:
-                with step_baggage(current, task.name), _keeping_a_stopped_turn(line):
-                    result = await run_relayed(worker, line, prompt, usage_limits=usage_limits, capabilities=[StepSteerDelivery(line)])
+                with step_baggage(current, task.name), stopped:
+                    result = await run_relayed(worker, line, prompt, usage_limits=usage_limits, capabilities=[steering])
             finally:
                 line.executing = False
             current.conversations.settle(key, result.all_messages())
@@ -711,15 +726,20 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         monitor = line.monitor if line is not None and line.monitor is not None else WarnOnCacheBusts()
         opened = current.conversations.open(key, step=task, output_type=output_type, instructions=instructions, monitor=monitor)
         worker = _turn_worker(surface=list(dict.fromkeys(turn.outputs)), instructions=instructions, monitor=monitor)
+        history = list(line.messages) if line is not None else []
+        steering = StepSteerDelivery(opened)
+        stopped = _keeping_a_stopped_turn(
+            opened, history=history, steering=steering, billed=lambda produced: _record_spend(current, task.name, produced, records.spend)
+        )
         try:
-            with step_baggage(current, task.name), _keeping_a_stopped_turn(opened):
+            with step_baggage(current, task.name), stopped:
                 result = await run_relayed(
                     worker,
                     opened,
                     _turn_prompt(),
-                    message_history=line.messages if line is not None else None,
+                    message_history=history or None,
                     usage_limits=usage_limits,
-                    capabilities=[StepSteerDelivery(opened)],
+                    capabilities=[steering],
                 )
         finally:
             opened.executing = False
@@ -753,15 +773,20 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         briefing = "\n\n".join(f"### {name}\n{as_text(value)}" for name, value in inputs.items())
         prompt = briefing or "You have no inputs. Work from your instructions alone."
         prompt = _repair_asked_for(prompt)
+        history = list(line.messages)
+        steering = StepSteerDelivery(line)
+        stopped = _keeping_a_stopped_turn(
+            line, history=history, steering=steering, billed=lambda produced: _record_spend(current, step.name, produced, records.spend)
+        )
         try:
-            with step_baggage(current, step.name), _keeping_a_stopped_turn(line):
+            with step_baggage(current, step.name), stopped:
                 result = await run_relayed(
                     worker,
                     line,
                     prompt,
-                    message_history=line.messages or None,
+                    message_history=history or None,
                     usage_limits=UsageLimits(request_limit=budget),
-                    capabilities=[StepSteerDelivery(line)],
+                    capabilities=[steering],
                 )
         finally:
             line.executing = False

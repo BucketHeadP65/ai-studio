@@ -617,6 +617,11 @@ async def test_a_turn_whose_connection_broke_starts_again_from_the_history_it_be
     assert _last_user_prompt(retried) == _last_user_prompt(broken)
     assert not any(isinstance(part, TextPart) and half_said in part.content for message in retried for part in message.parts)
     assert _turn_index(_the_items_line(active).messages) == 2, "the settled line holds three turns, each once"
+    exchanged = _the_items_line(active).exchanged
+    prompts = [index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, UserPromptPart)]
+    broken_at = next(index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, TextPart) and half_said in part.content)
+    assert len(prompts) == 4, "what the line exchanged keeps the broken attempt's prompt beside the three settled ones"
+    assert prompts[1] < broken_at < prompts[2], "the broken attempt sits between turn one and the attempt that settled turn two"
     assert waits == [2.0]
 
 

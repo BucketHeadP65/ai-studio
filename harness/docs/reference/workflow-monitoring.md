@@ -216,7 +216,8 @@ gate) opens a conversation line the moment it starts executing, keyed by its nod
 routes below read and write that line while the run is held in the session pool. They are session-scoped only, because
 the inspector always holds the run's session. Once the run ends, the same conversations are in the full archive record's `conversations` map
 (keyed `"node[item]"`, the item empty for a step that is not a map item, so `"node[]"`), so an ended run needs no route of
-its own.
+its own. A line's archived conversation also holds every attempt at one of its turns that lost its model connection,
+placed where that attempt began, although the attempt after it started from the history the turn began with.
 
 ```
 GET    /api/sessions/{id}/run/steps                                 -> {"steps": [{"node", "item", "executing", "settled"}, ...]}
@@ -239,7 +240,8 @@ first token whenever the buffer still holds it. A steer is accepted only while t
 and echoed onto the stream at once as a `data-steer` chunk (`{"message", "at"}`) so every viewer sees the person's
 words, and the step's own delivery capability folds it into the step's next model request the way the chat's mid-turn
 steer does, inside the run's loop, never as a concurrent write to its history (upstream delivers it into the request
-the drain ran ahead of, or redirects a run that was about to end into one more request). A steer spends inside the step's
+the drain ran ahead of, or redirects a run that was about to end into one more request). A steer an attempt took in before
+its model connection broke goes back on the inbox, so the next attempt at the turn takes it in again. A steer spends inside the step's
 stated request budget. A step that overruns because of one fails as any overrun does.
 
 Live streaming and steering need the in-process engine (the default): on the temporal

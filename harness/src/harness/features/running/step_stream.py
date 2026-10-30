@@ -143,6 +143,8 @@ class StepSteerDelivery(AbstractCapability[None]):
             conversation: The line whose steer inbox this drains.
         """
         self._conversation = conversation
+        self.delivered: list[str] = []
+        """Every steer this capability moved into its run, oldest first."""
 
     async def before_model_request(self, ctx: RunContext[None], request_context: ModelRequestContext) -> ModelRequestContext:
         """Queue whatever the line's inbox is holding since the last model request.
@@ -154,7 +156,7 @@ class StepSteerDelivery(AbstractCapability[None]):
         Returns:
             `request_context`, unchanged.
         """
-        _drain(ctx, self._conversation)
+        self.delivered.extend(_drain(ctx, self._conversation))
         return request_context
 
     async def after_node_run(self, ctx: RunContext[None], *, node: AgentNode[None], result: NodeResult[None]) -> NodeResult[None]:
@@ -170,11 +172,14 @@ class StepSteerDelivery(AbstractCapability[None]):
         """
         del node
         if isinstance(result, End):
-            _drain(ctx, self._conversation)
+            self.delivered.extend(_drain(ctx, self._conversation))
         return result
 
 
-def _drain(ctx: RunContext[None], conversation: StepConversation) -> None:
-    """Move every waiting steer on `conversation`, oldest first, each as its own queued message beside the preamble."""
+def _drain(ctx: RunContext[None], conversation: StepConversation) -> list[str]:
+    """Move every waiting steer on `conversation`, oldest first, each as its own queued message beside the preamble, and return them."""
+    drained: list[str] = []
     while conversation.steer_inbox:
-        ctx.enqueue(SystemPromptPart(content=STEP_STEER_PREAMBLE), conversation.steer_inbox.pop(0))
+        drained.append(conversation.steer_inbox.pop(0))
+        ctx.enqueue(SystemPromptPart(content=STEP_STEER_PREAMBLE), drained[-1])
+    return drained

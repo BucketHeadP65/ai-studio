@@ -6,7 +6,9 @@ only through the one `StepConversations` the session holds, so a rerun sees its 
 
 A step conversation opens when a step starts executing (`open`) and settles when it answers
 (`settle`), so a running step always has a live entry with a tailable `stream`. `close_all` ends
-every step conversation's stream when the run ends.
+every step conversation's stream when the run ends. An attempt that lost its model connection is
+kept apart from the history (`dropped_attempts`): the run archive files it, and no later attempt
+is given it.
 """
 
 from __future__ import annotations
@@ -120,6 +122,18 @@ class StepStream:
             yield chunk
 
 
+@dataclass(frozen=True)
+class DroppedAttempt:
+    """One attempt at a turn that lost its model connection: where it began on its line and what it exchanged before the break."""
+
+    after: int
+    """How many messages of history the attempt was given."""
+    last_given: ModelMessage | None
+    """The last message of that history, `None` when it was given none."""
+    messages: tuple[ModelMessage, ...]
+    """The messages the attempt added to that history before its connection broke, its own prompt first."""
+
+
 @dataclass
 class StepConversation:
     """One step's standing in the current run: its step, its output type, its conversation, its live state."""
@@ -134,12 +148,30 @@ class StepConversation:
     lives inside one turn's own run, so it observes a prefix collapse within a turn, never across
     turns."""
     messages: list[ModelMessage] = field(default_factory=list)
+    dropped_attempts: list[DroppedAttempt] = field(default_factory=list)
+    """Every attempt on this line that lost its model connection, oldest first. Never part of `messages`."""
     stream: StepStream = field(default_factory=StepStream)
     """The live stream. A rerun that reopens this step conversation keeps the same stream, chunks and all."""
     steer_inbox: list[str] = field(default_factory=list)
     """Words a person sent this step conversation while it was executing, waiting for the step to read them."""
     executing: bool = False
     """Whether a step is running in this step conversation right now."""
+
+    @property
+    def exchanged(self) -> list[ModelMessage]:
+        """Every message this line exchanged, in order: `messages`, with each dropped attempt's messages where it began."""
+        exchanged: list[ModelMessage] = []
+        taken = 0
+        for attempt in self.dropped_attempts:
+            began = min(max(attempt.after, taken), len(self.messages))
+            if began > taken and self.messages[began - 1] != attempt.last_given:
+                # The attempt that settled next folded its own first request into the last message it was given.
+                began -= 1
+            exchanged.extend(self.messages[taken:began])
+            exchanged.extend(attempt.messages)
+            taken = began
+        exchanged.extend(self.messages[taken:])
+        return exchanged
 
 
 @dataclass
@@ -203,6 +235,14 @@ class StepConversations:
         conversation = self.conversations[key]
         conversation.messages = messages
         conversation.executing = False
+
+    def archived(self) -> dict[tuple[str, str], list[ModelMessage]]:
+        """What the run archive files for every step conversation: each one's `exchanged` messages.
+
+        Returns:
+            The messages, keyed by the node and item of each step conversation.
+        """
+        return {key: conversation.exchanged for key, conversation in self.conversations.items()}
 
     def close_all(self) -> None:
         """Close every held step conversation's stream. Called when the run ends."""

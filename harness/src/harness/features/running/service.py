@@ -358,9 +358,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
                         spec=spec,
                         params=params,
                         values=run_log.state.values,
-                        conversations={
-                            name: conversation.messages for name, conversation in session.active.conversations.conversations.items()
-                        },
+                        conversations=session.active.conversations.archived(),
                         gates_approved=gates_approved,
                         gates_rejected=gates_rejected,
                         gates_auto=auto,
@@ -569,7 +567,7 @@ async def stop(session: Runtime, *, records: RunRecords) -> bool:
             spec=waiting.spec,
             params=waiting.params,
             values=waiting.values,
-            conversations={name: conversation.messages for name, conversation in session.active.conversations.conversations.items()},
+            conversations=session.active.conversations.archived(),
             gates_approved=gates_approved,
             gates_orchestrated=orchestrated,
             gates_rejected={},
