@@ -172,7 +172,7 @@ class TestBuildAgent:
         assert params is not None
         [run_code] = params.function_tools
         assert run_code.description is not None
-        assert all(name in run_code.description for name in ("search", "fetch", "graph_expand", "find_paths"))
+        assert all(f"async def {name}(" in run_code.description for name in ("search", "fetch", "graph_expand", "find_paths"))
 
     def test_extra_capabilities_land_in_the_agent(self):
         # `extra_capabilities` is appended after the built-in Instrumentation (and any CodeMode), so
