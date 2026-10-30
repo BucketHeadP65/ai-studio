@@ -50,7 +50,7 @@ from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import Agent, AgentSpec, ModelRetry, capture_run_messages
 from pydantic_ai.capabilities import CombinedCapability, Toolset
 from pydantic_ai.exceptions import ModelConnectionError
-from pydantic_ai.messages import ModelRequest
+from pydantic_ai.messages import ModelRequest, ModelResponse, repair_messages
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import UsageLimits
 from pydantic_ai_harness import CodeMode
@@ -258,6 +258,18 @@ def _repair_asked_for(prompt: str) -> str:
     return "\n\n".join(sections)
 
 
+def _given_length(history: Sequence[ModelMessage]) -> int:
+    """How many messages a run given `history` and a new prompt holds ahead of that prompt, once it has cleaned the history."""
+    # Mirrors what a pydantic-ai run does to its history on entry: merge consecutive messages, then close the tool calls
+    # of a cut-off tail. A mismatch starts a dropped attempt on the wrong message.
+    cleaned = repair_messages(history, repair_last_response=False)
+    last = cleaned[-1] if cleaned else None
+    cut_off = (isinstance(last, ModelRequest) and last.state == "interrupted") or (
+        isinstance(last, ModelResponse) and last.state == "interrupted" and bool(last.tool_calls)
+    )
+    return len(repair_messages(cleaned, repair_last_response=True)) if cut_off else len(cleaned)
+
+
 @contextmanager
 def _keeping_a_stopped_turn(
     line: StepConversation,
@@ -271,8 +283,8 @@ def _keeping_a_stopped_turn(
         try:
             yield
         except ModelConnectionError:
-            added = tuple(messages[len(history) :])
-            line.dropped_attempts.append(DroppedAttempt(after=len(history), last_given=history[-1] if history else None, messages=added))
+            added = tuple(messages[_given_length(history) :])
+            line.dropped_attempts.append(DroppedAttempt(messages=added))
             line.steer_inbox[:0] = steering.delivered
             billed(added)
             raise

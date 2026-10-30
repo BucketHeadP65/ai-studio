@@ -32,6 +32,7 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserProm
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
 from harness.composition import build_environment
+from harness.features.running.contracts import DroppedAttempt, StepConversation
 from harness.features.running.service import archive_run
 from harness.session import ActiveRun, NoSessionLog, Runtime
 from harness.settings import WebSearchSettings
@@ -48,7 +49,7 @@ if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models.function import AgentInfo, DeltaToolCalls
 
-    from harness.features.running.contracts import RunRecords, StepConversation
+    from harness.features.running.contracts import RunRecords
     from harness.features.running.spend import SpendRow
 
 ITEM_SCHEMA = {"type": "object", "title": "Digest", "properties": {"title": {"type": "string"}}, "required": ["title"]}
@@ -242,3 +243,32 @@ async def test_a_steer_the_broken_attempt_took_in_reaches_the_next_attempt(tmp_p
     assert not any(isinstance(message, ModelResponse) for message in calls[2]), "the next attempt starts from the turn's own start"
     assert steered(calls[2]), "and the steer reaches it again"
     assert _the_items_line(active).steer_inbox == []
+
+
+def _asked(prompt: str) -> ModelRequest:
+    return ModelRequest(parts=[UserPromptPart(prompt)])
+
+
+def _said(text: str) -> ModelResponse:
+    return ModelResponse(parts=[TextPart(text)])
+
+
+def test_a_dropped_attempt_is_placed_ahead_of_the_settled_attempt_that_asked_the_same() -> None:
+    first, one, second, two = _asked("turn one"), _said("one"), _asked("turn two"), _said("two")
+    broken, half = _asked("turn two"), _said(HALF_SAID)
+    line = StepConversation(step=DIGEST, output_type=dict)
+    line.messages = [first, one, second, two]
+    line.dropped_attempts = [DroppedAttempt(messages=(broken, half))]
+
+    assert line.exchanged == [first, one, broken, half, second, two]
+
+
+def test_a_dropped_attempt_no_settled_attempt_asked_again_comes_after_everything_before_it() -> None:
+    """A rerun whose every attempt broke follows the run before it, which asked something else."""
+    earlier, answered = _asked("the first run"), _said("first")
+    attempts = [DroppedAttempt(messages=(_asked("the rerun"), _said(HALF_SAID))) for _ in range(2)]
+    line = StepConversation(step=DIGEST, output_type=dict)
+    line.messages = [earlier, answered]
+    line.dropped_attempts = attempts
+
+    assert line.exchanged == [earlier, answered, *attempts[0].messages, *attempts[1].messages]

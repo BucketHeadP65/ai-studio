@@ -18,8 +18,10 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from pydantic_ai.messages import ModelRequest, UserPromptPart
+
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterator, Sequence
 
     from core.ai.workflows.contracts import AgentStep, Briefing, StepIdentity
     from pydantic_ai.messages import ModelMessage
@@ -124,14 +126,15 @@ class StepStream:
 
 @dataclass(frozen=True)
 class DroppedAttempt:
-    """One attempt at a turn that lost its model connection: where it began on its line and what it exchanged before the break."""
+    """One attempt at a turn that lost its model connection, and what it exchanged before the break."""
 
-    after: int
-    """How many messages of history the attempt was given."""
-    last_given: ModelMessage | None
-    """The last message of that history, `None` when it was given none."""
     messages: tuple[ModelMessage, ...]
-    """The messages the attempt added to that history before its connection broke, its own prompt first."""
+    """The messages the attempt added to the history it was given before its connection broke, its own prompt first."""
+
+    @property
+    def prompt(self) -> str | None:
+        """The text of the attempt's own prompt, `None` when it holds none."""
+        return next(_prompts(self.messages[:1]), None)
 
 
 @dataclass
@@ -159,14 +162,19 @@ class StepConversation:
 
     @property
     def exchanged(self) -> list[ModelMessage]:
-        """Every message this line exchanged, in order: `messages`, with each dropped attempt's messages where it began."""
+        """Every message this line exchanged, in order: `messages`, each dropped attempt ahead of the attempt that asked the same.
+
+        A dropped attempt that no settled attempt asked the same as, such as the last attempt of a turn that never settled,
+        comes after every message before it.
+        """
         exchanged: list[ModelMessage] = []
         taken = 0
         for attempt in self.dropped_attempts:
-            began = min(max(attempt.after, taken), len(self.messages))
-            if began > taken and self.messages[began - 1] != attempt.last_given:
-                # The attempt that settled next folded its own first request into the last message it was given.
-                began -= 1
+            began = len(self.messages)
+            for index in range(len(self.messages) - 1, taken - 1, -1):
+                if attempt.prompt is not None and attempt.prompt in _prompts(self.messages[index : index + 1]):
+                    began = index
+                    break
             exchanged.extend(self.messages[taken:began])
             exchanged.extend(attempt.messages)
             taken = began
@@ -248,6 +256,15 @@ class StepConversations:
         """Close every held step conversation's stream. Called when the run ends."""
         for conversation in self.conversations.values():
             conversation.stream.close()
+
+
+def _prompts(messages: Sequence[ModelMessage]) -> Iterator[str]:
+    """The text of every user prompt part `messages` carry, in order."""
+    for message in messages:
+        if isinstance(message, ModelRequest):
+            for part in message.parts:
+                if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                    yield part.content
 
 
 def conversation_key(identity: StepIdentity | None, fallback: str) -> tuple[str, str]:

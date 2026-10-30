@@ -625,6 +625,126 @@ async def test_a_turn_whose_connection_broke_starts_again_from_the_history_it_be
     assert waits == [2.0]
 
 
+PUBLISH_SCHEMA = {"type": "object", "title": "Publish", "properties": {"headline": {"type": "string"}}, "required": ["headline"]}
+HALF_SAID = "half an answer"
+
+
+def _four_turn_spec() -> Workflow:
+    """The three-turn sequence with a fourth turn that turns the polish into a headline."""
+    triage, draft, polish = _sequence_tasks()
+    publish = Briefing(
+        name="publish",
+        instructions="Turn the polished summary into one headline, ready to publish as it stands.",
+        inputs={"polish": SameAs(like="polish")},
+        output=Shape(json_schema=PUBLISH_SCHEMA),
+    )
+    return Workflow(
+        name="digest-four-turns",
+        version=1,
+        description="One worker takes an item through triage, draft, polish and a headline as one conversation.",
+        parameters={"items": ParameterSpec(description="items to digest", json_schema={"type": "array", "items": ITEM_SCHEMA})},
+        inline=(triage, draft, polish, publish),
+        nodes=(MapNode(id="digest_each", turns=("triage", "draft", "polish", "publish"), over=FromParameter(parameter="items"), each="item"),),
+        output=FromNode(node="digest_each"),
+    )
+
+
+async def _a_sequence_broken_at(spec: Workflow, breaking_call: int, tmp_path: Path) -> ActiveRun:
+    """Run `spec` over one item, the stream of model call `breaking_call` (one-based) breaking part way through once."""
+    payloads = (*_PAYLOADS, {"headline": "final"})
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == breaking_call:
+            yield HALF_SAID
+            model_name = "test-model"
+            raise ModelConnectionError(model_name, "Connection error.", phase="read", in_stream=True)
+        index = _turn_index(messages)
+        yield {0: DeltaToolCall(name=info.output_tools[index].name, json_args=json.dumps(payloads[index]))}
+
+    async def no_wait(seconds: float) -> None:
+        del seconds
+
+    active = ActiveRun()
+    environment = await build_environment(FunctionModel(stream_function=stream), engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records_under(tmp_path), web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
+    await run_workflow(spec, environment, params={"items": [{"title": "quantum computing"}]}, approval=ApproveAll(), sleep=no_wait)
+    return active
+
+
+@pytest.mark.parametrize("spec", [_sequence_spec(), _four_turn_spec()], ids=["last-turn", "a-turn-before-the-last"])
+async def test_a_third_turn_whose_connection_broke_is_archived_with_its_own_prompt_where_it_began(spec: Workflow, tmp_path: Path) -> None:
+    """From turn three on, the history a turn is given holds two requests in a row, which the model run merges on entry."""
+    active = await _a_sequence_broken_at(spec, 3, tmp_path)
+
+    line = _the_items_line(active)
+    (dropped,) = line.dropped_attempts
+    first = dropped.messages[0]
+    assert isinstance(first, ModelRequest)
+    assert any(isinstance(part, UserPromptPart) and POLISH_INSTRUCTIONS in str(part.content) for part in first.parts), "the attempt's own prompt comes first"
+    exchanged = line.exchanged
+    prompts = [index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, UserPromptPart)]
+    broken_at = next(index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, TextPart) and HALF_SAID in part.content)
+    node = spec.nodes[0]
+    assert isinstance(node, MapNode)
+    assert len(prompts) == len(node.turns) + 1, "every settled turn's prompt and the broken attempt's own"
+    assert prompts[2] < broken_at < prompts[3], "the broken attempt sits between turn two and the attempt that settled turn three"
+    assert POLISH_INSTRUCTIONS in _prompt_of(exchanged[prompts[3]]), "the attempt that settled turn three asks the same"
+
+
+def _prompt_of(message: ModelMessage) -> str:
+    return next(str(part.content) for part in message.parts if isinstance(part, UserPromptPart))
+
+
+async def test_an_agent_step_line_left_cut_off_keeps_its_next_broken_attempts_own_prompt_first(tmp_path: Path) -> None:
+    """A stopped turn left the line ending on a cut-off answer with an open tool call, which the model run closes on entry."""
+    worker = AgentStep(
+        name="triage",
+        agent={"instructions": TRIAGE_INSTRUCTIONS},
+        inputs={"item": Shape(json_schema=ITEM_SCHEMA)},
+        output=Shape(json_schema=TRIAGE_SCHEMA),
+    )
+    spec = Workflow(
+        name="worker-cut-off",
+        version=1,
+        description="One worker step whose line a stopped turn left cut off.",
+        parameters={"item": ParameterSpec(description="the item", json_schema=ITEM_SCHEMA)},
+        inline=(worker,),
+        nodes=(RunNode(id="triage", work="triage", inputs={"item": FromParameter(parameter="item")}),),
+        output=FromNode(node="triage"),
+    )
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == 1:
+            yield HALF_SAID
+            model_name = "test-model"
+            raise ModelConnectionError(model_name, "Connection error.", phase="read", in_stream=True)
+        yield {0: DeltaToolCall(name=info.output_tools[0].name, json_args=json.dumps(_PAYLOADS[0]))}
+
+    async def no_wait(seconds: float) -> None:
+        del seconds
+
+    active = ActiveRun()
+    line = active.conversations.open(("triage", ""), step=worker, output_type=dict, instructions="", monitor=None)
+    line.messages = [
+        ModelRequest(parts=[UserPromptPart("Look the item up first.")]),
+        ModelResponse(parts=[ToolCallPart("search", {"query": "quantum computing"}, tool_call_id="call-1")], state="interrupted"),
+    ]
+    line.executing = False
+    environment = await build_environment(FunctionModel(stream_function=stream), engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records_under(tmp_path), web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
+
+    await run_workflow(spec, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=no_wait)
+
+    assert len(calls) == 2
+    (dropped,) = line.dropped_attempts
+    first = dropped.messages[0]
+    assert isinstance(first, ModelRequest)
+    assert [part.part_kind for part in first.parts] == ["user-prompt"], "the attempt's own prompt first, not the return the run closed the cut-off call with"
+    assert "### item" in _prompt_of(first)
+
+
 async def test_a_plain_run_step_is_unchanged(tmp_path: Path) -> None:
     seen_instructions: list[str | None] = []
 
