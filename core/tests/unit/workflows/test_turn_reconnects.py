@@ -2,27 +2,35 @@
 
 The model endpoint can close a streamed answer part way through. The engine then performs the same
 turn again, with the same arguments under the same identity, three attempts in all, waiting between
-them through the `sleep` a test injects. A turn that fails any other way fails exactly as before.
+them through the `sleep` a test injects. That holds for every turn the engine runs: a run node, a map
+item's turn, a judge, a person gate's answer and an orchestrator gate's decision. A connection that
+never opened (phase `pool` or `connect`) and a turn that fails any other way get one attempt, as before.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Literal
 
 import pytest
 
-from pydantic_ai.exceptions import ModelConnectionError, UnexpectedModelBehavior
+from pydantic import BaseModel
+from pydantic_ai.exceptions import ModelConnectionError, ModelTimeoutError, UnexpectedModelBehavior
 
 from core.ai.workflows.contracts import (
     CURRENT_STEP,
     Briefing,
     FromNode,
     FromParameter,
+    GateDecision,
     JudgeGate,
     MapNode,
+    OrchestratorGate,
     ParameterSpec,
+    PersonGate,
     RunNode,
     Shape,
     StepIdentity,
@@ -33,6 +41,11 @@ from core.ai.workflows.contracts import (
 )
 from core.ai.workflows.exceptions import RepeatedFailureError
 from tests.unit.workflows.conftest import ApproveAll
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from pydantic_ai.exceptions import TransportPhase
 
 _STRING = Shape(json_schema={"type": "string"})
 _ENGINE_LOGGER = "core.ai.workflows.graph_builder"
@@ -45,19 +58,16 @@ def _broken(item: str) -> ModelConnectionError:
 
 @dataclass
 class Breaks:
-    """How many leading attempts each item loses to a broken connection, and every attempt made, in order."""
+    """How many leading attempts each item loses, the error each lost attempt raises, and every attempt made, in order."""
 
     losses: dict[str, int]
-    failure: type[Exception] = ModelConnectionError
+    error: Callable[[str], Exception] = _broken
     attempts: list[str] = field(default_factory=list)
 
     def attempt(self, item: str) -> None:
         self.attempts.append(item)
         if self.attempts.count(item) <= self.losses.get(item, 0):
-            if self.failure is ModelConnectionError:
-                raise _broken(item)
-            msg = f"{item} answered nothing"
-            raise self.failure(msg)
+            raise self.error(item)
 
 
 @dataclass
@@ -217,7 +227,7 @@ async def test_a_judge_that_loses_its_connection_once_still_decides() -> None:
 
 async def test_a_turn_that_fails_another_way_is_not_started_again() -> None:
     """An `UnexpectedModelBehavior` gets one attempt and counts toward the streak exactly as before."""
-    breaks = Breaks(losses={"a": 1, "b": 1}, failure=UnexpectedModelBehavior)
+    breaks = Breaks(losses={"a": 1, "b": 1}, error=lambda item: UnexpectedModelBehavior(f"{item} answered nothing"))
     waits = Waits()
     state = WorkflowState(params={"items": ["a", "b"]})
 
@@ -276,3 +286,157 @@ async def test_every_attempt_at_a_turn_starts_from_the_same_inputs_and_identity(
     assert retried_identity.turn is not None
     assert retried_identity.turn.work == "second"
     assert waits.seconds == [2.0]
+
+
+@pytest.mark.parametrize("phase", ["read", "write", None])
+async def test_a_connection_that_broke_after_the_request_left_is_retried_at_every_such_phase(phase: TransportPhase | None) -> None:
+    breaks = Breaks(losses={"a": 2}, error=lambda item: ModelConnectionError("test-model", f"{item} broke", phase=phase))
+    waits = Waits()
+
+    result = await build_graph(_run_spec(), _registry(breaks), approval=ApproveAll(), sleep=waits).run(state=WorkflowState(params={"item": "a"}))
+
+    assert result == "A"
+    assert breaks.attempts == ["a", "a", "a"]
+    assert waits.seconds == [2.0, 4.0]
+
+
+@pytest.mark.parametrize("phase", ["pool", "connect"])
+async def test_a_connection_that_never_opened_gets_one_attempt(phase: TransportPhase) -> None:
+    """The HTTP client already retried a request that never left, so the engine adds no attempt of its own."""
+    breaks = Breaks(losses={"a": 1}, error=lambda item: ModelConnectionError("test-model", f"{item} never connected", phase=phase))
+    waits = Waits()
+
+    with pytest.raises(ModelConnectionError) as excinfo:
+        await build_graph(_run_spec(), _registry(breaks), approval=ApproveAll(), sleep=waits).run(state=WorkflowState(params={"item": "a"}))
+
+    assert excinfo.value.phase == phase
+    assert breaks.attempts == ["a"]
+    assert waits.seconds == []
+
+
+async def test_a_model_timeout_is_retried() -> None:
+    breaks = Breaks(losses={"a": 1}, error=lambda item: ModelTimeoutError("test-model", f"{item} timed out", phase="read"))
+    waits = Waits()
+
+    result = await build_graph(_run_spec(), _registry(breaks), approval=ApproveAll(), sleep=waits).run(state=WorkflowState(params={"item": "a"}))
+
+    assert result == "A"
+    assert breaks.attempts == ["a", "a"]
+    assert waits.seconds == [2.0]
+
+
+async def test_cancelling_a_run_during_the_wait_ends_it_without_another_attempt() -> None:
+    breaks = Breaks(losses={"a": 3})
+    waiting = asyncio.Event()
+
+    async def wait_for_ever(seconds: float) -> None:
+        del seconds
+        waiting.set()
+        await asyncio.Event().wait()
+
+    graph = build_graph(_run_spec(), _registry(breaks), approval=ApproveAll(), sleep=wait_for_ever)
+    run = asyncio.create_task(graph.run(state=WorkflowState(params={"item": "a"})))
+    await asyncio.wait_for(waiting.wait(), timeout=5)
+    run.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(run, timeout=5)
+    assert breaks.attempts == ["a"]
+
+
+_CHARGE = "Approve the loud item when it is the item upper-cased, and reject it with feedback naming what differs."
+
+
+def _gated_spec(gate: PersonGate | JudgeGate | OrchestratorGate) -> Workflow:
+    """A run node reviewed by `gate`, and a run node reading the value the gate released."""
+    return Workflow(
+        name="reconnecting-gate",
+        version=1,
+        description="A run node, a gate whose answer loses its model connection once, and a run node after it.",
+        parameters={"item": ParameterSpec(description="the item", json_schema={"type": "string"})},
+        nodes=(
+            RunNode(id="loud", work="shout", inputs={"item": FromParameter(parameter="item")}),
+            gate,
+            RunNode(id="again", work="shout", inputs={"item": FromNode(node="check")}),
+        ),
+        output=FromNode(node="again"),
+    )
+
+
+@dataclass
+class BrokenOnce:
+    """A gate's answerer whose first answer loses its model connection, then approves every time."""
+
+    asked: list[str] = field(default_factory=list)
+
+    def answer(self, gate_id: str) -> None:
+        self.asked.append(gate_id)
+        if len(self.asked) == 1:
+            raise _broken(gate_id)
+
+    async def review(self, gate_id: str, value: object, *, note: str = "") -> GateDecision:
+        del value, note
+        self.answer(gate_id)
+        return GateDecision(approve=True)
+
+    async def decide(self, gate_id: str, charge: str, value: object, /) -> GateDecision:
+        del charge, value
+        self.answer(gate_id)
+        return GateDecision(approve=True)
+
+
+async def test_an_orchestrator_gate_whose_decision_loses_its_connection_once_still_decides() -> None:
+    breaks = Breaks(losses={})
+    answerer = BrokenOnce()
+    waits = Waits()
+    registry = _registry(breaks)
+    registry.decide_gate = answerer.decide
+    spec = _gated_spec(OrchestratorGate(id="check", charge=_CHARGE, reviews=FromNode(node="loud"), rejected_to="loud"))
+    state = WorkflowState(params={"item": "a"})
+
+    result = await build_graph(spec, registry, approval=ApproveAll(), sleep=waits).run(state=state)
+
+    assert result == "A"
+    assert answerer.asked == ["check", "check"]
+    assert waits.seconds == [2.0]
+    assert [(fact.gate_id, fact.verdict, fact.source) for fact in state.gate_decisions] == [("check", "approve", "orchestrator")]
+
+
+async def test_a_person_gate_whose_answer_loses_its_connection_once_still_decides() -> None:
+    """A person gate a host answers with a model, as under orchestrate mode, gets the same three attempts."""
+    answerer = BrokenOnce()
+    waits = Waits()
+    spec = _gated_spec(PersonGate(id="check", reviews=FromNode(node="loud"), rejected_to="loud"))
+    state = WorkflowState(params={"item": "a"})
+
+    result = await build_graph(spec, _registry(Breaks(losses={})), approval=answerer, sleep=waits).run(state=state)
+
+    assert result == "A"
+    assert answerer.asked == ["check", "check"]
+    assert waits.seconds == [2.0]
+    assert [(fact.gate_id, fact.verdict, fact.source) for fact in state.gate_decisions] == [("check", "approve", "person")]
+
+
+class Unsure(BaseModel):
+    outcome: Literal["approve", "reject", "cannot_judge"]
+    feedback: str
+
+
+async def test_a_judges_escalation_whose_answer_loses_its_connection_once_still_decides() -> None:
+    async def unsure(text: str) -> Unsure:
+        del text
+        return Unsure(outcome="cannot_judge", feedback="I cannot tell")
+
+    answerer = BrokenOnce()
+    waits = Waits()
+    registry = _registry(Breaks(losses={}))
+    registry.register(unsure)
+    spec = _gated_spec(JudgeGate(id="check", work="unsure", reviews=FromNode(node="loud"), approved_when="outcome", rejected_to="loud"))
+    state = WorkflowState(params={"item": "a"})
+
+    result = await build_graph(spec, registry, approval=answerer, sleep=waits).run(state=state)
+
+    assert result == "A"
+    assert answerer.asked == ["check", "check"]
+    assert waits.seconds == [2.0]
+    assert [(fact.verdict, fact.source) for fact in state.gate_decisions] == [("cannot_judge", "judge"), ("approve", "person")]

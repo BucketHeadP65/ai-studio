@@ -339,15 +339,20 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   retry only before a response arrives, `FallbackModel.request_stream` hands a stream over after its first event and
   lets a later failure through, `on_model_request_error` can answer with a response or with a `ModelRetry` that sends a
   new request carrying a retry prompt, never the same request again, and pydantic-ai-harness's `StepPersistence` records
-  `model_request_failed` and raises. The engine therefore performs the whole turn again: a run node's step, each turn
-  of a map item, and a judge gate's step, with the same arguments under the same `StepIdentity`, three attempts in all,
-  waiting 2 and then 4 seconds. Only the last failure reaches a map's `on_error` and `abort_after_repeats`. Any other
-  failure gets one attempt. The harness keeps no message of an attempt that failed this way, so the next attempt starts
-  from the history the turn began with.
-- **Where:** `core/src/core/ai/workflows/graph_builder.py` (`_performed_turn`, the `sleep` of `build_graph` and
-  `run_workflow`), `harness/src/harness/composition.py` (`_keeping_a_stopped_turn`), tests in
-  `core/tests/unit/workflows/test_turn_reconnects.py` and `harness/tests/unit/test_turn_conversations.py`.
-- **Since:** 2026-10-30, after three map items in a row lost their streams after 212 s and 567 s and aborted a stance
-  refresh run.
+  `model_request_failed` and raises. The engine therefore performs the whole turn again, with the same arguments under
+  the same `StepIdentity`, three attempts in all, waiting 2 and then 4 seconds. Every turn it runs goes through one
+  helper: a run node's step, each turn of a map item, a judge gate's step, a person gate's answer, a judge's escalation
+  and an orchestrator gate's decision. A failure at the `pool` or `connect` phase gets one attempt, because the HTTP
+  client has already retried it. Only the last failure reaches a map's `on_error` and `abort_after_repeats`. Any other
+  failure gets one attempt. The harness keeps each attempt that lost its connection apart from the history the next
+  attempt starts from: the run archive files it where it began, its responses reach the spend rows, and a steer it had
+  taken in goes back on the line's inbox.
+- **Where:** `core/src/core/ai/workflows/graph_builder.py` (`_attempted`, the `sleep` of `build_graph` and
+  `run_workflow`), `harness/src/harness/composition.py` (`_keeping_a_stopped_turn`),
+  `harness/src/harness/features/running/conversations.py` (`DroppedAttempt`, `StepConversation.exchanged`), tests in
+  `core/tests/unit/workflows/test_turn_reconnects.py`, `harness/tests/unit/test_turn_reconnects.py` and
+  `harness/tests/unit/test_turn_conversations.py`.
+- **Since:** 2026-10-30, after three map items in a row lost their streams part way through, one of them after 212 s and
+  another after 567 s, and aborted a stance refresh run.
 - **Upstream candidate:** yes, as an issue: a retry of a streamed request whose stream broke after its first event,
   opt-in, for a run whose model request can be sent again unchanged.

@@ -12,6 +12,7 @@ import asyncio
 
 from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass, field
+from functools import partial
 from typing import TYPE_CHECKING, Literal, assert_never
 
 from pydantic import TypeAdapter
@@ -51,6 +52,8 @@ from core.observability import get_logger
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
+    from pydantic_ai.exceptions import TransportPhase
+
     from core.ai.workflows.domain.parameter_values import WorkflowArguments
     from core.ai.workflows.internal_contracts import ApprovalHook, RunObserver, StepExecutor
     from core.ai.workflows.registry import StepImplementation, StepRegistry
@@ -59,6 +62,9 @@ _logger = get_logger(__name__)
 
 _RECONNECT_WAITS: tuple[float, ...] = (2.0, 4.0)
 """Seconds waited before each further attempt at a turn whose model connection broke: two more attempts, three in all."""
+
+_NEVER_SENT: frozenset[TransportPhase | None] = frozenset({"pool", "connect"})
+"""The phases of a `ModelConnectionError` whose request never left for the provider. A turn failing at one gets one attempt."""
 
 
 @dataclass(frozen=True)
@@ -263,36 +269,32 @@ _Entry = _NodeStep | Join[WorkflowState, None, object, None]
 """Where an edge into a node lands: the node's step, or the join guarding it."""
 
 
-async def _performed_turn(
-    performing: StepExecutor,
-    node_id: str,
-    implementation: StepImplementation,
-    kwargs: Mapping[str, object],
-    *,
-    item_key: str | None,
-    sleep: Callable[[float], Awaitable[None]],
-) -> object:
-    """Perform one turn, and perform it again with the same arguments while it fails with `ModelConnectionError`, three attempts in all."""
+async def _attempted[R](
+    attempt: Callable[[], Awaitable[R]], *, node_id: str, item_key: str | None, sleep: Callable[[float], Awaitable[None]]
+) -> R:
+    """Await `attempt()`, and a fresh one while it fails with `ModelConnectionError` at a phase outside `_NEVER_SENT`, three attempts in all."""
     template = (
         "{node_id!r} lost its model connection on attempt {attempt} of {attempts}, starting the turn again in {wait} s: {failure}"
         if item_key is None
         else "{node_id!r} item {item_key!r} lost its model connection on attempt {attempt} of {attempts}, starting the turn again in {wait} s: {failure}"
     )
-    for attempt, wait in enumerate(_RECONNECT_WAITS, start=1):
+    for number, wait in enumerate(_RECONNECT_WAITS, start=1):
         try:
-            return await performing.perform(node_id, implementation, kwargs)
+            return await attempt()
         except ModelConnectionError as exc:
+            if exc.phase in _NEVER_SENT:
+                raise
             _logger.warning(
                 template,
                 node_id=node_id,
                 item_key=item_key,
-                attempt=attempt,
+                attempt=number,
                 attempts=len(_RECONNECT_WAITS) + 1,
                 wait=wait,
                 failure=f"{type(exc).__qualname__}: {exc}",
             )
             await sleep(wait)
-    return await performing.perform(node_id, implementation, kwargs)
+    return await attempt()
 
 
 async def _observed[R](node_id: str, watching: RunObserver, work: Awaitable[R]) -> R:
@@ -369,13 +371,13 @@ def build_graph(
             case RunNode():
                 heads[node.id] = exits[node.id] = _build_run_step(builder, node, registry, watching, performing, waiting)
             case PersonGate():
-                gate_steps[node.id] = _build_gate_step(builder, node, approval, watching)
+                gate_steps[node.id] = _build_gate_step(builder, node, approval, watching, waiting)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case JudgeGate():
                 gate_steps[node.id] = _build_judge_step(builder, node, registry, watching, performing, approval, waiting)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case OrchestratorGate():
-                gate_steps[node.id] = _build_orchestrator_step(builder, node, registry, watching)
+                gate_steps[node.id] = _build_orchestrator_step(builder, node, registry, watching, waiting)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case MapNode():
                 heads[node.id], exits[node.id] = _build_map_steps(builder, node, registry, watching, performing, inline, waiting)
@@ -516,7 +518,7 @@ def _build_run_step(
             kwargs[name] = value
         try:
             with performing_step(_step_identity(node.id, ctx.state, tier=node.tier)):
-                output = await _observed(node.id, watching, _performed_turn(performing, node.id, impl, kwargs, item_key=None, sleep=sleep))
+                output = await _observed(node.id, watching, _attempted(partial(performing.perform, node.id, impl, kwargs), node_id=node.id, item_key=None, sleep=sleep))
         except Exception as exc:
             _settle(ctx.state, node.id, 0, "", "failed", f"{type(exc).__qualname__}: {exc}")
             raise
@@ -624,9 +626,8 @@ def _build_map_steps(
                     else None
                 )
                 with performing_step(_step_identity(node.id, ctx.state, work=work, item_key=item_key, turn=facts, tier=node.tier)):
-                    previous = await _observed(
-                        observed_id, watching, _performed_turn(performing, observed_id, impl, kwargs, item_key=item_key, sleep=sleep)
-                    )
+                    turn = partial(performing.perform, observed_id, impl, kwargs)
+                    previous = await _observed(observed_id, watching, _attempted(turn, node_id=observed_id, item_key=item_key, sleep=sleep))
                 outputs.append(previous)
         except Exception as exc:
             # `_observed` already reported this item as failed. `on_error` decides only what the
@@ -814,7 +815,8 @@ def _build_judge_step(
         async def _decide() -> object:
             """The judge's answer, or the budget stop as an answer: running out never fails the run."""
             try:
-                return await _performed_turn(performing, node.id, impl, {parameter: value, **wired}, item_key=None, sleep=sleep)
+                judging = partial(performing.perform, node.id, impl, {parameter: value, **wired})
+                return await _attempted(judging, node_id=node.id, item_key=None, sleep=sleep)
             except UsageLimitExceeded as exc:
                 which = str(exc).split(".")[0]
                 return _BudgetStop(f"The reviewer ran out of budget before it could decide. {which}.")
@@ -834,13 +836,17 @@ def _build_judge_step(
             # Two facts, one reach: the judge's own refusal to answer, then whoever answered in
             # its place. The escalation is not a second attempt at this gate.
             _record_decision(node.id, ctx.state, reviewed, verdict="cannot_judge", source="judge")
-            decided = _decided(decision=await _observed(node.id, watching, approval.review(node.id, value, note=note)), asked="person")
+            asking = partial(approval.review, node.id, value, note=note)
+            answer = await _observed(node.id, watching, _attempted(asking, node_id=node.id, item_key=None, sleep=sleep))
+            decided = _decided(decision=answer, asked="person")
         return _finish_review(node, ctx.state, value, reviewed, decided)
 
     return builder.step(_judge, node_id=node.id)
 
 
-def _build_orchestrator_step(builder: _Builder, node: OrchestratorGate, registry: StepRegistry, watching: RunObserver) -> _GateStep:
+def _build_orchestrator_step(
+    builder: _Builder, node: OrchestratorGate, registry: StepRegistry, watching: RunObserver, sleep: Callable[[float], Awaitable[None]]
+) -> _GateStep:
     """Add a gate the host's orchestrator decides, with a person gate's outcomes, pass-through and rewind."""
     decide = registry.decide_gate
     if decide is None:
@@ -856,20 +862,26 @@ def _build_orchestrator_step(builder: _Builder, node: OrchestratorGate, registry
         value = _resolve(node.reviews, ctx.state)
         reviewed = _begin_review(node, ctx.state, value)
         # Observed like the other gates: the gate is "running" for as long as the orchestrator takes.
-        decided = _decided(decision=await _observed(node.id, watching, decide(node.id, node.charge, value)), asked="orchestrator")
+        deciding = partial(decide, node.id, node.charge, value)
+        answer = await _observed(node.id, watching, _attempted(deciding, node_id=node.id, item_key=None, sleep=sleep))
+        decided = _decided(decision=answer, asked="orchestrator")
         return _finish_review(node, ctx.state, value, reviewed, decided)
 
     return builder.step(_orchestrate, node_id=node.id)
 
 
-def _build_gate_step(builder: _Builder, node: PersonGate, approval: ApprovalHook, watching: RunObserver) -> _GateStep:
+def _build_gate_step(
+    builder: _Builder, node: PersonGate, approval: ApprovalHook, watching: RunObserver, sleep: Callable[[float], Awaitable[None]]
+) -> _GateStep:
     async def _gate(ctx: StepContext[WorkflowState, None, object]) -> _Approved | _Rejected:
         if (hit := _replay(node.id, ctx.state)) is not _NOT_IN_RUN_LOG:
             return _Approved(hit)  # the recorded approval releases its value and nobody is asked again
         value = _resolve(node.reviews, ctx.state)
         reviewed = _begin_review(node, ctx.state, value)
         # A gate is "running" for exactly as long as a human takes.
-        decided = _decided(decision=await _observed(node.id, watching, approval.review(node.id, value)), asked="person")
+        asking = partial(approval.review, node.id, value)
+        answer = await _observed(node.id, watching, _attempted(asking, node_id=node.id, item_key=None, sleep=sleep))
+        decided = _decided(decision=answer, asked="person")
         return _finish_review(node, ctx.state, value, reviewed, decided)
 
     return builder.step(_gate, node_id=node.id)
