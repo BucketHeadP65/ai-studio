@@ -38,9 +38,10 @@ Entry shape: what it does, where it lives, since when, upstream candidate (yes, 
 - **What:** a flag on `CodeMode` (default off) that renders each folded tool as `async def name(*, args) -> return  # first
   sentence` instead of a full stub with the whole docstring and every TypedDict block. The sandbox's type stubs stay fully
   detailed, so a wrong call is still refused with an exact message. On our chat agent it took `run_code` from 23.6 KB to 8.3 KB.
-- **Status:** removed with the fork on 2026-09-29. Without it the authoring agent's `run_code` description measures 15,567
-  bytes, and the owner accepted that size (`TestRunCodeCatalogSize` now allows 20,000). A compact catalog option goes upstream
-  as a feature request.
+- **Status:** removed with the fork on 2026-09-29. The owner accepted the full catalog's size, and `TestRunCodeCatalogSize`
+  allows 20,000 bytes. Since pydantic-ai-harness 0.63 the authoring agent's catalog sits in its own instruction block rather
+  than in `run_code`'s description, so the test measures the description and the catalog block together (about 16.3 KB). A
+  compact catalog option goes upstream as a feature request.
 - **Where (in the fork):** `pydantic_ai_harness/code_mode/_toolset.py` (`_render_compact_line`, `_render_catalog`),
   `_capability.py` (the flag), tests in `tests/code_mode/`.
 - **Since:** 2026-08-25 (`07a7fa54`. The keyword-only `*` fix is `a147fabf`).
