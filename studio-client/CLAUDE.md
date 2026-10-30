@@ -82,13 +82,20 @@ API, so no code here imports `typescript`. Vitest, Biome and Playwright do not n
 reads imports with the oxc parser that `vite` exports as `parseSync`. In VS Code, the "TypeScript 7" extension
 (`TypeScriptTeam.native-preview`, a workspace recommendation) runs the TypeScript 7 language server.
 
-**The graph draws its own edge labels.** sigma 4 lays an edge label from source to target, so the label of an edge
-drawn right to left comes out upside down (sigma.js issue 1544, open on 4.0.3). `renderEdgeLabels` stays off and
-`src/components/graph/edge-labels.ts` draws the labels upright on a 2D canvas. `edge-label-layer.ts` lays that canvas
-into sigma's render as a layer program at the `nodes` depth, after every edge and before every node, as sigma 3 drew
-them. Turn sigma's labels back on and delete both files once a sigma release keeps them upright. `e2e/graph.spec.ts`
-checks that nodes, edges and edge labels are drawn, and that a selected node's label reads above its ring.
+**sigma 4.0.4 or later draws the edge labels.** From 4.0.4 sigma keeps an edge label upright when its edge runs
+right to left (the edge label option `keepUpright`, on by default). Older 4.0 releases drew those labels upside down.
 
-**sigma 4 logs WebGL warnings on every render.** The browser console fills with `GL_INVALID_OPERATION:
-glDrawArraysInstanced: Active draw buffers with missing fragment shader outputs` (about a hundred in a short session).
-It is sigma's label picking pass (sigma.js issue 1562, fix in open PR 1563), not the app. Hover and click still work.
+The edge style is `EDGE_STYLE` in `src/lib/graph-model.ts`. It puts each edge label under its line
+(`labelPosition: "below"`), so a highlighted edge, drawn in the label's colour, never strikes through it. It draws the
+labels at the `nodes` depth (`labelDepth: "nodes"`), after every edge line and before every node. The edge reducer
+raises a highlighted edge to the `topEdges` depth, so labels left at sigma's default `edges` depth would have the
+highlighted lines painted over them. Each label draws on a box of the canvas colour (`labelBackgroundColor`), so a
+line crossing it stops at its edge rather than showing between the letters. Labels that overlap each other on a dense
+hub stay overlapped. sigma 4.0.4 draws every edge label at a fixed 12px (11px for node labels here) and ignores an edge style's
+`labelSize`, so the edge style sets none.
+
+Every edge of the hovered or selected node shows its label, even when the node at its other end is off screen. sigma
+by itself labels an edge only when both its nodes show their labels or one of them is hovered.
+`e2e/graph.spec.ts` checks that nodes, edges and edge labels are drawn, that the label of a right to left edge sits
+under its line (an upside down label sits above it), that a selected node's label reads above its ring, and that a
+selected node keeps its edge labels after the pointer leaves.

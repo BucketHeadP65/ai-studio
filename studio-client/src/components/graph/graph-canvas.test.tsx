@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphResult } from "@/api/types";
 
-import { FALLBACK_NODE_COLOR, graphSignature, nodeColor, toGraphology } from "@/lib/graph-model";
+import {
+  EDGE_STYLE,
+  FALLBACK_NODE_COLOR,
+  graphSignature,
+  nodeColor,
+  toGraphology,
+} from "@/lib/graph-model";
 
 // sigma renders on WebGL, which jsdom does not have, so these tests pin the
 // PURE mapping the canvas is built from: GraphResult → graphology attributes
@@ -93,5 +99,19 @@ describe("graphSignature", () => {
       nodes: GRAPH.nodes.map((n) => (n.id === "paper:a" ? { ...n, title: "Renamed" } : n)),
     };
     expect(graphSignature(changed)).not.toBe(graphSignature(GRAPH));
+  });
+});
+
+describe("EDGE_STYLE", () => {
+  // sigma draws its depths in turn (edges, topEdges, nodes, topNodes), and the canvas raises a
+  // highlighted edge to topEdges. A label drawn earlier would have the highlighted lines painted
+  // over it.
+  it("draws the edge labels after every edge and before every node", () => {
+    expect(EDGE_STYLE).toMatchObject({ labelDepth: "nodes" });
+  });
+
+  // A line crossing a label would otherwise show between its letters.
+  it("draws each edge label on the canvas colour, so no crossing line shows through it", () => {
+    expect(EDGE_STYLE).toMatchObject({ labelBackgroundColor: "#ffffff" });
   });
 });

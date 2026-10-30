@@ -7,9 +7,7 @@ import { extremityArrow } from "sigma/rendering";
 import { DEFAULT_STYLES, type SigmaOptions } from "sigma/types";
 
 import type { GraphEdge, GraphNode, GraphResult } from "@/api/types";
-import { graphSignature, toGraphology } from "@/lib/graph-model";
-
-import { edgeLabelLayer } from "./edge-label-layer";
+import { EDGE_STYLE, graphSignature, toGraphology } from "@/lib/graph-model";
 
 // The knowledge base graph's canvas, on sigma.js v4 + graphology, the stack built for
 // exactly this (WebGL network rendering, Gephi lineage) instead of the manual
@@ -38,13 +36,12 @@ interface Focus {
   selectedId: string | null;
 }
 
-// Sizes stay in screen pixels (sigma 4 defaults to layout units), every edge
-// draws its arrow head, and the node label size and colour ride the styles.
-// sigma's own edge labels stay off: UprightEdgeLabels draws them.
+// Sizes stay in screen pixels (sigma 4 defaults to layout units), and the node
+// label's size and colour ride the styles.
 function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
   return {
     settings: {
-      renderEdgeLabels: false,
+      renderEdgeLabels: true,
       enableEdgeEvents: true,
       labelDensity: 1,
       labelGridCellSize: 90,
@@ -57,14 +54,17 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
     primitives: { edges: { extremities: [extremityArrow()] } },
     styles: {
       nodes: [DEFAULT_STYLES.nodes, { labelSize: 11, labelColor: "#334155" }],
-      edges: [DEFAULT_STYLES.edges, { head: "arrow" }],
+      edges: [DEFAULT_STYLES.edges, EDGE_STYLE],
     },
     // Focus, in one reducer pair. Hovering a node keeps it and its neighbourhood
     // in full colour and fades the rest, the standard way to read a hairball one
     // ego-network at a time, and the selected node is ringed and always labelled
     // so the reader can find what they searched for. A node raised to the top
     // layer raises its label too: sigma draws the ring by depth and the label by
-    // labelDepth, so a label left below would sit under its own ring.
+    // labelDepth, so a label left below would sit under its own ring. Every edge of
+    // the hovered or selected node shows its label, even when the node at its other
+    // end is off screen: sigma itself labels an edge only when both its nodes show
+    // their labels or one of them is hovered.
     nodeReducer: (node, _data, _attributes, _state, _graphState, graph) => {
       const { hovered, selectedId } = focus.current;
       const center = hovered ?? selectedId;
@@ -87,7 +87,7 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
       const center = hovered ?? selectedId;
       if (center === null) return {};
       if (graph.source(edge) === center || graph.target(edge) === center) {
-        return { color: "#94a3b8", depth: "topEdges" };
+        return { color: "#94a3b8", depth: "topEdges", labelVisibility: "visible" as const };
       }
       return { color: MUTED, label: "" };
     },
@@ -161,25 +161,6 @@ function GraphSync({
   return null;
 }
 
-const EDGE_LABEL_LAYER = "edge-labels";
-
-// The edge labels, upright in place of sigma 4's own (sigma.js issue 1544, see
-// edge-labels.ts), drawn inside sigma's render between the edges and the nodes
-// (edge-label-layer.ts), as sigma 3 drew them.
-function UprightEdgeLabels({ focus }: { focus: RefObject<Focus> }) {
-  const sigma = useSigma();
-
-  useEffect(() => {
-    const focused = () => focus.current.hovered ?? focus.current.selectedId;
-    sigma.addCustomLayerProgram(EDGE_LABEL_LAYER, "nodes", edgeLabelLayer(sigma, focused));
-    return () => {
-      sigma.removeCustomLayerProgram(EDGE_LABEL_LAYER);
-    };
-  }, [sigma, focus]);
-
-  return null;
-}
-
 export function GraphCanvas({ graph, onSelect, selectedId, className }: GraphCanvasProps) {
   const focus = useRef<Focus>({ hovered: null, selectedId: selectedId ?? null });
   // Built once: a new options object would make the container build a new renderer.
@@ -192,7 +173,6 @@ export function GraphCanvas({ graph, onSelect, selectedId, className }: GraphCan
       data-testid="graph-canvas"
     >
       <GraphSync graph={graph} onSelect={onSelect} selectedId={selectedId} focus={focus} />
-      <UprightEdgeLabels focus={focus} />
     </SigmaContainer>
   );
 }
