@@ -38,9 +38,10 @@ Entry shape: what it does, where it lives, since when, upstream candidate (yes, 
 - **What:** a flag on `CodeMode` (default off) that renders each folded tool as `async def name(*, args) -> return  # first
   sentence` instead of a full stub with the whole docstring and every TypedDict block. The sandbox's type stubs stay fully
   detailed, so a wrong call is still refused with an exact message. On our chat agent it took `run_code` from 23.6 KB to 8.3 KB.
-- **Status:** removed with the fork on 2026-09-29. Without it the authoring agent's `run_code` description measures 15,567
-  bytes, and the owner accepted that size (`TestRunCodeCatalogSize` now allows 20,000). A compact catalog option goes upstream
-  as a feature request.
+- **Status:** removed with the fork on 2026-09-29. The owner accepted the full catalog's size, and `TestRunCodeCatalogSize`
+  allows 20,000 bytes. Since pydantic-ai-harness 0.63 the authoring agent's catalog sits in its own instruction block rather
+  than in `run_code`'s description, so the test measures the description and the catalog block together (about 16.3 KB). A
+  compact catalog option goes upstream as a feature request.
 - **Where (in the fork):** `pydantic_ai_harness/code_mode/_toolset.py` (`_render_compact_line`, `_render_catalog`),
   `_capability.py` (the flag), tests in `tests/code_mode/`.
 - **Since:** 2026-08-25 (`07a7fa54`. The keyword-only `*` fix is `a147fabf`).
@@ -248,8 +249,9 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 ### UE-19. `SkillHint` (core): a dynamic reminder naming the skill a decision model picks
 
 - **What:** a `SystemReminders` dynamic reminder that asks a decision model which mounted skill a run's prompt needs, on the
-  run's first model request only, and names it in one line when the averaged probability clears a threshold. It is never
-  saved to the history. A missing prompt, no unloaded skill, a "(none)" pick, a weak pick or a failed model all answer nothing.
+  run's first model request only, and names it in one line when the averaged probability clears a threshold. Since
+  pydantic-ai-harness 0.62 the history holds it once, as a system prompt part scoped to that request, which no later
+  request sends again. A missing prompt, no unloaded skill, a "(none)" pick, a weak pick or a failed model all answer nothing.
 - **Where:** `core/src/core/ai/skill_hint.py`, tests in `core/tests/unit/test_skill_hint.py`, mounted on the harness chat
   agent by `harness/src/harness/features/authoring/skill_hint.py`.
 - **Since:** 2026-10-06.

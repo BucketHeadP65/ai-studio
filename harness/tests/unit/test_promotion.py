@@ -29,6 +29,7 @@ from harness.features.selfauthoring.infrastructure.promotion import (
     demote_capability,
     promote_capability,
     promoted_capability_types,
+    promoted_names,
 )
 from tests.support.environment import world_over
 from tests.support.selfauthoring import FakeActivationLog
@@ -277,6 +278,21 @@ def test_reauthoring_an_active_promoted_capability_demotes_it(tmp_path: Path) ->
     kinds = [(event.name, event.action, event.via, event.kind) for event in activations.events]
     assert ("marker", "deactivate", "agent", "capability_activated") in kinds
     assert ("marker", "deactivate", "agent", "capability_promoted") in kinds
+
+
+def test_a_rejected_rewrite_of_a_promoted_capability_keeps_the_promotion(tmp_path: Path) -> None:
+    """Code that fails validation replaces nothing, so the reviewed code's promotion stays and nothing is recorded."""
+    store, activations = _custom_capabilities(tmp_path)
+    store.write("marker", _MEETS_CONTRACT_SOURCE)
+    store.activate("marker")
+    promote_capability(store, "marker")
+    activations.events.clear()
+
+    record = store.write("marker", "this is not python at all !!!")
+
+    assert record.last_error is not None
+    assert promoted_names(store.directory) == frozenset({"marker"})
+    assert activations.events == []
 
 
 def test_reauthoring_a_promoted_capability_never_reexecutes_the_new_source_via_the_registry(tmp_path: Path) -> None:

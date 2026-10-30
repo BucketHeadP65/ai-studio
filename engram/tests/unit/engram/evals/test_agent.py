@@ -161,6 +161,19 @@ class TestBuildAgent:
         tool_names = {tool.name for tool in params.function_tools}
         assert tool_names == {"run_code"}
 
+    async def test_code_mode_names_every_retrieval_tool_in_run_codes_description(self):
+        # The catalog of sandboxed functions stays in `run_code`'s description, the prompt shape the evals were measured on.
+        model = _model()
+        agent = build_agent(model, instructions="be precise", toolset=_toolset(), code_mode=True)
+
+        await agent.run("any question")
+
+        params = model.last_model_request_parameters
+        assert params is not None
+        [run_code] = params.function_tools
+        assert run_code.description is not None
+        assert all(f"async def {name}(" in run_code.description for name in ("search", "fetch", "graph_expand", "find_paths"))
+
     def test_extra_capabilities_land_in_the_agent(self):
         # `extra_capabilities` is appended after the built-in Instrumentation (and any CodeMode), so
         # a caller's capability rides alongside them on the agent's combined root capability.

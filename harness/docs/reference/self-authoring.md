@@ -48,6 +48,10 @@ through `check_draft` to `save_workflow`, with the same lineage and evidence. Se
 harness-side store instead of the vendor's default one. The vendor's `CapabilityStore.write()` activates a validated
 capability the moment it lands. `FileCustomCapabilities.write()` overrides that single method to land every entry
 `disabled` regardless of whether it validated. Pending is the only landing state, not a fallback for a broken one.
+A rewrite that fails validation over a version that validated lands nothing: the vendor store keeps that version's file
+and manifest entry, saves the rejected code beside it as `<name>.rejected.py`, and tells the agent the previous version is
+unchanged. The kept version keeps its status, active or pending, and nothing is recorded, since the reviewed code is still
+the code that runs.
 
 `activate(name)` / `deactivate(name)` are `harness`'s own acts. `disable(name)` is the agent's own
 `disable_custom_capability` tool, reused from the vendor toolset, attested with `via="agent"` rather than
@@ -228,7 +232,7 @@ plugins plus instructions are snapshotted beside the transcript, effective on th
 later document edits until re-selected. The Studio refuses a switch mid-conversation. The model stays its own knob,
 deliberately outside the set.
 
-`delete` removes a custom item outright (its manifest entry and its source file) and is refused while the item is
+`delete` removes a custom item outright (its manifest entry, its source file and a capability's rejected code) and is refused while the item is
 active, so the composition never changes as a side effect of routine cleanup (`DELETE /api/harness/{kind}/{name}` is
 the Studio's same path). `plugins` is the adjacent surface over the agent's *built-in* setup (`harness.plugins`):
 every functional plugin (knowledge base, leveled-reads, sql, pydantic-ai-docs, recall, skills, shell, files, and the
@@ -304,7 +308,7 @@ vendor registry's own validation (`get_capability_registry`'s `_validate_capabil
 on the class, the same shape every built-in capability already has.
 
 **Where it lands.** Promotion is idempotent and persists as one small, sorted `promoted.json` beside the capability
-manifest (`custom/capabilities/promoted.json`), the second file that directory holds. `promoted_capability_types`
+manifest (`custom/capabilities/promoted.json`). `promoted_capability_types`
 re-resolves the classes through the same loader on every call. `capability_grants_for` derives the matching
 `StepRegistry.capability_grants` list. Both are read once per environment build or per session by their callers
 (`composition.build_environment`, `build_agent`). A `promote`/`demote` that runs while a session is already live takes effect on
@@ -335,6 +339,7 @@ One settings-declared, git-tracked root holds every type's source and manifests:
 custom/
 ├── capabilities/
 │   ├── <name>.py          # one custom capability's source
+│   ├── <name>.rejected.py # code that failed validation, kept beside the live version until the next valid write or a delete
 │   ├── manifest.json      # AuthoredCapability records: name, class_name, status, last_error
 │   └── promoted.json      # the sorted list of promoted names
 ├── steps/

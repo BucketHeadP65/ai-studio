@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models import Model
     from pydantic_ai.models.function import AgentInfo, FunctionModel
-    from pydantic_ai.tools import DeferredToolRequests
+    from pydantic_ai.tools import DeferredToolRequests, ToolDefinition
 
 
 @dataclass
@@ -446,12 +446,32 @@ class TestDelegationMount:
         assert worker_brakes == agent_brakes
 
 
-def _offered_tool_names(info: AgentInfo) -> set[str]:
-    """The tools a request offers the model, the ones `run_code` holds in its catalog included."""
+_CATALOG = "toolset:code_mode:catalog"
+"""The id of the instruction block that holds the chat agent's catalog of sandboxed functions."""
+
+
+def _catalog_text(messages: Sequence[ModelMessage], info: AgentInfo) -> str:
+    """The catalog a request carries: its instruction block, then every change to it appended to the history."""
+    parts = info.model_request_parameters.instruction_parts or []
+    block = "".join(part.content for part in parts if str(part.id) == _CATALOG)
+    appended = [
+        part.content
+        for message in messages
+        for part in message.parts
+        if isinstance(part, UserPromptPart) and isinstance(part.content, str) and f'id="{_CATALOG}"' in part.content
+    ]
+    return "\n".join([block, *appended])
+
+
+def _sandbox(info: AgentInfo) -> ToolDefinition:
+    """The request's `run_code` tool."""
+    return next(tool for tool in info.function_tools if tool.name == SANDBOX)
+
+
+def _offered_tool_names(messages: Sequence[ModelMessage], info: AgentInfo) -> set[str]:
+    """The tools a request offers the model, the functions its catalog holds for `run_code` included."""
     names = {tool.name for tool in info.function_tools}
-    run_code = next((tool for tool in info.function_tools if tool.name == SANDBOX), None)
-    catalog = run_code.description or "" if run_code is not None else ""
-    return names | set(re.findall(r"async def (\w+)\(", catalog))
+    return names | set(re.findall(r"async def (\w+)\(", _catalog_text(messages, info)))
 
 
 def _captured_params(function: Callable[[Sequence[ModelMessage], AgentInfo], ModelResponse]) -> FunctionModel:
@@ -598,7 +618,7 @@ class TestSelfAuthoringDeferral:
 
         def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
             seen.append(messages)
-            offered.append(_offered_tool_names(info))
+            offered.append(_offered_tool_names(messages, info))
             if len(seen) == 1:
                 return ModelResponse(parts=[ToolCallPart("load_capability", {"id": capability_id})])
             return ModelResponse(parts=[TextPart("done")])
@@ -621,11 +641,51 @@ class TestSelfAuthoringDeferral:
         assert tool_name in offered[1], "the load must make the tool callable, not only name it"
 
 
-class TestRunCodeCatalogSize:
-    """`run_code.description`'s size, with everything that folds into it actually mounted.
+class TestCodeModeCatalog:
+    """The chat agent's catalog of sandboxed functions is an instruction block a capability load appends to."""
 
-    A regression guard, not the full picture. With the full catalog the description measures about
-    15.6 KB, and the ceiling leaves about 30% headroom over that, so a real regression shows without
+    async def test_the_catalog_is_an_instruction_block_and_run_code_lists_no_function(self, tmp_path: Path) -> None:
+        captured: dict[str, AgentInfo] = {}
+
+        def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
+            captured["info"] = info
+            return ModelResponse(parts=[TextPart("done")])
+
+        agent = _build(
+            ProjectConfig(), tmp_path, model=_captured_params(function), delegation=True, save_capability_id="saving-a-workflow"
+        )
+        await _run(agent)
+
+        assert "async def " not in (_sandbox(captured["info"]).description or ""), "run_code's description holds no catalog"
+        assert "async def search_workflows(" in _catalog_text([], captured["info"])
+
+    async def test_loading_self_authoring_appends_its_functions_and_leaves_run_code_as_it_was(self, tmp_path: Path) -> None:
+        seen: list[Sequence[ModelMessage]] = []
+        infos: list[AgentInfo] = []
+
+        def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
+            seen.append(list(messages))
+            infos.append(info)
+            if len(infos) == 1:
+                return ModelResponse(parts=[ToolCallPart("load_capability", {"id": SELF_AUTHORING_CAPABILITY_ID})])
+            return ModelResponse(parts=[TextPart("done")])
+
+        agent = _build(
+            ProjectConfig(), tmp_path, model=_captured_params(function), delegation=True, save_capability_id="saving-a-workflow"
+        )
+        await _run(agent)
+
+        assert len(infos) == 2, "the load must have succeeded outright, not retried"
+        assert _sandbox(infos[1]).description == _sandbox(infos[0]).description, "the load rewrites nothing the cached prefix holds"
+        assert "list_custom_capabilities" not in _offered_tool_names(seen[0], infos[0])
+        assert "list_custom_capabilities" in _offered_tool_names(seen[1], infos[1]), "the load appends its functions to the catalog"
+
+
+class TestRunCodeCatalogSize:
+    """The size of `run_code`'s description and the catalog block together, with everything that folds into the sandbox mounted.
+
+    A regression guard, not the full picture. With the full catalog the two measure about
+    16.3 KB, and the ceiling leaves about 20% headroom over that, so a real regression shows without
     chasing the exact byte count turn to turn.
     """
 
@@ -670,10 +730,8 @@ class TestRunCodeCatalogSize:
         )
         await _run(agent)
 
-        tools = {td.name: td for td in captured["info"].model_request_parameters.function_tools}
-        run_code_description = tools["run_code"].description
-        assert run_code_description is not None
-        assert len(run_code_description.encode()) < 20_000
+        prompt_text = (_sandbox(captured["info"]).description or "") + _catalog_text([], captured["info"])
+        assert len(prompt_text.encode()) < 20_000
 
 
 class TestSkillHintMount:

@@ -48,19 +48,21 @@ class FileCustomCapabilities(CapabilityStore):
         return None
 
     def write(self, name: str, code: str) -> AuthoredCapability:
-        """Write, validate and upsert `name`, landing its manifest entry disabled.
+        """Write and validate `name`, landing what replaces the live version disabled.
 
         A capability that validates cleanly lands disabled exactly like one that failed validation. The
         owner activates it with `harness activate capability <name>`. Overwriting an active capability
         is itself a deactivation: it is recorded from `agent`, the only surface that writes, and the
-        capability is demoted when it was promoted.
+        capability is demoted when it was promoted. Code that fails validation over a version that
+        validated replaces nothing: that version keeps its file, its entry and its status, and nothing
+        is recorded.
 
         Args:
             name: The name to write the capability under.
             code: The complete Python source.
 
         Returns:
-            The manifest entry as written, with the validation error when there was one.
+            The record of what was written, disabled, with the validation error when there was one.
 
         Raises:
             ValueError: `name` is not lowercase letters, digits and underscores starting with a letter.
@@ -69,7 +71,11 @@ class FileCustomCapabilities(CapabilityStore):
         previous = self._existing(name)
         record = super().write(name, code)
         record.status = "disabled"
-        self._upsert(record)
+        if record.module_file != f"{name}.py":
+            # The store kept the previous version and saved the rejected code beside it, outside the manifest.
+            return record
+        # The store's own `disable`, under its directory lock: this class's `disable` would record a deactivation.
+        CapabilityStore.disable(self, name)
         record_overwrite(
             previous,
             name,
@@ -131,7 +137,7 @@ class FileCustomCapabilities(CapabilityStore):
         return found
 
     def delete(self, name: str) -> bool:
-        """Remove `name`'s manifest entry and its module file, and record the act from `cli`.
+        """Remove `name`'s manifest entry, its module file and any rejected code beside it, and record the act from `cli`.
 
         An active capability is refused, so tidying the library never changes the setup. A disabled
         capability is never promoted, because deactivating demotes it.
@@ -155,6 +161,7 @@ class FileCustomCapabilities(CapabilityStore):
         manifest.capabilities = [entry for entry in manifest.capabilities if entry.name != name]
         self._save_manifest(manifest)
         (self.directory / record.module_file).unlink(missing_ok=True)
+        (self.directory / f"{name}.rejected.py").unlink(missing_ok=True)
         self.activations.record(CapabilityActivated(name=name, action="delete", via="cli"))
         return True
 
