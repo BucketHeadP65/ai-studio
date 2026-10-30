@@ -35,9 +35,9 @@ export function nodeColor(type: string): string {
 // The edges' look over sigma's defaults: every edge draws its arrow head, and its label
 // in its own colour under the line, so a highlighted edge never strikes through it. The
 // labels draw at the nodes depth, after every edge line (a highlighted one included) and
-// before every node.
+// before every node. sigma 4.0.4 draws every edge label at a fixed 12px and reads no
+// label size from an edge style.
 export const EDGE_STYLE = {
-  labelSize: 9,
   labelColor: "#94a3b8",
   labelPosition: "below",
   labelDepth: "nodes",

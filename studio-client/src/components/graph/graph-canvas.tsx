@@ -36,8 +36,8 @@ interface Focus {
   selectedId: string | null;
 }
 
-// Sizes stay in screen pixels (sigma 4 defaults to layout units), and the label
-// sizes and colours ride the styles.
+// Sizes stay in screen pixels (sigma 4 defaults to layout units), and the node
+// label's size and colour ride the styles.
 function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
   return {
     settings: {
