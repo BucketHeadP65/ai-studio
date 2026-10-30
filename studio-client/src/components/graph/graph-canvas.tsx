@@ -7,7 +7,7 @@ import { extremityArrow } from "sigma/rendering";
 import { DEFAULT_STYLES, type SigmaOptions } from "sigma/types";
 
 import type { GraphEdge, GraphNode, GraphResult } from "@/api/types";
-import { graphSignature, toGraphology } from "@/lib/graph-model";
+import { EDGE_STYLE, graphSignature, toGraphology } from "@/lib/graph-model";
 
 // The knowledge base graph's canvas, on sigma.js v4 + graphology, the stack built for
 // exactly this (WebGL network rendering, Gephi lineage) instead of the manual
@@ -36,9 +36,8 @@ interface Focus {
   selectedId: string | null;
 }
 
-// Sizes stay in screen pixels (sigma 4 defaults to layout units), every edge
-// draws its arrow head, and the label sizes and colours ride the styles. An edge
-// label sits under its line, so a highlighted edge never strikes through it.
+// Sizes stay in screen pixels (sigma 4 defaults to layout units), and the label
+// sizes and colours ride the styles.
 function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
   return {
     settings: {
@@ -55,10 +54,7 @@ function sigmaOptions(focus: RefObject<Focus>): SigmaOptions {
     primitives: { edges: { extremities: [extremityArrow()] } },
     styles: {
       nodes: [DEFAULT_STYLES.nodes, { labelSize: 11, labelColor: "#334155" }],
-      edges: [
-        DEFAULT_STYLES.edges,
-        { labelSize: 9, labelColor: "#94a3b8", labelPosition: "below", head: "arrow" },
-      ],
+      edges: [DEFAULT_STYLES.edges, EDGE_STYLE],
     },
     // Focus, in one reducer pair. Hovering a node keeps it and its neighbourhood
     // in full colour and fades the rest, the standard way to read a hairball one

@@ -32,6 +32,18 @@ export function nodeColor(type: string): string {
   return (NODE_TYPE_COLORS as Record<string, string>)[type] ?? FALLBACK_NODE_COLOR;
 }
 
+// The edges' look over sigma's defaults: every edge draws its arrow head, and its label
+// in its own colour under the line, so a highlighted edge never strikes through it. The
+// labels draw at the nodes depth, after every edge line (a highlighted one included) and
+// before every node.
+export const EDGE_STYLE = {
+  labelSize: 9,
+  labelColor: "#94a3b8",
+  labelPosition: "below",
+  labelDepth: "nodes",
+  head: "arrow",
+} as const;
+
 // Order-independent signature of the render-relevant content, so a
 // keepPreviousData refetch that resolves to the same graph never triggers a
 // rebuild + relayout (which would reshuffle the map under the reader).

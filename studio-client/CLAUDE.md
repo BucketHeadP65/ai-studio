@@ -84,9 +84,16 @@ reads imports with the oxc parser that `vite` exports as `parseSync`. In VS Code
 
 **sigma 4.0.4 or later draws the edge labels.** From 4.0.4 sigma keeps an edge label upright when its edge runs
 right to left (the edge label option `keepUpright`, on by default). Older 4.0 releases drew those labels upside down.
-The graph puts each edge label under its line (`labelPosition: "below"`), so a highlighted edge, drawn in the label's
-colour, never strikes through it. Every edge of the hovered or selected node shows its label, even when the node at
-its other end is off screen. sigma by itself labels an edge only when both its nodes show their labels or one of
-them is hovered. `e2e/graph.spec.ts` checks that nodes, edges and edge labels are drawn, that the label of a right to
-left edge sits under its line (an upside down label sits above it), that a selected node's label reads above its
-ring, and that a selected node keeps its edge labels after the pointer leaves.
+
+The edge style is `EDGE_STYLE` in `src/lib/graph-model.ts`. It puts each edge label under its line
+(`labelPosition: "below"`), so a highlighted edge, drawn in the label's colour, never strikes through it. It draws the
+labels at the `nodes` depth (`labelDepth: "nodes"`), after every edge line and before every node. The edge reducer
+raises a highlighted edge to the `topEdges` depth, so labels left at sigma's default `edges` depth would have the
+highlighted lines painted over them. The labels have no background, so a crossing line still shows between the
+letters.
+
+Every edge of the hovered or selected node shows its label, even when the node at its other end is off screen. sigma
+by itself labels an edge only when both its nodes show their labels or one of them is hovered.
+`e2e/graph.spec.ts` checks that nodes, edges and edge labels are drawn, that the label of a right to left edge sits
+under its line (an upside down label sits above it), that a selected node's label reads above its ring, and that a
+selected node keeps its edge labels after the pointer leaves.
