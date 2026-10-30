@@ -13,6 +13,7 @@ import openai
 import pytest
 
 from pydantic_ai.retries import AsyncHTTPX2TenacityTransport
+from tenacity import AsyncRetrying, RetryCallState
 
 from core.ai.models import chat_http_client, chat_retry_config
 
@@ -77,6 +78,14 @@ async def _post(transport: ScriptedTransport, sleeps: Sleeps) -> httpx2.Response
         return await client.post("https://example.test/responses", content=b"{}")
 
 
+def _failed_connection_after(seconds: float) -> RetryCallState:
+    state = RetryCallState(retry_object=AsyncRetrying(), fn=None, args=(), kwargs={})
+    state.set_exception((httpx2.ConnectError, httpx2.ConnectError("down"), None))
+    assert state.outcome_timestamp is not None
+    state.start_time = state.outcome_timestamp - seconds
+    return state
+
+
 def _sdk_client(transport: ScriptedTransport) -> openai.AsyncOpenAI:
     http_client = chat_http_client(wrapped=transport, config=chat_retry_config(sleep=Sleeps()))
     return openai.AsyncOpenAI(api_key="test-key", base_url="https://example.test/v1/", max_retries=0, http_client=http_client)
@@ -120,6 +129,25 @@ async def test_the_last_connection_error_is_raised_once_the_waits_pass_three_hun
     assert max(sleeps.seconds) <= 30.0
     assert sum(sleeps.seconds) >= 300.0
     assert sum(sleeps.seconds[:-1]) < 300.0
+
+
+def test_a_failed_connection_stops_once_three_hundred_seconds_have_passed_on_the_clock():
+    stop = chat_retry_config().get("stop")
+    assert stop is not None
+
+    assert not stop(_failed_connection_after(299.0))
+    assert stop(_failed_connection_after(300.0))
+
+
+async def test_a_retried_status_after_a_run_of_failed_connections_still_gets_four_attempts():
+    transport = ScriptedTransport(*[httpx2.ConnectError("down")] * 6, 503, 503, 503, 200)
+    sleeps = Sleeps()
+
+    response = await _post(transport, sleeps)
+
+    assert response.status_code == 200
+    assert transport.sent == 10
+    assert sleeps.seconds == [1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 8.0, 8.0, 8.0]
 
 
 async def test_a_slow_model_is_never_retried():

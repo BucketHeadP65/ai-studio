@@ -47,9 +47,10 @@ _EMBEDDING_MAX_WAIT_SECONDS = 20.0
 _CHAT_ATTEMPTS = 4
 _CHAT_MAX_WAIT_SECONDS = 20.0
 _CHAT_BACKOFF = wait_exponential(multiplier=1.0, min=1.0, max=8.0)
-_CHAT_STOP = stop_after_attempt(_CHAT_ATTEMPTS)
 _CONNECTION_BACKOFF = wait_exponential(multiplier=1.0, min=1.0, max=30.0)
 _CONNECTION_RETRY_SECONDS = 300.0
+_RETRIED_RESPONSES = "retried_responses"
+"""The key under which a request's own tenacity statistics count the responses it has retried."""
 _CONNECTION_FAILURES = (httpx2.NetworkError, httpx2.RemoteProtocolError, httpx2.ConnectTimeout)
 """The errors that end an attempt before a response begins, never a read timeout."""
 _SDK_RETRIED_STATUSES = frozenset({httpx2.codes.REQUEST_TIMEOUT, httpx2.codes.CONFLICT, httpx2.codes.TOO_MANY_REQUESTS})
@@ -134,9 +135,12 @@ def _wait_before_chat_retry(state: RetryCallState) -> float:
 
 
 def _stop_chat_retries(state: RetryCallState) -> bool:
-    """Whether to give up: after 300 seconds since the first attempt on a failed connection, after four attempts on a response."""
+    """Whether to give up: after 300 seconds since the first attempt on a failed connection, after the fourth retried response."""
     if _response(_finished(state)) is not None:
-        return _CHAT_STOP(state)
+        statistics = state.retry_object.statistics
+        responses = int(statistics.get(_RETRIED_RESPONSES, 0)) + 1
+        statistics[_RETRIED_RESPONSES] = responses
+        return responses >= _CHAT_ATTEMPTS
     # A recorded sleep moves no clock, so the waits it was asked for count as time passed.
     seconds_passed = max(state.seconds_since_start or 0.0, state.idle_for)
     return seconds_passed >= _CONNECTION_RETRY_SECONDS
@@ -167,8 +171,8 @@ def chat_retry_config(*, sleep: Callable[[float], Awaitable[None]] | None = None
 
     A failed connection is one that ends before a response begins, never a read timeout. It is retried with waits that
     grow from 1 to 30 seconds until 300 seconds have passed since the first attempt, and then its last error is raised.
-    A response with HTTP 408, 409, 429 or 5xx gets four attempts in all, with waits from 1 to 8 seconds or its
-    `Retry-After` header in whole seconds up to 20. Once those run out, the last response is returned unread.
+    A response with HTTP 408, 409, 429 or 5xx gets four attempts in all, counted over the responses alone, with waits from
+    1 to 8 seconds or its `Retry-After` header in whole seconds up to 20. Once those run out, the last response is returned unread.
 
     Args:
         sleep: Waits for the given seconds between attempts, or `None` for the real sleep. A test passes a recorder, and
@@ -203,9 +207,8 @@ class _SelfClosingAsyncClient(httpx2.AsyncClient):
 def chat_http_client(*, wrapped: httpx2.AsyncBaseTransport | None = None, config: RetryConfig | None = None) -> httpx2.AsyncClient:
     """An HTTP client for model requests that retries under `chat_retry_config`, on the OpenAI SDK's own client settings.
 
-    A failed connection is retried until 300 seconds have passed since the first attempt, and HTTP 408, 409, 429 and 5xx
-    get four attempts in all. It keeps the SDK's timeout, connection limits and redirect following, and closes itself once
-    nothing holds it. The `AsyncOpenAI` client it is handed to must retry nothing itself (`max_retries=0`), or the retries multiply.
+    It keeps the SDK's timeout, connection limits and redirect following. It closes itself once nothing holds it.
+    The `AsyncOpenAI` client it is handed to must retry nothing itself (`max_retries=0`), or the retries multiply.
 
     Args:
         wrapped: The transport that sends each attempt, or `None` for the real network transport.
