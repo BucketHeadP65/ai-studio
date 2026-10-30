@@ -12,6 +12,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
+from asyncpg.exceptions import AdminShutdownError, CannotConnectNowError, CrashShutdownError, PostgresConnectionError
 from sqlalchemy import text
 
 from core.cqrs.events import ChangeNotification
@@ -31,6 +32,15 @@ TOPICS_CHANNEL = "coordination_topics"
 SUBSCRIBER_QUEUE_LIMIT = 256
 """How many unread change notifications one in-process reader may hold. Past it the oldest is dropped, because the
 newest hint to refetch is the one that matters."""
+
+# A listening connection that was refused, reset, closed or never opened, or a database shutting down or starting up.
+_LOST_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    PostgresConnectionError,
+    CannotConnectNowError,
+    AdminShutdownError,
+    CrashShutdownError,
+)
 
 
 class Executes(Protocol):
@@ -53,11 +63,18 @@ class TopicNotifier(Protocol):
     """Sends one payload on one channel, over a connection of its own."""
 
     async def notify(self, channel: str, payload: str) -> None:
-        """Send `payload` on `channel`.
+        """Send `payload` on `channel`, replacing a connection the database closed.
+
+        A send that finds its connection closed or loses it midway goes out once more on a new connection. A send that
+        still fails raises, and the next call opens a new connection.
 
         Args:
             channel: The channel to send on.
             payload: The text to send.
+
+        Raises:
+            OSError: The database could not be reached.
+            asyncpg.PostgresError: The database refused the connection or the statement.
         """
         ...
 
@@ -70,7 +87,12 @@ class TopicListener(Protocol):
     """Receives payloads from one channel, over a connection of its own."""
 
     async def open(self) -> None:
-        """Start listening."""
+        """Start listening, on a new connection when the last one was lost.
+
+        Raises:
+            OSError: The database could not be reached.
+            asyncpg.PostgresError: The database refused or dropped the connection, or is shutting down or starting up.
+        """
         ...
 
     async def get(self) -> str:
@@ -110,6 +132,9 @@ class Broadcaster:
 
     One way out. The listening connection feeds every in-process subscriber, so an announcement from any process on
     the same database reaches every reader here.
+
+    Both connections come back by themselves after the database restarts. The sending connection is replaced on the next
+    send. The listening connection reopens with backoff and listens again.
     """
 
     def __init__(  # noqa: PLR0913 (every argument after the DSN is keyword-only and defaulted)
@@ -127,7 +152,7 @@ class Broadcaster:
         Args:
             dsn: The database both connections open on.
             coalesce_seconds: How long the publisher task gathers before sending, and how long the fan-out task first
-                waits before reopening a listening connection it lost.
+                waits before reopening a listening connection it lost or could not open.
             backoff_cap_seconds: The longest wait between reopen attempts. The wait doubles after each failed attempt up
                 to it, and a reopen that succeeds starts it over.
             notifier: The sending connection. Defaults to a `Notifier` on `dsn`.
@@ -261,7 +286,7 @@ class Broadcaster:
                     _logger.info("listener connection restored after {failures} failed attempts", failures=failures)
                     delay, failures = self._coalesce_seconds, 0
                 self.deliver(await self._listener.get())
-            except OSError as exc:
+            except _LOST_CONNECTION_ERRORS as exc:
                 if not failures:
                     _logger.warning("listener connection lost, reconnecting with backoff", error=exc)
                 failures += 1

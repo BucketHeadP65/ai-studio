@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
@@ -18,7 +18,7 @@ from sqlalchemy import NullPool, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
+    from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, Mapping, Sequence
 
     from sqlalchemy import MetaData
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -303,38 +303,101 @@ class Listener:
             self._connection = None
 
 
+class SendingConnection(Protocol):
+    """The part of an asyncpg connection a `Notifier` sends on."""
+
+    async def execute(self, query: str, *args: str) -> str:
+        """Run `query` with `args` bound to its placeholders.
+
+        Args:
+            query: The statement to run.
+            args: Its bound values, in placeholder order.
+
+        Returns:
+            The server's status line for the statement.
+        """
+        ...
+
+    def is_closed(self) -> bool:
+        """Whether the connection is closed, by either end.
+
+        Returns:
+            True once the connection is closed.
+        """
+        ...
+
+    def terminate(self) -> None:
+        """Close the connection at once, without waiting on the server."""
+        ...
+
+    async def close(self) -> None:
+        """Close the connection gracefully."""
+        ...
+
+
 class Notifier:
     """One dedicated connection for sending notifications on any channel.
 
     The sending half of `Listener`. It holds its own connection, so a send never waits behind other
-    work on a pool. It connects on the first send and stays connected. Close it when done.
+    work on a pool. It connects on the first send and keeps the connection until the database closes
+    it, then opens a new one. Close it when done.
     """
 
-    def __init__(self, dsn: str) -> None:
+    def __init__(self, dsn: str, *, connect: Callable[[str], Awaitable[SendingConnection]] = asyncpg.connect) -> None:
         """Hold the connection details. Nothing connects until the first send.
 
         Args:
             dsn: The database DSN, in either spelling.
+            connect: Opens a connection on the libpq spelling of `dsn`.
         """
         self._dsn = asyncpg_dsn(dsn)
-        self._connection: asyncpg.Connection | None = None
+        self._connect = connect
+        self._connection: SendingConnection | None = None
         self._lock = asyncio.Lock()
 
     async def notify(self, channel: str, payload: str) -> None:
         """Send `payload` on `channel`, connecting on the first call.
 
-        Concurrent calls are safe. They take turns on the one connection.
+        Concurrent calls are safe. They take turns on the one connection. A held connection the database
+        closed is dropped and the send goes out on a new one. A send that loses its held connection midway
+        is sent once more on a new connection. A send that still fails raises, and the next call connects again.
 
         Args:
             channel: The Postgres channel to send on.
             payload: The notification payload.
+
+        Raises:
+            OSError: The database could not be reached.
+            asyncpg.PostgresError: The database refused the connection or the statement.
         """
         async with self._lock:
-            connection = self._connection
-            if connection is None:
-                connection = await asyncpg.connect(self._dsn)
-                self._connection = connection
+            if self._connection is not None and self._connection.is_closed():
+                self._drop()
+            reused = self._connection is not None
+            try:
+                await self._send(channel, payload)
+            except Exception:
+                if not reused or self._connection is not None:
+                    raise
+                await self._send(channel, payload)
+
+    async def _send(self, channel: str, payload: str) -> None:
+        """Send once, connecting when no connection is held and dropping the held one when the send finds it closed."""
+        if self._connection is None:
+            self._connection = await self._connect(self._dsn)
+        connection = self._connection
+        try:
             await connection.execute("SELECT pg_notify($1, $2)", channel, payload)
+        except Exception:
+            if connection.is_closed():
+                self._drop()
+            raise
+
+    def _drop(self) -> None:
+        """Terminate the held connection and forget it."""
+        if self._connection is not None:
+            self._connection.terminate()
+            self._connection = None
 
     async def close(self) -> None:
         """Close the connection. Calling it twice is harmless."""

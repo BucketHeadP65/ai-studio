@@ -9,15 +9,18 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import pytest
+
+from asyncpg.exceptions import CannotConnectNowError, ConnectionDoesNotExistError
+
 from core.cqrs.contracts import Broadcaster, Job, TopicPublisher, change_frames
 from core.cqrs.events import ChangeNotification, matches
 from core.cqrs.infrastructure.broadcaster import SUBSCRIBER_QUEUE_LIMIT, TOPICS_CHANNEL
-from tests.support.fakes.topics import FakeListener, FakeNotifier
+from core.db import Notifier, asyncpg_dsn
+from tests.support.fakes.topics import FakeConnection, FakeConnector, FakeListener, FakeNotifier
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
-
-    import pytest
 
 T0 = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
@@ -222,6 +225,76 @@ class TestReconnect:
         assert (await asyncio.wait_for(reader, timeout=1)).topic == "kb.research"
         await stream.aclose()
         await broadcaster.stop()
+
+    @pytest.mark.parametrize(
+        "refusal",
+        [
+            CannotConnectNowError("the database system is starting up"),
+            ConnectionDoesNotExistError("connection was closed in the middle of operation"),
+        ],
+    )
+    async def test_a_database_restart_refusing_the_reopen_still_resubscribes_and_delivers(self, refusal: Exception):
+        broadcaster, _, listener = _broadcaster(coalesce_seconds=0.01)
+        await broadcaster.start()
+        listener.fail_next(ConnectionError("listener connection lost"))
+        listener.fail_next_open(refusal)
+        stream = broadcaster.subscribe()
+        reader = asyncio.create_task(anext(stream))
+        listener.arrive("kb.research")
+        assert (await asyncio.wait_for(reader, timeout=1)).topic == "kb.research"
+        assert listener.open_count == 5
+        await stream.aclose()
+        await broadcaster.stop()
+
+
+DSN = "postgresql://u:p@h/db"
+
+
+def _sending_broadcaster(connector: FakeConnector) -> Broadcaster:
+    return Broadcaster(DSN, notifier=Notifier(DSN, connect=connector.connect), listener=FakeListener())
+
+
+class TestSendReconnect:
+    async def test_a_connection_the_database_closed_is_replaced_and_the_topic_goes_out(self):
+        first, second = FakeConnection(), FakeConnection()
+        connector = FakeConnector(first, second)
+        broadcaster = _sending_broadcaster(connector)
+        broadcaster.publish("sessions")
+        assert await broadcaster.flush() == 1
+        first.closed = True
+        broadcaster.publish("run.wf.report")
+        assert await broadcaster.flush() == 1
+        assert first.sent == [(TOPICS_CHANNEL, "sessions")]
+        assert second.sent == [(TOPICS_CHANNEL, "run.wf.report")]
+        assert connector.dsns == [asyncpg_dsn(DSN), asyncpg_dsn(DSN)]
+        assert first.terminated
+
+    async def test_a_connection_lost_during_the_send_is_replaced_and_the_topic_is_sent_again(self):
+        first, second = FakeConnection(), FakeConnection()
+        connector = FakeConnector(first, second)
+        broadcaster = _sending_broadcaster(connector)
+        broadcaster.publish("sessions")
+        await broadcaster.flush()
+        first.lose_on_send = True
+        broadcaster.publish("run.wf.report")
+        assert await broadcaster.flush() == 1
+        assert second.sent == [(TOPICS_CHANNEL, "run.wf.report")]
+        assert first.terminated
+
+    async def test_a_database_still_down_is_logged_and_the_next_send_recovers(self, caplog: pytest.LogCaptureFixture):
+        first, second = FakeConnection(), FakeConnection()
+        connector = FakeConnector(first, ConnectionRefusedError("connect call failed"), second)
+        broadcaster = _sending_broadcaster(connector)
+        broadcaster.publish("sessions")
+        await broadcaster.flush()
+        first.lose_on_send = True
+        broadcaster.publish("run.wf.report")
+        assert await broadcaster.flush() == 0
+        assert "run.wf.report" in caplog.text
+        assert len(connector.dsns) == 2
+        broadcaster.publish("run.wf.report")
+        assert await broadcaster.flush() == 1
+        assert second.sent == [(TOPICS_CHANNEL, "run.wf.report")]
 
 
 class TestTopicPublisher:

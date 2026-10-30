@@ -1,12 +1,15 @@
-"""Hand-written doubles for the two raw-connection ports the broadcaster holds.
+"""Hand-written doubles for the two raw-connection ports the broadcaster holds and the connection a `Notifier` opens.
 
 `FakeNotifier` records what was sent instead of reaching Postgres. `FakeListener` hands back
-whatever a test queued, so the fan-out can be driven without a database.
+whatever a test queued, so the fan-out can be driven without a database. `FakeConnector` hands a
+`Notifier` scripted `FakeConnection`s, so a lost connection can be driven without a database.
 """
 
 from __future__ import annotations
 
 import asyncio
+
+from asyncpg.exceptions import ConnectionDoesNotExistError, InterfaceError
 
 
 class FakeNotifier:
@@ -68,3 +71,55 @@ class FakeListener:
     async def close(self) -> None:
         """Mark it closed."""
         self.closed = True
+
+
+class FakeConnection:
+    """A sending connection that records each payload, or fails as asyncpg does once closed or lost mid-statement."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str]] = []
+        self.closed = False
+        self.terminated = False
+        self.lose_on_send = False
+
+    async def execute(self, query: str, *args: str) -> str:
+        """Record `(channel, payload)`, or raise asyncpg's error for a closed or lost connection."""
+        if self.lose_on_send:
+            self.closed = True
+            msg = "connection was closed in the middle of operation"
+            raise ConnectionDoesNotExistError(msg)
+        if self.closed:
+            msg = "connection is closed"
+            raise InterfaceError(msg)
+        channel, payload = args
+        self.sent.append((channel, payload))
+        return query.split(" ", 1)[0]
+
+    def is_closed(self) -> bool:
+        """Whether the database or a test closed it."""
+        return self.closed
+
+    def terminate(self) -> None:
+        """Mark it terminated and closed."""
+        self.terminated = True
+        self.closed = True
+
+    async def close(self) -> None:
+        """Mark it closed."""
+        self.closed = True
+
+
+class FakeConnector:
+    """Hands out scripted connections in order, or raises a scripted error in a connection's place."""
+
+    def __init__(self, *outcomes: FakeConnection | Exception) -> None:
+        self.outcomes: list[FakeConnection | Exception] = list(outcomes)
+        self.dsns: list[str] = []
+
+    async def connect(self, dsn: str) -> FakeConnection:
+        """Record `dsn` and return the next scripted connection, or raise the next scripted error."""
+        self.dsns.append(dsn)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
