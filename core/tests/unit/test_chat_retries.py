@@ -1,4 +1,4 @@
-"""The chat retry policy retries a failed connection and the statuses the OpenAI SDK retries, three times with growing waits."""
+"""The chat retry policy retries a failed connection for 300 seconds and the statuses the OpenAI SDK retries four attempts in all."""
 
 from __future__ import annotations
 
@@ -96,15 +96,30 @@ async def test_a_connection_that_fails_twice_is_retried_until_a_response_comes(f
     assert sleeps.seconds == [1.0, 2.0]
 
 
-async def test_the_last_connection_error_is_raised_after_three_retries():
-    transport = ScriptedTransport(*[httpx2.ConnectError("down")] * 4)
+async def test_a_connection_that_fails_past_four_attempts_is_retried_until_a_response_comes():
+    transport = ScriptedTransport(*[httpx2.ConnectError("down")] * 6, 200)
     sleeps = Sleeps()
 
-    with pytest.raises(httpx2.ConnectError):
+    response = await _post(transport, sleeps)
+
+    assert response.status_code == 200
+    assert transport.sent == 7
+    assert sleeps.seconds == [1.0, 2.0, 4.0, 8.0, 16.0, 30.0]
+
+
+async def test_the_last_connection_error_is_raised_once_the_waits_pass_three_hundred_seconds():
+    failures = [httpx2.ConnectError(f"down {attempt}") for attempt in range(1, 21)]
+    transport = ScriptedTransport(*failures)
+    sleeps = Sleeps()
+
+    with pytest.raises(httpx2.ConnectError) as raised:
         await _post(transport, sleeps)
 
-    assert transport.sent == 4
-    assert sleeps.seconds == [1.0, 2.0, 4.0]
+    assert raised.value is failures[transport.sent - 1]
+    assert transport.sent == len(sleeps.seconds) + 1
+    assert max(sleeps.seconds) <= 30.0
+    assert sum(sleeps.seconds) >= 300.0
+    assert sum(sleeps.seconds[:-1]) < 300.0
 
 
 async def test_a_slow_model_is_never_retried():
@@ -177,6 +192,18 @@ async def test_the_last_response_is_handed_back_unread_once_retries_run_out():
     assert all(body.closed for body in transport.bodies[:3])
 
 
+async def test_a_503_stops_after_four_attempts_and_the_last_response_is_handed_back():
+    transport = ScriptedTransport(*[503] * 5)
+    sleeps = Sleeps()
+
+    response = await _post(transport, sleeps)
+
+    assert response.status_code == 503
+    assert response.json() == _ERROR_BODY
+    assert transport.sent == 4
+    assert sleeps.seconds == [1.0, 2.0, 4.0]
+
+
 async def test_the_sdk_raises_its_own_rate_limit_error_once_retries_run_out():
     transport = ScriptedTransport(*[429] * 4)
 
@@ -187,12 +214,13 @@ async def test_the_sdk_raises_its_own_rate_limit_error_once_retries_run_out():
 
 
 async def test_the_sdk_raises_its_own_connection_error_once_retries_run_out():
-    transport = ScriptedTransport(*[httpx2.ConnectError("down")] * 4)
+    transport = ScriptedTransport(*[httpx2.ConnectError("down")] * 20)
 
-    with pytest.raises(openai.APIConnectionError):
+    with pytest.raises(openai.APIConnectionError) as raised:
         await _sdk_client(transport).responses.create(model="some-deployment", input="hello")
 
-    assert transport.sent == 4
+    assert isinstance(raised.value.__cause__, httpx2.ConnectError)
+    assert transport.sent == 15
 
 
 @pytest.mark.parametrize("status", [400, 401, 404])
