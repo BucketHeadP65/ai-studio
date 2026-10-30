@@ -232,7 +232,7 @@ plugins plus instructions are snapshotted beside the transcript, effective on th
 later document edits until re-selected. The Studio refuses a switch mid-conversation. The model stays its own knob,
 deliberately outside the set.
 
-`delete` removes a custom item outright (its manifest entry and its source file) and is refused while the item is
+`delete` removes a custom item outright (its manifest entry, its source file and a capability's rejected code) and is refused while the item is
 active, so the composition never changes as a side effect of routine cleanup (`DELETE /api/harness/{kind}/{name}` is
 the Studio's same path). `plugins` is the adjacent surface over the agent's *built-in* setup (`harness.plugins`):
 every functional plugin (knowledge base, leveled-reads, sql, pydantic-ai-docs, recall, skills, shell, files, and the
@@ -308,7 +308,7 @@ vendor registry's own validation (`get_capability_registry`'s `_validate_capabil
 on the class, the same shape every built-in capability already has.
 
 **Where it lands.** Promotion is idempotent and persists as one small, sorted `promoted.json` beside the capability
-manifest (`custom/capabilities/promoted.json`), the second file that directory holds. `promoted_capability_types`
+manifest (`custom/capabilities/promoted.json`). `promoted_capability_types`
 re-resolves the classes through the same loader on every call. `capability_grants_for` derives the matching
 `StepRegistry.capability_grants` list. Both are read once per environment build or per session by their callers
 (`composition.build_environment`, `build_agent`). A `promote`/`demote` that runs while a session is already live takes effect on
@@ -339,6 +339,7 @@ One settings-declared, git-tracked root holds every type's source and manifests:
 custom/
 ├── capabilities/
 │   ├── <name>.py          # one custom capability's source
+│   ├── <name>.rejected.py # code that failed validation, kept beside the live version until the next valid write or a delete
 │   ├── manifest.json      # AuthoredCapability records: name, class_name, status, last_error
 │   └── promoted.json      # the sorted list of promoted names
 ├── steps/

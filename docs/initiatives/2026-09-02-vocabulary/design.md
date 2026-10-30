@@ -277,7 +277,7 @@ words it replaces. The inventory holds every other term.
 | Friction target type | What a friction flag is about: a tool, a skill, a capability, a workflow, an agent, the instructions, or the agent itself. | The friction target type of that flag is a skill. | `FrictionTargetType` (the `target_kind` field, tool argument and CLI option stay) | `TargetKind`. |
 | Session type | What a session was opened as: chat, runner or master. | The session type of a scheduled fire is runner. | `SessionType` (the `session_kind` column and log field and the `kind` listing field stay) | `SessionKind`. |
 | Registry of projects | The append-only list of project folders this harness knows. | The registry of projects lists the checkout and two other folders. | `project_registry`, `registered_projects`, `RegisteredProject`, `ProjectRegistered`, `ProjectUnregistered` | registry (bare). |
-| Skill hint | One line naming the skill a decision model picks for a turn's message, shown to the model on the turn's first request and never saved. | The skill hint named designing-workflows. | `SkillHint`, `skill_hint` | unchanged. |
+| Skill hint | One line naming the skill a decision model picks for a turn's message, shown to the model on the turn's first request only. The history keeps it scoped to that request, so no later request sends it again. | The skill hint named designing-workflows. | `SkillHint`, `skill_hint` | unchanged. |
 | Permutation self-consistency | Asking one pick-one question in several option orders and averaging each option's probability. | Permutation self-consistency steadied the skill pick. | `DecisionModelQuestions.pick(permutations=...)` | unchanged. |
 
 ### 4.7 Words retired everywhere
