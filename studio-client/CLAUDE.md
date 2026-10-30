@@ -89,8 +89,9 @@ The edge style is `EDGE_STYLE` in `src/lib/graph-model.ts`. It puts each edge la
 (`labelPosition: "below"`), so a highlighted edge, drawn in the label's colour, never strikes through it. It draws the
 labels at the `nodes` depth (`labelDepth: "nodes"`), after every edge line and before every node. The edge reducer
 raises a highlighted edge to the `topEdges` depth, so labels left at sigma's default `edges` depth would have the
-highlighted lines painted over them. The labels have no background, so a crossing line still shows between the
-letters. sigma 4.0.4 draws every edge label at a fixed 12px (11px for node labels here) and ignores an edge style's
+highlighted lines painted over them. Each label draws on a box of the canvas colour (`labelBackgroundColor`), so a
+line crossing it stops at its edge rather than showing between the letters. Labels that overlap each other on a dense
+hub stay overlapped. sigma 4.0.4 draws every edge label at a fixed 12px (11px for node labels here) and ignores an edge style's
 `labelSize`, so the edge style sets none.
 
 Every edge of the hovered or selected node shows its label, even when the node at its other end is off screen. sigma

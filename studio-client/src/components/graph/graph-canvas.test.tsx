@@ -109,4 +109,9 @@ describe("EDGE_STYLE", () => {
   it("draws the edge labels after every edge and before every node", () => {
     expect(EDGE_STYLE).toMatchObject({ labelDepth: "nodes" });
   });
+
+  // A line crossing a label would otherwise show between its letters.
+  it("draws each edge label on the canvas colour, so no crossing line shows through it", () => {
+    expect(EDGE_STYLE).toMatchObject({ labelBackgroundColor: "#ffffff" });
+  });
 });
