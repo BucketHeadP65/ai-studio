@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 
 from typing import TYPE_CHECKING
 
@@ -66,6 +67,15 @@ def test_the_body_carries_the_new_message_and_the_studios_own_fields() -> None:
     assert [part.content for message in messages for part in message.parts if isinstance(part, UserPromptPart)] == ["hello"]
     assert body.context is None
     assert body.tool_results == []
+
+
+def test_reading_the_body_warns_about_nothing() -> None:
+    """The message id the adapter keeps on each message it loads is not taken for metadata the client sent."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        messages = messages_of(_body("hello"))
+
+    assert [part.content for message in messages for part in message.parts if isinstance(part, UserPromptPart)] == ["hello"]
 
 
 async def test_the_step_reading_rides_the_stream_and_the_settle_closes_it() -> None:

@@ -86,6 +86,23 @@ def test_reauthoring_a_pending_capability_attests_nothing(tmp_path: Path) -> Non
     assert activations.events == []
 
 
+def test_a_rejected_rewrite_of_an_active_capability_keeps_it_live_and_attests_nothing(tmp_path: Path) -> None:
+    """A rewrite that fails validation replaces nothing, so the reviewed version stays active and on disk."""
+    store, activations = _store(tmp_path)
+    store.write("marker", _VALID_SOURCE)
+    store.activate("marker")
+    activations.events.clear()
+
+    record = store.write("marker", _BROKEN_SOURCE)
+
+    assert record.last_error is not None
+    assert record.module_file == "marker.rejected.py", "the store keeps the rejected code beside the live file"
+    assert activations.events == [], "the reviewed code is still there, so nothing was deactivated"
+    [listed] = store.list_all()
+    assert (listed.status, listed.last_error, listed.module_file) == ("active", None, "marker.py")
+    assert (tmp_path / "capabilities" / "marker.py").read_text(encoding="utf-8") == _VALID_SOURCE
+
+
 def test_activating_a_capability_with_a_stored_error_is_refused_naming_it(tmp_path: Path) -> None:
     store, activations = _store(tmp_path)
     record = store.write("broken", _BROKEN_SOURCE)

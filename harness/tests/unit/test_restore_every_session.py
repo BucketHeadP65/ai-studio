@@ -287,12 +287,12 @@ async def test_a_run_killed_during_a_step_runs_only_that_step_again(tmp_path: Pa
 
 
 async def test_a_branch_killed_mid_flight_never_takes_the_other_branchs_result(tmp_path: Path) -> None:
-    after, session_id = await _killed(tmp_path, _branches(), BRANCH_ARGS, hold="excite:LEFT", logged=frozenset({"l1", "r1"}))
+    after, session_id = await _killed(tmp_path, _branches(), BRANCH_ARGS, hold="excite:RIGHT", logged=frozenset({"l1", "r1", "l2"}))
 
     _pool_after, runtime, steps = await _restored(after, session_id)
     values = await _at_gate(runtime)
 
-    assert steps.calls == ["excite:LEFT", "pair"], "only the step in flight and what follows it ran again"
+    assert steps.calls == ["excite:RIGHT", "pair"], "only the step in flight and what follows it ran again"
     assert values["both"] == ["LEFT!", "RIGHT!"], "each branch kept its own result"
     await _finish(runtime)
 

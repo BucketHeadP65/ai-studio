@@ -1,7 +1,7 @@
 """The Vercel AI data-stream protocol, in and out. Nothing else in the slice knows it."""
 
 from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from core.ai.history.contracts import StepUsage, to_chunk
 from pydantic_ai import AgentRunResult
@@ -24,15 +24,16 @@ def messages_of(body: ChatRequest) -> list[ModelMessage]:
     """The new messages the request carries, as pydantic-ai messages.
 
     The parts a client is not trusted to send are stripped: its own system prompts, file URLs on a
-    scheme other than http or https, and references to files uploaded to the model provider.
+    scheme other than http or https, and references to files uploaded to the model provider. Every
+    message's metadata is dropped too, the message id the adapter keeps there among it.
 
     Args:
         body: The chat request.
 
     Returns:
-        The messages, with those parts stripped.
+        The messages, with those parts and the metadata stripped.
     """
-    return sanitize_messages(VercelAIAdapter.load_messages(body.messages))
+    return sanitize_messages([replace(message, metadata=None) for message in VercelAIAdapter.load_messages(body.messages)])
 
 
 @dataclass

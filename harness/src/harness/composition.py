@@ -628,7 +628,8 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 deps_type=NoneType,
                 toolsets=toolsets,
                 capabilities=[
-                    *([CodeMode(tools=in_sandbox)] if task.tools else []),
+                    # The function catalog stays in `run_code`'s description, not in the instructions.
+                    *([CodeMode(tools=in_sandbox, dynamic_catalog=False)] if task.tools else []),
                     *([step_shell()] if SHELL_TOOL in granted else []),
                     *([step_workspace(writable=SHELL_TOOL in granted)] if SHELL_TOOL in granted or task.skills else []),
                     *step_guards(budget),
@@ -660,7 +661,8 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 deps_type=NoneType,
                 toolsets=toolsets,
                 capabilities=[
-                    *([CodeMode(tools=in_sandbox)] if granted else []),
+                    # The function catalog stays in `run_code`'s description, not in the instructions.
+                    *([CodeMode(tools=in_sandbox, dynamic_catalog=False)] if granted else []),
                     *([step_shell()] if SHELL_TOOL in granted else []),
                     *([step_workspace(writable=SHELL_TOOL in granted)] if SHELL_TOOL in granted or turn.skills else []),
                     *step_guards(budget),
