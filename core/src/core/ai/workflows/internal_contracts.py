@@ -361,6 +361,10 @@ class ApprovalHook(Protocol):
     async def review(self, gate_id: str, value: object, *, note: str = "") -> GateDecision | bool:
         """Ask whichever person answers this gate.
 
+        The engine may call it again for the same reach of the gate. A call that raises
+        `ModelConnectionError` at any phase but `pool` or `connect` is made again with the same
+        arguments, three calls in all.
+
         Args:
             gate_id: Which gate this is.
             value: What is being reviewed.
@@ -368,6 +372,9 @@ class ApprovalHook(Protocol):
 
         Returns:
             The decision, or a plain boolean from a hook that answers one.
+
+        Raises:
+            ModelConnectionError: When a model answering for the person lost its connection.
         """
         ...
 
@@ -385,6 +392,10 @@ class OrchestratorDecider(Protocol):
     async def __call__(self, gate_id: str, charge: str, value: object, /) -> GateDecision:
         """Decide one orchestrator gate from its charge and the reviewed value.
 
+        The engine may call it again for the same reach of the gate. A call that raises
+        `ModelConnectionError` at any phase but `pool` or `connect` is made again with the same
+        arguments, three calls in all.
+
         Args:
             gate_id: The gate being decided.
             charge: The brief the gate hands its decider.
@@ -392,6 +403,9 @@ class OrchestratorDecider(Protocol):
 
         Returns:
             The decision on the gate.
+
+        Raises:
+            ModelConnectionError: When the orchestrator's model lost its connection.
         """
         ...
 
