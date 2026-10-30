@@ -476,8 +476,7 @@ def build_agent(
                 },
                 cache=content_cache(),
             ),
-            # The function catalog stays in `run_code`'s description, not in the instructions.
-            CodeMode(tools=lambda _ctx, tool: _in_code_mode(tool.name, rides_sandbox), dynamic_catalog=False),
+            CodeMode(tools=lambda _ctx, tool: _in_code_mode(tool.name, rides_sandbox)),
             SandboxDiscipline[Runtime](),
             LoopDetection(on_loop="nudge"),
             # The project's context policy: escalating tiers, or the provider's own compaction.

@@ -231,6 +231,17 @@ def test_delete_removes_a_disabled_capability_its_file_and_attests(tmp_path: Pat
     assert (activations.events[-1].name, activations.events[-1].action) == ("marker", "delete")
 
 
+def test_delete_also_removes_the_code_a_rejected_rewrite_left(tmp_path: Path) -> None:
+    store, _activations = _store(tmp_path)
+    store.write("marker", _VALID_SOURCE)
+    store.write("marker", _BROKEN_SOURCE)
+    assert (tmp_path / "capabilities" / "marker.rejected.py").exists()
+
+    assert store.delete("marker")
+
+    assert sorted(path.name for path in (tmp_path / "capabilities").iterdir()) == ["manifest.json"]
+
+
 def test_delete_refuses_an_active_capability_naming_the_fix(tmp_path: Path) -> None:
     store, _activations = _store(tmp_path)
     store.write("marker", _VALID_SOURCE)
