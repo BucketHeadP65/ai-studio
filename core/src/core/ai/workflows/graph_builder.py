@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, assert_never
 
 from pydantic import TypeAdapter
-from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.exceptions import ModelConnectionError, UsageLimitExceeded
 from pydantic_graph import Graph, GraphBuilder, Join, Step, StepContext
 from pydantic_graph.id_types import NodeID
 
@@ -49,13 +49,16 @@ from core.ai.workflows.exceptions import RepeatedFailureError, RetryExhaustedErr
 from core.observability import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from core.ai.workflows.domain.parameter_values import WorkflowArguments
     from core.ai.workflows.internal_contracts import ApprovalHook, RunObserver, StepExecutor
     from core.ai.workflows.registry import StepImplementation, StepRegistry
 
 _logger = get_logger(__name__)
+
+_RECONNECT_WAITS: tuple[float, ...] = (2.0, 4.0)
+"""Seconds waited before each further attempt at a turn whose model connection broke: two more attempts, three in all."""
 
 
 @dataclass(frozen=True)
@@ -260,6 +263,38 @@ _Entry = _NodeStep | Join[WorkflowState, None, object, None]
 """Where an edge into a node lands: the node's step, or the join guarding it."""
 
 
+async def _performed_turn(
+    performing: StepExecutor,
+    node_id: str,
+    implementation: StepImplementation,
+    kwargs: Mapping[str, object],
+    *,
+    item_key: str | None,
+    sleep: Callable[[float], Awaitable[None]],
+) -> object:
+    """Perform one turn, and perform it again with the same arguments while it fails with `ModelConnectionError`, three attempts in all."""
+    template = (
+        "{node_id!r} lost its model connection on attempt {attempt} of {attempts}, starting the turn again in {wait} s: {failure}"
+        if item_key is None
+        else "{node_id!r} item {item_key!r} lost its model connection on attempt {attempt} of {attempts}, starting the turn again in {wait} s: {failure}"
+    )
+    for attempt, wait in enumerate(_RECONNECT_WAITS, start=1):
+        try:
+            return await performing.perform(node_id, implementation, kwargs)
+        except ModelConnectionError as exc:
+            _logger.warning(
+                template,
+                node_id=node_id,
+                item_key=item_key,
+                attempt=attempt,
+                attempts=len(_RECONNECT_WAITS) + 1,
+                wait=wait,
+                failure=f"{type(exc).__qualname__}: {exc}",
+            )
+            await sleep(wait)
+    return await performing.perform(node_id, implementation, kwargs)
+
+
 async def _observed[R](node_id: str, watching: RunObserver, work: Awaitable[R]) -> R:
     """Run one node's work between the observer's `started` and `finished` calls, calling `finished` on failure too."""
     watching.started(node_id)
@@ -292,6 +327,7 @@ def build_graph(
     approval: ApprovalHook,
     observer: RunObserver | None = None,
     executor: StepExecutor | None = None,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> _WorkflowGraph:
     """Validate `workflow`, then build it into a graph the engine can run.
 
@@ -303,6 +339,8 @@ def build_graph(
         approval: Who answers each person gate, and each judge gate whose judge cannot judge.
         observer: Told when each node starts and finishes. None means nobody watches.
         executor: How each step is performed. None awaits the step in this process.
+        sleep: Waits the given seconds before another attempt at a turn whose model connection broke.
+            None waits with `asyncio.sleep`. A test passes a recorder.
 
     Returns:
         The built graph. Run it with a fresh `WorkflowState`.
@@ -317,6 +355,7 @@ def build_graph(
 
     watching = observer if observer is not None else _NoObserver()
     performing = executor if executor is not None else _InProcessExecutor()
+    waiting = sleep if sleep is not None else asyncio.sleep
     builder: _Builder = GraphBuilder(name=workflow.name, state_type=WorkflowState, output_type=object)
     # `heads` holds where an edge into a node lands and where a rejection rewinds to. `exits` holds where
     # its outgoing edges leave from. They differ only for a `map`, which expands into four graph nodes:
@@ -328,18 +367,18 @@ def build_graph(
     for node in workflow.nodes:
         match node:
             case RunNode():
-                heads[node.id] = exits[node.id] = _build_run_step(builder, node, registry, watching, performing)
+                heads[node.id] = exits[node.id] = _build_run_step(builder, node, registry, watching, performing, waiting)
             case PersonGate():
                 gate_steps[node.id] = _build_gate_step(builder, node, approval, watching)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case JudgeGate():
-                gate_steps[node.id] = _build_judge_step(builder, node, registry, watching, performing, approval)
+                gate_steps[node.id] = _build_judge_step(builder, node, registry, watching, performing, approval, waiting)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case OrchestratorGate():
                 gate_steps[node.id] = _build_orchestrator_step(builder, node, registry, watching)
                 heads[node.id] = exits[node.id] = gate_steps[node.id]
             case MapNode():
-                heads[node.id], exits[node.id] = _build_map_steps(builder, node, registry, watching, performing, inline)
+                heads[node.id], exits[node.id] = _build_map_steps(builder, node, registry, watching, performing, inline, waiting)
             case _ as unreachable:
                 assert_never(unreachable)
 
@@ -362,6 +401,7 @@ async def run_workflow(
     observer: RunObserver | None = None,
     memo: Mapping[str, object] | None = None,
     executor: StepExecutor | None = None,
+    sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> object:
     """Build `workflow` and run it once in this process.
 
@@ -374,6 +414,8 @@ async def run_workflow(
         memo: A previous run's recorded node outputs, to resume from. Each node it holds replays
             its output instead of running again.
         executor: How each step is performed. None awaits the step in this process.
+        sleep: Waits the given seconds before another attempt at a turn whose model connection broke.
+            None waits with `asyncio.sleep`.
 
     Returns:
         The value the workflow's `output` wire names.
@@ -383,7 +425,7 @@ async def run_workflow(
         RetryExhaustedError: If a gate rejects its last permitted attempt.
         RepeatedFailureError: If a map's items fail with one exception class `abort_after_repeats` times in a row.
     """
-    graph = build_graph(workflow, registry, approval=approval, observer=observer, executor=executor)
+    graph = build_graph(workflow, registry, approval=approval, observer=observer, executor=executor, sleep=sleep)
     return await graph.run(state=WorkflowState(params=params, memo=dict(memo or {})))
 
 
@@ -447,7 +489,14 @@ def _implementation(registry: StepRegistry, work: str) -> StepImplementation:
     return impl
 
 
-def _build_run_step(builder: _Builder, node: RunNode, registry: StepRegistry, watching: RunObserver, performing: StepExecutor) -> _RunStep:
+def _build_run_step(
+    builder: _Builder,
+    node: RunNode,
+    registry: StepRegistry,
+    watching: RunObserver,
+    performing: StepExecutor,
+    sleep: Callable[[float], Awaitable[None]],
+) -> _RunStep:
     impl = _implementation(registry, node.work)
     # A parameter wire's value is validated at run time with the step's own input type.
     # Each adapter is built once, when the graph is built.
@@ -467,7 +516,7 @@ def _build_run_step(builder: _Builder, node: RunNode, registry: StepRegistry, wa
             kwargs[name] = value
         try:
             with performing_step(_step_identity(node.id, ctx.state, tier=node.tier)):
-                output = await _observed(node.id, watching, performing.perform(node.id, impl, kwargs))
+                output = await _observed(node.id, watching, _performed_turn(performing, node.id, impl, kwargs, item_key=None, sleep=sleep))
         except Exception as exc:
             _settle(ctx.state, node.id, 0, "", "failed", f"{type(exc).__qualname__}: {exc}")
             raise
@@ -495,6 +544,7 @@ def _build_map_steps(
     watching: RunObserver,
     performing: StepExecutor,
     inline: Mapping[str, InlineStep],
+    sleep: Callable[[float], Awaitable[None]],
 ) -> tuple[_RunStep, _RunStep]:
     """Add a map's four graph nodes (resolve the list, run each item through every turn, collect, gather), return the first and last."""
     impls = [_implementation(registry, work) for work in node.turns]
@@ -574,7 +624,9 @@ def _build_map_steps(
                     else None
                 )
                 with performing_step(_step_identity(node.id, ctx.state, work=work, item_key=item_key, turn=facts, tier=node.tier)):
-                    previous = await _observed(observed_id, watching, performing.perform(observed_id, impl, kwargs))
+                    previous = await _observed(
+                        observed_id, watching, _performed_turn(performing, observed_id, impl, kwargs, item_key=item_key, sleep=sleep)
+                    )
                 outputs.append(previous)
         except Exception as exc:
             # `_observed` already reported this item as failed. `on_error` decides only what the
@@ -732,7 +784,13 @@ def _build_retry_step(
 
 
 def _build_judge_step(
-    builder: _Builder, node: JudgeGate, registry: StepRegistry, watching: RunObserver, performing: StepExecutor, approval: ApprovalHook
+    builder: _Builder,
+    node: JudgeGate,
+    registry: StepRegistry,
+    watching: RunObserver,
+    performing: StepExecutor,
+    approval: ApprovalHook,
+    sleep: Callable[[float], Awaitable[None]],
 ) -> _GateStep:
     """Add a gate a judge step decides, like a person gate. A `cannot_judge` verdict asks `approval`, with the judge's note."""
     impl = _implementation(registry, node.work)
@@ -756,7 +814,7 @@ def _build_judge_step(
         async def _decide() -> object:
             """The judge's answer, or the budget stop as an answer: running out never fails the run."""
             try:
-                return await performing.perform(node.id, impl, {parameter: value, **wired})
+                return await _performed_turn(performing, node.id, impl, {parameter: value, **wired}, item_key=None, sleep=sleep)
             except UsageLimitExceeded as exc:
                 which = str(exc).split(".")[0]
                 return _BudgetStop(f"The reviewer ran out of budget before it could decide. {which}.")

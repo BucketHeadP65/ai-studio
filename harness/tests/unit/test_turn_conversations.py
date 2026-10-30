@@ -8,6 +8,8 @@ answering each turn with that turn's own output tool.
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 from uuid import UUID
@@ -35,7 +37,9 @@ from core.ai.workflows.contracts import (
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.temporal import continuing_step_conversation
 from pydantic_ai import UnexpectedModelBehavior
+from pydantic_ai.exceptions import ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage
 from pydantic_ai_harness.step_persistence import ContinuableSnapshot
 from pydantic_ai_harness.warn_on_cache_busts import CacheBustWarning
@@ -56,13 +60,13 @@ from tests.support.streaming import streaming_function_model, usage_preserving_f
 from tests.support.tiers import tiers_under
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import AsyncIterator, Sequence
     from pathlib import Path
 
     from core.ai.workflows.contracts import Tier
     from core.thinking import Thinking
     from pydantic_ai.messages import ModelMessage
-    from pydantic_ai.models.function import AgentInfo, FunctionModel
+    from pydantic_ai.models.function import AgentInfo, DeltaToolCalls
     from pydantic_ai.tools import ToolDefinition
 
     from harness.adapters.model_tiers import ModelTiers
@@ -580,6 +584,40 @@ async def test_a_later_turn_with_no_line_in_this_process_is_refused_by_name(tmp_
     message = str(excinfo.value)
     assert "digest_each" in message, message
     assert "2" in message, message
+
+
+async def test_a_turn_whose_connection_broke_starts_again_from_the_history_it_began_with(tmp_path: Path) -> None:
+    """Turn two's stream breaks part way through. Its next attempt asks exactly what the broken one asked, with nothing the broken one said."""
+    calls: list[list[ModelMessage]] = []
+    waits: list[float] = []
+    half_said = "half an answer"
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        index = _turn_index(messages)
+        if len(calls) == 2:
+            yield half_said
+            model_name = "test-model"
+            raise ModelConnectionError(model_name, "Connection error.", phase="read", in_stream=True)
+        tool = info.output_tools[index]
+        yield {0: DeltaToolCall(name=tool.name, json_args=json.dumps(_PAYLOADS[index]))}
+
+    async def record(seconds: float) -> None:
+        waits.append(seconds)
+
+    active = ActiveRun()
+    environment = await build_environment(FunctionModel(stream_function=stream), engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records_under(tmp_path), web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
+
+    await run_workflow(_sequence_spec(), environment, params={"items": [{"title": "quantum computing"}]}, approval=ApproveAll(), sleep=record)
+
+    assert len(calls) == 4, "turn one, turn two's broken attempt, turn two again, turn three"
+    broken, retried = calls[1], calls[2]
+    assert [[part.part_kind for part in message.parts] for message in retried] == [[part.part_kind for part in message.parts] for message in broken]
+    assert _turn_index(retried) == 1, "the retried request carries turn two's prompt once"
+    assert _last_user_prompt(retried) == _last_user_prompt(broken)
+    assert not any(isinstance(part, TextPart) and half_said in part.content for message in retried for part in message.parts)
+    assert _turn_index(_the_items_line(active).messages) == 2, "the settled line holds three turns, each once"
+    assert waits == [2.0]
 
 
 async def test_a_plain_run_step_is_unchanged(tmp_path: Path) -> None:

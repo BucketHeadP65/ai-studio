@@ -592,6 +592,33 @@ and output quality on the same inputs. One of them moving alone settles nothing 
 that answers worse is not an improvement, and a higher cache-read rate paid for with a wider tool
 surface is not either.
 
+## A turn whose model connection broke
+
+The model endpoint can close a streamed answer part way through. pydantic-ai then raises `ModelConnectionError`, and
+nothing below the engine sends the request again. The HTTP retry of `chat_retry_config` covers only a connection that
+fails before a response begins, and `FallbackModel` hands a stream over after its first event and lets a later failure
+through.
+
+The engine performs such a turn again. Every turn it runs goes through one helper in `graph_builder.py`: a run node's
+step, each turn of a map item, and a judge gate's step. A turn that fails with `ModelConnectionError`, its subclass
+`ModelTimeoutError` included, is performed again with the same arguments under the same `StepIdentity`, three attempts in
+all. The waits between attempts are 2 and 4 seconds, through the `sleep` that `build_graph` and `run_workflow` take
+(`asyncio.sleep` when none is passed). Each dropped attempt is logged at warning level with the node id, the item key when
+there is one, the attempt number and the error.
+
+- Only the last attempt's failure counts. It reaches the map's `on_error` and its `abort_after_repeats` streak exactly
+  as any failure did before, and an attempt that succeeds is a success.
+- The observer sees one turn: one `started` and one `finished`, whatever happened between the attempts.
+- A turn that fails any other way gets one attempt, as before.
+- A host that keeps a step conversation starts every attempt from the history the turn began with. The harness keeps no
+  message of an attempt that failed with `ModelConnectionError`, so a line whose last attempt failed that way also holds
+  the history its turn began with.
+- An attempt's effects are not undone. A tool the broken attempt ran has run, and the next attempt may run it again.
+- `WorkItemFact.retry_attempts` does not count these attempts. It counts how many times an identity settled again after a
+  rewind, and every attempt at a turn belongs to one settle.
+- A step a durable run schedules as an activity has Temporal's own attempts, and its failure reaches the engine as
+  Temporal's `ActivityError`, which the engine never performs again.
+
 ## Disclosure: `core.ai.disclosure`
 
 ### Purpose

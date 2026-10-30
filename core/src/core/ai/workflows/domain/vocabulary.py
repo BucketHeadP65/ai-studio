@@ -240,7 +240,9 @@ class MapNode(BaseModel):
     """How many consecutive items may fail with the same error class before the run aborts.
 
     The run aborts whatever `on_error` says. Failures are counted in completion order, and any
-    item that succeeds resets the count. `None` disables the ceiling."""
+    item that succeeds resets the count. `None` disables the ceiling. A turn that fails with
+    `ModelConnectionError` is performed again first, three attempts in all, and only its last
+    failure reaches `on_error` and this count."""
     tier: Tier | None = None
     """Which model tier performs this. None means the step's own tier, else the host's default."""
 

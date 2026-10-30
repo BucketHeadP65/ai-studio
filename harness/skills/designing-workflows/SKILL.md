@@ -120,7 +120,8 @@ says why.
 - **Repeated identical failures mean stop.** A map's `abort_after_repeats` counts consecutive items that fail
   with the same error class, resets on any item that succeeds, and ends the run as failed once it reaches the
   count, naming the error. The default is 3. Set it to `None` only for a map that genuinely wants unbounded
-  skipping.
+  skipping. A turn whose model connection broke is started again first, three attempts in all, so only an item
+  that lost every attempt counts.
 - **A run that skipped most of its work did not complete.** `abort_after_repeats` catches a systemic fault
   repeating identically. It does not catch a majority of items failing for varied reasons. An outcome that says
   `completed` over a majority of skips still teaches the owner to trust a run that failed.

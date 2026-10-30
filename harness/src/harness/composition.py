@@ -49,6 +49,7 @@ from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import Agent, AgentSpec, ModelRetry, capture_run_messages
 from pydantic_ai.capabilities import CombinedCapability, Toolset
+from pydantic_ai.exceptions import ModelConnectionError
 from pydantic_ai.messages import ModelRequest
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai.usage import UsageLimits
@@ -258,10 +259,12 @@ def _repair_asked_for(prompt: str) -> str:
 
 @contextmanager
 def _keeping_a_stopped_turn(line: StepConversation) -> Generator[None]:
-    """Write whatever a failed or cut-off turn exchanged onto `line`, so the next call sees it."""
+    """Write what a failed or cut-off turn exchanged onto `line` for the next call, unless a `ModelConnectionError` ended it."""
     with capture_run_messages() as messages:
         try:
             yield
+        except ModelConnectionError:
+            raise
         except BaseException:
             line.messages = list(messages)
             raise

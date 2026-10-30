@@ -330,3 +330,24 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 - **Since:** 2026-10-29.
 - **Upstream candidate:** yes, as an issue: a `typesafe` upstream in `gateway_provider`, so `gateway/typesafe:<model>`
   reaches Jev on the gateway's TypeSafe route like any other gateway model, trace header included.
+
+### UE-25. The workflow engine performs a turn again when its model connection breaks (core, harness)
+
+- **What:** an endpoint that closes a streamed answer part way through raises `ModelConnectionError`
+  ("peer closed connection without sending complete message body"), and nothing in either library sends the request
+  again once the stream has begun. The provider SDK's `max_retries` and the tenacity transports of `pydantic_ai.retries`
+  retry only before a response arrives, `FallbackModel.request_stream` hands a stream over after its first event and
+  lets a later failure through, `on_model_request_error` can answer with a response or with a `ModelRetry` that sends a
+  new request carrying a retry prompt, never the same request again, and pydantic-ai-harness's `StepPersistence` records
+  `model_request_failed` and raises. The engine therefore performs the whole turn again: a run node's step, each turn
+  of a map item, and a judge gate's step, with the same arguments under the same `StepIdentity`, three attempts in all,
+  waiting 2 and then 4 seconds. Only the last failure reaches a map's `on_error` and `abort_after_repeats`. Any other
+  failure gets one attempt. The harness keeps no message of an attempt that failed this way, so the next attempt starts
+  from the history the turn began with.
+- **Where:** `core/src/core/ai/workflows/graph_builder.py` (`_performed_turn`, the `sleep` of `build_graph` and
+  `run_workflow`), `harness/src/harness/composition.py` (`_keeping_a_stopped_turn`), tests in
+  `core/tests/unit/workflows/test_turn_reconnects.py` and `harness/tests/unit/test_turn_conversations.py`.
+- **Since:** 2026-10-30, after three map items in a row lost their streams after 212 s and 567 s and aborted a stance
+  refresh run.
+- **Upstream candidate:** yes, as an issue: a retry of a streamed request whose stream broke after its first event,
+  opt-in, for a run whose model request can be sent again unchanged.
