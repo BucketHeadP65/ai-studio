@@ -1,7 +1,7 @@
 ---
 title: Write stances
-summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest, and every proposed new stance listed with its pages and never written.
-version: 3
+summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest, and every proposed new stance listed with its pages and digests and never written.
+version: 4
 step:
   name: write_stances
   source: |
@@ -78,7 +78,7 @@ step:
           items:
             type: object
             title: ProposedStance
-            required: [stance_id, title, pages]
+            required: [stance_id, title, pages, research_pages]
             properties:
               stance_id: {type: string}
               title: {type: string}
@@ -93,6 +93,9 @@ step:
                     page_type: {type: string}
                     status: {type: string}
                     title: {type: string}
+              research_pages:
+                type: array
+                items: {type: string}
   tools: [write_note]
 ---
 
@@ -105,4 +108,4 @@ written to the path it was read from. A draft that names a section twice, or nam
 carry, is refused, and so is a draft of a stance the run did not read. A draft that fails a check is not written,
 and a page write_note refuses is caught. Both are answered in `failed` with the reason, and every other draft still
 lands. A frontmatter field held as null is left out of the page. Every proposed new stance is answered in `proposed`
-as merge_proposals gave it, with the pages behind it, and no page is written for one.
+as merge_proposals gave it, with the records pages and the digests behind it, and no page is written for one.

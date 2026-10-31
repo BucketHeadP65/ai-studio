@@ -427,8 +427,9 @@ _STANCE_PROPOSAL: dict[str, object] = {
     "stance_id": "stance.y",
     "title": "Y",
     "pages": [{"page_id": "adr-0031-other", "page_type": "adr", "status": "accepted", "title": "Other"}],
+    "research_pages": ["paper.a", "paper.b"],
 }
-"""The one new stance proposed here, which is listed and never written."""
+"""The one new stance proposed here, with the digests it rests on, which is listed and never written."""
 
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},

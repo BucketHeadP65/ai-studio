@@ -2,9 +2,9 @@
 title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
-  under a judge, merges each rewrite into its page as read, so its Evidence and Alternatives never change, and lists
-  the new stances they propose.
-uses: [st.list_stance_changes.v2, st.place_stance_pages.v3, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v3]
+  under a judge, merges each rewrite into its page as read, keeping its Evidence and Alternatives, and lists the new
+  stances they propose on two digests or more.
+uses: [st.list_stance_changes.v2, st.place_stance_pages.v4, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v4]
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -13,11 +13,14 @@ presentation:
   produces: >-
     Each stance a changed records page bears on, rewritten in place: its status following the records, and its
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
-    it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance
-    and never drafted. The run card lists the stances written, the ones refused with the check each failed, where every
-    changed page was placed, every stance as it was before the run, and every stance the run could not read with the
-    reason. It shows every proposed new stance with the records pages behind it among what the run left behind,
-    collected as soon as the pages are placed, so a run that fails while rewriting still carries them.
+    it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance,
+    and never drafted, only when its page takes a position on a question research literature addresses and at least
+    two of the base's digests (its paper, talk, article and post pages) bear on that position. An implementation
+    choice with no research question behind it is skipped with a reason that says so. The run card lists the stances
+    written, the ones refused with the check each failed, where every changed page was placed, every stance as it was
+    before the run, and every stance the run could not read with the reason. It shows every proposed new stance with
+    the records pages and the digests behind it among what the run left behind, collected as soon as the pages are
+    placed, so a run that fails while rewriting still carries them.
   owner_participation: >-
     Nothing during a run, unless the judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -40,8 +43,8 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 6
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages, drafting none.
+  version: 7
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages and the digests it rests on, drafting none and dropping any that rests on fewer than two digests the base holds.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -193,20 +196,35 @@ workflow:
                 if page is None or placed["placement"] != "new" or not stance_id or stance_id in changes["stance_ids"]:
                     continue
                 if stance_id not in proposals:
-                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": []}
+                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": [], "research_pages": []}
                 if placed["page_id"] not in [held["page_id"] for held in proposals[stance_id]["pages"]]:
                     proposals[stance_id]["pages"].append(page)
-        list(proposals.values())
+                for research_id in placed["research_pages"]:
+                    if research_id not in proposals[stance_id]["research_pages"]:
+                        proposals[stance_id]["research_pages"].append(research_id)
+        digests = {}
+        if proposals:
+            for page_type in ["paper", "talk", "article", "post"]:
+                for row in await list_pages(knowledge_base=collection, page_type=page_type, limit=10000):
+                    digests[row["page_id"]] = True
+        kept = []
+        for proposal in proposals.values():
+            held = [research_id for research_id in proposal["research_pages"] if research_id in digests]
+            if len(held) >= 2:
+                kept.append({"stance_id": proposal["stance_id"], "title": proposal["title"], "pages": proposal["pages"], "research_pages": held})
+        kept
       inputs:
         changes: {like: list_stance_changes}
         placements: {like: place_stance_pages, many: true}
+        collection:
+          json_schema: {type: string}
       output:
         json_schema:
           type: array
           items:
             type: object
             title: ProposedStance
-            required: [stance_id, title, pages]
+            required: [stance_id, title, pages, research_pages]
             properties:
               stance_id: {type: string}
               title: {type: string}
@@ -221,15 +239,20 @@ workflow:
                     page_type: {type: string}
                     status: {type: string}
                     title: {type: string}
+              research_pages:
+                type: array
+                description: The digests of the base the proposal rests on, at least two.
+                items: {type: string}
+      tools: [list_pages]
   result:
-    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages.
+    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the digests it rests on.
     primary_work: refresh_stances
     empty_primary: noop
     required_gates:
       - {gate_id: check_stances, accepted_sources: [judge]}
     artifacts:
       - id: proposed_stances
-        label: New stances proposed, each with the records pages behind it
+        label: New stances proposed, each with the records pages and the digests behind it
         source: {node: merge_proposals}
         media_type: application/json
   nodes:
@@ -269,6 +292,7 @@ workflow:
       inputs:
         changes: {node: list_changes}
         placements: {node: place_pages}
+        collection: {parameter: collection}
     - kind: map
       id: refresh_stances
       turns: [refresh_stance]
@@ -311,10 +335,15 @@ a full pass, and reads every stance page as it stands. A stance it cannot read, 
 field it does not declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so
 both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups of
 five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
-a new stance, or a skip. `merge_work` makes one item per stance the run read with every page that bears on it, its
-record among them. `merge_proposals` makes one proposal per proposed new stance id with every page behind it,
-combining the groups that proposed the same id, and its list is the run's `proposed_stances` artifact. It waits on
-neither the refresh map nor the judge, so a run either of them fails still carries it. An id a listed stance carries
+a new stance, or a skip. A worker proposes a new stance only for a page that takes a position on a question research
+literature addresses, and names the digests bearing on it that it found with `search`. An implementation choice with
+no research question behind it is a skip. `merge_work` makes one item per stance the run read with every page that
+bears on it, its record among them. `merge_proposals` makes one proposal per proposed new stance id with every page
+behind it and every digest its placements name, combining the groups that proposed the same id. It lists the base's
+digests, its paper, talk, article and post pages, with `list_pages`, keeps only the named ids among them, so a stance
+page or an id the base does not hold never counts, and drops a proposal left with fewer than two. Its list is the
+run's `proposed_stances` artifact. It waits on neither the refresh map nor the judge, so a run either of them fails
+still carries it. An id a listed stance carries
 makes no proposal: a page placed under it joins that stance's item when the run read the stance, and is left alone
 when it could not. `refresh_stances` runs one worker per item, two at a time, and no worker drafts a proposal. Each
 answers only its stance's changes:
