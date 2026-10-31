@@ -18,8 +18,9 @@ field the workflow does not declare are both named and left alone while the run 
 drafts one and no page is written for one, each reaches write_stances' `proposed` with its pages, two groups proposing
 the same id make one proposal, and an id a listed stance carries makes no proposal. Then the digests a proposal rests
 on: one resting on two reaches the artifact with them, one resting on fewer is dropped, a stance id never counts, the
-groups sharing an id count their digests together, an id the research base does not hold is dropped, and a digest
-cited as a wikilink counts as its bare id.
+groups sharing an id count their digests together, an id the research base does not hold is dropped, a digest at
+status skipped never counts, a digest cited as a wikilink or as a collection-qualified ref counts as its bare id, and a
+digest type the research base refuses to list adds no digest while the run still writes its rewrites.
 """
 
 from __future__ import annotations
@@ -71,8 +72,11 @@ SECTIONS = ("TL;DR", "Position", "Why", "Evidence", "Alternatives", "Open Questi
 DIGEST_TYPES = ("paper", "talk", "article", "post")
 """The research base's digest page types, the ones a proposal's research pages count among."""
 
-LITERATURE = {"paper.dense-retrieval": "paper", "art.memory-survey": "article", "talk.agent-loops": "talk"}
+LITERATURE = {"paper.dense-retrieval": "paper", "art.memory-survey": "article", "talk.agent-loops": "talk", "post.keep-shipping": "post"}
 """Digests the scripted research base holds, each id with its page type."""
+
+SKIPPED = frozenset({"post.keep-shipping"})
+"""The digests of LITERATURE the scripted research base lists at status skipped."""
 
 CITED = ["paper.dense-retrieval", "art.memory-survey"]
 """Two digests the research base holds, the research pages a proposing placement cites unless a case says otherwise."""
@@ -178,7 +182,8 @@ class Bases:
     """The records base and the research base the programs read and write, scripted.
 
     `records` holds each records page's frontmatter by id, and `stances` each stance page as read_page answers it.
-    `literature` holds each digest's page type by id, which list_pages lists under that type.
+    `literature` holds each digest's page type by id, which list_pages lists under that type, at status skipped
+    for the ids `skipped_digests` names and active otherwise. `refused_types` names the digest types list_pages refuses.
     A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
     names records pages whose file lies in an app's own docs folder, beyond the records base's root, which list_pages
     lists and read_page refuses the way the real tool does. `unreadable` names stance ids list_pages lists and
@@ -189,6 +194,8 @@ class Bases:
     records: dict[str, dict[str, str]] = field(default_factory=dict)
     stances: dict[str, dict[str, object]] = field(default_factory=dict)
     literature: dict[str, str] = field(default_factory=dict)
+    skipped_digests: frozenset[str] = frozenset()
+    refused_types: frozenset[str] = frozenset()
     outside_root: frozenset[str] = frozenset()
     unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
@@ -243,8 +250,16 @@ class Bases:
             ]
         if knowledge_base == "research":
             assert page_type in DIGEST_TYPES
+            if page_type in self.refused_types:
+                msg = f"no page_type {page_type!r} in knowledge base 'research', the page_types are paper, stance"
+                raise ModelRetry(msg)
             return [
-                {"page_id": page_id, "page_type": page_type, "title": page_id, "status": "active"}
+                {
+                    "page_id": page_id,
+                    "page_type": page_type,
+                    "title": page_id,
+                    "status": "skipped" if page_id in self.skipped_digests else "active",
+                }
                 for page_id, held_type in self.literature.items()
                 if held_type == page_type
             ]
@@ -839,6 +854,7 @@ async def _proposed_beside_a_kept_one(sandbox: AsyncMonty, cited: list[str]) -> 
         records={"adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
         stances={"stance.x": _stance("x", record="adr-other")},
         literature=LITERATURE,
+        skipped_digests=SKIPPED,
     )
     state = await _run(sandbox, bases, Scripted(place=_beside_a_kept_proposal(cited)), changed="adr-1,adr-2")
     proposals: list[dict[str, object]] = to_jsonable_python(state.values["merge_proposals"])
@@ -864,7 +880,7 @@ async def test_placements_sharing_an_id_count_their_digests_together(sandbox: As
     bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
 
     def one_digest_per_group(group: Group) -> list[str]:
-        return ["paper.dense-retrieval"] if group["group_id"] == 0 else ["art.memory-survey", "paper.dense-retrieval"]
+        return ["paper.dense-retrieval"] if group["group_id"] == 0 else ["art.memory-survey"]
 
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", first_only=True, cited=one_digest_per_group))
 
@@ -878,7 +894,7 @@ async def test_placements_sharing_an_id_count_their_digests_together(sandbox: As
             "pages": [_listed("adr-1"), _listed("adr-6")],
             "research_pages": ["paper.dense-retrieval", "art.memory-survey"],
         }
-    ], "each group cites one distinct digest, and together they rest the proposal on two"
+    ], "neither group cites two digests, and only together do they rest the proposal on two"
 
 
 @pytest.mark.parametrize(
@@ -919,3 +935,50 @@ async def test_a_digest_cited_as_a_wikilink_counts_as_its_bare_id(sandbox: Async
     assert to_jsonable_python(state.values["merge_proposals"]) == [
         {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": kept}
     ], "the artifact carries each digest once, by its bare id"
+
+
+async def test_a_digest_at_status_skipped_does_not_count(sandbox: AsyncMonty) -> None:
+    kept, _ = await _proposed_beside_a_kept_one(sandbox, ["paper.dense-retrieval", "post.keep-shipping"])
+
+    assert kept == [("stance.agent-memory", CITED)], "a digest the base skipped backs no proposal"
+
+
+async def test_a_digest_cited_as_a_collection_qualified_ref_counts_as_its_bare_id(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
+    cited = ["page:research/paper.dense-retrieval", "section:research/art.memory-survey#findings"]
+
+    state = await _run(
+        sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited)), changed="adr-1"
+    )
+
+    assert to_jsonable_python(state.values["merge_proposals"]) == [
+        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}
+    ], "a hit's ref names the same digest as its id"
+
+
+async def test_a_refused_digest_type_adds_no_digest_and_the_rewrite_is_still_written(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        literature=LITERATURE,
+        refused_types=frozenset({"article"}),
+    )
+    cited = ["paper.dense-retrieval", "art.memory-survey", "talk.agent-loops"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
+
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite lands"
+    assert _value(state, "write_stances") == {
+        "written": ["stance.x"],
+        "failed": [],
+        "proposed": [
+            {
+                "stance_id": "stance.agent-memory",
+                "title": "Agent memory",
+                "pages": [_listed("adr-1")],
+                "research_pages": ["paper.dense-retrieval", "talk.agent-loops"],
+            }
+        ],
+    }, "the refused type adds no digest, and the other types still count"
+    assert _outcome(state) == "succeeded"

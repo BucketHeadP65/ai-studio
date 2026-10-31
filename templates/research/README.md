@@ -25,7 +25,7 @@ from this template can register its own vocabulary for any research domain.
   and `progress=adr:accepted, adr:superseded, architecture:current, spec-doc:approved, spec-doc:executed`, or by hand
   with `changed_page_ids` empty for a full pass. A topic no stance covers is proposed as a new stance only when its
   records page takes a position on a question research literature addresses and at least two digests of the base (its
-  paper, talk, article and post pages, never a stance) bear on it. The run checks each cited digest against the base
+  paper, talk, article and post pages, never a stance and never one at status skipped) bear on it. The run checks each cited digest against the base
   and drops a proposal left with fewer than two, and an implementation choice with no research question behind it is
   skipped. The run card shows every proposal with the records pages and the digests behind it among what the run left
   behind (the `proposed_stances` artifact), so you draft the ones you pick by hand.

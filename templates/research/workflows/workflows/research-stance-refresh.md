@@ -4,7 +4,7 @@ description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
   under a judge, merges each rewrite into its page as read, keeping its Evidence and Alternatives, and lists the new
   stances they propose on two digests or more.
-uses: [st.list_stance_changes.v2, st.place_stance_pages.v4, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v4]
+uses: [st.list_stance_changes.v2, st.place_stance_pages.v5, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v4]
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -15,7 +15,7 @@ presentation:
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
     it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance,
     and never drafted, only when its page takes a position on a question research literature addresses and at least
-    two of the base's digests (its paper, talk, article and post pages) bear on that position. An implementation
+    two of the base's digests (its paper, talk, article and post pages, none at status skipped) bear on that position. An implementation
     choice with no research question behind it is skipped with a reason that says so. The run card lists the stances
     written, the ones refused with the check each failed, where every changed page was placed, every stance as it was
     before the run, and every stance the run could not read with the reason. It shows every proposed new stance with
@@ -43,7 +43,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 8
+  version: 9
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages and the digests it rests on, drafting none and dropping any that rests on fewer than two digests the base holds.
   parameters:
     collection:
@@ -203,14 +203,22 @@ workflow:
                     research_id = cited.strip()
                     if research_id.startswith("[[") and research_id.endswith("]]"):
                         research_id = research_id[2:-2]
-                    research_id = research_id.split("|")[0].split("#")[0].strip()
+                    research_id = research_id.split("|")[0].split("#")[0]
+                    if "/" in research_id and ":" in research_id.split("/")[0]:
+                        research_id = research_id.split("/", 1)[1]
+                    research_id = research_id.strip()
                     if research_id and research_id not in proposals[stance_id]["research_pages"]:
                         proposals[stance_id]["research_pages"].append(research_id)
         digests = {}
         if proposals:
             for page_type in ["paper", "talk", "article", "post"]:
-                for row in await list_pages(knowledge_base=collection, page_type=page_type, limit=10000):
-                    digests[row["page_id"]] = True
+                try:
+                    rows = await list_pages(knowledge_base=collection, page_type=page_type, limit=10000)
+                except Exception as error:
+                    continue
+                for row in rows:
+                    if row["status"] != "skipped":
+                        digests[row["page_id"]] = True
         kept = []
         for proposal in proposals.values():
             held = [research_id for research_id in proposal["research_pages"] if research_id in digests]
@@ -245,7 +253,7 @@ workflow:
                     title: {type: string}
               research_pages:
                 type: array
-                description: The digests of the base the proposal rests on, at least two.
+                description: The digests of the base the proposal rests on, at least two, none at status skipped.
                 items: {type: string}
       tools: [list_pages]
   result:
@@ -344,9 +352,11 @@ literature addresses, and names the digests bearing on it that it found with `se
 no research question behind it is a skip. `merge_work` makes one item per stance the run read with every page that
 bears on it, its record among them. `merge_proposals` makes one proposal per proposed new stance id with every page
 behind it and every digest its placements name, combining the groups that proposed the same id. A digest named as a
-wikilink, such as `[[paper.x|label]]` or `[[paper.x#^c3|label]]`, counts as its bare id `paper.x`. It lists the base's
-digests, its paper, talk, article and post pages, with `list_pages`, keeps only the named ids among them, so a stance
-page or an id the base does not hold never counts, and drops a proposal left with fewer than two. Its list is the
+wikilink, such as `[[paper.x|label]]` or `[[paper.x#^c3|label]]`, or as a hit's ref, such as `page:research/paper.x`,
+counts as its bare id `paper.x`. It lists the base's digests, its paper, talk, article and post pages, with
+`list_pages`, and keeps only the named ids among them not at status skipped, so a stance page, a skipped digest or an
+id the base does not hold never counts. A digest type the base refuses to list adds no digest, and the run carries on.
+It drops a proposal left with fewer than two. Its list is the
 run's `proposed_stances` artifact. It waits on neither the refresh map nor the judge, so a run either of them fails
 still carries it. An id a listed stance carries
 makes no proposal: a page placed under it joins that stance's item when the run read the stance, and is left alone
