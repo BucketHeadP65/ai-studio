@@ -34,8 +34,10 @@ from core.ai.workflows.contracts import (
     Workflow,
     WorkflowState,
     build_graph,
+    canonical_reviewed_value,
     load_spec_document,
     load_step_document,
+    reviewed_value_digest,
     step_page_id,
 )
 from pydantic import ValidationError
@@ -52,7 +54,7 @@ from tests.unit.test_flag_workflow_failures import NoPerson, _never_performed, _
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-    from core.ai.workflows.contracts import InlineStep
+    from core.ai.workflows.contracts import InlineStep, Outcome
     from core.ai.workflows.registry import StepImplementation
 
 RESEARCH = Path(__file__).resolve().parents[3] / "templates" / "research" / "workflows"
@@ -323,8 +325,8 @@ def _value(state: WorkflowState, node_id: str) -> dict[str, object]:
     return value
 
 
-def _outcome(state: WorkflowState) -> str:
-    """The checked outcome of a completed run, read off its own facts the way the run card reads it."""
+def _checked(state: WorkflowState) -> Outcome:
+    """The checked outcome of a completed run with its minted artifacts, read off its own facts the way the run card reads it."""
     ended = EndedRun(
         spec=_spec(),
         run_id="run-stance-refresh",
@@ -336,7 +338,12 @@ def _outcome(state: WorkflowState) -> str:
         gate_decisions=state.gate_decisions,
         gate_generations=state.gate_generations,
     )
-    return checked_outcome(ended).status
+    return checked_outcome(ended)
+
+
+def _outcome(state: WorkflowState) -> str:
+    """The checked outcome's status of a completed run."""
+    return _checked(state).status
 
 
 async def test_the_refresh_worker_is_granted_read_page_to_patch_the_stance_in_code() -> None:
@@ -637,6 +644,20 @@ async def test_a_proposed_new_stance_makes_no_rewrite_and_reaches_the_output_wit
         "failed": [],
         "proposed": [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}],
     }
+
+
+async def test_a_proposal_only_run_carries_its_proposals_as_an_artifact_and_ends_noop(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    proposals = [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}]
+    assert to_jsonable_python(state.values["merge_proposals"]) == proposals
+    outcome = _checked(state)
+    assert outcome.status == "noop", "no stance was rewritten"
+    assert [(ref.id, ref.node_id, ref.media_type, ref.value_digest) for ref in outcome.artifacts] == [
+        ("proposed_stances", "merge_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value(proposals)))
+    ], "the card shows the proposals as what the run left behind"
 
 
 async def test_proposals_of_the_same_id_combine_into_one_with_every_page(sandbox: AsyncMonty) -> None:

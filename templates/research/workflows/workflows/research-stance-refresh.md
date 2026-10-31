@@ -14,9 +14,10 @@ presentation:
     Each stance a changed records page bears on, rewritten in place: its status following the records, and its
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
     it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance
-    and never drafted. The run card lists the stances written, the ones refused with the check each failed, every
-    proposed new stance with the records pages behind it, where every changed page was placed, every stance as it was
-    before the run, and every stance the run could not read with the reason.
+    and never drafted. The run card lists the stances written, the ones refused with the check each failed, where every
+    changed page was placed, every stance as it was before the run, and every stance the run could not read with the
+    reason. It shows every proposed new stance with the records pages behind it among what the run left behind,
+    collected as soon as the pages are placed, so a run that fails while rewriting still carries them.
   owner_participation: >-
     Nothing during a run, unless the judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -39,7 +40,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 5
+  version: 6
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages, drafting none.
   parameters:
     collection:
@@ -226,6 +227,11 @@ workflow:
     empty_primary: noop
     required_gates:
       - {gate_id: check_stances, accepted_sources: [judge]}
+    artifacts:
+      - id: proposed_stances
+        label: New stances proposed, each with the records pages behind it
+        source: {node: merge_proposals}
+        media_type: application/json
   nodes:
     - kind: run
       id: list_changes
@@ -307,9 +313,11 @@ both maps run over nothing. `group_pages` puts the admitted pages no stance name
 five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
 a new stance, or a skip. `merge_work` makes one item per stance the run read with every page that bears on it, its
 record among them. `merge_proposals` makes one proposal per proposed new stance id with every page behind it,
-combining the groups that proposed the same id. An id a listed stance carries makes no proposal: a page placed under
-it joins that stance's item when the run read the stance, and is left alone when it could not. `refresh_stances`
-runs one worker per item, two at a time, and no worker drafts a proposal. Each answers only its stance's changes:
+combining the groups that proposed the same id, and its list is the run's `proposed_stances` artifact. It waits on
+neither the refresh map nor the judge, so a run either of them fails still carries it. An id a listed stance carries
+makes no proposal: a page placed under it joins that stance's item when the run read the stance, and is left alone
+when it could not. `refresh_stances` runs one worker per item, two at a time, and no worker drafts a proposal. Each
+answers only its stance's changes:
 the status, the summary and the sections it rewrites among TL;DR, Position, Why and Open Questions, checked against
 the base's grammar as the whole page they make, and names any finding it left because only a change to Evidence or
 Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its
