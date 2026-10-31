@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from asyncpg.exceptions import CannotConnectNowError, ConnectionDoesNotExistError
+from asyncpg.exceptions import CannotConnectNowError, ConnectionDoesNotExistError, ProtocolViolationError, TooManyConnectionsError
 
 from core.cqrs.contracts import Broadcaster, Job, TopicPublisher, change_frames
 from core.cqrs.events import ChangeNotification, matches
@@ -231,6 +231,7 @@ class TestReconnect:
         [
             CannotConnectNowError("the database system is starting up"),
             ConnectionDoesNotExistError("connection was closed in the middle of operation"),
+            TooManyConnectionsError("sorry, too many clients already"),
         ],
     )
     async def test_a_database_restart_refusing_the_reopen_still_resubscribes_and_delivers(self, refusal: Exception):
@@ -245,6 +246,20 @@ class TestReconnect:
         assert listener.open_count == 5
         await stream.aclose()
         await broadcaster.stop()
+
+    async def test_a_protocol_fault_on_open_ends_the_fan_out_and_names_the_error(self, caplog: pytest.LogCaptureFixture):
+        broadcaster, _, listener = _broadcaster(coalesce_seconds=0.01)
+        await broadcaster.start()
+        listener.fail_next_open(ProtocolViolationError("unexpected message type"))
+        for _ in range(20):
+            await asyncio.sleep(0.01)
+            if "broadcaster task exited unexpectedly" in caplog.text:
+                break
+        assert "broadcaster task exited unexpectedly" in caplog.text
+        assert "ProtocolViolationError" in caplog.text
+        assert listener.open_count == 2
+        with suppress(ProtocolViolationError):
+            await broadcaster.stop()
 
 
 DSN = "postgresql://u:p@h/db"

@@ -12,11 +12,10 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
-from asyncpg.exceptions import AdminShutdownError, CannotConnectNowError, CrashShutdownError, PostgresConnectionError
 from sqlalchemy import text
 
 from core.cqrs.events import ChangeNotification
-from core.db import Listener, Notifier
+from core.db import DATABASE_CONNECTION_ERRORS, Listener, Notifier
 from core.observability import get_logger
 
 if TYPE_CHECKING:
@@ -34,13 +33,7 @@ SUBSCRIBER_QUEUE_LIMIT = 256
 newest hint to refetch is the one that matters."""
 
 # A listening connection that was refused, reset, closed or never opened, or a database shutting down or starting up.
-_LOST_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
-    OSError,
-    PostgresConnectionError,
-    CannotConnectNowError,
-    AdminShutdownError,
-    CrashShutdownError,
-)
+_LOST_CONNECTION_ERRORS: tuple[type[Exception], ...] = (OSError, *DATABASE_CONNECTION_ERRORS)
 
 
 class Executes(Protocol):
@@ -65,8 +58,9 @@ class TopicNotifier(Protocol):
     async def notify(self, channel: str, payload: str) -> None:
         """Send `payload` on `channel`, replacing a connection the database closed.
 
-        A send that finds its connection closed or loses it midway goes out once more on a new connection. A send that
-        still fails raises, and the next call opens a new connection.
+        A send that finds its connection closed gets one attempt on a new connection. A send that loses its connection
+        midway goes out once more on a new connection, so a payload may arrive twice when the server committed it and
+        the reply was lost. A send that still fails raises, and the next call opens a new connection.
 
         Args:
             channel: The channel to send on.

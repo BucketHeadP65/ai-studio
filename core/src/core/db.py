@@ -1,4 +1,4 @@
-"""Database helpers: engine and session factories, DSN spellings, insert batches, and Postgres notifications.
+"""Database helpers: engine and session factories, DSN spellings, insert batches, lost-connection errors, and Postgres notifications.
 
 This module holds no engine or session factory of its own. Each application builds and shares its own.
 `create_tables` takes the metadata of the caller's own `DeclarativeBase`.
@@ -14,6 +14,16 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
 
+from asyncpg.exceptions import (
+    AdminShutdownError,
+    CannotConnectNowError,
+    ClientCannotConnectError,
+    ConnectionDoesNotExistError,
+    ConnectionFailureError,
+    ConnectionRejectionError,
+    CrashShutdownError,
+    TooManyConnectionsError,
+)
 from sqlalchemy import NullPool, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -25,6 +35,28 @@ if TYPE_CHECKING:
 
 MAX_BIND_PARAMETERS = 32767
 """asyncpg's ceiling on the arguments one statement may bind. A multi-row INSERT binds rows times columns of them."""
+
+DATABASE_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
+    ConnectionError,
+    BrokenPipeError,
+    ConnectionAbortedError,
+    ConnectionRefusedError,
+    ConnectionResetError,
+    ClientCannotConnectError,
+    ConnectionDoesNotExistError,
+    ConnectionRejectionError,
+    ConnectionFailureError,
+    AdminShutdownError,
+    CrashShutdownError,
+    CannotConnectNowError,
+    TooManyConnectionsError,
+)
+"""The errors of a refused, reset or closed connection and of a database shutting down or starting up.
+
+Python's connection errors, and asyncpg's errors for a connection that could not be opened, does not exist, was
+rejected or failed, for an administrator or crash shutdown, for a database not yet accepting connections, and for a
+database already holding as many connections as it allows.
+"""
 
 
 def async_dsn(dsn: str) -> str:
@@ -359,8 +391,9 @@ class Notifier:
         """Send `payload` on `channel`, connecting on the first call.
 
         Concurrent calls are safe. They take turns on the one connection. A held connection the database
-        closed is dropped and the send goes out on a new one. A send that loses its held connection midway
-        is sent once more on a new connection. A send that still fails raises, and the next call connects again.
+        closed is dropped and the send gets one attempt on a new one. A send that loses its held connection
+        midway is sent once more on a new connection, so a payload may arrive twice when the server committed
+        it and the reply was lost. A send that still fails raises, and the next call connects again.
 
         Args:
             channel: The Postgres channel to send on.

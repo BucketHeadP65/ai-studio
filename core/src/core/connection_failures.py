@@ -19,43 +19,14 @@ import re
 
 from typing import TYPE_CHECKING
 
-from asyncpg.exceptions import (
-    AdminShutdownError,
-    CannotConnectNowError,
-    ClientCannotConnectError,
-    ConnectionDoesNotExistError,
-    ConnectionFailureError,
-    ConnectionRejectionError,
-    CrashShutdownError,
-    LockNotAvailableError,
-    PostgresError,
-    QueryCanceledError,
-)
+from asyncpg.exceptions import LockNotAvailableError, PostgresError, QueryCanceledError
 from openai import APIConnectionError
 from sqlalchemy.exc import DBAPIError
 
+from core.db import DATABASE_CONNECTION_ERRORS
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-
-DATABASE_CONNECTION_ERRORS: tuple[type[Exception], ...] = (
-    ConnectionError,
-    BrokenPipeError,
-    ConnectionAbortedError,
-    ConnectionRefusedError,
-    ConnectionResetError,
-    ClientCannotConnectError,
-    ConnectionDoesNotExistError,
-    ConnectionRejectionError,
-    ConnectionFailureError,
-    AdminShutdownError,
-    CrashShutdownError,
-    CannotConnectNowError,
-)
-"""The errors of a refused, reset or closed connection and of a database shutting down or starting up.
-
-Python's connection errors, and asyncpg's errors for a connection that could not be opened, does not exist, was
-rejected or failed, for an administrator or crash shutdown, and for a database not yet accepting connections.
-"""
 
 # The exact types asyncio raises a failed connection attempt as when its errno names no connection error.
 _CONNECT_ATTEMPT_ERRORS: tuple[type[OSError], ...] = (OSError, TimeoutError)

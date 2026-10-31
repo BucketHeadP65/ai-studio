@@ -19,6 +19,7 @@ from asyncpg.exceptions import (
     PostgresSyntaxError,
     QueryCanceledError,
     SyntaxOrAccessError,
+    TooManyConnectionsError,
 )
 from openai import AsyncOpenAI
 from pydantic_ai.embeddings.openai import OpenAIEmbeddingModel
@@ -29,13 +30,8 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
 from sqlalchemy.exc import DBAPIError
 
-from core.connection_failures import (
-    DATABASE_CONNECTION_ERRORS,
-    connection_failure_message,
-    is_database_connection_failure,
-    is_lock_timeout,
-    is_statement_timeout,
-)
+from core.connection_failures import connection_failure_message, is_database_connection_failure, is_lock_timeout, is_statement_timeout
+from core.db import DATABASE_CONNECTION_ERRORS
 
 DATABASE = "localhost:5434/knowledge_bases"
 
@@ -153,6 +149,7 @@ def test_the_rule_names_the_errors_of_a_refused_failed_or_closed_database_connec
         AdminShutdownError,
         CrashShutdownError,
         CannotConnectNowError,
+        TooManyConnectionsError,
     ) == DATABASE_CONNECTION_ERRORS
 
 
@@ -174,9 +171,10 @@ def _from_statement(driver_error: PostgresError) -> DBAPIError:
         ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 5434)"),
         OSError("Multiple exceptions: [Errno 61] Connect call failed ('::1', 5434, 0, 0), [Errno 61] Connect call failed ('127.0.0.1', 5434)"),
         CannotConnectNowError("the database system is shutting down"),
+        TooManyConnectionsError("sorry, too many clients already"),
         _from_statement(ConnectionDoesNotExistError("connection was closed in the middle of operation")),
     ],
-    ids=["refused", "every address refused", "starting up", "closed under a statement"],
+    ids=["refused", "every address refused", "starting up", "too many clients", "closed under a statement"],
 )
 def test_a_refused_failed_or_closed_connection_is_a_database_connection_failure(error: Exception) -> None:
     assert is_database_connection_failure(error) is True

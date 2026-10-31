@@ -6,7 +6,8 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
 ## Module map
 
 - `core.db`: async engine/session factories, the reader engine (`build_reader_engine`), bind-parameter batches, `redact_db`,
-  and `SessionScopedFactory` (one fresh session per call)
+  `SessionScopedFactory` (one fresh session per call), and the errors of a lost database connection
+  (`DATABASE_CONNECTION_ERRORS`)
 - `core.files`, `core.markdown`: file and markdown utilities (atomic writes, the cooperative `exclusive_lock`,
   `has_hidden_component`, heading slugs, the paragraph split of a section body)
 - `core.connection_failures`: whether an error is a database connection failure, a statement timeout or a lock timeout, and
