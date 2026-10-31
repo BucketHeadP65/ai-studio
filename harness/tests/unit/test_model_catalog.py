@@ -40,7 +40,7 @@ _ROUTES = ModelSettings()
 
 
 def _unguarded(model: Model) -> Model:
-    """The model inside the content filter guard core puts around every Azure and gateway model."""
+    """The model inside the content filter guard every route builds its model in."""
     assert isinstance(model, ContentFilterGuard)
     return model.wrapped
 
@@ -89,7 +89,7 @@ def test_an_azure_id_needs_the_azure_endpoint() -> None:
 
 def test_a_zai_id_routes_through_openrouter_under_its_own_prefix() -> None:
 
-    model = models.model_for("glm-5.3-flash", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    model = _unguarded(models.model_for("glm-5.3-flash", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(model, OpenRouterModel)
     assert model.model_name == "z-ai/glm-5.3-flash"
@@ -207,7 +207,7 @@ def test_a_deepseek_model_carries_deepseek_thinking_and_refuses_json_schema() ->
 
 def test_a_deepseek_id_routes_through_openrouter_when_the_credential_is_present() -> None:
 
-    model = models.model_for("deepseek-v4-pro-0813", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    model = _unguarded(models.model_for("deepseek-v4-pro-0813", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(model, OpenRouterModel)
     assert model.model_name == "deepseek/deepseek-v4-pro-0813"
@@ -271,6 +271,26 @@ def _ceiling_of(model_id: str) -> int | None:
     return None if settings is None else settings.get("max_tokens")
 
 
+@pytest.mark.parametrize(
+    ("model_id", "infrastructure", "inner"),
+    [
+        ("gpt-6-luna", _GATEWAY_AND_OPENROUTER, OpenAIResponsesModel),
+        ("gpt-5.4", _GATEWAY, OpenAIResponsesModel),
+        ("deepseek-v4-flash-0731", _GATEWAY, OpenAIChatModel),
+        ("glm-5.3-flash", _GATEWAY_AND_OPENROUTER, OpenRouterModel),
+        ("openai/gpt-5.4-mini", _GATEWAY_AND_OPENROUTER, OpenRouterModel),
+    ],
+    ids=["azure", "gateway-responses", "gateway-chat", "openrouter-catalog", "openrouter-any-id"],
+)
+def test_every_route_builds_its_model_inside_the_content_filter_guard(
+    model_id: str, infrastructure: InfrastructureSettings, inner: type[Model]
+) -> None:
+    built = models.model_for(model_id, infrastructure=infrastructure, models=_ROUTES)
+
+    assert isinstance(built, ContentFilterGuard)
+    assert isinstance(built.wrapped, inner)
+
+
 @pytest.mark.parametrize("model_id", ["glm-5.3-flash", "deepseek-v4-pro-0813", "gpt-5.4", "gpt-6-luna"])
 def test_every_route_asks_for_the_thinking_level_it_was_given(model_id: str) -> None:
 
@@ -290,7 +310,7 @@ def test_the_thinking_level_defaults_to_the_top_of_the_scale() -> None:
 
 def test_an_id_outside_the_catalog_builds_on_openrouter() -> None:
 
-    built = models.model_for("openai/gpt-5.4-mini", thinking="medium", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    built = _unguarded(models.model_for("openai/gpt-5.4-mini", thinking="medium", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(built, OpenRouterModel)
     assert built.model_name == "openai/gpt-5.4-mini"

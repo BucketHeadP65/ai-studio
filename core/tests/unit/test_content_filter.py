@@ -13,7 +13,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, JsonValue
 from pydantic_ai import Agent, PromptedOutput
 from pydantic_ai.exceptions import ContentFilterError, UnexpectedModelBehavior
-from pydantic_ai.messages import ModelResponse, TextPart
+from pydantic_ai.messages import ModelResponse, PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -165,6 +165,28 @@ async def test_the_error_names_each_category_azure_flagged_on_its_first_line(str
         "Content filter triggered. Finish reason: 'content_filter'. Filter results: completion violence filtered at severity "
         "medium, completion protected_material_text detected and filtered., body:"
     )
+
+
+async def test_a_streamed_caller_receives_the_text_before_the_error() -> None:
+    transport = ScriptedResponses(Answer(text=STOCK_REFUSAL, status="incomplete", incomplete_reason="content_filter"))
+    received: list[str] = []
+
+    async def collect(_: RunContext[None], events: AsyncIterable[AgentStreamEvent]) -> None:
+        try:
+            async for event in events:
+                if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+                    received.append(event.part.content)
+                elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                    received.append(event.delta.content_delta)
+        except ContentFilterError:
+            received.append("<error>")
+            raise
+
+    agent = Agent(ContentFilterGuard(_responses_model(transport)), deps_type=type(None), output_type=PromptedOutput(Verdict))
+    with pytest.raises(ContentFilterError):
+        await agent.run("Judge this.", event_stream_handler=collect)
+
+    assert "".join(received) == f"{STOCK_REFUSAL}<error>"
 
 
 async def test_the_error_says_when_the_response_holds_no_filter_result() -> None:

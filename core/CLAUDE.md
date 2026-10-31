@@ -35,7 +35,7 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
 - `core.ai.filesystem`: `UnnumberedFileSystem`, pydantic-ai-harness's `FileSystem` with `read_file`'s line numbers removed
 - `core.ai.shell`: `PathGuardedShell`, pydantic-ai-harness's `Shell` refusing a command that names a denied path
 - `core.ai.tool_output_limits`: `ToolOutputLimits`, pydantic-ai-harness's capability that also keeps a reduced return's `tools`
-- `core.ai.content_filter`: `ContentFilterGuard`, the wrapper around every model core's factories build, which raises
+- `core.ai.content_filter`: `ContentFilterGuard`, the wrapper around every generation model the repo builds, which raises
   `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps
   Azure's content filter results in a response's provider details
 - `core.ai.history`: the conversation record behind pydantic-ai-harness's step-store port (every message once, forms, stamps,

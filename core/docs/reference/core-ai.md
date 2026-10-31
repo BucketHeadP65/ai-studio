@@ -37,7 +37,7 @@ every consumer (`core/CLAUDE.md`'s ripple rule). The acceptance gate for any cha
 | `core.ai.format_maps` | `FormatMaps`: a large text return of a configured tool answers with its format's map, and the tool gains a `part` argument that slices the run's cached copy. Stock outliners for `markdown`, `csv`, `listing`, `diff` and `json` | `ai/format_maps/{contracts,internal_contracts,domain,capability,toolset}.py`, `ai/format_maps/infrastructure/file_cache.py` |
 | `core.ai.filesystem` | `UnnumberedFileSystem`: pydantic-ai-harness's `FileSystem` whose `read_file` returns each line without its number | `ai/filesystem.py` |
 | `core.ai.tool_output_limits` | `ToolOutputLimits`: pydantic-ai-harness's capability, except a reduced return keeps the `tools` the original revealed | `ai/tool_output_limits.py` |
-| `core.ai.content_filter` | `ContentFilterGuard`, the wrapper around every model `create_azure_model` and `create_gateway_model` build, which raises `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps Azure's content filter results in a response's provider details. See below | `ai/content_filter.py` |
+| `core.ai.content_filter` | `ContentFilterGuard`, the wrapper around every generation model the repo builds, `create_azure_model` and `create_gateway_model` included, which raises `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps Azure's content filter results in a response's provider details. See below | `ai/content_filter.py` |
 | `core.ai.history` | The conversation record behind the step-store port, plus `StepUsage` and `StepUsageTap` (one model response's cost as its `data-step` chunk carries it) and `recording_capabilities` (the step recorder and the request parameters recorder for one agent) | `ai/history/{contracts,internal_contracts,domain,exceptions,read_models,conversation_record,message_key,request_parameters_recorder,recording,step_usage}.py`, `ai/history/infrastructure/{checkpoints,database,postgres_step_store,queries,reads,rows,schema,writes}.py` |
 | `core.ai.registry` | The generic capability/model registry | `ai/registry.py` |
 | `core.ai.capabilities` | Capability descriptors (`AbstractCapability` seam, `SupportsInstructionBlocks`) | `ai/capabilities.py` |
@@ -635,10 +635,12 @@ text, such as the stock sentence "I'm sorry, but I cannot assist with that reque
 output, and with a structured output type every output retry is spent on a request the filter refuses again.
 
 Every model `create_azure_model` and `create_gateway_model` build, `TestModel` aside, is a `ContentFilterGuard` around
-the model itself. The guard raises `ContentFilterError` for any response that finishes on `content_filter`, whatever text
-it carries, when a request returns or when a streamed request's body exits. The response never reaches output
-validation and no output retry is sent for it. `ContentFilterError` is not a `ModelConnectionError`, so the engine
-performs the turn once.
+the model itself, and so is every model a host builds on its own (the harness's OpenRouter models, the connectors' xAI
+model). The guard raises `ContentFilterError` for any response that finishes on `content_filter`, whatever text it
+carries, when a request returns or when a streamed request's body exits. The response never reaches output validation
+and no output retry is sent for it. Both engines perform the turn once. The in-process engine performs a turn again
+only when it lost its model connection, and `ContentFilterError` is not a `ModelConnectionError`. The Temporal engine's
+default retry policy lists `ContentFilterError` among the errors it never retries.
 
 - The error's first line opens as pydantic-ai's own (`Content filter triggered. Finish reason: 'content_filter'.`) and
   ends by naming each filter category that filtered or detected, with its source and severity, for example
@@ -650,7 +652,7 @@ performs the turn once.
   `content_filters` list the OpenAI SDK has no field for, and this model keeps that list, as sent, in the response's
   provider details under `content_filters`, streamed or not. pydantic-ai keeps the result of a filter that refused the
   request itself under `content_filter_result`, and the error names that too.
-- A model built anywhere else, such as an OpenRouter model, is not guarded.
+- `decision_model` builds a decision model, which is not guarded.
 
 ## Disclosure: `core.ai.disclosure`
 

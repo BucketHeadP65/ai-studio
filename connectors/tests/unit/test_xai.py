@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from core.ai.content_filter import ContentFilterGuard
 from engram.config import KnowledgeBaseSettings, SourceResources
+from pydantic_ai.models.xai import XaiModel
 
-from engram_connectors.xai import XaiResource, xai_resource
+from engram_connectors.xai import XaiResource, build_xai_model, xai_resource
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,3 +45,11 @@ def test_a_block_with_a_key_validates_into_the_resource(tmp_path: Path) -> None:
     assert resource is not None
     assert resource.api_key == "xai-secret"
     assert resource.model == "grok-4-1-fast-non-reasoning"
+
+
+def test_the_model_comes_back_inside_the_content_filter_guard() -> None:
+    model = build_xai_model(XaiResource(api_key="xai-secret", model="grok-4-1-fast-non-reasoning"))
+
+    assert isinstance(model, ContentFilterGuard)
+    assert isinstance(model.wrapped, XaiModel)
+    assert model.model_name == "grok-4-1-fast-non-reasoning"

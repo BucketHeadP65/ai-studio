@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
 from pydantic_ai.exceptions import ContentFilterError
@@ -67,6 +67,7 @@ class FilterReportingResponsesModel(OpenAIResponsesModel):
     `content_filters` as sent, on a streamed response and on a whole one alike. A response without them gains nothing.
     """
 
+    @override
     def _process_provider_details(self, response: responses.Response) -> dict[str, JsonValue] | None:
         """The response's `content_filters` list under the same key, or `None` when it carries none."""
         extra = response.model_extra or {}

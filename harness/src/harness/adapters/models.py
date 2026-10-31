@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING, Literal
 
+from core.ai.content_filter import ContentFilterGuard
 from core.ai.models import Thinking, chat_http_client, create_azure_model, create_gateway_model
 from genai_prices import calc_price
 from pydantic_ai.models.openrouter import OpenRouterModel, OpenRouterModelSettings
@@ -147,8 +148,8 @@ def _openrouter_model(
     thinking: Thinking,
     provider: OpenRouterProvider,
     ceiling: int,
-) -> OpenRouterModel:
-    """One model reached through OpenRouter at `thinking`, with DeepSeek's pins when `vendor` is `deepseek`, else its own profile."""
+) -> Model:
+    """One OpenRouter model at `thinking` in a `ContentFilterGuard`, with DeepSeek's pins for a `deepseek` vendor, else its own profile."""
     own = OpenRouterProvider.model_profile(wire_name)
     profile = (
         _deepseek_profile(wire_name.rpartition("/")[2], own=own) if vendor == "deepseek" else (own if own is not None else ModelProfile())
@@ -160,7 +161,7 @@ def _openrouter_model(
     # any table. Without it the response carries token counts and no figure.
     openrouter_settings = OpenRouterModelSettings(thinking=thinking, max_tokens=ceiling, openrouter_usage={"include": True})
     openrouter_settings["openrouter_provider"] = {"ignore": [*_OPENROUTER_IGNORED_HOSTS.get(wire_name, ()), *_OPENROUTER_HOSTS_NEVER_USED]}
-    return OpenRouterModel(wire_name, provider=provider, profile=profile, settings=openrouter_settings)
+    return ContentFilterGuard(OpenRouterModel(wire_name, provider=provider, profile=profile, settings=openrouter_settings))
 
 
 def model_for(model_id: str, *, infrastructure: InfrastructureSettings, models: ModelSettings, thinking: Thinking = DEFAULT_THINKING) -> Model:
@@ -178,7 +179,8 @@ def model_for(model_id: str, *, infrastructure: InfrastructureSettings, models: 
         thinking: The thinking level the model is built at.
 
     Returns:
-        The model.
+        The model, inside a `ContentFilterGuard` whatever its route, so a response a content filter cut raises
+        `ContentFilterError` at once.
 
     Raises:
         ValueError: The route `model_id` needs has no key in the settings file's infrastructure section.

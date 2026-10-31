@@ -454,6 +454,15 @@ def test_a_step_that_can_never_succeed_stops_retrying_by_default(registry: StepR
     assert {"NotFoundError", "TypeError", "ValidationError"} <= set(policy.non_retryable_error_types or ())
 
 
+def test_a_step_a_content_filter_cut_is_not_performed_again(registry: StepRegistry) -> None:
+    """The filter refuses the same request again, so a fresh activity would only be another paid request."""
+    bind("filtered-config", registry)
+    policy = _binding("filtered-config").activity_config.get("retry_policy")
+
+    assert policy is not None
+    assert "ContentFilterError" in (policy.non_retryable_error_types or ())
+
+
 def test_the_workflow_type_is_a_stable_name() -> None:
     """A running workflow outlives a deploy, so its registered type name is a compatibility surface."""
     assert WORKFLOW_TYPE == "PydanticAIWorkflowRun"

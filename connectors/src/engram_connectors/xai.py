@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
 
+from core.ai.content_filter import ContentFilterGuard
 from pydantic import BaseModel
 from pydantic_ai.models.xai import XaiModel
 from pydantic_ai.providers.xai import XaiProvider
 
 if TYPE_CHECKING:
     from engram.config import SourceResources
+    from pydantic_ai.models import Model
 
 SETTINGS_KEY: Final = "xai"
 """The `SourceResources.settings` block this connection is read from."""
@@ -47,8 +49,10 @@ def xai_resource(resources: SourceResources) -> XaiResource | None:
     return resource if resource.api_key else None
 
 
-def build_xai_model(resource: XaiResource) -> XaiModel:
-    """Build the xAI model client for a connection.
+def build_xai_model(resource: XaiResource) -> Model:
+    """Build the xAI model client for a connection, inside a `ContentFilterGuard`.
+
+    A response the provider cut on `content_filter` raises `ContentFilterError` at once instead of reaching output validation.
 
     Args:
         resource: The connection whose model and API key the client uses.
@@ -56,4 +60,4 @@ def build_xai_model(resource: XaiResource) -> XaiModel:
     Returns:
         The model client, authenticated with the connection's API key.
     """
-    return XaiModel(resource.model, provider=XaiProvider(api_key=resource.api_key))
+    return ContentFilterGuard(XaiModel(resource.model, provider=XaiProvider(api_key=resource.api_key)))

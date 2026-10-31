@@ -198,12 +198,14 @@ def continuing_step_conversation(state: StepConversationContinuation) -> Generat
 
 _DEFAULT_ACTIVITY_CONFIG = ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5),
-    retry_policy=RetryPolicy(maximum_attempts=5, non_retryable_error_types=("NotFoundError", "TypeError", "ValidationError")),
+    retry_policy=RetryPolicy(
+        maximum_attempts=5, non_retryable_error_types=("NotFoundError", "TypeError", "ValidationError", "ContentFilterError")
+    ),
 )
 """How a step is scheduled when the caller states nothing: five minutes per attempt and at most five attempts.
 
-An activity the worker never registered (`NotFoundError`) and a step that raises `TypeError` or
-pydantic's `ValidationError` fail the run on the first attempt. An inline step validates its
+An activity the worker never registered (`NotFoundError`) and a step that raises `TypeError`,
+pydantic's `ValidationError` or pydantic-ai's `ContentFilterError` fail the run on the first attempt. An inline step validates its
 arguments inside the activity, so an argument that does not fit it fails there. A published
 step's arguments are decoded before the step runs, and one that does not decode is retried up to
 the ceiling."""

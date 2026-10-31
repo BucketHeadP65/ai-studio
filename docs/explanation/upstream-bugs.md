@@ -313,7 +313,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `_process_provider_details`, the hook added for this in pydantic-ai#9094 and run on streams since pydantic-ai#10515.
 - **Grade:** costly. Each filtered item spends every output retry on a request the filter refuses again.
 - **Found:** 2026-10-31, reading a workflow run in which 8 items were filtered and every one ended this way or at once.
-- **What we did:** `core.ai.content_filter` (UE-26): `ContentFilterGuard` around every model core's factories build raises
+- **What we did:** `core.ai.content_filter` (UE-26): `ContentFilterGuard` around every generation model the repo builds raises
   `ContentFilterError` for any `content_filter` response, and `FilterReportingResponsesModel` keeps the `content_filters`
   list, so the error's first line names each flagged category and its severity (`343ec2df`).
 - **Upstream state:** present in 2.63.0. The open pull request pydantic-ai#12039 makes `ModelFallback` fall back on a
