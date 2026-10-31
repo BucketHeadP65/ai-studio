@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, TypeGuard
 import httpx2
 import pytest
 
+from core.ai.content_filter import ContentFilterGuard
 from core.ai.disclosure.contracts import ProgressiveDisclosure
 from core.ai.evaluation.contracts import (
     EvaluationError,
@@ -251,6 +252,12 @@ class TestApplyReasoningEffort:
 # -- build_eval_model --------------------------------------------------------
 
 
+def _unguarded(model: Model) -> Model:
+    """The model inside the content filter guard core puts around every Azure model."""
+    assert isinstance(model, ContentFilterGuard)
+    return model.wrapped
+
+
 class TestBuildEvalModel:
     async def test_test_model_spec_is_a_network_free_test_model(self):
         model = await build_eval_model(FakeContainer(), "test-model")
@@ -270,7 +277,7 @@ class TestBuildEvalModel:
         assert AzureOpenAiSettings in container.requested
 
     async def test_a_thinking_level_is_sent_as_the_responses_reasoning_effort(self):
-        model = await build_eval_model(FakeContainer(), "gpt-5.4", thinking="xhigh")
+        model = _unguarded(await build_eval_model(FakeContainer(), "gpt-5.4", thinking="xhigh"))
 
         assert isinstance(model, OpenAIResponsesModel)
         assert model.settings == {"thinking": "xhigh"}
@@ -279,14 +286,14 @@ class TestBuildEvalModel:
         assert OPENAI_REASONING_EFFORT_MAP["xhigh"] == "xhigh"
 
     async def test_no_thinking_level_leaves_the_model_at_its_default(self):
-        model = await build_eval_model(FakeContainer(), "gpt-5.4")
+        model = _unguarded(await build_eval_model(FakeContainer(), "gpt-5.4"))
 
         assert isinstance(model, OpenAIResponsesModel)
         assert model.settings is None
 
     @pytest.mark.parametrize("thinking", [None, "low"])
     async def test_an_azure_deployment_retries_on_the_chat_client_and_never_in_the_sdk(self, thinking: Thinking | None):
-        model = await build_eval_model(FakeContainer(), "gpt-5.4", thinking=thinking)
+        model = _unguarded(await build_eval_model(FakeContainer(), "gpt-5.4", thinking=thinking))
 
         assert isinstance(model, OpenAIResponsesModel)
         assert isinstance(model.client._client._transport, AsyncHTTPX2TenacityTransport)

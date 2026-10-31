@@ -9,6 +9,7 @@ from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.test import TestModel
 
 from core.ai import create_azure_model, create_azure_openai_client, create_model
+from core.ai.content_filter import ContentFilterGuard
 from core.ai.models import chat_http_client
 
 
@@ -67,7 +68,8 @@ def test_create_model_azure_builds_a_responses_model():
 def test_create_azure_model_builds_a_responses_model_with_its_settings() -> None:
     model = create_azure_model("some-deployment", endpoint="https://example.openai.azure.com", settings={"max_tokens": 7})
 
-    assert isinstance(model, OpenAIResponsesModel)
+    assert isinstance(model, ContentFilterGuard)
+    assert isinstance(model.wrapped, OpenAIResponsesModel)
     assert model.settings is not None
     assert model.settings.get("max_tokens") == 7
 
@@ -75,8 +77,9 @@ def test_create_azure_model_builds_a_responses_model_with_its_settings() -> None
 def test_an_azure_model_without_a_client_keeps_the_sdks_own_retries() -> None:
     model = create_azure_model("some-deployment", endpoint="https://example.openai.azure.com")
 
-    assert isinstance(model, OpenAIResponsesModel)
-    assert model.client.max_retries == DEFAULT_MAX_RETRIES
+    assert isinstance(model, ContentFilterGuard)
+    assert isinstance(model.wrapped, OpenAIResponsesModel)
+    assert model.wrapped.client.max_retries == DEFAULT_MAX_RETRIES
 
 
 def test_an_azure_model_on_the_chat_retry_client_leaves_retries_to_it_and_keeps_the_sdks_timeout() -> None:
@@ -84,7 +87,8 @@ def test_an_azure_model_on_the_chat_retry_client_leaves_retries_to_it_and_keeps_
 
     model = create_azure_model("some-deployment", endpoint="https://example.openai.azure.com", http_client=http_client)
 
-    assert isinstance(model, OpenAIResponsesModel)
-    assert model.client._client is http_client
-    assert model.client.max_retries == 0
-    assert model.client.timeout == DEFAULT_TIMEOUT
+    assert isinstance(model, ContentFilterGuard)
+    assert isinstance(model.wrapped, OpenAIResponsesModel)
+    assert model.wrapped.client._client is http_client
+    assert model.wrapped.client.max_retries == 0
+    assert model.wrapped.client.timeout == DEFAULT_TIMEOUT

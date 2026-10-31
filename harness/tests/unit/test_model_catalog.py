@@ -8,9 +8,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import pytest
 
+from core.ai.content_filter import ContentFilterGuard
 from core.settings import AzureOpenAiSettings, DatabaseSettings, GatewaySettings, InfrastructureSettings, OpenRouterSettings
 from genai_prices import calc_price
 from pydantic_ai.messages import ModelResponse
@@ -24,6 +26,9 @@ from harness.adapters import models
 from harness.settings import ModelSettings
 from tests.support.price_registry import empty_price_registry
 
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
+
 _DATABASE = DatabaseSettings(url="postgresql+asyncpg://owner:pw@db.example:5432/kb", reader_url="postgresql+asyncpg://reader:pw@db.example:5432/kb")
 _GATEWAY = InfrastructureSettings(database=_DATABASE, gateway=GatewaySettings(api_key="test-key", base_url="https://gateway.test/proxy"))
 _AZURE_ENDPOINT = "https://example.openai.azure.com"
@@ -32,6 +37,12 @@ _GATEWAY_AND_OPENROUTER = _GATEWAY.model_copy(
 )
 _ROUTES = ModelSettings()
 """The deployment's own route settings, handed to every build here so none reads an export."""
+
+
+def _unguarded(model: Model) -> Model:
+    """The model inside the content filter guard core puts around every Azure and gateway model."""
+    assert isinstance(model, ContentFilterGuard)
+    return model.wrapped
 
 
 def test_the_default_model_is_glm_flash() -> None:
@@ -44,7 +55,7 @@ def test_the_catalog_lists_the_five_models_default_first() -> None:
 
 
 def test_an_azure_id_builds_a_responses_model_on_the_endpoints_v1_path_with_the_ceiling() -> None:
-    built = models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES, thinking="low")
+    built = _unguarded(models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES, thinking="low"))
 
     assert isinstance(built, OpenAIResponsesModel)
     assert built.model_name == "gpt-6-luna"
@@ -55,7 +66,7 @@ def test_an_azure_id_builds_a_responses_model_on_the_endpoints_v1_path_with_the_
 
 
 def test_an_azure_id_never_routes_through_openrouter_or_the_gateway() -> None:
-    built = models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    built = _unguarded(models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(built, OpenAIResponsesModel)
     assert models.openrouter_wire_name("gpt-6-luna") is None
@@ -64,7 +75,7 @@ def test_an_azure_id_never_routes_through_openrouter_or_the_gateway() -> None:
 
 
 def test_an_azure_id_retries_a_dropped_connection_on_its_own_client_and_never_in_the_sdk() -> None:
-    built = models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    built = _unguarded(models.model_for("gpt-6-luna", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(built, OpenAIResponsesModel)
     assert isinstance(built.client._client._transport, AsyncHTTPX2TenacityTransport)
@@ -176,7 +187,7 @@ def test_the_figure_the_host_billed_wins_over_every_table() -> None:
 
 
 def test_a_deepseek_id_builds_a_chat_model_on_the_deepseek_route() -> None:
-    model = models.model_for("deepseek-v4-flash-0731", infrastructure=_GATEWAY, models=_ROUTES)
+    model = _unguarded(models.model_for("deepseek-v4-flash-0731", infrastructure=_GATEWAY, models=_ROUTES))
 
     assert isinstance(model, OpenAIChatModel)
     assert model.model_name == "deepseek-v4-flash-0731"
@@ -214,7 +225,7 @@ def test_the_openrouter_route_covers_both_deepseek_catalog_entries() -> None:
 
 def test_the_openai_catalog_entry_never_routes_through_openrouter() -> None:
     """The credential only redirects DeepSeek; `gpt-5.4` stays on the gateway's own OpenAI route."""
-    model = models.model_for("gpt-5.4", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES)
+    model = _unguarded(models.model_for("gpt-5.4", infrastructure=_GATEWAY_AND_OPENROUTER, models=_ROUTES))
 
     assert isinstance(model, OpenAIResponsesModel)
     assert model.model_name == "gpt-5.4"
@@ -298,7 +309,7 @@ def test_thinking_is_no_longer_a_deployment_setting() -> None:
 
 
 def test_the_openai_id_builds_a_responses_model_on_the_openai_route() -> None:
-    model = models.model_for("gpt-5.4", infrastructure=_GATEWAY, models=_ROUTES)
+    model = _unguarded(models.model_for("gpt-5.4", infrastructure=_GATEWAY, models=_ROUTES))
 
     assert isinstance(model, OpenAIResponsesModel)
     assert model.model_name == "gpt-5.4"

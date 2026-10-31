@@ -5,6 +5,9 @@ A plain `openai.AsyncOpenAI` client pointed at Azure's OpenAI-compatible
 (`azure.identity`, no API keys), and a `"test-model"` shortcut that returns
 pydantic-ai's `TestModel` so unit tests never touch the network.
 
+Every generation model built here except `TestModel` is a `ContentFilterGuard`: a response that finishes on
+`content_filter` raises `ContentFilterError` at once instead of reaching output validation.
+
 This module reads no environment variables. The caller must pass the endpoint
 and deployment explicitly.
 """
@@ -21,13 +24,14 @@ import httpx2
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import DEFAULT_CONNECTION_LIMITS, DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT, AsyncOpenAI
 from pydantic_ai.embeddings.openai import OpenAIEmbeddingModel
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.providers.gateway import gateway_provider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.retries import AsyncHTTPX2TenacityTransport, RetryConfig, wait_retry_after
 from tenacity import Future, RetryCallState, retry_if_exception_type, retry_if_result, stop_after_attempt, wait_exponential
 
+from core.ai.content_filter import ContentFilterGuard, FilterReportingResponsesModel
 from core.thinking import Thinking as Thinking  # noqa: PLC0414 (the redundant alias marks a re-export)
 
 if TYPE_CHECKING:
@@ -267,13 +271,13 @@ def create_azure_model(
             client and its own retries.
 
     Returns:
-        `TestModel`, or an `OpenAIResponsesModel` backed by an Azure client.
+        `TestModel`, or a `ContentFilterGuard` over a `FilterReportingResponsesModel` backed by an Azure client.
     """
     if deployment == _TEST_MODEL_NAME:
         return TestModel()
     max_retries = DEFAULT_MAX_RETRIES if http_client is None else 0
     client = create_azure_openai_client(endpoint, http_client=http_client, max_retries=max_retries)
-    return OpenAIResponsesModel(deployment, provider=OpenAIProvider(openai_client=client), settings=settings)
+    return ContentFilterGuard(FilterReportingResponsesModel(deployment, provider=OpenAIProvider(openai_client=client), settings=settings))
 
 
 def create_gateway_model(
@@ -299,19 +303,19 @@ def create_gateway_model(
         base_url: The regional gateway proxy base, e.g. `https://gateway-eu.pydantic.dev/proxy`.
         route: An optional gateway route / routing-group name (e.g. `DeepSeek1` for a custom
             provider), or `None` to use the provider's default route.
-        use_responses: `True` builds an `OpenAIResponsesModel` (Responses API), `False` an
+        use_responses: `True` builds a `FilterReportingResponsesModel` (Responses API), `False` an
             `OpenAIChatModel` (Chat Completions).
         profile: The profile the Chat Completions model is built with, or `None` for the model's own.
             The Responses model always takes its own.
         settings: The request settings the model carries, or `None` for none.
 
     Returns:
-        The resolved pydantic-ai `Model` routed through the gateway.
+        The model routed through the gateway, inside a `ContentFilterGuard`.
     """
     provider = gateway_provider("openai", api_key=api_key, base_url=base_url, route=route)
     if use_responses:
-        return OpenAIResponsesModel(model_name, provider=provider, settings=settings)
-    return OpenAIChatModel(model_name, provider=provider, profile=profile, settings=settings)
+        return ContentFilterGuard(FilterReportingResponsesModel(model_name, provider=provider, settings=settings))
+    return ContentFilterGuard(OpenAIChatModel(model_name, provider=provider, profile=profile, settings=settings))
 
 
 def create_model(spec: str, *, endpoint: str | None = None) -> Model:

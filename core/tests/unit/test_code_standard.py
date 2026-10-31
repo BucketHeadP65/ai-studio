@@ -29,6 +29,7 @@ DOCUMENTED: tuple[str, ...] = (
     "core.supervisor",
     "core.testing.fakes",
     "core.ai.empty_answer",
+    "core.ai.content_filter",
     "core.ai.filesystem",
     "core.ai.tool_output_limits",
     "core.ai.artifacts",
