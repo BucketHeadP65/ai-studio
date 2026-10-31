@@ -356,3 +356,23 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   another after 567 s, and aborted a stance refresh run.
 - **Upstream candidate:** yes, as an issue: a retry of a streamed request whose stream broke after its first event,
   opt-in, for a run whose model request can be sent again unchanged.
+
+### UE-26. A response a content filter cut ends the turn at once, naming the filter (core)
+
+- **What:** `ContentFilterGuard` is a `WrapperModel` that raises pydantic-ai's `ContentFilterError` for every response
+  that finishes on `content_filter`, whatever text it carries, when a request returns or when a streamed request's body
+  exits. The response never reaches output validation, so no output retry is spent on it, and the engine performs the
+  turn once, because the error is not a `ModelConnectionError`. `FilterReportingResponsesModel` subclasses
+  `OpenAIResponsesModel` and overrides the `_process_provider_details` hook to keep the top-level `content_filters` list
+  Azure sends, as sent, in the provider details, streamed or not. The error's first line opens as pydantic-ai's own and
+  ends by naming each category that filtered or detected, with its source and severity, or by saying the response holds no
+  filter result. That line is what a failed map item records as its reason. Its body is the whole response as JSON. A
+  streamed response stays in the run's history marked `interrupted`. pydantic-ai's own `RaiseContentFilterError` raises
+  for the same responses, but it is a capability each of some twenty agents would have to carry, and its message names no
+  category.
+- **Where:** `core/src/core/ai/content_filter.py`, applied in `create_azure_model` and `create_gateway_model`
+  (`core/src/core/ai/models.py`), tests in `core/tests/unit/test_content_filter.py`. Models built outside core, such as
+  the harness's OpenRouter models and the connectors' xAI model, are not guarded.
+- **Since:** 2026-10-31, after the filtered items of a workflow run spent their output retries for nothing (UB-12).
+- **Upstream candidate:** yes, as an issue: a `content_filter` response never retried as output by default, Azure's
+  `content_filters` kept by `OpenAIResponsesModel`, and the flagged categories in `ContentFilterError`'s message.

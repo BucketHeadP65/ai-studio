@@ -290,6 +290,43 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `write(name, code, status='disabled')`), or a public directory lock a subclass can hold around its own manifest writes.
 - **Issue:** not filed.
 
+## UB-12. A response a content filter cut is validated as output, and its retries all fail
+
+- **Library:** pydantic-ai 2.63.0 (`pydantic_ai/_agent_graph.py`, `CallToolsNode`, the `content_filter` check under
+  "No actionable output was returned by the model". `pydantic_ai/models/openai.py`, `OpenAIResponsesModel._process_response`
+  and `OpenAIResponsesStreamedResponse._handle_terminal_response`).
+- **Symptom:** an Azure deployment whose content filter cuts a streamed answer returns a response that finishes on
+  `content_filter` with zero usage and one text part, the stock sentence "I'm sorry, but I cannot assist with that
+  request." The agent validates that sentence as its output. Under a structured output type it fails as `json_invalid`,
+  the agent sends a retry prompt, the filter cuts the answer again, and the item fails with "Exceeded maximum output
+  retries (4)" after five paid requests. The same run raised `ContentFilterError` at once for two filtered responses that
+  carried no text. None of the 8 filtered items recovered on a retry. Neither error names the filter category, and the
+  run's record kept none, so nobody could tell which filter fired.
+- **Cause:** two gaps. First, the graph raises `ContentFilterError` only when a `content_filter` response is empty, blank
+  or thinking only. A response with text goes to output validation like any other. The opt-in capability
+  `RaiseContentFilterError` raises for every `content_filter` response, but it has to be added to each agent, and its
+  message, like the graph's, is only "Content filter triggered. Finish reason: 'content_filter'". Second, Azure sends its
+  filter results on a successful Responses API response as a top-level `content_filters` list the OpenAI SDK has no field
+  for. pydantic-ai parses Azure's result types (`_AzureContentFilterResult`, `_AzureContentFilter`) only from the body of
+  an HTTP 400 that refused the prompt (`_check_azure_content_filter`). On a 200 response, streamed or not, the list
+  reaches the provider details only through a subclass of `OpenAIResponsesModel` that overrides
+  `_process_provider_details`, the hook added for this in pydantic-ai#9094 and run on streams since pydantic-ai#10515.
+- **Grade:** costly. Each filtered item spends every output retry on a request the filter refuses again.
+- **Found:** 2026-10-31, reading a workflow run in which 8 items were filtered and every one ended this way or at once.
+- **What we did:** `core.ai.content_filter` (UE-26): `ContentFilterGuard` around every model core's factories build raises
+  `ContentFilterError` for any `content_filter` response, and `FilterReportingResponsesModel` keeps the `content_filters`
+  list, so the error's first line names each flagged category and its severity (`343ec2df`).
+- **Upstream state:** present in 2.63.0. The open pull request pydantic-ai#12039 makes `ModelFallback` fall back on a
+  refusal with text, but leaves the default and the message as they are. The ask is that a `content_filter` response never
+  be retried as output (raise `ContentFilterError`, or at least send no output retry for it), that `OpenAIResponsesModel`
+  keep Azure's `content_filters` in the provider details by default, and that `ContentFilterError` name the flagged
+  categories when the provider details hold them.
+- **Issue:** not filed.
+- **Repro:** an agent over a `FunctionModel` that returns `ModelResponse(parts=[TextPart("I'm sorry, but I cannot
+  assist with that request.")], finish_reason='content_filter')`, with `output_type=PromptedOutput(Verdict)` and
+  `retries={'output': 4}`, raises `UnexpectedModelBehavior: Exceeded maximum output retries (4)` after 5 model calls.
+  With `capabilities=[RaiseContentFilterError()]` it raises `ContentFilterError` after 1.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
