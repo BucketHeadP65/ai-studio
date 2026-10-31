@@ -17,7 +17,8 @@ on the [ADR-0017](0017-local-postgres-primary-testbed.md) local Postgres bed by 
 [ADR-0012](0012-retrieval-strategy-and-code-mode-axes.md) retrieval-strategy axis as a tuned knob,
 measures over the [ADR-0006](0006-dual-dialect-bm25-seam.md) BM25 seam, and treats
 [ADR-0015](0015-code-mode-on-the-mcp-retrieval-surface.md) code-mode as a deliberately excluded eval
-axis. Scope: a new cluster under `features/evals` (`policy.py`, `diagnosis.py`, `objective.py`,
+axis. Scope (the loop's code now lives in the `engram.evals.tuning` slice, with its diagnosis in
+`engram.evals.rca`): a new cluster under `features/evals` (`policy.py`, `diagnosis.py`, `objective.py`,
 `proposer.py`, `calibration.py`, `mcp_calibration.py`, `delivery.py`), the `CalibrateRetrieval` bus
 command with its handler and DI, the `engram evals calibrate` and `engram evals apply-policy` CLI
 commands, `EvalsSettings.calibration` (`src/settings.py`), three opt-in MCP authoring tools, and a
