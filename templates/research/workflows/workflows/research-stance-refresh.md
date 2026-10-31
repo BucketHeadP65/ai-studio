@@ -43,7 +43,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 7
+  version: 8
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages and the digests it rests on, drafting none and dropping any that rests on fewer than two digests the base holds.
   parameters:
     collection:
@@ -199,8 +199,12 @@ workflow:
                     proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": [], "research_pages": []}
                 if placed["page_id"] not in [held["page_id"] for held in proposals[stance_id]["pages"]]:
                     proposals[stance_id]["pages"].append(page)
-                for research_id in placed["research_pages"]:
-                    if research_id not in proposals[stance_id]["research_pages"]:
+                for cited in placed["research_pages"]:
+                    research_id = cited.strip()
+                    if research_id.startswith("[[") and research_id.endswith("]]"):
+                        research_id = research_id[2:-2]
+                    research_id = research_id.split("|")[0].split("#")[0].strip()
+                    if research_id and research_id not in proposals[stance_id]["research_pages"]:
                         proposals[stance_id]["research_pages"].append(research_id)
         digests = {}
         if proposals:
@@ -339,7 +343,8 @@ a new stance, or a skip. A worker proposes a new stance only for a page that tak
 literature addresses, and names the digests bearing on it that it found with `search`. An implementation choice with
 no research question behind it is a skip. `merge_work` makes one item per stance the run read with every page that
 bears on it, its record among them. `merge_proposals` makes one proposal per proposed new stance id with every page
-behind it and every digest its placements name, combining the groups that proposed the same id. It lists the base's
+behind it and every digest its placements name, combining the groups that proposed the same id. A digest named as a
+wikilink, such as `[[paper.x|label]]` or `[[paper.x#^c3|label]]`, counts as its bare id `paper.x`. It lists the base's
 digests, its paper, talk, article and post pages, with `list_pages`, keeps only the named ids among them, so a stance
 page or an id the base does not hold never counts, and drops a proposal left with fewer than two. Its list is the
 run's `proposed_stances` artifact. It waits on neither the refresh map nor the judge, so a run either of them fails

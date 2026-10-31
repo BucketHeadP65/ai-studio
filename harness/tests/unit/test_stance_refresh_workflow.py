@@ -18,7 +18,8 @@ field the workflow does not declare are both named and left alone while the run 
 drafts one and no page is written for one, each reaches write_stances' `proposed` with its pages, two groups proposing
 the same id make one proposal, and an id a listed stance carries makes no proposal. Then the digests a proposal rests
 on: one resting on two reaches the artifact with them, one resting on fewer is dropped, a stance id never counts, the
-groups sharing an id count their digests together, and an id the research base does not hold is dropped.
+groups sharing an id count their digests together, an id the research base does not hold is dropped, and a digest
+cited as a wikilink counts as its bare id.
 """
 
 from __future__ import annotations
@@ -896,3 +897,25 @@ async def test_a_research_page_the_base_does_not_hold_is_dropped(
     proposals, _ = await _proposed_beside_a_kept_one(sandbox, cited)
 
     assert proposals == kept, "an id the research base does not hold never counts toward the two digests"
+
+
+@pytest.mark.parametrize(
+    ("cited", "kept"),
+    [
+        (["[[paper.dense-retrieval]]", "[[art.memory-survey|Memory survey]]"], ["paper.dense-retrieval", "art.memory-survey"]),
+        (
+            ["[[paper.dense-retrieval#^c3|Dense retrieval]]", "paper.dense-retrieval", "[[talk.agent-loops]]"],
+            ["paper.dense-retrieval", "talk.agent-loops"],
+        ),
+    ],
+)
+async def test_a_digest_cited_as_a_wikilink_counts_as_its_bare_id(sandbox: AsyncMonty, cited: list[str], kept: list[str]) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
+
+    state = await _run(
+        sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited)), changed="adr-1"
+    )
+
+    assert to_jsonable_python(state.values["merge_proposals"]) == [
+        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": kept}
+    ], "the artifact carries each digest once, by its bare id"
