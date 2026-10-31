@@ -2,8 +2,9 @@
 title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
-  under a judge, and merges each rewrite into its page as it was read, so its Evidence and Alternatives never change.
-uses: [st.list_stance_changes.v2, st.place_stance_pages.v2, st.refresh_stance.v3, st.check_stances.v2, st.write_stances.v2]
+  under a judge, merges each rewrite into its page as read, so its Evidence and Alternatives never change, and lists
+  the new stances they propose.
+uses: [st.list_stance_changes.v2, st.place_stance_pages.v3, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v3]
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -12,16 +13,17 @@ presentation:
   produces: >-
     Each stance a changed records page bears on, rewritten in place: its status following the records, and its
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
-    it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers gets a new stance page. The
-    run card lists the stances written, the ones refused with the check each failed, where every changed page was
-    placed, every stance as it was before the run, and every stance the run could not read with the reason.
+    it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance
+    and never drafted. The run card lists the stances written, the ones refused with the check each failed, every
+    proposed new stance with the records pages behind it, where every changed page was placed, every stance as it was
+    before the run, and every stance the run could not read with the reason.
   owner_participation: >-
     Nothing during a run, unless the judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
     whose sentences no records page supports or whose status the records do not give. A judge that cannot decide asks
     you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
     wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
-    they were before it.
+    they were before it. A proposed new stance is yours to draft by hand.
   not_for: >-
     Not for adding literature to a stance, which comes from the digests and the flag pass. Not for editing a
     stance's Evidence or Alternatives, which this run never changes. Not for more than twenty-five changed pages at
@@ -32,13 +34,13 @@ presentation:
     - {key: progress, label: Page types and statuses that count, control: text}
     - {key: changed_page_ids, label: Only these changed pages, control: text}
   result_fields:
-    - {label: Stances written and refused (recorded), path: values.write_stances}
+    - {label: "Stances written, refused and proposed (recorded)", path: values.write_stances}
     - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 4
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each stance they change as its changes alone, judge every draft, then merge each rewrite into the page as it was read and write it.
+  version: 5
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages, drafting none.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -97,21 +99,16 @@ workflow:
         items = {}
         for stance in changes["stances"]:
             if stance["record"] in admitted:
-                items[stance["stance_id"]] = {"stance_id": stance["stance_id"], "title": stance["title"], "path": stance["path"], "new": False, "pages": [admitted[stance["record"]]], "current": stance["payload"]}
+                items[stance["stance_id"]] = {"stance_id": stance["stance_id"], "title": stance["title"], "path": stance["path"], "pages": [admitted[stance["record"]]], "current": stance["payload"]}
         for answer in placements:
             for placed in answer["placements"]:
-                stance_id = placed["stance_id"]
+                stance = read.get(placed["stance_id"])
                 page = admitted.get(placed["page_id"])
-                if page is None or placed["placement"] == "skip" or not stance_id:
+                if page is None or stance is None or placed["placement"] == "skip":
                     continue
+                stance_id = stance["stance_id"]
                 if stance_id not in items:
-                    stance = read.get(stance_id)
-                    if stance is not None:
-                        items[stance_id] = {"stance_id": stance_id, "title": stance["title"], "path": stance["path"], "new": False, "pages": [], "current": stance["payload"]}
-                    elif placed["placement"] == "new":
-                        items[stance_id] = {"stance_id": stance_id, "title": placed["title"], "path": "", "new": True, "pages": [], "current": None}
-                    else:
-                        continue
+                    items[stance_id] = {"stance_id": stance_id, "title": stance["title"], "path": stance["path"], "pages": [], "current": stance["payload"]}
                 if placed["page_id"] not in [held["page_id"] for held in items[stance_id]["pages"]]:
                     items[stance_id]["pages"].append(page)
         list(items.values())
@@ -124,12 +121,11 @@ workflow:
           items:
             type: object
             title: StanceWork
-            required: [stance_id, title, path, new, pages]
+            required: [stance_id, title, path, pages, current]
             properties:
               stance_id: {type: string}
               title: {type: string}
               path: {type: string}
-              new: {type: boolean}
               pages:
                 type: array
                 items:
@@ -144,7 +140,7 @@ workflow:
               current:
                 type: object
                 title: StancePayload
-                description: The stance page as it stood before the run. Null for a new stance.
+                description: The stance page as it stood before the run.
                 required: [frontmatter, sections]
                 properties:
                   frontmatter:
@@ -183,8 +179,49 @@ workflow:
                         heading: {type: string}
                         level: {type: integer}
                         body: {type: string}
+    - name: merge_proposals
+      source: |
+        admitted = {}
+        for page in changes["admitted"]:
+            admitted[page["page_id"]] = page
+        proposals = {}
+        for answer in placements:
+            for placed in answer["placements"]:
+                stance_id = placed["stance_id"]
+                page = admitted.get(placed["page_id"])
+                if page is None or placed["placement"] != "new" or not stance_id or stance_id in changes["stance_ids"]:
+                    continue
+                if stance_id not in proposals:
+                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": []}
+                if placed["page_id"] not in [held["page_id"] for held in proposals[stance_id]["pages"]]:
+                    proposals[stance_id]["pages"].append(page)
+        list(proposals.values())
+      inputs:
+        changes: {like: list_stance_changes}
+        placements: {like: place_stance_pages, many: true}
+      output:
+        json_schema:
+          type: array
+          items:
+            type: object
+            title: ProposedStance
+            required: [stance_id, title, pages]
+            properties:
+              stance_id: {type: string}
+              title: {type: string}
+              pages:
+                type: array
+                items:
+                  type: object
+                  title: BearingPage
+                  required: [page_id, page_type, status, title]
+                  properties:
+                    page_id: {type: string}
+                    page_type: {type: string}
+                    status: {type: string}
+                    title: {type: string}
   result:
-    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them.
+    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages.
     primary_work: refresh_stances
     empty_primary: noop
     required_gates:
@@ -220,6 +257,12 @@ workflow:
       inputs:
         changes: {node: list_changes}
         placements: {node: place_pages}
+    - kind: run
+      id: merge_proposals
+      work: merge_proposals
+      inputs:
+        changes: {node: list_changes}
+        placements: {node: place_pages}
     - kind: map
       id: refresh_stances
       turns: [refresh_stance]
@@ -246,6 +289,7 @@ workflow:
       inputs:
         drafts: {node: check_stances}
         changes: {node: list_changes}
+        proposals: {node: merge_proposals}
         collection: {parameter: collection}
   output: {node: write_stances}
 ---
@@ -261,15 +305,16 @@ a full pass, and reads every stance page as it stands. A stance it cannot read, 
 field it does not declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so
 both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups of
 five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
-a new stance, or a skip. `merge_work` makes one item per stance with every page that bears on it, its record among
-them, and one item per proposed new stance, combining the groups that proposed the same id. `refresh_stances` runs
-one worker per item, two at a time. For an existing stance it answers only its changes: the status, the summary and
-the sections it rewrites among TL;DR, Position, Why and Open Questions, checked against the base's grammar as the
-whole page they make. For a new stance it answers the whole page. Each names any finding it left because only a
-change to Evidence or Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its feedback. An
-empty list is approved without a read. `write_stances` merges each approved rewrite into the page as it was read,
-keeping every section and frontmatter field the rewrite does not name, and writes it to the path it was read from. It
-refuses a rewrite that carries no changes, names a section twice or names one the page does not carry, refuses a new
-stance that carries no page or takes the id of a stance that exists, catches each refusal, and answers which were
-written and which failed which check.
+a new stance, or a skip. `merge_work` makes one item per stance the run read with every page that bears on it, its
+record among them. `merge_proposals` makes one proposal per proposed new stance id with every page behind it,
+combining the groups that proposed the same id. An id a listed stance carries makes no proposal: a page placed under
+it joins that stance's item when the run read the stance, and is left alone when it could not. `refresh_stances`
+runs one worker per item, two at a time, and no worker drafts a proposal. Each answers only its stance's changes:
+the status, the summary and the sections it rewrites among TL;DR, Position, Why and Open Questions, checked against
+the base's grammar as the whole page they make, and names any finding it left because only a change to Evidence or
+Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its
+feedback. An empty list is approved without a read. `write_stances` merges each approved rewrite into the page as it
+was read, keeping every section and frontmatter field the rewrite does not name, and writes it to the path it was
+read from. It refuses a rewrite that names a section twice or names one the page does not carry, catches each
+refusal, and answers which were written, which failed which check, and every proposal, for which it writes no page.
 Three consecutive identical failures in either map abort the run as failed.

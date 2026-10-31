@@ -132,8 +132,8 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `excise_source`, `check_excision` and `removal_report` type against `plan_items` and
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
-    `place_stance_pages` and `refresh_stance` type against `group_pages` and `merge_work`, defined only inside
-    `research-stance-refresh.md`'s own `inline:`.
+    `place_stance_pages`, `refresh_stance` and `write_stances` type against `group_pages`, `merge_work` and
+    `merge_proposals`, defined only inside `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
     """
@@ -423,6 +423,13 @@ _STANCE_POSITION: dict[str, object] = {
 }
 """The one section the stance draft here changes."""
 
+_STANCE_PROPOSAL: dict[str, object] = {
+    "stance_id": "stance.y",
+    "title": "Y",
+    "pages": [{"page_id": "adr-0031-other", "page_type": "adr", "status": "accepted", "title": "Other"}],
+}
+"""The one new stance proposed here, which is listed and never written."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -481,7 +488,6 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
             {
                 "stance_id": "stance.x",
                 "path": "Wiki/Stances/x.md",
-                "new": False,
                 "changes": {"status": "trying", "summary": _STANCE_SUMMARY, "sections": [_STANCE_POSITION]},
                 "sources": ["adr-0030-something"],
                 "findings_left": [],
@@ -504,6 +510,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
             "qualified": 1,
             "capped": False,
         },
+        "proposals": [_STANCE_PROPOSAL],
         "collection": "research",
     },
     "write_adrs": {
@@ -749,7 +756,8 @@ def _assert_docs_pass_programs(ran: dict[str, object], called_by_step: _CalledBy
 def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
     """The two stance-refresh programs: a full pass over one pair, then one draft's changes merged into its stance as read.
 
-    The merged page lands on the stance's own path, with only its status, summary and Position changed.
+    The merged page lands on the stance's own path, with only its status, summary and Position changed. The one
+    proposal is answered as given, and no page is written for it.
 
     Every `list_pages` call here answers the same two rows, so the stance listing names two ids and both read back as
     the one stance page `read_page` answers.
@@ -778,7 +786,7 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
     assert called_by_step["list_stance_changes"][1][1] == {"knowledge_base": "research", "page_type": "stance", "limit": 1000}
     assert called_by_step["list_stance_changes"][2][1] == {"knowledge_base": "research", "page_id": "adr-0030-something"}
 
-    assert to_jsonable_python(ran["write_stances"]) == {"written": ["stance.x"], "failed": []}
+    assert to_jsonable_python(ran["write_stances"]) == {"written": ["stance.x"], "failed": [], "proposed": [_STANCE_PROPOSAL]}
     assert [(name, to_jsonable_python(args)) for name, args in called_by_step["write_stances"]] == [
         (
             "write_note",

@@ -1,7 +1,7 @@
 ---
 title: Place changed pages against the stances
-summary: For each records page of one group, the stance page it changes, a new stance to draft, or a skip with its reason.
-version: 2
+summary: For each records page of one group, the stance page it changes, a new stance to propose, or a skip with its reason.
+version: 3
 step:
   name: place_stance_pages
   instructions: |-
@@ -60,4 +60,5 @@ step:
 Use once per group of a stance refresh, inside a map over group_pages, with `collection` and `records` wired from the
 workflow's parameters. The group holds only the changed pages no stance names as its record, since a stance whose
 record changed is refreshed without a placement. It writes nothing in either knowledge base and never drafts a
-stance. A later merge turns the placements into one item per stance.
+stance. Two later merges turn the placements into one rewrite item per stance the run read and one proposal per
+proposed new stance id, and the run drafts no proposal.

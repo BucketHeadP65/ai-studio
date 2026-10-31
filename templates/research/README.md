@@ -23,7 +23,8 @@ from this template can register its own vocabulary for any research domain.
 - `workflows/workflows/research-stance-refresh.md`, "Refresh stances from the docs": rewrites the stance pages a changed
   records page bears on, started by an `on index repo-docs` schedule with `collection=research`, `records=repo-docs`
   and `progress=adr:accepted, adr:superseded, architecture:current, spec-doc:approved, spec-doc:executed`, or by hand
-  with `changed_page_ids` empty for a full pass.
+  with `changed_page_ids` empty for a full pass. A topic no stance covers is listed on the run card as a proposed new
+  stance with the records pages behind it, and you draft the ones you pick by hand.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.

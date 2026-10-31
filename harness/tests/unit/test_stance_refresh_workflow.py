@@ -6,17 +6,17 @@ sandbox, and every tool they call answers from a scripted records base and a scr
 reaches a real knowledge base.
 
 What the cases cover: a stance whose record changed is rewritten and written to its own path, a refresh answer that
-names Evidence or Alternatives fails the refresh step's own output type, the merge keeps every section, frontmatter
-field and claim the draft does not name exactly as read, an existing stance's draft without its changes, or naming a
-section twice or one the page lacks, is refused, a refused write is reported beside the written one, more than
-twenty-five changed pages keep none, a run that admits nothing makes one judge call on an empty list and ends noop,
-two groups proposing the same new stance make one item, a changed page the records base does not list leaves its
-stance alone, a changed page whose file lies outside the records base's root is still admitted, a repeated pair is
-listed once, a full pass lists every pair with no cap, and the refresh worker is granted read_page to patch the stance
-it reads. Then the stances the run cannot read: one read_page refuses
-and one carrying a field the workflow does not declare are both named and left alone while the run carries on, while
-one carrying the `created` date write_note stamps is read and written back with it, and a new draft never takes the
-id of a stance that exists or a path the model chose, and is refused without its page.
+names Evidence or Alternatives, or carries no changes, fails the refresh step's own output type, the merge keeps every
+section, frontmatter field and claim the draft does not name exactly as read, a draft naming a section twice or one
+the page lacks is refused, a refused write is reported beside the written one, more than twenty-five changed pages
+keep none, a run that admits nothing makes one judge call on an empty list and ends noop, a changed page the records
+base does not list leaves its stance alone, a changed page whose file lies outside the records base's root is still
+admitted, a repeated pair is listed once, a full pass lists every pair with no cap, and the refresh worker is granted
+read_page to patch the stance it reads. Then the stances the run cannot read: one read_page refuses and one carrying a
+field the workflow does not declare are both named and left alone while the run carries on, while one carrying the
+`created` date write_note stamps is read and written back with it. Then the new stances placement proposes: no worker
+drafts one and no page is written for one, each reaches write_stances' `proposed` with its pages, two groups proposing
+the same id make one proposal, and an id a listed stance carries makes no proposal.
 """
 
 from __future__ import annotations
@@ -91,9 +91,8 @@ class Item(TypedDict):
     stance_id: str
     title: str
     path: str
-    new: bool
     pages: list[Page]
-    current: Payload | None
+    current: Payload
 
 
 class StanceAsRead(TypedDict):
@@ -245,32 +244,17 @@ def _skip_all(group: Group) -> list[dict[str, str]]:
 def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
     """The draft a refresh worker answers: the stance moved to trying, with one section rewritten from its first page.
 
-    An existing stance's draft carries only its changes, its summary kept as read. A new stance's draft carries its whole page.
+    The draft carries only its changes, its summary kept as read.
     """
     resting_on = item["pages"][0]["page_id"]
-    current = item["current"]
-    draft: dict[str, object] = {
+    changed = Section(heading=changing, level=2, body=f"Rewritten, resting on `{resting_on}`.")
+    return {
         "stance_id": item["stance_id"],
         "path": item["path"],
-        "new": item["new"],
         "sources": [page["page_id"] for page in item["pages"]],
         "findings_left": [],
+        "changes": {"status": "trying", "summary": str(item["current"]["frontmatter"]["summary"]), "sections": [changed]},
     }
-    if current is None:
-        frontmatter: dict[str, object] = {
-            "id": item["stance_id"],
-            "type": "stance",
-            "title": item["title"],
-            "summary": "What the system plans on this topic.",
-            "status": "trying",
-            "record": resting_on,
-        }
-        sections = [
-            Section(heading=heading, level=2, body=f"{heading} of the new stance, resting on `{resting_on}`.") for heading in SECTIONS
-        ]
-        return {**draft, "payload": {"frontmatter": frontmatter, "sections": sections}}
-    changed = Section(heading=changing, level=2, body=f"Rewritten, resting on `{resting_on}`.")
-    return {**draft, "changes": {"status": "trying", "summary": str(current["frontmatter"]["summary"]), "sections": [changed]}}
 
 
 @dataclass
@@ -375,7 +359,7 @@ async def test_a_stance_whose_record_changed_is_rewritten_and_written(sandbox: A
     assert [(write["knowledge_base"], write["path"]) for write in bases.writes] == [("research", "Wiki/Stances/x.md")]
     read: Payload = to_jsonable_python(stance["payload"])
     assert bases.writes[0]["payload"]["frontmatter"] == dict(read["frontmatter"], status="trying"), "no field the page lacks is written"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
     kept: list[StanceAsRead] = to_jsonable_python(_value(state, "list_changes")["stances"])
     assert [
         (stance["stance_id"], stance["path"], stance["payload"]["frontmatter"]["status"], stance["payload"]["sections"]) for stance in kept
@@ -389,9 +373,7 @@ async def test_a_draft_naming_evidence_or_alternatives_fails_the_refresh_output_
     refresh = registry.get("refresh_stance")
     assert refresh is not None
     stance: PageAsRead = to_jsonable_python(_stance("x", record="adr-x"))
-    item = Item(
-        stance_id="stance.x", title="Stance on x", path="Wiki/Stances/x.md", new=False, pages=[_listed("adr-x")], current=stance["payload"]
-    )
+    item = Item(stance_id="stance.x", title="Stance on x", path="Wiki/Stances/x.md", pages=[_listed("adr-x")], current=stance["payload"])
     _typed(refresh, _rewritten(item, changing="Position"))
 
     with pytest.raises(ValidationError, match=r"changes\.sections\.0\.heading"):
@@ -428,26 +410,7 @@ async def test_the_merge_keeps_every_part_the_draft_does_not_name_exactly_as_rea
         for section in read["payload"]["sections"]
     ], "the named sections take the draft's body at the level and place the page gave them, and every other section stays as read"
     assert to_jsonable_python(written).get("claims", []) == read["payload"]["claims"] == [], "a stance takes no claims and none is written"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
-
-
-async def test_an_existing_stance_draft_without_its_changes_is_refused(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-x": _record("adr-x")}, stances={"stance.x": _stance("x", record="adr-x")})
-
-    def answer_the_whole_page(item: Item) -> dict[str, object]:
-        draft = {key: value for key, value in _rewritten(item).items() if key != "changes"}
-        current = item["current"]
-        assert current is not None
-        # A whole page answered as a draft takes the new stance's shape, which declares no created.
-        frontmatter = {key: value for key, value in current["frontmatter"].items() if key != "created"}
-        return {**draft, "payload": {**current, "frontmatter": frontmatter}}
-
-    state = await _run(sandbox, bases, Scripted(rewrite=answer_the_whole_page), changed="adr-x")
-
-    assert bases.writes == []
-    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
-    assert [entry["stance_id"] for entry in failed] == ["stance.x"]
-    assert "carries no changes" in failed[0]["reason"]
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
 @pytest.mark.parametrize(
@@ -524,40 +487,6 @@ async def test_a_run_that_admits_nothing_ends_noop(sandbox: AsyncMonty) -> None:
     assert _outcome(state) == "noop"
 
 
-async def test_placements_proposing_the_same_new_stance_make_one_item(sandbox: AsyncMonty) -> None:
-    records = {f"adr-{number}": _record(f"adr-{number}") for number in range(1, 7)}
-    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")})
-
-    def propose_agent_memory(group: Group) -> list[dict[str, str]]:
-        first, *rest = group["pages"]
-        proposed = {
-            "page_id": first["page_id"],
-            "placement": "new",
-            "stance_id": "stance.agent-memory",
-            "title": "Agent memory",
-            "reason": "No stance covers it.",
-        }
-        return [proposed, *_skip_all(Group(group_id=group["group_id"], pages=rest))]
-
-    scripted = Scripted(place=propose_agent_memory)
-
-    state = await _run(sandbox, bases, scripted, changed=",".join(records))
-
-    assert sorted(len(group["pages"]) for group in scripted.groups) == [1, 5], "the six pages go out in groups of five"
-    assert scripted.items == [
-        {
-            "stance_id": "stance.agent-memory",
-            "title": "Agent memory",
-            "path": "",
-            "new": True,
-            "pages": [_listed("adr-1"), _listed("adr-6")],
-            "current": None,
-        }
-    ]
-    assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("", "stance.agent-memory")]
-    assert _value(state, "write_stances") == {"written": ["stance.agent-memory"], "failed": []}
-
-
 async def test_a_stance_whose_record_is_missing_is_left_alone(sandbox: AsyncMonty) -> None:
     bases = Bases(records={}, stances={"stance.x": _stance("x", record="adr-x")})
     scripted = Scripted()
@@ -581,7 +510,7 @@ async def test_a_changed_page_outside_the_records_root_is_admitted_through_list_
 
     assert _value(state, "list_changes")["admitted"] == [_listed("adr-0049-rerank")]
     assert [page_id for knowledge_base, page_id in bases.reads if knowledge_base == "repo-docs"] == [], "no records page file is read"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
 @pytest.mark.parametrize("changed", ["adr-x", ""])
@@ -644,7 +573,7 @@ async def test_an_unreadable_stance_is_named_and_another_stance_is_still_refresh
     assert [(entry["stance_id"], entry["record"]) for entry in unread] == [("stance.broken", "")]
     assert "cannot be read as a payload" in unread[0]["reason"], "the refusal's own words reach the run card"
     assert [item["stance_id"] for item in scripted.items] == ["stance.x"], "a placement on a stance the run could not read makes no item"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
 async def test_a_stance_with_an_undeclared_frontmatter_field_is_named_and_the_run_succeeds(sandbox: AsyncMonty) -> None:
@@ -677,85 +606,102 @@ async def test_a_stance_carrying_created_is_read_and_written_back_with_it(sandbo
     assert [stance["stance_id"] for stance in kept] == ["stance.x"]
     assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
     assert bases.writes[0]["payload"]["frontmatter"]["created"] == "2026-10-29", "the page keeps the date it was first written on"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
-async def test_a_new_draft_taking_an_existing_stance_id_is_never_written(sandbox: AsyncMonty) -> None:
-    bases = Bases(
-        records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, unreadable=frozenset({"stance.broken"})
-    )
+def _proposing(stance_id: str, title: str, *, first_only: bool = False) -> Callable[[Group], list[dict[str, str]]]:
+    """A placement worker proposing the new stance `stance_id` for every page of its group, or for its first page alone."""
 
-    def propose_the_unread_id(group: Group) -> list[dict[str, str]]:
-        return [
-            {
-                "page_id": page["page_id"],
-                "placement": "new",
-                "stance_id": "stance.broken",
-                "title": "Broken",
-                "reason": "No stance covers it.",
-            }
-            for page in group["pages"]
+    def place(group: Group) -> list[dict[str, str]]:
+        proposed = group["pages"][:1] if first_only else group["pages"]
+        rest = group["pages"][len(proposed) :]
+        placements = [
+            {"page_id": page["page_id"], "placement": "new", "stance_id": stance_id, "title": title, "reason": "No stance covers it."}
+            for page in proposed
         ]
+        return [*placements, *_skip_all(Group(group_id=group["group_id"], pages=rest))]
 
-    scripted = Scripted(place=propose_the_unread_id)
+    return place
+
+
+async def test_a_proposed_new_stance_makes_no_rewrite_and_reaches_the_output_with_its_pages(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"))
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    assert [(item["stance_id"], item["new"]) for item in scripted.items] == [("stance.broken", True)]
+    assert scripted.items == [], "no worker drafts a proposed stance"
     assert bases.writes == []
-    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
-    assert [entry["stance_id"] for entry in failed] == ["stance.broken"]
-    assert "existing stance stance.broken" in failed[0]["reason"]
+    assert _value(state, "write_stances") == {
+        "written": [],
+        "failed": [],
+        "proposed": [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}],
+    }
 
 
-async def test_a_new_draft_is_written_where_its_page_type_places_it(sandbox: AsyncMonty) -> None:
+async def test_proposals_of_the_same_id_combine_into_one_with_every_page(sandbox: AsyncMonty) -> None:
+    records = {f"adr-{number}": _record(f"adr-{number}") for number in range(1, 7)}
+    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")})
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", first_only=True))
+
+    state = await _run(sandbox, bases, scripted, changed=",".join(records))
+
+    assert sorted(len(group["pages"]) for group in scripted.groups) == [1, 5], "the six pages go out in groups of five"
+    assert scripted.items == []
+    assert _value(state, "write_stances")["proposed"] == [
+        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1"), _listed("adr-6")]}
+    ]
+
+
+async def test_write_stances_writes_each_rewrite_and_never_a_page_for_a_proposal(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")})
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
+
+    assert [item["stance_id"] for item in scripted.items] == ["stance.x"]
+    assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("Wiki/Stances/x.md", "stance.x")]
+    assert _value(state, "write_stances") == {
+        "written": ["stance.x"],
+        "failed": [],
+        "proposed": [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}],
+    }
+
+
+async def test_a_proposal_under_a_stance_the_run_read_joins_that_stance_rewrite(sandbox: AsyncMonty) -> None:
     bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+    scripted = Scripted(place=_proposing("stance.x", "Stance on x"))
 
-    def propose_agent_memory(group: Group) -> list[dict[str, str]]:
-        return [
-            {
-                "page_id": page["page_id"],
-                "placement": "new",
-                "stance_id": "stance.agent-memory",
-                "title": "Agent memory",
-                "reason": "No stance covers it.",
-            }
-            for page in group["pages"]
-        ]
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    def aim_at_an_existing_file(item: Item) -> dict[str, object]:
-        return {**_rewritten(item), "path": "Wiki/Stances/x.md"}
-
-    state = await _run(sandbox, bases, Scripted(place=propose_agent_memory, rewrite=aim_at_an_existing_file), changed="adr-1")
-
-    assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("", "stance.agent-memory")]
-    assert _value(state, "write_stances") == {"written": ["stance.agent-memory"], "failed": []}
+    assert [(item["stance_id"], item["pages"]) for item in scripted.items] == [("stance.x", [_listed("adr-1")])]
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
-async def test_a_new_stance_draft_without_its_page_is_refused(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+async def test_a_proposal_under_a_stance_the_run_could_not_read_is_neither_refreshed_nor_proposed(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, unreadable=frozenset({"stance.broken"})
+    )
+    scripted = Scripted(place=_proposing("stance.broken", "Broken"))
 
-    def propose_agent_memory(group: Group) -> list[dict[str, str]]:
-        return [
-            {
-                "page_id": page["page_id"],
-                "placement": "new",
-                "stance_id": "stance.agent-memory",
-                "title": "Agent memory",
-                "reason": "No stance covers it.",
-            }
-            for page in group["pages"]
-        ]
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    def answer_no_page(item: Item) -> dict[str, object]:
-        return {key: value for key, value in _rewritten(item).items() if key != "payload"}
-
-    state = await _run(sandbox, bases, Scripted(place=propose_agent_memory, rewrite=answer_no_page), changed="adr-1")
-
+    assert scripted.items == []
     assert bases.writes == []
-    failed: list[dict[str, str]] = to_jsonable_python(_value(state, "write_stances")["failed"])
-    assert [entry["stance_id"] for entry in failed] == ["stance.agent-memory"]
-    assert "carries no page" in failed[0]["reason"]
+    assert _value(state, "write_stances") == {"written": [], "failed": [], "proposed": []}
+
+
+async def test_a_draft_without_its_changes_fails_the_refresh_output_type(sandbox: AsyncMonty) -> None:
+    registry, problems = (await _registry(sandbox, Bases())).including(_spec())
+    assert problems == ()
+    refresh = registry.get("refresh_stance")
+    assert refresh is not None
+    stance: PageAsRead = to_jsonable_python(_stance("x", record="adr-x"))
+    item = Item(stance_id="stance.x", title="Stance on x", path="Wiki/Stances/x.md", pages=[_listed("adr-x")], current=stance["payload"])
+    draft = {key: value for key, value in _rewritten(item).items() if key != "changes"}
+
+    with pytest.raises(ValidationError, match=r"changes\n  Field required"):
+        _typed(refresh, draft)
 
 
 async def test_a_finding_left_in_unchanged_evidence_reaches_the_judge_and_the_page_still_lands(sandbox: AsyncMonty) -> None:
@@ -771,4 +717,4 @@ async def test_a_finding_left_in_unchanged_evidence_reaches_the_judge_and_the_pa
 
     reviewed: list[dict[str, object]] = to_jsonable_python(scripted.reviewed[0])
     assert [draft["findings_left"] for draft in reviewed] == [[left]], "the judge reads the finding the worker left"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
