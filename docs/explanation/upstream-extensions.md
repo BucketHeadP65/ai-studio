@@ -380,3 +380,23 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 - **Since:** 2026-10-31, after the filtered items of a workflow run spent their output retries for nothing (UB-12).
 - **Upstream candidate:** yes, as an issue: a `content_filter` response never retried as output by default, Azure's
   `content_filters` kept by `OpenAIResponsesModel`, and the flagged categories in `ContentFilterError`'s message.
+
+### UE-27. `WarnNearToolCallLimit` (core): a warning as a run's tool calls near their limit
+
+- **What:** before each model request, once the run's `RunUsage.tool_calls` reaches 70 percent of the limit it is given,
+  the capability enqueues a request-scoped `SystemPromptPart`, the same part `WarnNearLimits` sends, so the cached
+  prefix stays valid and a later request no longer shows it. It is URGENT past the threshold and CRITICAL with three or
+  fewer calls left. It names the calls used, the limit and what remains, and says each call a `run_code` program makes
+  counts as well as the `run_code` call itself. `WarnNearLimits` warns on `iterations`, `context_window` and
+  `total_tokens` only, so a code-mode step whose programs make dozens of calls per request reached its
+  `tool_calls_limit` with no warning. Found when a judge step spent its 160 tool calls in a few requests, failed at call
+  161 and its gate fell to a person. The warning arrives between requests, so one program that spends past the limit
+  still ends the run.
+- **Where:** `core/src/core/ai/tool_call_limit.py`, tests in `core/tests/unit/test_tool_call_limit.py`. Mounted by the
+  harness's `step_guards` (`harness/src/harness/adapters/environment.py`) on every briefing, judge and map turn whose
+  budget names `tool_calls` (`run_defined_step` in `harness/src/harness/composition.py`), tests in
+  `harness/tests/unit/test_tool_call_warning.py`.
+- **Since:** 2026-11-04 (`fa4b2cd6`, mounted in `d7832457`).
+- **Upstream candidate:** yes, as a `tool_calls` kind on `WarnNearLimits`. Drafted as I8 in the owner's issue drafts.
+  pydantic/pydantic-ai#9019 (open) names the same gap inside a wider ask for continuous budget disclosure, and #4359
+  (open) asks for tool-call reminders after tool returns.
