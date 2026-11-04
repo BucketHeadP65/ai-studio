@@ -474,8 +474,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Cause:** a retry that answers a tool call is that call's own `ToolReturnPart` with `outcome='retried'`. It reaches
   `run_stream_events()` as a `FunctionToolResultEvent` or an `OutputToolResultEvent`, and `_handle_tool_result` turns it
   into a `tool-output-error` chunk whose `errorText` is the feedback. A retry that answers no call is a
-  `RetryFeedbackPart`. `CallToolsNode` puts it into the next `ModelRequest` and yields no event, and no member of
-  `AgentStreamEvent` could carry it. The adapter has nothing to translate. `transform_stream` also turns to the request
+  `RetryFeedbackPart`. `CallToolsNode` puts it into the next `ModelRequest` and yields no event, and nothing in the
+  agent graph emits an event for it. The adapter has nothing to translate. `transform_stream` also turns to the request
   side only on a `ToolCallEvent`, so the retried response opens no new `start-step` and streams inside the refused one.
 - **Grade:** misleading. A person watching the stream cannot tell that the first answer was refused, or why. The
   recording loses nothing.
@@ -484,7 +484,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** the archived step view reads the recorded messages and draws each `retry-feedback` part as a refusal
   (`stepConversationToUiMessages` in `studio-client/src/api/step-chat.ts`, `e76ba0c5`). The live step drawer reads the
   recording too, once the step settles: `GET /api/sessions/{id}/run/steps/{node}/messages` answers a running workflow's
-  step messages in the archive's shape (`9ae9afa0`), and the drawer draws them through the same conversion, keeping the
+  step messages in the archive's shape (`76ca23a8`), and the drawer draws them through the same conversion, keeping the
   live messages on screen until they arrive. While the step executes, the drawer draws the stream and shows no refusal.
 - **Upstream state:** present in 2.63.0 and in 2.66.0 (the repro below gives the same events and chunks). The open pull
   request pydantic/pydantic-ai#11939 adds `ModelResponseRejectedEvent`, a `HandleResponseEvent` member carrying the
