@@ -148,6 +148,7 @@ function StepConversation({
       ref={logRef}
       role="log"
       aria-label="Step conversation"
+      aria-live="off"
       onScroll={keepDistance}
       className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
     >
@@ -301,7 +302,7 @@ export function StepChatDrawer({
   const speaker = speakerFor(node.id, effectiveItem ?? "");
 
   // The composer's own state comes from the line's `executing` flag, never from the stream's
-  // `streaming` bit -- that bit cannot tell a fetch failure from a settled line. Four notices,
+  // `streaming` bit. That bit cannot tell a fetch failure from a settled line. Four notices,
   // live only (an archived run always finds its line in `recordConversations` and reads as
   // finished, unchanged). A failed lines fetch reads as unreadable rather than finished. No line
   // yet for this node or item reads as not started. A settled line whose recording could not be

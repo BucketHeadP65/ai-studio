@@ -515,6 +515,34 @@ describe("StepChatDrawer, live, once a line settles", () => {
     expect(await screen.findByText("Refused")).toBeInTheDocument();
     expect(log.scrollTop).toBe(900);
   });
+
+  it("leaves a reader who scrolled up where they are while the source stays the same", async () => {
+    server.use(linesOf(true), openStreamOf("draft", REFUSED_STREAM_CHUNKS));
+    const onClose = vi.fn();
+    const { rerender } = render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={onClose} />);
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+
+    const log = screen.getByRole("log", { name: "Step conversation" });
+    let height = 1000;
+    Object.defineProperty(log, "scrollHeight", { configurable: true, get: () => height });
+    Object.defineProperty(log, "scrollTop", { configurable: true, writable: true, value: 0 });
+    log.scrollTop = 200;
+    fireEvent.scroll(log);
+
+    // A new node object with the same id renders the conversation again with its source unchanged.
+    height = 1300;
+    rerender(<StepChatDrawer sessionId="s-1" recordConversations={null} node={{ ...NODE }} open onClose={onClose} />);
+
+    expect(log.scrollTop).toBe(200);
+  });
+
+  it("marks the step conversation so a screen reader does not announce it as it streams", async () => {
+    server.use(linesOf(true), openStreamOf("draft", REFUSED_STREAM_CHUNKS));
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+
+    expect(screen.getByRole("log", { name: "Step conversation" })).toHaveAttribute("aria-live", "off");
+  });
 });
 
 describe("StepChatDrawer, live", () => {
