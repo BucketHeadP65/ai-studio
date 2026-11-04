@@ -398,6 +398,6 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   harness's `step_guards` (`harness/src/harness/adapters/environment.py`) on every step, and silent in a run with no
   tool-call limit. Only a briefing, judge or map turn whose budget names `tool_calls` sets one (`run_defined_step` in
   `harness/src/harness/composition.py`). Tests in `harness/tests/unit/test_tool_call_warning.py`.
-- **Since:** 2026-11-04 (`fa4b2cd6`, mounted in `d7832457`).
+- **Since:** 2026-11-04 (`fa4b2cd6`, mounted in `d7832457`, named and worded in `6a1bbda8`, `74d433ae` and `613085b5`).
 - **Upstream candidate:** no new issue. pydantic/pydantic-ai#9019 (open) already names this gap inside a wider ask for
   continuous budget disclosure, and #4359 (open) asks for tool-call reminders after tool returns.
