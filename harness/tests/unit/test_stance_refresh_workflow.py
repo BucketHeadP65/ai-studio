@@ -1,7 +1,7 @@
 """The shipped stance-refresh workflow, run end to end off its own files.
 
 The graph and the steps come from the real documents under `templates/research/workflows`, never from a copy typed
-out here. The three model steps are scripted and no model is reached. The four programs run for real in the
+out here. The five model steps are scripted and no model is reached. The five programs run for real in the
 sandbox, and every tool they call answers from a scripted records base and a scripted research base, so nothing
 reaches a real knowledge base.
 
@@ -14,13 +14,15 @@ base does not list leaves its stance alone, a changed page whose file lies outsi
 admitted, a repeated pair is listed once, a full pass lists every pair with no cap, and the refresh worker is granted
 read_page to patch the stance it reads. Then the stances the run cannot read: one read_page refuses and one carrying a
 field the workflow does not declare are both named and left alone while the run carries on, while one carrying the
-`created` date write_note stamps is read and written back with it. Then the new stances placement proposes: no worker
-drafts one and no page is written for one, each reaches write_stances' `proposed` with its pages, two groups proposing
-the same id make one proposal, and an id a listed stance carries makes no proposal. Then the digests a proposal rests
-on: one resting on two reaches the artifact with them, one resting on fewer is dropped, a stance id never counts, the
-groups sharing an id count their digests together, an id the research base does not hold is dropped, a digest at
-status skipped never counts, a digest cited as a wikilink or as a collection-qualified ref counts as its bare id, and a
-digest type the research base refuses to list adds no digest while the run still writes its rewrites.
+`created` date write_note stamps is read and written back with it. Then the new stances placement proposes: placement
+names a proposal by its id, title and pages alone, no worker drafts one and no page is written for one, each reaches
+write_stances' `proposed` and the `proposed_stances` artifact with its pages and its findings, two groups proposing
+the same id make one proposal, and an id a listed stance carries makes no proposal. Then the findings behind a
+proposal: each keeps the claim's own text copied from its digest, a missing anchor, a skipped digest, a page that is
+no digest and one digest cited twice never count toward the two digests, a digest read_page refuses drops only its own
+findings while the run still writes its rewrites, a proposal whose findings all contest it is kept and marked, a
+rejection by the proposals judge backs the proposals again and never reruns the rewrites, and a run with no proposal
+backs nothing and reads no digest. Last, the budgets of the backing worker and the rewrite judge.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ import yaml
 
 from core.ai.workflows.contracts import (
     Briefing,
+    Shape,
     StepRegistry,
     Workflow,
     WorkflowState,
@@ -69,17 +72,31 @@ PROGRESS = "adr:accepted, adr:superseded, architecture:current, spec-doc:approve
 SECTIONS = ("TL;DR", "Position", "Why", "Evidence", "Alternatives", "Open Questions")
 """The stance page type's canonical sections, headed the way read_page heads them."""
 
-DIGEST_TYPES = ("paper", "talk", "article", "post")
-"""The research base's digest page types, the ones a proposal's research pages count among."""
+HOW = "It measures the position directly."
+"""The sentence every scripted backing worker gives on how a claim bears."""
 
-LITERATURE = {"paper.dense-retrieval": "paper", "art.memory-survey": "article", "talk.agent-loops": "talk", "post.keep-shipping": "post"}
-"""Digests the scripted research base holds, each id with its page type."""
 
-SKIPPED = frozenset({"post.keep-shipping"})
-"""The digests of LITERATURE the scripted research base lists at status skipped."""
+@dataclass(frozen=True)
+class Digest:
+    """One page of the scripted research base that read_page answers with claims: its type, its status and its claims by anchor."""
 
-CITED = ["paper.dense-retrieval", "art.memory-survey"]
-"""Two digests the research base holds, the research pages a proposing placement cites unless a case says otherwise."""
+    page_type: str
+    status: str
+    claims: dict[str, str]
+
+
+DIGESTS = {
+    "paper.dense-retrieval": Digest(
+        "paper",
+        "active",
+        {"^c1": "Dense retrieval beats keyword search on open questions.", "^c2": "Dense retrieval needs in-domain training data."},
+    ),
+    "art.memory-survey": Digest("article", "active", {"^c3": "Agents that keep episodic memory finish more long tasks."}),
+    "talk.agent-loops": Digest("talk", "active", {"^c4": "Agent loops without memory repeat the actions that failed."}),
+    "post.keep-shipping": Digest("post", "skipped", {"^c1": "Small changes shipped often break less."}),
+    "con.memory": Digest("concept", "active", {"^c1": "Memory comes in episodic and semantic kinds."}),
+}
+"""The research base's pages read_page answers with claims: four digests, one of them skipped, and a concept page that is no digest."""
 
 
 class Page(TypedDict):
@@ -111,6 +128,18 @@ class Item(TypedDict):
     path: str
     pages: list[Page]
     current: Payload
+
+
+class Proposal(TypedDict):
+    stance_id: str
+    title: str
+    pages: list[Page]
+
+
+class Finding(TypedDict):
+    claim: str
+    side: str
+    how: str
 
 
 class StanceAsRead(TypedDict):
@@ -182,9 +211,8 @@ class Bases:
     """The records base and the research base the programs read and write, scripted.
 
     `records` holds each records page's frontmatter by id, and `stances` each stance page as read_page answers it.
-    `literature` holds each digest's page type by id, which list_pages lists under that type, at status skipped
-    for the ids `skipped_digests` names and active otherwise. `refused_types` names the digest types list_pages refuses.
-    A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
+    `digests` holds the research pages read_page answers with claims, and `refused_digests` names the ids among them
+    read_page refuses. A research id held by none of them is one read_page cannot find. A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
     names records pages whose file lies in an app's own docs folder, beyond the records base's root, which list_pages
     lists and read_page refuses the way the real tool does. `unreadable` names stance ids list_pages lists and
     read_page refuses. `refusing` names the stance ids write_note refuses. `writes`, `listed` and `reads` record every
@@ -193,9 +221,8 @@ class Bases:
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
     stances: dict[str, dict[str, object]] = field(default_factory=dict)
-    literature: dict[str, str] = field(default_factory=dict)
-    skipped_digests: frozenset[str] = frozenset()
-    refused_types: frozenset[str] = frozenset()
+    digests: dict[str, Digest] = field(default_factory=dict)
+    refused_digests: frozenset[str] = frozenset()
     outside_root: frozenset[str] = frozenset()
     unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
@@ -239,6 +266,15 @@ class Bases:
                 f"{page_id} at Wiki/Stances/{page_id.removeprefix('stance.')}.md cannot be read as a payload: text before the first heading"
             )
             raise ModelRetry(msg)
+        if knowledge_base == "research" and page_id in self.refused_digests:
+            msg = f"{page_id} at Wiki/{page_id}.md cannot be read as a payload: claim ^c1 does not read back"
+            raise ModelRetry(msg)
+        if knowledge_base == "research" and page_id in self.digests:
+            digest = self.digests[page_id]
+            frontmatter = {"id": page_id, "type": digest.page_type, "title": f"Title of {page_id}", "status": digest.status}
+            claims = [{"anchor": anchor, "text": text, "loc": "p. 1"} for anchor, text in digest.claims.items()]
+            payload = {"frontmatter": frontmatter, "sections": [{"heading": "Findings", "level": 2, "body": ""}], "claims": claims}
+            return {"page_id": page_id, "path": f"Wiki/{page_id}.md", "payload": payload}
         msg = f"no indexed page {page_id!r} in knowledge base {knowledge_base!r}, list_pages and search answer the page ids it holds"
         raise ModelRetry(msg)
 
@@ -248,21 +284,7 @@ class Bases:
                 {"page_id": stance_id, "page_type": "stance", "title": stance_id, "status": "considering"}
                 for stance_id in [*self.stances, *sorted(self.unreadable)]
             ]
-        if knowledge_base == "research":
-            assert page_type in DIGEST_TYPES
-            if page_type in self.refused_types:
-                msg = f"no page_type {page_type!r} in knowledge base 'research', the page_types are paper, stance"
-                raise ModelRetry(msg)
-            return [
-                {
-                    "page_id": page_id,
-                    "page_type": page_type,
-                    "title": page_id,
-                    "status": "skipped" if page_id in self.skipped_digests else "active",
-                }
-                for page_id, held_type in self.literature.items()
-                if held_type == page_type
-            ]
+        assert knowledge_base == "repo-docs", f"no program in this workflow lists the {page_type!r} pages of {knowledge_base!r}"
         return [
             {"page_id": page_id, "page_type": front["type"], "title": front["title"], "status": front["status"]}
             for page_id, front in self.records.items()
@@ -273,16 +295,45 @@ class Bases:
 def _skip_all(group: Group) -> list[dict[str, object]]:
     """Every page of the group skipped, as a placement worker answers for pages that change no stance."""
     return [
-        {
-            "page_id": page["page_id"],
-            "placement": "skip",
-            "stance_id": "",
-            "title": "",
-            "reason": "It changes no stance.",
-            "research_pages": [],
-        }
+        {"page_id": page["page_id"], "placement": "skip", "stance_id": "", "title": "", "reason": "It changes no stance."}
         for page in group["pages"]
     ]
+
+
+def _finding(claim: str, side: str = "supports") -> Finding:
+    """One finding a backing worker answers: a claim reference, its side and the sentence on how it bears."""
+    return Finding(claim=claim, side=side, how=HOW)
+
+
+BACKED = [_finding("paper.dense-retrieval#^c1"), _finding("art.memory-survey#^c3")]
+"""Two findings from two digests the research base holds, what a backing worker answers unless a case says otherwise."""
+
+
+def _backed_by_two(_: Proposal) -> list[Finding]:
+    """The findings of BACKED, for every proposal."""
+    return BACKED
+
+
+def _shown(claim: str, side: str = "supports") -> dict[str, str]:
+    """One finding as check_findings keeps it, with the claim's own text copied from its digest."""
+    page_id, anchor = claim.split("#")
+    return {"claim": claim, "claim_text": DIGESTS[page_id].claims[anchor], "side": side, "how": HOW}
+
+
+def _kept(stance_id: str, title: str, pages: list[Page], claims: list[str], *, contests_only: bool = False) -> dict[str, object]:
+    """One proposal as check_findings keeps it, every finding on its claims supporting it unless `contests_only`."""
+    side = "contests" if contests_only else "supports"
+    return {
+        "stance_id": stance_id,
+        "title": title,
+        "pages": pages,
+        "findings": [_shown(claim, side) for claim in claims],
+        "contests_only": contests_only,
+    }
+
+
+MEMORY = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c1", "art.memory-survey#^c3"])
+"""The proposal stance.agent-memory as the run keeps it, proposed for adr-1 alone and backed by BACKED."""
 
 
 def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
@@ -303,19 +354,24 @@ def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
 
 @dataclass
 class Scripted:
-    """The three model steps of the workflow, scripted. The programs run for real.
+    """The five model steps of the workflow, scripted. The programs run for real.
 
-    `place` answers each group's placements and `rewrite` each item's draft. The judge approves whatever it is
-    handed. `calls` records every node performed, in order, and `groups`, `items` and `reviewed` what each
-    placement worker, refresh worker and judge call was handed.
+    `place` answers each group's placements, `rewrite` each item's draft and `back` each proposal's findings. The
+    rewrite judge approves whatever it is handed. The proposals judge answers `proposal_verdicts` in order, then
+    approves. `calls` records every node performed, in order, and `groups`, `items`, `reviewed`, `backed` and `judged`
+    what each placement worker, refresh worker, rewrite judge call, backing worker and proposals judge call was handed.
     """
 
     place: Callable[[Group], list[dict[str, object]]] = _skip_all
     rewrite: Callable[[Item], dict[str, object]] = _rewritten
+    back: Callable[[Proposal], list[Finding]] = _backed_by_two
+    proposal_verdicts: list[dict[str, str]] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     reviewed: list[list[object]] = field(default_factory=list)
+    backed: list[Proposal] = field(default_factory=list)
+    judged: list[list[object]] = field(default_factory=list)
 
     async def perform(self, node_id: str, implementation: StepImplementation, kwargs: Mapping[str, object]) -> object:
         self.calls.append(node_id)
@@ -330,6 +386,14 @@ class Scripted:
         if node_id == "check_stances":
             self.reviewed.append(to_jsonable_python(kwargs["drafts"]))
             return _typed(implementation, {"outcome": "approve", "feedback": ""})
+        if node_id == "back_proposals":
+            proposal: Proposal = to_jsonable_python(kwargs["proposal"])
+            self.backed.append(proposal)
+            return _typed(implementation, {**proposal, "findings": self.back(proposal)})
+        if node_id == "judge_proposals":
+            self.judged.append(to_jsonable_python(kwargs["proposals"]))
+            verdict = self.proposal_verdicts.pop(0) if self.proposal_verdicts else {"outcome": "approve", "feedback": ""}
+            return _typed(implementation, verdict)
         return await implementation.function(**kwargs)
 
 
@@ -608,7 +672,6 @@ async def test_an_unreadable_stance_is_named_and_another_stance_is_still_refresh
                 "stance_id": "stance.broken",
                 "title": "Broken",
                 "reason": "It changes that stance.",
-                "research_pages": [],
             }
             for page in group["pages"]
         ]
@@ -659,26 +722,14 @@ async def test_a_stance_carrying_created_is_read_and_written_back_with_it(sandbo
     assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
-def _proposing(
-    stance_id: str, title: str, *, first_only: bool = False, cited: Callable[[Group], list[str]] = lambda _: CITED
-) -> Callable[[Group], list[dict[str, object]]]:
-    """A placement worker proposing the new stance `stance_id` for every page of its group, or for its first page alone.
-
-    Each proposing placement cites the research pages `cited` answers for its group.
-    """
+def _proposing(stance_id: str, title: str, *, first_only: bool = False) -> Callable[[Group], list[dict[str, object]]]:
+    """A placement worker proposing the new stance `stance_id` for every page of its group, or for its first page alone."""
 
     def place(group: Group) -> list[dict[str, object]]:
         proposed = group["pages"][:1] if first_only else group["pages"]
         rest = group["pages"][len(proposed) :]
         placements: list[dict[str, object]] = [
-            {
-                "page_id": page["page_id"],
-                "placement": "new",
-                "stance_id": stance_id,
-                "title": title,
-                "reason": "Papers argue for it.",
-                "research_pages": cited(group),
-            }
+            {"page_id": page["page_id"], "placement": "new", "stance_id": stance_id, "title": title, "reason": "Papers argue for it."}
             for page in proposed
         ]
         return [*placements, *_skip_all(Group(group_id=group["group_id"], pages=rest))]
@@ -686,59 +737,58 @@ def _proposing(
     return place
 
 
-async def test_a_proposed_new_stance_makes_no_rewrite_and_reaches_the_output_with_its_pages(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
+def test_placement_names_a_new_stance_by_its_id_title_and_pages_alone() -> None:
+    place = next(step for step in _spec().inline if step.name == "place_stance_pages")
+    assert isinstance(place, Briefing)
+    assert isinstance(place.output, Shape)
+    placement = place.output.json_schema["properties"]["placements"]["items"]
+    assert set(placement["properties"]) == {"page_id", "placement", "stance_id", "title", "reason"}, "a placement cites no digest"
+    assert "research_pages" not in place.instructions
+
+
+async def test_a_proposed_new_stance_makes_no_rewrite_and_reaches_the_output_with_its_findings(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, digests=DIGESTS)
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"))
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
     assert scripted.items == [], "no worker drafts a proposed stance"
+    assert scripted.backed == [Proposal(stance_id="stance.agent-memory", title="Agent memory", pages=[_listed("adr-1")])]
     assert bases.writes == []
-    assert _value(state, "write_stances") == {
-        "written": [],
-        "failed": [],
-        "proposed": [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}],
-    }
+    assert _value(state, "write_stances") == {"written": [], "failed": [], "proposed": [MEMORY]}
 
 
-async def test_a_proposal_only_run_carries_its_proposals_as_an_artifact_and_ends_noop(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
+async def test_a_proposal_only_run_carries_its_judged_proposals_as_an_artifact_and_ends_noop(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, digests=DIGESTS)
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"))
 
-    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    proposals = [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}]
-    assert to_jsonable_python(state.values["merge_proposals"]) == proposals
+    assert scripted.judged == [[MEMORY]], "the proposals judge reads every finding with the claim's own text"
+    assert to_jsonable_python(state.values["judge_proposals"]) == [MEMORY]
     outcome = _checked(state)
     assert outcome.status == "noop", "no stance was rewritten"
     assert [(ref.id, ref.node_id, ref.media_type, ref.value_digest) for ref in outcome.artifacts] == [
-        ("proposed_stances", "merge_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value(proposals)))
-    ], "the card shows the proposals as what the run left behind"
+        ("proposed_stances", "judge_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value([MEMORY])))
+    ], "the card shows each approved proposal with its title, its pages and every finding's claim, text, side and sentence"
 
 
 async def test_proposals_of_the_same_id_combine_into_one_with_every_page(sandbox: AsyncMonty) -> None:
     records = {f"adr-{number}": _record(f"adr-{number}") for number in range(1, 7)}
-    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
+    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")}, digests=DIGESTS)
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", first_only=True))
 
     state = await _run(sandbox, bases, scripted, changed=",".join(records))
 
     assert sorted(len(group["pages"]) for group in scripted.groups) == [1, 5], "the six pages go out in groups of five"
     assert scripted.items == []
-    assert _value(state, "write_stances")["proposed"] == [
-        {
-            "stance_id": "stance.agent-memory",
-            "title": "Agent memory",
-            "pages": [_listed("adr-1"), _listed("adr-6")],
-            "research_pages": CITED,
-        }
-    ]
+    assert [proposal["pages"] for proposal in scripted.backed] == [[_listed("adr-1"), _listed("adr-6")]], "one worker backs the proposal"
+    assert _value(state, "write_stances")["proposed"] == [{**MEMORY, "pages": [_listed("adr-1"), _listed("adr-6")]}]
 
 
 async def test_write_stances_writes_each_rewrite_and_never_a_page_for_a_proposal(sandbox: AsyncMonty) -> None:
     bases = Bases(
-        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")},
-        stances={"stance.x": _stance("x", record="adr-x")},
-        literature=LITERATURE,
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
     )
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"))
 
@@ -746,11 +796,7 @@ async def test_write_stances_writes_each_rewrite_and_never_a_page_for_a_proposal
 
     assert [item["stance_id"] for item in scripted.items] == ["stance.x"]
     assert [(write["path"], write["payload"]["frontmatter"]["id"]) for write in bases.writes] == [("Wiki/Stances/x.md", "stance.x")]
-    assert _value(state, "write_stances") == {
-        "written": ["stance.x"],
-        "failed": [],
-        "proposed": [{"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}],
-    }
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": [MEMORY]}
 
 
 async def test_a_proposal_under_a_stance_the_run_read_joins_that_stance_rewrite(sandbox: AsyncMonty) -> None:
@@ -805,180 +851,179 @@ async def test_a_finding_left_in_unchanged_evidence_reaches_the_judge_and_the_pa
     assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
 
 
-async def test_a_proposal_resting_on_two_digests_reaches_the_artifact_with_them(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
-
-    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
-
-    assert to_jsonable_python(state.values["merge_proposals"]) == [
-        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}
-    ]
-    listed = [
-        (call["page_type"], call["limit"])
-        for call in bases.listed
-        if call["knowledge_base"] == "research" and call["page_type"] != "stance"
-    ]
-    assert listed == [(page_type, 10000) for page_type in DIGEST_TYPES], "the research base's digests are listed once per digest type"
-
-
-def _beside_a_kept_proposal(cited: list[str]) -> Callable[[Group], list[dict[str, object]]]:
-    """A placement worker proposing stance.agent-memory on two held digests for its first page, and stance.reranking on `cited` for its second."""
-
-    def place(group: Group) -> list[dict[str, object]]:
-        first, second = group["pages"]
-        return [
-            {
-                "page_id": first["page_id"],
-                "placement": "new",
-                "stance_id": "stance.agent-memory",
-                "title": "Agent memory",
-                "reason": "Papers argue for it.",
-                "research_pages": CITED,
-            },
-            {
-                "page_id": second["page_id"],
-                "placement": "new",
-                "stance_id": "stance.reranking",
-                "title": "Reranking",
-                "reason": "Papers argue for it.",
-                "research_pages": cited,
-            },
-        ]
-
-    return place
-
-
-async def _proposed_beside_a_kept_one(sandbox: AsyncMonty, cited: list[str]) -> tuple[list[tuple[object, object]], WorkflowState]:
-    """Each proposal the run keeps as its stance id and research pages, when stance.reranking cites `cited`, with the run."""
-    bases = Bases(
-        records={"adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
-        stances={"stance.x": _stance("x", record="adr-other")},
-        literature=LITERATURE,
-        skipped_digests=SKIPPED,
-    )
-    state = await _run(sandbox, bases, Scripted(place=_beside_a_kept_proposal(cited)), changed="adr-1,adr-2")
-    proposals: list[dict[str, object]] = to_jsonable_python(state.values["merge_proposals"])
-    return [(proposal["stance_id"], proposal["research_pages"]) for proposal in proposals], state
-
-
-async def test_a_proposal_resting_on_fewer_than_two_digests_is_dropped(sandbox: AsyncMonty) -> None:
-    kept, state = await _proposed_beside_a_kept_one(sandbox, ["paper.dense-retrieval"])
-
-    assert kept == [("stance.agent-memory", CITED)], "the proposal resting on one digest is dropped and the one resting on two stays"
-    proposed: list[dict[str, object]] = to_jsonable_python(_value(state, "write_stances")["proposed"])
-    assert [proposal["stance_id"] for proposal in proposed] == ["stance.agent-memory"]
-
-
-async def test_a_stance_cited_as_a_research_page_does_not_count(sandbox: AsyncMonty) -> None:
-    kept, _ = await _proposed_beside_a_kept_one(sandbox, ["paper.dense-retrieval", "stance.x"])
-
-    assert kept == [("stance.agent-memory", CITED)], "one digest and one stance rest a proposal on one digest"
-
-
-async def test_placements_sharing_an_id_count_their_digests_together(sandbox: AsyncMonty) -> None:
-    records = {f"adr-{number}": _record(f"adr-{number}") for number in range(1, 7)}
-    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
-
-    def one_digest_per_group(group: Group) -> list[str]:
-        return ["paper.dense-retrieval"] if group["group_id"] == 0 else ["art.memory-survey"]
-
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", first_only=True, cited=one_digest_per_group))
-
-    state = await _run(sandbox, bases, scripted, changed=",".join(records))
-
-    assert sorted(len(group["pages"]) for group in scripted.groups) == [1, 5]
-    assert to_jsonable_python(state.values["merge_proposals"]) == [
+def _two_proposals(group: Group) -> list[dict[str, object]]:
+    """A placement worker proposing stance.agent-memory for its group's first page and stance.reranking for its second."""
+    first, second = group["pages"]
+    return [
         {
+            "page_id": first["page_id"],
+            "placement": "new",
             "stance_id": "stance.agent-memory",
             "title": "Agent memory",
-            "pages": [_listed("adr-1"), _listed("adr-6")],
-            "research_pages": ["paper.dense-retrieval", "art.memory-survey"],
-        }
-    ], "neither group cites two digests, and only together do they rest the proposal on two"
+            "reason": "Papers argue for it.",
+        },
+        {
+            "page_id": second["page_id"],
+            "placement": "new",
+            "stance_id": "stance.reranking",
+            "title": "Reranking",
+            "reason": "Papers argue for it.",
+        },
+    ]
 
 
-@pytest.mark.parametrize(
-    ("cited", "kept"),
-    [
-        (["paper.dense-retrieval", "paper.made-up"], [("stance.agent-memory", CITED)]),
-        (
-            ["paper.dense-retrieval", "paper.made-up", "talk.agent-loops"],
-            [("stance.agent-memory", CITED), ("stance.reranking", ["paper.dense-retrieval", "talk.agent-loops"])],
-        ),
-    ],
-)
-async def test_a_research_page_the_base_does_not_hold_is_dropped(
-    sandbox: AsyncMonty, cited: list[str], kept: list[tuple[object, object]]
-) -> None:
-    proposals, _ = await _proposed_beside_a_kept_one(sandbox, cited)
+async def _kept_beside_memory(
+    sandbox: AsyncMonty, findings: list[Finding], *, refused: frozenset[str] = frozenset()
+) -> tuple[list[dict[str, object]], Bases, WorkflowState]:
+    """What check_findings keeps when stance.reranking is backed by `findings` beside stance.agent-memory, with the bases and the run.
 
-    assert proposals == kept, "an id the research base does not hold never counts toward the two digests"
-
-
-@pytest.mark.parametrize(
-    ("cited", "kept"),
-    [
-        (["[[paper.dense-retrieval]]", "[[art.memory-survey|Memory survey]]"], ["paper.dense-retrieval", "art.memory-survey"]),
-        (
-            ["[[paper.dense-retrieval#^c3|Dense retrieval]]", "paper.dense-retrieval", "[[talk.agent-loops]]"],
-            ["paper.dense-retrieval", "talk.agent-loops"],
-        ),
-    ],
-)
-async def test_a_digest_cited_as_a_wikilink_counts_as_its_bare_id(sandbox: AsyncMonty, cited: list[str], kept: list[str]) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
-
-    state = await _run(
-        sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited)), changed="adr-1"
-    )
-
-    assert to_jsonable_python(state.values["merge_proposals"]) == [
-        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": kept}
-    ], "the artifact carries each digest once, by its bare id"
-
-
-async def test_a_digest_at_status_skipped_does_not_count(sandbox: AsyncMonty) -> None:
-    kept, _ = await _proposed_beside_a_kept_one(sandbox, ["paper.dense-retrieval", "post.keep-shipping"])
-
-    assert kept == [("stance.agent-memory", CITED)], "a digest the base skipped backs no proposal"
-
-
-async def test_a_digest_cited_as_a_collection_qualified_ref_counts_as_its_bare_id(sandbox: AsyncMonty) -> None:
-    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, literature=LITERATURE)
-    cited = ["page:research/paper.dense-retrieval", "section:research/art.memory-survey#findings"]
-
-    state = await _run(
-        sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited)), changed="adr-1"
-    )
-
-    assert to_jsonable_python(state.values["merge_proposals"]) == [
-        {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")], "research_pages": CITED}
-    ], "a hit's ref names the same digest as its id"
-
-
-async def test_a_refused_digest_type_adds_no_digest_and_the_rewrite_is_still_written(sandbox: AsyncMonty) -> None:
+    stance.agent-memory is backed by BACKED. The run also rewrites stance.x, whose record changed, and read_page refuses
+    the digests `refused` names.
+    """
     bases = Bases(
-        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")},
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
         stances={"stance.x": _stance("x", record="adr-x")},
-        literature=LITERATURE,
-        refused_types=frozenset({"article"}),
+        digests=DIGESTS,
+        refused_digests=refused,
     )
-    cited = ["paper.dense-retrieval", "art.memory-survey", "talk.agent-loops"]
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory", cited=lambda _: cited))
+
+    def back(proposal: Proposal) -> list[Finding]:
+        return BACKED if proposal["stance_id"] == "stance.agent-memory" else findings
+
+    state = await _run(sandbox, bases, Scripted(place=_two_proposals, back=back), changed="adr-x,adr-1,adr-2")
+    kept: list[dict[str, object]] = to_jsonable_python(state.values["check_findings"])
+    return kept, bases, state
+
+
+def _reranking(claims: list[str], *, sides: tuple[str, ...] = ()) -> dict[str, object]:
+    """The proposal stance.reranking as the run keeps it, proposed for adr-2, each finding supporting it unless `sides` says otherwise."""
+    shown = [_shown(claim, sides[index] if sides else "supports") for index, claim in enumerate(claims)]
+    return {
+        "stance_id": "stance.reranking",
+        "title": "Reranking",
+        "pages": [_listed("adr-2")],
+        "findings": shown,
+        "contests_only": all(finding["side"] == "contests" for finding in shown),
+    }
+
+
+@pytest.mark.parametrize(
+    "findings",
+    [
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("art.memory-survey#^c9")], id="a-missing-anchor"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("post.keep-shipping#^c1")], id="a-skipped-digest"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("con.memory#^c1")], id="a-page-that-is-no-digest"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("paper.dense-retrieval#^c2")], id="one-digest-cited-twice"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("paper.made-up#^c1")], id="an-id-the-base-does-not-hold"),
+    ],
+)
+async def test_a_proposal_left_with_one_digest_after_the_checks_is_dropped(sandbox: AsyncMonty, findings: list[Finding]) -> None:
+    kept, _, _ = await _kept_beside_memory(sandbox, findings)
+
+    assert kept == [MEMORY], "stance.reranking keeps findings from one digest at most and is dropped, and stance.agent-memory stays"
+
+
+async def test_a_finding_that_fails_a_check_is_dropped_and_the_proposal_keeps_the_rest(sandbox: AsyncMonty) -> None:
+    findings = [
+        _finding("[[paper.dense-retrieval#^c2|Dense retrieval]]"),
+        _finding("art.memory-survey#^c9"),
+        _finding("post.keep-shipping#^c1"),
+        _finding("page:research/talk.agent-loops#^c4"),
+        _finding("paper.dense-retrieval#^c2"),
+    ]
+
+    kept, bases, _ = await _kept_beside_memory(sandbox, findings)
+
+    assert kept == [MEMORY, _reranking(["paper.dense-retrieval#^c2", "talk.agent-loops#^c4"])], (
+        "a claim cited as a wikilink or a collection-qualified ref counts once as its bare reference, and each failed finding goes alone"
+    )
+    digest_reads = [page_id for knowledge_base, page_id in bases.reads if knowledge_base == "research" and page_id in DIGESTS]
+    assert sorted(digest_reads) == ["art.memory-survey", "paper.dense-retrieval", "post.keep-shipping", "talk.agent-loops"], (
+        "check_findings reads each cited digest once, however many proposals cite it"
+    )
+
+
+async def test_a_digest_read_page_refuses_drops_its_findings_and_the_rewrite_is_still_written(sandbox: AsyncMonty) -> None:
+    findings = [_finding("paper.dense-retrieval#^c2"), _finding("talk.agent-loops#^c4")]
+
+    kept, bases, state = await _kept_beside_memory(sandbox, findings, refused=frozenset({"talk.agent-loops"}))
+
+    assert ("research", "talk.agent-loops") in bases.reads
+    assert kept == [MEMORY], "the refused digest's finding is dropped, which leaves stance.reranking one digest"
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite lands"
+    assert _outcome(state) == "succeeded"
+
+
+@pytest.mark.parametrize(("sides", "contests_only"), [(("contests", "contests"), True), (("supports", "contests"), False)])
+async def test_a_proposal_whose_findings_all_contest_it_is_kept_and_marked(
+    sandbox: AsyncMonty, sides: tuple[str, str], *, contests_only: bool
+) -> None:
+    findings = [_finding("talk.agent-loops#^c4", sides[0]), _finding("art.memory-survey#^c3", sides[1])]
+
+    kept, _, state = await _kept_beside_memory(sandbox, findings)
+
+    reranking = _reranking(["talk.agent-loops#^c4", "art.memory-survey#^c3"], sides=sides)
+    assert reranking["contests_only"] is contests_only
+    assert kept == [MEMORY, reranking], "a proposal the literature argues against is kept"
+    assert _value(state, "write_stances")["proposed"] == [MEMORY, reranking], "and reaches the card marked as such"
+
+
+async def test_a_proposals_judge_rejection_backs_the_proposals_again_and_never_reruns_the_rewrites(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
+    )
+    first = [_finding("paper.dense-retrieval#^c2"), _finding("art.memory-survey#^c3")]
+
+    def back(_: Proposal) -> list[Finding]:
+        return first if not scripted.judged else BACKED
+
+    feedback = "stance.agent-memory: paper.dense-retrieval#^c2 is about training data and does not bear on agent memory."
+    scripted = Scripted(
+        place=_proposing("stance.agent-memory", "Agent memory"), back=back, proposal_verdicts=[{"outcome": "reject", "feedback": feedback}]
+    )
 
     state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
 
-    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite lands"
-    assert _value(state, "write_stances") == {
-        "written": ["stance.x"],
-        "failed": [],
-        "proposed": [
-            {
-                "stance_id": "stance.agent-memory",
-                "title": "Agent memory",
-                "pages": [_listed("adr-1")],
-                "research_pages": ["paper.dense-retrieval", "talk.agent-loops"],
-            }
-        ],
-    }, "the refused type adds no digest, and the other types still count"
+    rejected = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c2", "art.memory-survey#^c3"])
+    assert scripted.judged == [[rejected], [MEMORY]], "the second backing answers the judge's feedback"
+    assert scripted.calls.count("back_proposals") == 2
+    assert (scripted.calls.count("refresh_stances"), scripted.calls.count("check_stances")) == (1, 1), "the rewrites run once"
+    assert {node_id: [entry.feedback for entry in entries] for node_id, entries in state.retry_feedback.items()} == {
+        "back_proposals": [feedback]
+    }
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
+    assert _value(state, "write_stances")["proposed"] == [MEMORY]
+
+
+async def test_a_run_with_no_proposal_backs_nothing_and_reads_no_digest(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
+    )
+    scripted = Scripted()
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
+
+    assert scripted.backed == [], "no backing worker runs"
+    assert scripted.calls.count("check_findings") == 1, "check_findings is code"
+    assert [page_id for _, page_id in bases.reads if page_id in DIGESTS] == [], "and reads no digest"
+    assert scripted.judged == [[]], "the proposals judge is reached once, on an empty list, as the rewrite judge is"
+    judge = next(step for step in _spec().inline if step.name == "judge_proposals")
+    assert isinstance(judge, Briefing)
+    assert "When proposals is an empty list, answer outcome approve" in judge.instructions, "and approves it calling no tool"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": [], "proposed": []}
     assert _outcome(state) == "succeeded"
+
+
+def test_the_backing_worker_and_the_rewrite_judge_hold_budgets_that_fit_their_work() -> None:
+    steps = {step.name: step for step in _spec().inline}
+    back, check = steps["back_proposal"], steps["check_stances"]
+    assert isinstance(back, Briefing)
+    assert isinstance(check, Briefing)
+    assert set(back.tools) == {"search", "fetch", "read_page"}
+    assert back.budget is not None
+    assert (back.budget.requests, back.budget.tool_calls) == (20, 120)
+    assert isinstance(back.output, Shape)
+    finding = back.output.json_schema["properties"]["findings"]["items"]
+    assert set(finding["properties"]) == {"claim", "side", "how"}, "the backing worker types no claim text"
+    assert check.budget is not None
+    assert (check.budget.requests, check.budget.tool_calls) == (40, 300)

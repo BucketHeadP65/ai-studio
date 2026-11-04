@@ -2,9 +2,16 @@
 title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites the stances they change
-  under a judge, merges each rewrite into its page as read, keeping its Evidence and Alternatives, and lists the new
-  stances they propose on two digests or more.
-uses: [st.list_stance_changes.v2, st.place_stance_pages.v5, st.refresh_stance.v4, st.check_stances.v3, st.write_stances.v4]
+  under a judge, keeping their Evidence and Alternatives, and lists each new stance they propose with the findings for
+  or against it, under a second judge.
+uses:
+  - st.list_stance_changes.v2
+  - st.place_stance_pages.v6
+  - st.refresh_stance.v4
+  - st.check_stances.v4
+  - st.back_proposal.v1
+  - st.judge_proposals.v1
+  - st.write_stances.v5
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -14,18 +21,21 @@ presentation:
     Each stance a changed records page bears on, rewritten in place: its status following the records, and its
     summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind
     it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance,
-    and never drafted, only when its page takes a position on a question research literature addresses and at least
-    two of the base's digests (its paper, talk, article and post pages, none at status skipped) bear on that position. An implementation
-    choice with no research question behind it is skipped with a reason that says so. The run card lists the stances
-    written, the ones refused with the check each failed, where every changed page was placed, every stance as it was
-    before the run, and every stance the run could not read with the reason. It shows every proposed new stance with
-    the records pages and the digests behind it among what the run left behind, collected as soon as the pages are
-    placed, so a run that fails while rewriting still carries them.
+    and never drafted, only when its page takes a position on a question research literature addresses and claims of
+    at least two of the base's digests (its paper, talk, article and post pages, none at status skipped) support or
+    contest that position. An implementation choice with no research question behind it is skipped with a reason that
+    says so. The run card lists the stances written, the ones refused with the check each failed, where every changed
+    page was placed, every stance as it was before the run, and every stance the run could not read with the reason.
+    Among what the run left behind it shows every proposed new stance a judge approved, with the records pages behind
+    it and each finding: the claim's reference, the claim's own text, whether it supports or contests the position,
+    and one sentence on how. A proposal whose findings all contest its position is marked as one the literature argues
+    against.
   owner_participation: >-
-    Nothing during a run, unless the judge cannot decide. A schedule starts it when the records knowledge base is
+    Nothing during a run, unless a judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
-    whose sentences no records page supports or whose status the records do not give. A judge that cannot decide asks
-    you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
+    whose sentences no records page supports or whose status the records do not give. A second judge rejects a
+    proposal's finding whose claim does not bear on its position, and a proposal that duplicates a stance. A judge
+    that cannot decide asks you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
     wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
     they were before it. A proposed new stance is yours to draft by hand.
   not_for: >-
@@ -43,8 +53,8 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 9
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, and list every new stance they propose with its pages and the digests it rests on, drafting none and dropping any that rests on fewer than two digests the base holds.
+  version: 10
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, merge each rewrite into the page as it was read and write it, and list every approved proposal with its pages and findings, drafting none.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -196,47 +206,20 @@ workflow:
                 if page is None or placed["placement"] != "new" or not stance_id or stance_id in changes["stance_ids"]:
                     continue
                 if stance_id not in proposals:
-                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": [], "research_pages": []}
+                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": []}
                 if placed["page_id"] not in [held["page_id"] for held in proposals[stance_id]["pages"]]:
                     proposals[stance_id]["pages"].append(page)
-                for cited in placed["research_pages"]:
-                    research_id = cited.strip()
-                    if research_id.startswith("[[") and research_id.endswith("]]"):
-                        research_id = research_id[2:-2]
-                    research_id = research_id.split("|")[0].split("#")[0]
-                    if "/" in research_id and ":" in research_id.split("/")[0]:
-                        research_id = research_id.split("/", 1)[1]
-                    research_id = research_id.strip()
-                    if research_id and research_id not in proposals[stance_id]["research_pages"]:
-                        proposals[stance_id]["research_pages"].append(research_id)
-        digests = {}
-        if proposals:
-            for page_type in ["paper", "talk", "article", "post"]:
-                try:
-                    rows = await list_pages(knowledge_base=collection, page_type=page_type, limit=10000)
-                except Exception as error:
-                    continue
-                for row in rows:
-                    if row["status"] != "skipped":
-                        digests[row["page_id"]] = True
-        kept = []
-        for proposal in proposals.values():
-            held = [research_id for research_id in proposal["research_pages"] if research_id in digests]
-            if len(held) >= 2:
-                kept.append({"stance_id": proposal["stance_id"], "title": proposal["title"], "pages": proposal["pages"], "research_pages": held})
-        kept
+        list(proposals.values())
       inputs:
         changes: {like: list_stance_changes}
         placements: {like: place_stance_pages, many: true}
-        collection:
-          json_schema: {type: string}
       output:
         json_schema:
           type: array
           items:
             type: object
-            title: ProposedStance
-            required: [stance_id, title, pages, research_pages]
+            title: Proposal
+            required: [stance_id, title, pages]
             properties:
               stance_id: {type: string}
               title: {type: string}
@@ -251,21 +234,122 @@ workflow:
                     page_type: {type: string}
                     status: {type: string}
                     title: {type: string}
-              research_pages:
+    - name: check_findings
+      source: |
+        digest_types = ["paper", "talk", "article", "post"]
+        read = {}
+        named = []
+        kept = []
+        for backing in backings:
+            if backing["stance_id"] in named:
+                continue
+            named.append(backing["stance_id"])
+            findings = []
+            digests = []
+            for finding in backing["findings"]:
+                claim = finding["claim"].strip()
+                if claim.startswith("[[") and claim.endswith("]]"):
+                    claim = claim[2:-2]
+                claim = claim.split("|")[0].strip()
+                if "/" in claim and ":" in claim.split("/")[0]:
+                    claim = claim.split("/", 1)[1]
+                if "#" not in claim:
+                    continue
+                page_id, anchor = claim.split("#", 1)
+                page_id = page_id.strip()
+                anchor = anchor.strip()
+                if not anchor.startswith("^"):
+                    anchor = "^" + anchor
+                reference = page_id + "#" + anchor
+                if not page_id or reference in [held["claim"] for held in findings]:
+                    continue
+                if page_id not in read:
+                    try:
+                        read[page_id] = await read_page(knowledge_base=collection, page_id=page_id)
+                    except Exception as error:
+                        read[page_id] = None
+                page = read[page_id]
+                if page is None:
+                    continue
+                front = page["payload"]["frontmatter"]
+                if front.get("type") not in digest_types or front.get("status") == "skipped":
+                    continue
+                text = ""
+                for held in page["payload"]["claims"]:
+                    if held["anchor"] == anchor:
+                        text = held["text"]
+                if not text:
+                    continue
+                findings.append({"claim": reference, "claim_text": text, "side": finding["side"], "how": finding["how"]})
+                if page_id not in digests:
+                    digests.append(page_id)
+            if len(digests) >= 2:
+                contests_only = True
+                for held in findings:
+                    if held["side"] != "contests":
+                        contests_only = False
+                kept.append({"stance_id": backing["stance_id"], "title": backing["title"], "pages": backing["pages"], "findings": findings, "contests_only": contests_only})
+        kept
+      inputs:
+        backings: {like: back_proposal, many: true}
+        collection:
+          json_schema: {type: string}
+      output:
+        json_schema:
+          type: array
+          items:
+            type: object
+            title: ProposedStance
+            required: [stance_id, title, pages, findings, contests_only]
+            properties:
+              stance_id: {type: string}
+              title: {type: string}
+              pages:
                 type: array
-                description: The digests of the base the proposal rests on, at least two, none at status skipped.
-                items: {type: string}
-      tools: [list_pages]
+                items:
+                  type: object
+                  title: BearingPage
+                  required: [page_id, page_type, status, title]
+                  properties:
+                    page_id: {type: string}
+                    page_type: {type: string}
+                    status: {type: string}
+                    title: {type: string}
+              findings:
+                type: array
+                description: The claims that take a side on the position, each on a digest the base holds at a status other than skipped, from at least two digests.
+                items:
+                  type: object
+                  title: CheckedFinding
+                  required: [claim, claim_text, side, how]
+                  properties:
+                    claim:
+                      type: string
+                      description: The claim's reference, the digest id and the claim's anchor, such as paper.ace-2025#^c8.
+                    claim_text:
+                      type: string
+                      description: The claim's own text, copied from the digest.
+                    side:
+                      enum: [supports, contests]
+                      type: string
+                    how:
+                      type: string
+                      description: One sentence on how the claim bears on the position.
+              contests_only:
+                type: boolean
+                description: True when every finding contests the position, so the literature argues against it.
+      tools: [read_page]
   result:
-    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the digests it rests on.
+    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the findings from the literature that take a side on it.
     primary_work: refresh_stances
     empty_primary: noop
     required_gates:
       - {gate_id: check_stances, accepted_sources: [judge]}
+      - {gate_id: judge_proposals, accepted_sources: [judge]}
     artifacts:
       - id: proposed_stances
-        label: New stances proposed, each with the records pages and the digests behind it
-        source: {node: merge_proposals}
+        label: New stances proposed, each with the records pages behind it and the findings from the literature that take a side on it
+        source: {node: judge_proposals}
         media_type: application/json
   nodes:
     - kind: run
@@ -304,7 +388,6 @@ workflow:
       inputs:
         changes: {node: list_changes}
         placements: {node: place_pages}
-        collection: {parameter: collection}
     - kind: map
       id: refresh_stances
       turns: [refresh_stance]
@@ -325,13 +408,37 @@ workflow:
         records: {parameter: records}
       approved_when: outcome
       rejected_to: refresh_stances
+    - kind: map
+      id: back_proposals
+      turns: [back_proposal]
+      over: {node: merge_proposals}
+      each: proposal
+      inputs:
+        collection: {parameter: collection}
+      max_parallel: 2
+      on_error: skip
+      abort_after_repeats: 3
+    - kind: run
+      id: check_findings
+      work: check_findings
+      inputs:
+        backings: {node: back_proposals}
+        collection: {parameter: collection}
+    - kind: judge
+      id: judge_proposals
+      work: judge_proposals
+      reviews: {node: check_findings}
+      inputs:
+        collection: {parameter: collection}
+      approved_when: outcome
+      rejected_to: back_proposals
     - kind: run
       id: write_stances
       work: write_stances
       inputs:
         drafts: {node: check_stances}
         changes: {node: list_changes}
-        proposals: {node: merge_proposals}
+        proposals: {node: judge_proposals}
         collection: {parameter: collection}
   output: {node: write_stances}
 ---
@@ -343,30 +450,41 @@ empty `changed_page_ids` too, so it also starts a full pass. Not for editing a s
 grow.
 
 The stages: `list_changes` lists every records page `progress` admits and keeps the changed ones, or every one for
-a full pass, and reads every stance page as it stands. A stance it cannot read, or one carrying a
-field it does not declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so
-both maps run over nothing. `group_pages` puts the admitted pages no stance names as its record into groups of
-five, counting the stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an existing stance,
-a new stance, or a skip. A worker proposes a new stance only for a page that takes a position on a question research
-literature addresses, and names the digests bearing on it that it found with `search`. An implementation choice with
-no research question behind it is a skip. `merge_work` makes one item per stance the run read with every page that
-bears on it, its record among them. `merge_proposals` makes one proposal per proposed new stance id with every page
-behind it and every digest its placements name, combining the groups that proposed the same id. A digest named as a
-wikilink, such as `[[paper.x|label]]` or `[[paper.x#^c3|label]]`, or as a hit's ref, such as `page:research/paper.x`,
-counts as its bare id `paper.x`. It lists the base's digests, its paper, talk, article and post pages, with
-`list_pages`, and keeps only the named ids among them not at status skipped, so a stance page, a skipped digest or an
-id the base does not hold never counts. A digest type the base refuses to list adds no digest, and the run carries on.
-It drops a proposal left with fewer than two. Its list is the
-run's `proposed_stances` artifact. It waits on neither the refresh map nor the judge, so a run either of them fails
-still carries it. An id a listed stance carries
-makes no proposal: a page placed under it joins that stance's item when the run read the stance, and is left alone
-when it could not. `refresh_stances` runs one worker per item, two at a time, and no worker drafts a proposal. Each
-answers only its stance's changes:
-the status, the summary and the sections it rewrites among TL;DR, Position, Why and Open Questions, checked against
-the base's grammar as the whole page they make, and names any finding it left because only a change to Evidence or
-Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again with its
-feedback. An empty list is approved without a read. `write_stances` merges each approved rewrite into the page as it
-was read, keeping every section and frontmatter field the rewrite does not name, and writes it to the path it was
-read from. It refuses a rewrite that names a section twice or names one the page does not carry, catches each
-refusal, and answers which were written, which failed which check, and every proposal, for which it writes no page.
-Three consecutive identical failures in either map abort the run as failed.
+a full pass, and reads every stance page as it stands. A stance it cannot read, or one carrying a field it does not
+declare, is named with the reason and left alone. Past twenty-five changed pages it keeps none, so every map runs over
+nothing. `group_pages` puts the admitted pages no stance names as its record into groups of five, counting the
+stances it could not read. `place_pages` runs one worker per group, four at a time, each placing its pages against an
+existing stance, a new stance, or a skip. A worker proposes a new stance, by an id and a title, only for a page that
+takes a position on a question research literature addresses, one papers could support or contest, and cites no
+literature. An implementation choice with no research question behind it is a skip. `merge_work` makes one item per
+stance the run read with every page that bears on it, its record among them. `merge_proposals` makes one proposal per
+proposed new stance id with its title and every page behind it, combining the groups that proposed the same id. An id
+a listed stance carries makes no proposal: a page placed under it joins that stance's item when the run read the
+stance, and is left alone when it could not.
+
+`refresh_stances` runs one worker per item, two at a time, and no worker drafts a proposal. Each answers only its
+stance's changes: the status, the summary and the sections it rewrites among TL;DR, Position, Why and Open Questions,
+checked against the base's grammar as the whole page they make, and names any finding it left because only a change
+to Evidence or Alternatives would fix it. `check_stances` is the judge, and a rejection sends the refresh round again
+with its feedback. An empty list is approved without a read.
+
+`back_proposals` runs one worker per proposal, two at a time. Each searches the research knowledge base, reads the
+digests that may bear on the position with `read_page`, and answers its findings: each claim that supports or
+contests the position, by its reference such as `paper.ace-2025#^c8`, its side, and one sentence on how it bears. It
+types no claim text. `check_findings` reads every cited digest once with `read_page` and keeps a finding only when the
+page is a digest, its paper, talk, article and post pages, not at status skipped, and holds that claim anchor. It
+copies the claim's text from the page beside the worker's sentence. A claim cited as a wikilink, such as
+`[[paper.x#^c3|label]]`, or as a hit's ref, such as `page:research/paper.x#^c3`, counts as `paper.x#^c3`. A digest
+`read_page` refuses drops its own findings, and the run carries on. It drops a proposal left with findings from fewer
+than two different digests, and marks one whose findings all contest its position with `contests_only`.
+`judge_proposals` is the proposals' judge. It rejects a finding whose claim text does not bear on the position as its
+title states it, and a proposal that duplicates an existing stance. A rejection backs every proposal again with its
+feedback and never reruns the rewrites. An empty list is approved without a read. Its approved list is the run's
+`proposed_stances` artifact, which waits on no rewrite.
+
+`write_stances` waits on both judges. It merges each approved rewrite into the page as it was read, keeping every
+section and frontmatter field the rewrite does not name, and writes it to the path it was read from. It refuses a
+rewrite that names a section twice or names one the page does not carry, catches each refusal, and answers which were
+written, which failed which check, and every approved proposal, for which it writes no page. A run whose proposals
+judge spends its last attempt, or cannot decide and is not answered, fails before any rewrite is written. Three
+consecutive identical failures in any map abort the run as failed.

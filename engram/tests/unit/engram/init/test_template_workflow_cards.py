@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 JOB_VERBS = frozenset(
     {
+        "back",
         "check",
         "count",
         "digest",
@@ -35,6 +36,7 @@ JOB_VERBS = frozenset(
         "finish",
         "fold",
         "group",
+        "judge",
         "link",
         "list",
         "merge",

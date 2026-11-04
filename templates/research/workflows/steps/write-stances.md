@@ -1,7 +1,7 @@
 ---
 title: Write stances
-summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest, and every proposed new stance listed with its pages and digests and never written.
-version: 4
+summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest, and every judged new stance proposal listed with its pages and findings and never written.
+version: 5
 step:
   name: write_stances
   source: |
@@ -52,7 +52,7 @@ step:
   inputs:
     drafts: {like: refresh_stance, many: true}
     changes: {like: list_stance_changes}
-    proposals: {like: merge_proposals}
+    proposals: {like: check_findings}
     collection:
       json_schema: {type: string}
   output:
@@ -78,7 +78,7 @@ step:
           items:
             type: object
             title: ProposedStance
-            required: [stance_id, title, pages, research_pages]
+            required: [stance_id, title, pages, findings, contests_only]
             properties:
               stance_id: {type: string}
               title: {type: string}
@@ -93,19 +93,31 @@ step:
                     page_type: {type: string}
                     status: {type: string}
                     title: {type: string}
-              research_pages:
+              findings:
                 type: array
-                items: {type: string}
+                items:
+                  type: object
+                  title: CheckedFinding
+                  required: [claim, claim_text, side, how]
+                  properties:
+                    claim: {type: string}
+                    claim_text: {type: string}
+                    side:
+                      enum: [supports, contests]
+                      type: string
+                    how: {type: string}
+              contests_only: {type: boolean}
   tools: [write_note]
 ---
 
 Use as the tail of a stance refresh, after a judge has reviewed the drafts, with `changes` wired from the same run's
-list_stance_changes and `proposals` from its merge_proposals. Each stance is built from its page as
+list_stance_changes and `proposals` from the judge of its proposals. Each stance is built from its page as
 list_stance_changes read it before the run: its status and summary are the draft's, each section the draft names
 takes the draft's body at the place and level the page gave it, and every other section and frontmatter field stays
 as read. Its id, its Evidence and its Alternatives come from the page as read, so no draft can change them. It is
 written to the path it was read from. A draft that names a section twice, or names a section the page does not
 carry, is refused, and so is a draft of a stance the run did not read. A draft that fails a check is not written,
 and a page write_note refuses is caught. Both are answered in `failed` with the reason, and every other draft still
-lands. A frontmatter field held as null is left out of the page. Every proposed new stance is answered in `proposed`
-as merge_proposals gave it, with the records pages and the digests behind it, and no page is written for one.
+lands. A frontmatter field held as null is left out of the page. Every proposed new stance the proposals judge
+approved is answered in `proposed` as it was approved, with the records pages behind it and its findings, and no page
+is written for one.

@@ -132,8 +132,9 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `excise_source`, `check_excision` and `removal_report` type against `plan_items` and
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
-    `place_stance_pages`, `refresh_stance` and `write_stances` type against `group_pages`, `merge_work` and
-    `merge_proposals`, defined only inside `research-stance-refresh.md`'s own `inline:`.
+    `place_stance_pages`, `refresh_stance`, `back_proposal`, `judge_proposals` and `write_stances` type against
+    `group_pages`, `merge_work`, `merge_proposals` and `check_findings`, defined only inside
+    `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
     """
@@ -251,6 +252,8 @@ async def test_every_step_file_loads_and_asks_only_for_tools_this_app_offers() -
         "place_stance_pages",
         "refresh_stance",
         "check_stances",
+        "back_proposal",
+        "judge_proposals",
         "write_stances",
     }
     offered = set(await app_grants())
@@ -427,9 +430,13 @@ _STANCE_PROPOSAL: dict[str, object] = {
     "stance_id": "stance.y",
     "title": "Y",
     "pages": [{"page_id": "adr-0031-other", "page_type": "adr", "status": "accepted", "title": "Other"}],
-    "research_pages": ["paper.a", "paper.b"],
+    "findings": [
+        {"claim": "paper.a#^c1", "claim_text": "A finding of paper a.", "side": "supports", "how": "It measures the position."},
+        {"claim": "paper.b#^c2", "claim_text": "A finding of paper b.", "side": "contests", "how": "It finds the opposite."},
+    ],
+    "contests_only": False,
 }
-"""The one new stance proposed here, with the digests it rests on, which is listed and never written."""
+"""The one new stance proposed here, with the findings behind it, which is listed and never written."""
 
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},

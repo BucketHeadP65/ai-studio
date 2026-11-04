@@ -1,7 +1,7 @@
 ---
 title: Check refreshed stances
 summary: Reads every stance draft against the records it names and the page it changes, and answers approve, reject with what to change, or cannot judge.
-version: 3
+version: 4
 step:
   name: check_stances
   instructions: |-
@@ -43,7 +43,7 @@ step:
       required: [outcome, feedback]
   tools: [fetch]
   tier: orchestrator
-  budget: {requests: 40, tool_calls: 160}
+  budget: {requests: 40, tool_calls: 300}
 ---
 
 Use as the judge after a map of refresh_stance, with `collection` and `records` wired from the workflow's parameters.
