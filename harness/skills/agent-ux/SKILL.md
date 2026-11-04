@@ -59,6 +59,9 @@ agent's world.
    never a model deficiency to prompt around. The same gate applies to instructions: the prompt you composed is not the prompt the
    model receives (the framework may reorder your layers, e.g. literal instruction strings render ahead of function-shaped ones),
    so read one rendered request and check the identity still speaks first, with tool and capability blocks after it.
+   Text written for one role carries that role's assumptions: a person who reads the answer, a capability it can load, a
+   tool it holds. When the same text is mounted on another role, read every sentence again from that role and give it a
+   variant that is true there.
 
 9. **No author in the room.** The surface never explains its own construction. "What is written here is only what no single
    surface can say for itself" is the author defending a refactor to the diff reviewer, smuggled into UI copy the agent pays for
@@ -89,6 +92,7 @@ agent's world.
 - [ ] Does every input form the agent might hold get accepted and normalized?
 - [ ] Does every error say what to do next, and is retrying honest (works or explicitly futile)?
 - [ ] Have you read the full tool listing cold, as the agent sees it?
+- [ ] Mounted on a second role, does every sentence still hold there (a person to ask, a loader it lacks, a tool it does not hold)?
 - [ ] Have you read one rendered request and confirmed the identity opens the prompt, tool/capability blocks after it?
 - [ ] Does every instruction sentence change what the agent would do, no design apologia, no prose about how the prompt is organized?
 - [ ] Have you watched one live run and treated non-adoption as a design defect?
