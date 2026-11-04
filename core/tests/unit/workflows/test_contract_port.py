@@ -1291,6 +1291,29 @@ async def test_save_refuses_a_uses_list_naming_the_same_step_twice(tmp_path: Pat
     assert host.stored == []
 
 
+@dataclass
+class _PagelessHost(FakeHost):
+    """A host whose `read_step` raises `LibraryError` for an id it has no page for, as `LibraryCollection.fetch_step` does."""
+
+    async def read_step(self, key: str) -> dict[str, object]:
+        self.calls.append(("read_step", {"key": key}))
+        if key not in self.steps:
+            msg = f"no page has the id {key!r}"
+            raise LibraryError(msg)
+        return {"document": self.steps[key]}
+
+
+async def test_save_refuses_a_used_step_the_host_has_no_page_for(tmp_path: Path) -> None:
+    """A host's `LibraryError` for an unknown id is the save's refusal, not a tool call that crashes the run."""
+    host = _PagelessHost()
+    port = _port(host, tmp_path)
+
+    said = await port._save(_ctx(), _yaml(_spec_carrying(_digest_step())), applicability="Use once. Do not use twice.", uses=["st.missing.v1"])
+
+    assert said.startswith("REFUSED. Nothing was written. 'st.missing.v1' did not yield a valid reusable step")
+    assert host.stored == []
+
+
 async def test_fetch_step_on_an_unknown_id_is_a_retry_not_a_crash(tmp_path: Path) -> None:
     """The adaptation boundary applies to the library too: an untranslatable answer is a named retry."""
     host = FakeHost()

@@ -66,6 +66,7 @@ from tests.support.authoring import a_controller, one_session
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
+from tests.support.fakes.step_library import FakeStepLibrary
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.state import records_under
 
@@ -73,6 +74,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from core.ai.workflows.contracts import WorkflowLibrary
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models.function import AgentInfo
 
@@ -234,11 +236,11 @@ def _kept_path(tmp_path: Path) -> Path:
     return tmp_path / "draft.json"
 
 
-def _ctx(tmp_path: Path, registry: StepRegistry, *, draft: Draft | None = None) -> RunContext[Runtime]:
-    """A run context whose session holds `registry`, `draft` and the file the settled draft is kept in."""
+def _ctx(tmp_path: Path, registry: StepRegistry, *, draft: Draft | None = None, library: WorkflowLibrary | None = None) -> RunContext[Runtime]:
+    """A run context whose session holds `registry`, `draft`, `library` (a folder of workflows by default) and the draft's file."""
     session = Runtime(
         registry=registry,
-        library=FolderLibrary(tmp_path / "workflows"),
+        library=library if library is not None else FolderLibrary(tmp_path / "workflows"),
         agent=Agent(TestModel(), deps_type=Runtime),
         conversation=Conversation(draft=draft or Draft()),
         draft_file=_kept_path(tmp_path),
@@ -543,6 +545,71 @@ def _inventory_spec(*, unbuildable: bool = False, unwired: bool = False) -> Work
 
 
 RUNNABLE_CLAIM = "Every step it names resolves here, and its wiring checked clean."
+
+
+def _on_a_library_step() -> tuple[Workflow, Briefing]:
+    """The inventory draft with `verdict` taken out of its `inline`, and `verdict` itself, as a library keeps it."""
+    spec = _inventory_spec()
+    verdict = next(step for step in spec.inline if step.name == "verdict")
+    assert isinstance(verdict, Briefing)
+    return spec.model_copy(update={"inline": tuple(step for step in spec.inline if step.name != "verdict")}), verdict
+
+
+def _yaml_of(spec: Workflow) -> str:
+    return yaml.safe_dump(spec.model_dump(mode="json"), sort_keys=False)
+
+
+async def test_a_draft_on_a_library_step_checks_and_settles_when_it_names_the_step_in_uses(tmp_path: Path) -> None:
+    """`uses` copies each named step into the draft's `inline` before the check, as the save does."""
+    spec, verdict = _on_a_library_step()
+    library = FakeStepLibrary(tmp_path / "workflows", {"st.verdict.v1": verdict})
+    ctx = _ctx(tmp_path, _live_registry(), library=library)
+
+    without = await check_draft(ctx, _yaml_of(spec))
+    answer = await check_draft(ctx, _yaml_of(spec), uses=["st.verdict.v1"])
+
+    assert "Nothing here can build: verdict" in without
+    assert RUNNABLE_CLAIM in answer
+    checked = ctx.deps.conversation.last_workflow
+    assert checked is not None
+    assert [step.name for step in checked.inline] == ["triage", "polish", "verdict"], "what runs as the draft carries the copy"
+    assert [step["name"] for step in yaml.safe_load(ctx.deps.conversation.draft.spec_yaml)["inline"]] == ["triage", "polish", "verdict"]
+    assert library.fetched == ["st.verdict.v1"]
+
+
+@pytest.mark.parametrize(
+    ("uses", "refusal"),
+    [
+        (["st.verdict.v1", "st.verdict.v1"], "'st.verdict.v1' is named more than once in `uses`"),
+        (["st.nothing.v1"], "'st.nothing.v1' did not yield a valid reusable step"),
+        (["st.triage.v1"], "st.triage.v1 is step 'triage', which this workflow already carries under inline"),
+    ],
+)
+async def test_a_uses_the_save_would_refuse_is_refused_and_leaves_the_draft_as_it_was(
+    tmp_path: Path, uses: list[str], refusal: str
+) -> None:
+    spec, verdict = _on_a_library_step()
+    triage = next(step for step in spec.inline if step.name == "triage")
+    existing = Draft(spec_yaml="name: kept\nversion: 1\n", title="Kept")
+    library = FakeStepLibrary(tmp_path / "workflows", {"st.verdict.v1": verdict, "st.triage.v1": triage})
+    ctx = _ctx(tmp_path, _live_registry(), draft=existing, library=library)
+
+    answer = await check_draft(ctx, _yaml_of(spec), uses=uses)
+
+    assert refusal in answer
+    assert ctx.deps.conversation.draft == existing
+    assert ctx.deps.conversation.last_workflow is None
+    assert ctx.deps.conversation.last_issues == (answer.removeprefix("NOT VALID:\n"),)
+
+
+async def test_uses_on_a_library_that_keeps_no_steps_is_refused_with_what_to_do_instead(tmp_path: Path) -> None:
+    spec, _verdict = _on_a_library_step()
+    ctx = _ctx(tmp_path, _live_registry())
+
+    answer = await check_draft(ctx, _yaml_of(spec), uses=["st.verdict.v1"])
+
+    assert "this library keeps no reusable steps. Drop `uses` and define the steps under inline" in answer
+    assert ctx.deps.conversation.last_workflow is None
 
 
 def _claims_it_runs(text: str) -> bool:

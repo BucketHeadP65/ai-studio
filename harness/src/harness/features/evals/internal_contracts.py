@@ -24,31 +24,12 @@ if TYPE_CHECKING:
         TaskCase,
         TaskGrade,
     )
-    from core.ai.workflows.contracts import InlineStep
     from pydantic_ai.models import Model
 
     from harness.features.evals.domain.benchmark import UsageSource
     from harness.features.evals.domain.outcomes import ArchivedRun, RunSpendView
     from harness.features.evals.domain.pilot import PilotTrial, WorkflowAutomationExecution
     from harness.features.evals.infrastructure.budgeted_model import PilotMeter
-
-
-class ReusableStepQueries(Protocol):
-    """The one library read a step eval needs: a step document behind its own id."""
-
-    async def fetch_step(self, step_id: str) -> InlineStep:
-        """The reusable step `step_id` names, validated as an inline step.
-
-        Args:
-            step_id: The reusable step's id.
-
-        Returns:
-            The step as a `Briefing`, `Program` or `AgentStep`.
-
-        Raises:
-            LibraryError: no reusable step has that id.
-        """
-        ...
 
 
 class ArchivedRuns(Protocol):

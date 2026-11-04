@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.domain.lineage import Lineage
     from core.ai.workflows.domain.presentation import WorkflowPresentation
     from core.ai.workflows.domain.run_events import ReviewedArtifactRef
-    from core.ai.workflows.domain.vocabulary import AgentStep, Briefing, Program, Workflow
+    from core.ai.workflows.domain.vocabulary import AgentStep, Briefing, InlineStep, Program, Workflow
     from core.ai.workflows.graph_builder import GateDecision
     from core.ai.workflows.read_models import SavedWorkflow
     from core.ai.workflows.registry import StepImplementation
@@ -258,6 +258,28 @@ class WorkflowLibrary(Protocol):
 
         Returns:
             The count.
+        """
+        ...
+
+
+@runtime_checkable
+class ReusableStepQueries(Protocol):
+    """The library read a workflow built on reusable steps needs: one step behind its own id.
+
+    A library that keeps reusable steps answers it. A caller narrows a `WorkflowLibrary` with `isinstance`.
+    """
+
+    async def fetch_step(self, step_id: str) -> InlineStep:
+        """The reusable step `step_id` names, validated as an inline step.
+
+        Args:
+            step_id: The reusable step's id.
+
+        Returns:
+            The step as a `Briefing`, `Program` or `AgentStep`.
+
+        Raises:
+            LibraryError: No reusable step has that id.
         """
         ...
 

@@ -15,9 +15,13 @@ from typing import TYPE_CHECKING
 import yaml
 
 from core.ai.workflows.contracts import (
+    NO_REUSABLE_STEPS,
+    ReusableStepQueries,
+    ReusableStepsRefusedError,
     Workflow,
     WorkflowArguments,
     WorkflowIntent,
+    copy_reusable_steps,
     intent_issues,
     prepare,
     process_instructions,
@@ -52,9 +56,9 @@ from harness.rendering import parallel_groups
 from harness.session import Runtime, draft_path, remember_draft
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
-    from core.ai.workflows.contracts import StepRegistry, WorkflowContract
+    from core.ai.workflows.contracts import StepRegistry, WorkflowContract, WorkflowLibrary
     from core.cqrs.contracts import TopicSink
     from pydantic_ai.tools import ToolDefinition
 
@@ -96,7 +100,8 @@ _LOCAL_VOICE = (
     "findings beside it. Do not narrate what they are already looking at.\n"
     "- A proposed workflow reaches the person's screen when you call `check_draft` with the YAML and the "
     "card facts (a title, a one-line summary, and applicability that says when NOT to use it). Do not "
-    "restate the YAML in your answer, the card already carries it.\n"
+    "restate the YAML in your answer, the card already carries it. Name library steps in "
+    "`check_draft`'s `uses` while drafting.\n"
     "- A workflow is saved only once somebody has described it: a title, a summary, and four "
     "sentences: what it is for, what a finished run leaves the person holding, what they do "
     "during a run, and what to reach for something else for. `check_draft` takes all six and says "
@@ -173,6 +178,7 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
     produces: str = "",
     owner_participation: str = "",
     not_for: str = "",
+    uses: list[str] | None = None,
     intent: WorkflowIntent | None = None,
 ) -> str:
     """Validate a workflow spec and put it on the owner's screen as the draft.
@@ -181,6 +187,9 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
 
     The real validator, reporting every problem at once. An `inline` step is built and type-checked
     here too, while it is still cheap to change.
+
+    A draft may build on steps from the library: name them in `uses` and wire their names, as you
+    would for `save_workflow`. They are copied in before the check, so the draft runs as it stands.
 
     The answer ends with what the draft still owes before it can be saved. A workflow cannot be
     kept until the title, the summary and all four sentences below are written, so ask the person
@@ -196,6 +205,10 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
         produces: What a finished run leaves the person holding. Blank keeps what the draft already says.
         owner_participation: What the person does during a run. Blank keeps what the draft already says.
         not_for: What to reach for something else for. Blank keeps what the draft already says.
+        uses: Reusable step ids from `search_steps`, each copied into the draft's `inline` before the
+            check. A step whose name is already under `inline`, or an id named twice, is refused.
+            When you save, pass the spec you wrote and the same `uses`, never the draft's YAML, which
+            already carries the copies.
         intent: What the person asked for and what they expect a run to do, in their words. Pass it
             once you have it, and again whenever it changes. Omitted, the draft keeps the one it
             already carries. An intent that still owes answers is fine: record what was said and
@@ -206,6 +219,12 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
     except (ValidationError, yaml.YAMLError) as exc:
         ctx.deps.conversation.last_issues = (str(exc)[:900],)
         return f"the draft is not a well-formed workflow yet:\n{str(exc)[:900]}"
+    if uses:
+        try:
+            workflow = await _with_library_steps(workflow, uses, ctx.deps.library)
+        except ReusableStepsRefusedError as exc:
+            ctx.deps.conversation.last_issues = (str(exc),)
+            return f"NOT VALID:\n{exc}"
     report = validate(workflow, ctx.deps.registry)
     ctx.deps.conversation.last_workflow = workflow
     ctx.deps.conversation.last_issues = tuple(f"[{i.kind}] {i.where}: {i.detail}" for i in report.issues)
@@ -238,6 +257,13 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
         return "\n".join(line for line in (answer, fit, owed, _intent_owed(draft.intent)) if line)
     refused = "NOT VALID:\n" + "\n".join(ctx.deps.conversation.last_issues)
     return f"{refused}\n{fit}" if fit else refused
+
+
+async def _with_library_steps(workflow: Workflow, uses: Sequence[str], library: WorkflowLibrary) -> Workflow:
+    """`workflow` with the library steps `uses` names copied into its `inline`, refused when the library keeps none."""
+    if not isinstance(library, ReusableStepQueries):
+        raise ReusableStepsRefusedError(NO_REUSABLE_STEPS)
+    return await copy_reusable_steps(workflow, uses, library.fetch_step)
 
 
 def _intent_owed(intent: WorkflowIntent | None) -> str:

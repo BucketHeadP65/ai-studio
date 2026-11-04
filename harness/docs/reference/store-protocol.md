@@ -377,6 +377,11 @@ tool through `LibraryVocabulary.put_args`. Both call the same `verify_savable` o
 the same rules written twice, the same function. A second copy of a gate is a second place
 for it to drift open.
 
+`uses` follows the same rule. `WorkflowContract._copy_in` (the save) and the harness's
+`check_draft` both copy reusable steps into `inline` through `copy_reusable_steps`
+(`core.ai.workflows.reusable_steps`), so both refuse an id named twice, an id that yields no
+valid step and a step already under `inline`, in the same words.
+
 The spec goes in as structured data rather than text, so a malformed graph is caught by
 the tool call's own schema. A refusal is delivered with the validator's findings so the
 caller can fix and retry. The port raises the refusal as a `ModelRetry` with

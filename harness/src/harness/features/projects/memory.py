@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Literal, TypedDict, get_args
 from engram import CATEGORIES
 from engram.agent_memory.contracts import EngramMemoryStore, search_categories
 from pydantic_ai import ModelRetry
-from pydantic_ai.capabilities import DynamicCapability
+from pydantic_ai.capabilities import CombinedCapability, DynamicCapability
 
 # Runtime imports, not TYPE_CHECKING: `FunctionToolset.add_function` resolves each tool function's
 # annotations when it registers the tool, so `RunContext` or `Runtime` under TYPE_CHECKING fails there
@@ -32,6 +32,7 @@ from pydantic_ai.tools import RunContext
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai_harness.memory import InMemoryStore, Memory, MemoryConflictError, MemoryFile, MemoryOperation, SearchableMemoryStore
 
+from harness.plugins import Switched, plugin_enabled
 from harness.session import Runtime
 
 if TYPE_CHECKING:
@@ -40,6 +41,11 @@ if TYPE_CHECKING:
     from pydantic_ai._instructions import AgentInstructions
     from pydantic_ai.capabilities import AbstractCapability
     from pydantic_ai_harness.memory import MemoryMutation, MemorySearchResult, MemoryStore
+
+    from harness.settings import StateSettings
+
+MEMORY_PLUGIN = "memory"
+"""The plugin every memory mount sits behind, by its name in the plugin catalog."""
 
 Category = Literal["world", "project", "reference"]
 """Mirrors `engram.agent_memory.CATEGORIES`, spelled out for the tool schema. The assertion below keeps the two from
@@ -527,12 +533,14 @@ def memory_mounts(
     project_namespace: str,
     global_memory_enabled: Callable[[], bool],
 ) -> tuple[AbstractCapability[Runtime], ...]:
-    """Three mounts behind the caller's one `memory` plugin: global (switched per turn), project and scratchpad.
+    """The three memory mounts: global (switched per turn), project and scratchpad.
 
-    The global mount resolves to nothing on a turn where `global_memory_enabled()` answers false. The project mount is
-    on whenever the plugin is, scoped to `project_namespace`. The scratchpad belongs to the session, lives in this
-    process and is gone when the session ends. The global and project mounts share `store`, each in its own scope, and
-    the scratchpad gets a fresh in-memory store whose notes are listed back the same way.
+    The global mount resolves to nothing on a turn where `global_memory_enabled()` answers false. It is a dynamic
+    capability, so it must sit at the top of the agent's capabilities: inside another dynamic capability, a plugin
+    switch included, its functions never reach the agent. `memory_plugin_mounts` places all three. The project mount is
+    scoped to `project_namespace`. The scratchpad belongs to the session, lives in this process and is gone when the
+    session ends. The global and project mounts share `store`, each in its own scope, and the scratchpad gets a fresh
+    in-memory store whose notes are listed back the same way.
 
     Args:
         store: The backing store the global and project mounts share.
@@ -568,3 +576,38 @@ def memory_mounts(
         id="memory-scratchpad",
     )
     return (global_mount, project_mount, scratchpad_mount)
+
+
+def memory_plugin_mounts(
+    store: MemoryStore,
+    *,
+    project_namespace: str,
+    global_memory_enabled: Callable[[], bool],
+    state: StateSettings,
+) -> tuple[AbstractCapability[Runtime], ...]:
+    """The `memory` plugin's three mounts, placed so every function the memory guidance names reaches the agent.
+
+    The project and scratchpad mounts sit behind one switch for the `memory` plugin. The global mount sits beside that
+    switch, at the top of the agent's capabilities, and asks the plugin's state itself, so it is on only while the
+    plugin is on and `global_memory_enabled()` answers true. Pass the result to the agent as it is.
+
+    Args:
+        store: The backing store the global and project mounts share.
+        project_namespace: The project's scope in that store.
+        global_memory_enabled: Whether the project turns global memory on, asked on every turn.
+        state: Where the plugin's on and off state is read from, on every turn.
+
+    Returns:
+        The global mount, then the switch around the project and scratchpad mounts.
+    """
+
+    def global_memory_on() -> bool:
+        return plugin_enabled(state, MEMORY_PLUGIN) and global_memory_enabled()
+
+    global_mount, project_mount, scratchpad_mount = memory_mounts(
+        store, project_namespace=project_namespace, global_memory_enabled=global_memory_on
+    )
+    # One switch around the two mounts, not one each: `Switched.id` is `plugin-{plugin}`, and two switches for one
+    # plugin mint the same capability id, which `Agent.__init__` refuses.
+    door = Switched(CombinedCapability[Runtime](capabilities=[project_mount, scratchpad_mount]), plugin=MEMORY_PLUGIN, state=state)
+    return (global_mount, door)

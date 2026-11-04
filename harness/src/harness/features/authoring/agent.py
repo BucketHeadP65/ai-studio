@@ -241,7 +241,8 @@ def build_agent(
         tiers: How a model tier name becomes a model, for delegation and the context gauge. `None`
             mounts no delegation plugin and leaves the gauge on its default window.
         memory: The standing-memory mounts (global, project and the session scratchpad), already
-            behind the `memory` plugin. Empty mounts none.
+            behind the `memory` plugin, as `memory_plugin_mounts` places them. Each is mounted at the
+            top of the agent's capabilities. Empty mounts none.
         digest: The `digest_now` plugin, built by the caller over its own studio API client. `None`
             mounts nothing.
         follow_me: The follow-me companion's plugin, mounted only in a master session. `None`
@@ -391,8 +392,8 @@ def build_agent(
                 plugin="recall",
                 state=state,
             ),
-            # The standing memory (global, project, scratchpad), which the caller wraps in one
-            # `memory` plugin.
+            # The standing memory (global, project, scratchpad), behind the `memory` plugin. Never
+            # wrap these in another dynamic capability: the global mount's functions would not reach the agent.
             *memory,
             # `digest_now`: land a source, sync a knowledge base, and start its digest workflow
             # without waiting for it.

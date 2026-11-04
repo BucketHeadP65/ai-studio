@@ -47,9 +47,11 @@ output: {node: publish}
 ## Reuse a step from the library before defining one
 
 The library holds steps other workflows already run: `search_steps` finds them by what they do, `fetch_step` shows one
-whole (its name, inputs, output and tools). When one fits, name it in `save_workflow`'s `uses` list and wire your `run`
-or `map` node to its `name`. The step is copied into your workflow at save time, so the workflow still carries
-everything it needs, and the library remembers where the step came from. Define a step under `inline` only when nothing in
+whole (its name, inputs, output and tools). When one fits, name it in the `uses` list of `check_draft` while you draft
+and of `save_workflow` when you save, and wire your `run` or `map` node to its `name`. Each of the two copies the step
+into your workflow before it checks, so the draft runs as it stands and the saved workflow carries everything it needs.
+Only `save_workflow` with `uses` records where the step came from. When you save, pass the spec you wrote and the same
+`uses`, never the draft's YAML, which already carries the copies. Define a step under `inline` only when nothing in
 the library fits. A step you fetched may be typed `{like: <its name>}` by any step you define beside it.
 
 Read a reusable step's `source:` before you reuse it, and write your own the same way: inside a program every granted tool

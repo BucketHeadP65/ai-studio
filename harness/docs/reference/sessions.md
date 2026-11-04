@@ -133,7 +133,8 @@ the same proposal, verdict, and graph the inspector already had.
 
 The agent's own reply on either chat plugin is prose text, not a structured envelope. A draft reaches that `"draft"`
 field when the agent calls `check_draft(spec_yaml, title, summary, applicability)` (the three card fields are each
-optional, and an omitted one leaves what the draft already holds), and when `POST /api/adapt` puts an adaptation of a
+optional, and an omitted one leaves what the draft already holds, and `uses` names library steps the check copies into
+the draft's `inline` first), and when `POST /api/adapt` puts an adaptation of a
 stored workflow there. A passing check settles those fields onto the draft, and the reply names the result in prose. A
 failing check reports the issues in prose too, and leaves the draft as it was.
 
