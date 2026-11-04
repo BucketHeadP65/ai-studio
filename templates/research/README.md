@@ -24,15 +24,16 @@ from this template can register its own vocabulary for any research domain.
   records page bears on, started by an `on index repo-docs` schedule with `collection=research`, `records=repo-docs`
   and `progress=adr:accepted, adr:superseded, architecture:current, spec-doc:approved, spec-doc:executed`, or by hand
   with `changed_page_ids` empty for a full pass. A topic no stance covers is proposed as a new stance only when its
-  records page takes a position on a question research literature addresses. One worker per proposal then names the
-  claims of the base's digests (its paper, talk, article and post pages) that support or contest that position. The
-  run reads each cited digest and keeps a claim only when the digest is not at status skipped and holds that claim,
-  copying the claim's text from the page. It drops a proposal left with claims from fewer than two digests, and a
+  records page takes a position on a question research literature addresses. Once every rewrite is written, one
+  worker per proposal names the claims of the base's digests (its paper, talk, article and post pages) that support
+  or contest that position. The run reads each cited digest and keeps a claim only when the digest is not at status
+  skipped and holds that claim, copying the claim's text from the page. It drops a proposal left with claims from fewer than two digests, and a
   judge of its own rejects a claim that does not bear on the position or a proposal that duplicates a stance. An
   implementation choice with no research question behind it is skipped. The run card shows every approved proposal
   with the records pages behind it and each finding (the claim's reference and text, whether it supports or contests
   the position, and one sentence on how) among what the run left behind (the `proposed_stances` artifact), marking
-  one the literature only argues against, so you draft the ones you pick by hand.
+  one the literature only argues against, so you draft the ones you pick by hand. A proposal whose worker changed its
+  id, title or pages is left off, and a run whose proposals fail still keeps its rewrites.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.

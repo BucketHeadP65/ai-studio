@@ -426,6 +426,34 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `DynamicCapability` alone offers `ping`. Patching `DynamicToolset.for_run` to call `for_run` on the toolset its factory
   returned brings `ping` back.
 
+## UB-13. A join finalized in the same pass as another join fires before that join's new task can feed it
+
+- **Library:** pydantic-graph 2.63.0 (`pydantic_graph/graph_builder.py`, `_GraphIterator`, the per-result loop at lines
+  726-740 and `_get_completed_fork_runs` at lines 994-1011).
+- **Symptom:** a node waiting on two producers starts with only one of them. In a stance refresh where `write_stances`
+  waited on `list_changes` and on the rewrite judge, and the proposals waited on `write_stances`, `write_stances` started
+  right after `merge_work`, before any rewrite ran, and failed with `KeyError('check_stances')`. In the plain graph below,
+  `tail` runs twice, once with only `src`'s item and once with only `mid`'s, and the end node gets three items.
+- **Cause:** after each task result, the loop takes one snapshot of the active tasks and asks
+  `_get_completed_fork_runs` for every open join whose fork run no active task still feeds. It then finalizes all of
+  them and dispatches their new tasks. When two joins share a fork run and the first one's new task feeds the second,
+  the snapshot lacks that task, so the second join counts as complete in the same pass and fires early. The sweep that
+  runs once no task is pending already re-reads the live tasks before each join ("An earlier join in this pass may have
+  dispatched tasks that feed this join"). The per-result loop does not.
+- **Grade:** wrong results. A node runs on a partial input, and runs again later on the rest, with no error from the graph.
+- **Found:** 2026-11-04, review of the stance refresh fix round, traced with a wrapper around `_get_completed_fork_runs`
+  and `_is_fork_run_completed` on the real graph, then cut down to the graph below.
+- **What we did:** the stance refresh avoids the shape. `write_stances` reads `merge_work` instead of `list_changes`.
+  `merge_work` already sits upstream of the rewrite judge `write_stances` waits on, so no join of `write_stances` holds
+  an item while `merge_work`'s join is finalized (`cafa27f9`).
+- **Upstream state:** present in 2.63.0. Checking each finalized join again against the live tasks plus the tasks this
+  pass already dispatched, as the sweep does, fixes the graph below and the stance refresh shape. The ask is that fix.
+- **Issue:** not filed. Draft I8 in `void/upstream-issues-to-file.md`.
+- **Repro:** `src` broadcasts to `b`, `mid_join` and `tail_join`. `b` goes to `mid_join` and `last_join`. `mid_join`
+  goes to `mid`, `mid` to `tail_join`, `tail_join` to `tail`, `tail` to `last_join`, `last_join` to `last`, and `last` to
+  the end. Each join collects its items into a list. `tail` is handed `['src']`, then `['mid']`, where it should be
+  handed `['mid', 'src']` once.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
