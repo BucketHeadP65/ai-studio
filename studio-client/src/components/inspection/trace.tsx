@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { type ReactElement, type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { type KeyboardEvent, type ReactElement, type ReactNode, type RefObject, useEffect, useRef } from "react";
 
 import type { Finding } from "@/api/inspection";
 import { conversationPayloads, inspectionApi } from "@/api/inspection";
@@ -50,6 +50,24 @@ function Composer({
   note: ReactNode;
   noteIsError: boolean;
 }): ReactElement {
+  const canAsk = !disabled && draft.trim() !== "";
+  // A keyup that follows a keydown already handled is skipped, so one press asks once.
+  const returnDownSeen = useRef(false);
+
+  // Return asks, as in the chat, and Shift+Return keeps its newline. Keyup also asks when an
+  // input method or an extension overlay swallowed the keydown.
+  function askOnReturn(event: KeyboardEvent<HTMLTextAreaElement>, phase: "down" | "up") {
+    const isReturn = event.code === "Enter" || event.code === "NumpadEnter" || event.key === "Enter";
+    if (!isReturn || event.shiftKey) return;
+    event.preventDefault();
+    if (phase === "up" && returnDownSeen.current) {
+      returnDownSeen.current = false;
+      return;
+    }
+    returnDownSeen.current = phase === "down";
+    if (canAsk) onAsk();
+  }
+
   return (
     <div className="flex flex-col gap-2 border-line border-t bg-well px-3.5 py-3">
       <Textarea
@@ -60,10 +78,12 @@ function Composer({
         value={draft}
         disabled={disabled}
         onChange={(event) => onDraft(event.target.value)}
+        onKeyDown={(event) => askOnReturn(event, "down")}
+        onKeyUp={(event) => askOnReturn(event, "up")}
       />
       <div className="flex items-center justify-between gap-4">
         <span className={cn("text-caption text-label-3", noteIsError && "text-danger-ink")}>{note}</span>
-        <Button onClick={onAsk} disabled={disabled || draft.trim() === ""}>
+        <Button onClick={onAsk} disabled={!canAsk}>
           Ask
         </Button>
       </div>
