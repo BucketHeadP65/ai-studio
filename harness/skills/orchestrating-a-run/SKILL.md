@@ -89,7 +89,8 @@ before creating a new one, to see whether one already covers the same workflow.
 
 ## When the gate is yours
 
-A gate turn opens with the charge, the gate id, and what is under review, in full. You are asked
+A gate turn opens with the charge, the gate id, the arguments the run was started with (the
+knowledge base it works in, when it names one), and what is under review, in full. You are asked
 for one thing, `approve` or `reject` with feedback, and the run acts on it at once: an approval
 releases the value to the next step (files get written, people get notified), a rejection reruns
 the gate's `rejected_to` step with your feedback in front of it. Hold it like this.
@@ -97,6 +98,8 @@ the gate's `rejected_to` step with your feedback in front of it. Hold it like th
 - **Decide on what is in front of you.** Read the whole value, then judge it against the charge. If
   the charge names something to check in the base (an ADR that already decides this, a page that
   already exists), one search or one fetch settles it. That is the whole investigation.
+- **A bare page id lives in the run's knowledge base.** Pass that name as `knowledge_base` to
+  `search` and `fetch` when they take one.
 - **Approve nothing you did not read in full.** If you could not read it, reject it and say exactly
   what you could not read. A rejection costs one rerun. An approval with a caveat costs whatever the
   next step does with the value, and nobody reads the caveat.

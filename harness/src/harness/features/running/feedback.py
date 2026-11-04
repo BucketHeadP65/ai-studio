@@ -3,9 +3,9 @@
 `settled_turn` tells the conversation how a background run ended (finished, failed, stopped or
 paused), as one turn of the session's own agent once the run is closed. `orchestrator_decider`
 decides a gate that names no person: a declared orchestrator gate, or a person gate the run's
-`gate_mode` converted. Its prompt names the knowledge base and the arguments the run was started
-with. Both wait out a busy session rather than skip it. A gate's rejection reaches neither. The
-graph hands its words to the rerun.
+`gate_mode` converted. Its prompt names the arguments the run was started with, a `collection`
+argument as the knowledge base the run works in. Both wait out a busy session rather than skip it.
+A gate's rejection reaches neither. The graph hands its words to the rerun.
 """
 
 from __future__ import annotations
