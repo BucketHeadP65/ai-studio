@@ -1,9 +1,11 @@
 """A model response that a content filter cut ends the turn at once, with an error that names the filter that fired.
 
-`ContentFilterGuard` raises pydantic-ai's `ContentFilterError` for every response that finishes on `content_filter`,
-whatever text it carries, streamed or not, so a filtered response never reaches output validation.
-`FilterReportingResponsesModel` keeps the content filter results an Azure Responses API response carries in the
-response's provider details, under `content_filters`, where the error reads them.
+`ContentFilterGuard` makes every response that finishes on `content_filter`, whatever text it carries, streamed or not,
+and every prompt Azure's content filter refuses with HTTP 400, end the turn with pydantic-ai's `ContentFilterError`, so
+a filtered response never reaches output validation. `content_filter_message` reads the error back as one sentence
+naming each category the filter flagged. `FilterReportingResponsesModel` keeps the content filter results an Azure
+Responses API response carries in the response's provider details, under `content_filters`, where that sentence reads
+them.
 """
 
 from __future__ import annotations
@@ -11,11 +13,12 @@ from __future__ import annotations
 import json
 
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import TYPE_CHECKING, override
 
 from pydantic import BaseModel, ConfigDict, JsonValue, TypeAdapter, ValidationError
-from pydantic_ai.exceptions import ContentFilterError
-from pydantic_ai.messages import ModelMessagesTypeAdapter
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.models.wrapper import WrapperModel
 
@@ -25,7 +28,7 @@ if TYPE_CHECKING:
 
     from openai.types import responses
     from pydantic_ai import RunContext
-    from pydantic_ai.messages import ModelMessage, ModelResponse
+    from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models import ModelRequestParameters, StreamedResponse
     from pydantic_ai.settings import ModelSettings
 
@@ -56,8 +59,30 @@ class _ContentFilter(BaseModel):
     content_filter_results: dict[str, _CategoryResult | None] | None = None
 
 
+class _InnerError(BaseModel):
+    """The `innererror` of Azure's HTTP 400 for a refused prompt, holding what each filter category found in it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    content_filter_result: dict[str, JsonValue] | None = None
+
+
+class _RefusalError(BaseModel):
+    """The error of an HTTP 400 body: Azure's code `content_filter` when its content filter refused the prompt."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    code: str | None = None
+    innererror: _InnerError | None = None
+    content_filters: list[JsonValue] | None = None
+
+
 _FILTER_LIST = TypeAdapter(list[_ContentFilter])
 _CATEGORY_RESULTS = TypeAdapter(dict[str, _CategoryResult | None])
+_REFUSAL_STATUS = 400
+"""The HTTP status Azure refuses a prompt with when its content filter flags it."""
+_REFUSAL_CODE = "content_filter"
+"""The error code of that refusal."""
 
 
 class FilterReportingResponsesModel(OpenAIResponsesModel):
@@ -77,17 +102,19 @@ class FilterReportingResponsesModel(OpenAIResponsesModel):
 
 
 class ContentFilterGuard(WrapperModel):
-    """A model that raises `ContentFilterError` for every response of the model it wraps that finishes on `content_filter`.
+    """A model whose every response that finishes on `content_filter` ends an agent's turn with `ContentFilterError`.
 
-    A request is checked when it returns, and a streamed request when its body exits, so the filtered response is
-    never validated as output and no output retry is sent for it. The error's first line names the content filter
-    results the response holds, or says it holds none. Every other response passes through unchanged.
+    A streamed request raises the error once its body exits. A request returns the filtered response with its parts
+    removed, so the agent records its usage like any other response's and then raises the error itself, and a caller
+    outside an agent run gets that empty response. Either way the filtered response is never validated as output and
+    no output retry is sent for it. A prompt Azure's content filter refuses with HTTP 400 raises the error at once. Every
+    other response and every other error passes through unchanged. `content_filter_message` names the categories.
     """
 
     async def request(
         self, messages: list[ModelMessage], model_settings: ModelSettings | None, model_request_parameters: ModelRequestParameters
     ) -> ModelResponse:
-        """The wrapped model's response, unless a content filter cut it.
+        """The wrapped model's response, its parts removed when a content filter cut it.
 
         Args:
             messages: The messages to send.
@@ -95,13 +122,18 @@ class ContentFilterGuard(WrapperModel):
             model_request_parameters: The request parameters.
 
         Returns:
-            The wrapped model's response.
+            The wrapped model's response, with no parts when it finishes on `content_filter`.
 
         Raises:
-            ContentFilterError: When the response finishes on `content_filter`.
+            ContentFilterError: When Azure's content filter refused the prompt with HTTP 400.
         """
-        response = await self.wrapped.request(messages, model_settings, model_request_parameters)
-        _raise_if_filtered(response)
+        try:
+            response = await self.wrapped.request(messages, model_settings, model_request_parameters)
+        except ModelHTTPError as error:
+            _raise_if_refused(error)
+            raise
+        if response.finish_reason == "content_filter":
+            return replace(response, parts=[])
         return response
 
     @asynccontextmanager
@@ -124,11 +156,37 @@ class ContentFilterGuard(WrapperModel):
             The wrapped model's streamed response.
 
         Raises:
-            ContentFilterError: When the finished response finishes on `content_filter`.
+            ContentFilterError: When the finished response finishes on `content_filter`, or when Azure's content filter
+                refused the prompt with HTTP 400.
         """
-        async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as response_stream:
-            yield response_stream
+        try:
+            async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as response_stream:
+                yield response_stream
+        except ModelHTTPError as error:
+            _raise_if_refused(error)
+            raise
         _raise_if_filtered(response_stream.get())
+
+
+def content_filter_message(error: ContentFilterError) -> str:
+    """One sentence saying a content filter cut a response, why the provider says so, and what each filter category found.
+
+    The sentence is read from the response the error's body carries, so it is the same whether the guard raised the error
+    or the agent did. An error whose body holds no single response answers its own message.
+
+    Args:
+        error: The error a filtered response or a refused prompt ended the turn with.
+
+    Returns:
+        The sentence, on one line.
+    """
+    try:
+        messages = ModelMessagesTypeAdapter.validate_json(error.body or "")
+    except ValidationError:
+        return error.message
+    if len(messages) != 1 or not isinstance(response := messages[0], ModelResponse):
+        return error.message
+    return _content_filter_message(response)
 
 
 def _content_filter_message(response: ModelResponse) -> str:
@@ -145,11 +203,37 @@ def _content_filter_message(response: ModelResponse) -> str:
     return f"{opening} {_filter_results(details)}"
 
 
+def _raise_if_refused(error: ModelHTTPError) -> None:
+    """Raise `ContentFilterError` from `error` when it is Azure's HTTP 400 for a prompt its content filter refused."""
+    if error.status_code != _REFUSAL_STATUS:
+        return
+    body = error.body
+    if isinstance(body, dict) and isinstance(nested := body.get("error"), dict):
+        body = nested
+    try:
+        refusal = _RefusalError.model_validate(body)
+    except ValidationError:
+        return
+    if refusal.code != _REFUSAL_CODE:
+        return
+    details: dict[str, JsonValue] = {"finish_reason": _REFUSAL_CODE}
+    if refusal.innererror is not None and refusal.innererror.content_filter_result is not None:
+        details[_RESULT_KEY] = refusal.innererror.content_filter_result
+    if refusal.content_filters is not None:
+        details[_FILTERS_KEY] = refusal.content_filters
+    response = ModelResponse(parts=[], model_name=error.model_name, finish_reason="content_filter", provider_details=details)
+    raise _filter_error(response) from error
+
+
 def _raise_if_filtered(response: ModelResponse) -> None:
     """Raise `ContentFilterError` carrying the whole response when `response` finishes on `content_filter`."""
     if response.finish_reason == "content_filter":
-        body = ModelMessagesTypeAdapter.dump_json([response]).decode()
-        raise ContentFilterError(_content_filter_message(response), body=body)
+        raise _filter_error(response)
+
+
+def _filter_error(response: ModelResponse) -> ContentFilterError:
+    """The `ContentFilterError` for `response`: the sentence naming its filter results, and the whole response as its body."""
+    return ContentFilterError(_content_filter_message(response), body=ModelMessagesTypeAdapter.dump_json([response]).decode())
 
 
 def _filter_results(details: Mapping[str, JsonValue]) -> str:

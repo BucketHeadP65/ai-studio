@@ -11,14 +11,15 @@ import pytest
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, JsonValue
-from pydantic_ai import Agent, PromptedOutput
-from pydantic_ai.exceptions import ContentFilterError, UnexpectedModelBehavior
+from pydantic_ai import Agent, PromptedOutput, capture_run_messages
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.messages import ModelResponse, PartDeltaEvent, PartStartEvent, TextPart, TextPartDelta
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from core.ai.content_filter import ContentFilterGuard, FilterReportingResponsesModel
+from core.ai.content_filter import ContentFilterGuard, FilterReportingResponsesModel, content_filter_message
+from core.ai.history.step_usage import StepUsage, StepUsageTap
 from core.ai.models import create_azure_model, create_gateway_model
 
 if TYPE_CHECKING:
@@ -46,6 +47,16 @@ VIOLENCE: list[JsonValue] = [
 """Azure's `content_filters` list for a completion the violence and protected material filters cut, and a clean prompt."""
 
 
+USAGE: dict[str, JsonValue] = {
+    "input_tokens": 120,
+    "input_tokens_details": {"cached_tokens": 0},
+    "output_tokens": 11,
+    "output_tokens_details": {"reasoning_tokens": 0},
+    "total_tokens": 131,
+}
+"""The usage every scripted answer reports once it finishes."""
+
+
 class Verdict(BaseModel):
     """The structured answer the test agent asks for, so plain text fails output validation."""
 
@@ -59,6 +70,39 @@ class Answer(BaseModel):
     status: str = "completed"
     incomplete_reason: str | None = None
     content_filters: list[JsonValue] | None = None
+
+
+SELF_HARM_REFUSAL: dict[str, JsonValue] = {
+    "error": {
+        "message": "The response was filtered due to the prompt triggering Azure OpenAI's content management policy.",
+        "type": None,
+        "param": "prompt",
+        "code": "content_filter",
+        "status": 400,
+        "innererror": {
+            "code": "ResponsibleAIPolicyViolation",
+            "content_filter_result": {
+                "hate": {"filtered": False, "severity": "safe"},
+                "jailbreak": {"filtered": False, "detected": False},
+                "self_harm": {"filtered": True, "severity": "medium"},
+                "violence": {"filtered": False, "severity": "safe"},
+            },
+        },
+    }
+}
+"""Azure's HTTP 400 body for a prompt its self-harm filter refused, as the Responses API on the `/openai/v1/` endpoint sends it."""
+
+
+class RefusedPrompts(httpx2.AsyncBaseTransport):
+    """Answers every request with HTTP 400 and `body`, whether the request asked for a stream or not."""
+
+    def __init__(self, body: dict[str, JsonValue]) -> None:
+        self.body = body
+        self.sent = 0
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        self.sent += 1
+        return httpx2.Response(400, json=self.body, request=request)
 
 
 class ScriptedResponses(httpx2.AsyncBaseTransport):
@@ -96,6 +140,7 @@ def _response(answer: Answer, *, finished: bool) -> dict[str, JsonValue]:
         "tools": [],
         "status": answer.status if finished else "in_progress",
         "incomplete_details": {"reason": answer.incomplete_reason} if finished and answer.incomplete_reason else None,
+        "usage": USAGE if finished else None,
     }
     if finished and answer.content_filters is not None:
         body["content_filters"] = answer.content_filters
@@ -120,14 +165,14 @@ def _events(answer: Answer) -> list[dict[str, JsonValue]]:
     return [{**event, "sequence_number": number} for number, event in enumerate(events)]
 
 
-def _provider(transport: ScriptedResponses) -> OpenAIProvider:
+def _provider(transport: httpx2.AsyncBaseTransport) -> OpenAIProvider:
     client = AsyncOpenAI(
         api_key="unused", base_url="https://responses.example/v1/", http_client=httpx2.AsyncClient(transport=transport), max_retries=0
     )
     return OpenAIProvider(openai_client=client)
 
 
-def _responses_model(transport: ScriptedResponses) -> FilterReportingResponsesModel:
+def _responses_model(transport: httpx2.AsyncBaseTransport) -> FilterReportingResponsesModel:
     return FilterReportingResponsesModel("some-deployment", provider=_provider(transport))
 
 
@@ -150,8 +195,7 @@ async def test_an_answer_the_filter_cut_raises_at_once_and_sends_no_output_retry
         await _run(ContentFilterGuard(_responses_model(transport)), streamed=streamed)
 
     assert transport.sent == 1
-    assert raised.value.message.startswith("Content filter triggered. Finish reason: 'content_filter'.")
-    assert STOCK_REFUSAL in (raised.value.body or "")
+    assert content_filter_message(raised.value).startswith("Content filter triggered. Finish reason: 'content_filter'.")
 
 
 @pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
@@ -161,9 +205,9 @@ async def test_the_error_names_each_category_azure_flagged_on_its_first_line(str
     with pytest.raises(ContentFilterError) as raised:
         await _run(ContentFilterGuard(_responses_model(ScriptedResponses(answer))), streamed=streamed)
 
-    assert str(raised.value).splitlines()[0] == (
+    assert content_filter_message(raised.value) == (
         "Content filter triggered. Finish reason: 'content_filter'. Filter results: completion violence filtered at severity "
-        "medium, completion protected_material_text detected and filtered., body:"
+        "medium, completion protected_material_text detected and filtered."
     )
 
 
@@ -220,7 +264,53 @@ async def test_the_result_of_a_filter_that_refused_the_request_is_named_too() ->
     with pytest.raises(ContentFilterError) as raised:
         await _run(ContentFilterGuard(FunctionModel(refused)), streamed=False)
 
-    assert raised.value.message.endswith("Filter results: self_harm filtered at severity high.")
+    assert content_filter_message(raised.value).endswith("Filter results: self_harm filtered at severity high.")
+
+
+@pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
+async def test_a_filtered_response_stays_in_the_run_history_with_its_usage(streamed: bool) -> None:
+    answer = Answer(text=STOCK_REFUSAL, status="incomplete", incomplete_reason="content_filter", content_filters=VIOLENCE)
+    agent = Agent(ContentFilterGuard(_responses_model(ScriptedResponses(answer))), deps_type=type(None), output_type=PromptedOutput(Verdict))
+
+    with capture_run_messages() as messages, pytest.raises(ContentFilterError):
+        await agent.run("Judge this.", event_stream_handler=_ignore if streamed else None)
+
+    (response,) = [message for message in messages if isinstance(message, ModelResponse)]
+    assert response.finish_reason == "content_filter"
+    assert (response.usage.input_tokens, response.usage.output_tokens) == (120, 11)
+
+
+async def test_a_whole_filtered_response_reaches_a_model_that_wraps_the_guard() -> None:
+    answer = Answer(text=STOCK_REFUSAL, status="incomplete", incomplete_reason="content_filter")
+    readings: list[StepUsage] = []
+    agent = Agent(StepUsageTap(ContentFilterGuard(_responses_model(ScriptedResponses(answer))), readings), deps_type=type(None), output_type=PromptedOutput(Verdict))
+
+    with pytest.raises(ContentFilterError):
+        await agent.run("Judge this.")
+
+    assert len(readings) == 1, "the response's usage is recorded like any other response's"
+
+
+@pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
+async def test_a_prompt_azure_refused_with_http_400_raises_and_names_the_category(streamed: bool) -> None:
+    transport = RefusedPrompts(SELF_HARM_REFUSAL)
+
+    with pytest.raises(ContentFilterError) as raised:
+        await _run(ContentFilterGuard(_responses_model(transport)), streamed=streamed)
+
+    assert transport.sent == 1
+    assert content_filter_message(raised.value) == (
+        "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium."
+    )
+
+
+async def test_every_other_http_400_passes_through_unchanged() -> None:
+    transport = RefusedPrompts({"error": {"message": "Unsupported parameter.", "type": "invalid_request_error", "code": "unsupported_parameter"}})
+
+    with pytest.raises(ModelHTTPError) as raised:
+        await _run(ContentFilterGuard(_responses_model(transport)), streamed=False)
+
+    assert raised.value.status_code == 400
 
 
 async def _outcome(model: Model, *, streamed: bool) -> tuple[str, str]:

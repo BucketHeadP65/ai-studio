@@ -316,7 +316,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Found:** 2026-10-31, reading a workflow run in which 8 items were filtered and every one ended this way or at once.
 - **What we did:** `core.ai.content_filter` (UE-26): `ContentFilterGuard` around every generation model the repo builds raises
   `ContentFilterError` for any `content_filter` response, and `FilterReportingResponsesModel` keeps the `content_filters`
-  list, so the error's first line names each flagged category and its severity (`343ec2df`).
+  list, so the error's first line names each flagged category and its severity (`343ec2df`). A whole response, not
+  streamed, is now handed back with its parts removed, so the agent records its usage and history like any other
+  response's and raises `ContentFilterError` itself, and `content_filter_message` reads the category sentence back from
+  the error's body.
 - **Upstream state:** present in 2.63.0. The open pull request pydantic-ai#12039 makes `ModelFallback` fall back on a
   refusal with text, but leaves the default and the message as they are. The ask is that a `content_filter` response never
   be retried as output (raise `ContentFilterError`, or at least send no output retry for it), that `OpenAIResponsesModel`
@@ -505,6 +508,35 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `finish-step`, `finish`, `done`. The same agent with a function tool that raises `ModelRetry` once streams
   `tool-output-error` with `errorText` "no such key, try again", then `finish-step` and a new `start-step`. With
   `PromptedOutput(Verdict)` a plain-text first answer streams as two text blocks back to back in one step.
+
+## UB-19. An Azure HTTP 400 prompt refusal through `OpenAIProvider` raises `ModelHTTPError`, not `ContentFilterError`
+
+- **Library:** pydantic-ai 2.63.0 (`pydantic_ai/models/openai.py`, `_check_azure_content_filter` and `_is_azure`, called from
+  `OpenAIResponsesModel._responses_create` and `OpenAIChatModel._completions_create`. `pydantic_ai/providers/azure.py`,
+  `AzureProvider.__init__`).
+- **Symptom:** a prompt Azure's content filter refuses comes back as HTTP 400 with the error code `content_filter` and an
+  `innererror.content_filter_result` naming each category. Through our Azure model it raised `ModelRequestRejectedError`
+  (a `ModelHTTPError`) whose message is the status, the model and the raw body, so a map item recorded it as a rejected
+  request and the Temporal engine did not know it as a filter refusal.
+- **Cause:** pydantic-ai turns that 400 into a `content_filter` response only when `_is_azure` holds: the provider's
+  system is `azure` or the client is an `AsyncAzureOpenAI`. Our Azure client is a plain `AsyncOpenAI` on the
+  `/openai/v1/` endpoint, authenticated with an Entra ID token provider, inside `OpenAIProvider`, so its system is
+  `openai`. `AzureProvider` cannot hold it: given `openai_client` it is typed for an `AsyncAzureOpenAI`, and built from
+  an endpoint it needs an API key and builds its own client.
+- **Grade:** misleading. The refusal is not retried for nothing, but the error names no category.
+- **Found:** 2026-10-31, in the review of the content filter guard (UE-26). Reproduced 2026-11-05 with a transport answering
+  HTTP 400 and Azure's body, streamed and not.
+- **What we did:** `ContentFilterGuard` maps a `ModelHTTPError` with status 400 whose error code is `content_filter` to
+  `ContentFilterError`, its provider details built the way `_check_azure_content_filter` builds them, so the sentence names
+  the categories as for a filtered response (UE-26).
+- **Upstream state:** present in 2.63.0. The ask is that `_check_azure_content_filter` run for any provider when the 400 body
+  carries Azure's `content_filter` error, or that `AzureProvider` accept an `AsyncOpenAI` client on the v1 endpoint, Entra
+  token provider included.
+- **Issue:** not filed.
+- **Repro:** an `OpenAIResponsesModel` over `OpenAIProvider(openai_client=AsyncOpenAI(base_url=".../openai/v1/", ...))`,
+  whose transport answers HTTP 400 with `{"error": {"code": "content_filter", "innererror": {"content_filter_result":
+  {"self_harm": {"filtered": true, "severity": "medium"}}}}}`, raises `ModelRequestRejectedError`, where the same body
+  through `AzureProvider` returns a `content_filter` response.
 
 ## Upstream changes that required adaptation (not bugs)
 
