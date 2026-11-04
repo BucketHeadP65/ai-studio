@@ -646,3 +646,16 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `ContinuationRefused` failure: the run fails rather than pausing, and a retry of the same attempt is refused too,
   because the attempt began and never settled. Nothing was moved forward, unlike the 2.60 `retry` field: the in-process
   engine never reads a checkpoint, and the restart guard in the entry above is required.
+- **Messages dump three more fields** (pydantic-ai 2.64.0 to 2.66.0): `ModelResponse.model_id`, the id of the model the
+  agent sent the request to, `SystemPromptPart.context_id`, `null` by default, and `content_file_digests` on a tool
+  return whose content is not a scalar, which lists the files that content holds (the fix of GHSA-4cj4-hgwf-4hc4). A tool
+  return stored before 2.66 has no such list, and on load its content rebuilds only an HTTP or HTTPS file URL as a file.
+  Any other mapping shaped like a file stays a mapping. Message keys do not change, and the record stores a message
+  re-sent under 2.66 as a new form, once per message. A checkpoint committed before the upgrade digests differently
+  after it, with the same consequence on the Temporal engine as the entry above, so the same restart guard is required.
+  `CapabilityLoadDeltaPart` is a new request part. It records a capability loaded by code (`RunContext.load_capability`),
+  which no code here does, and a compaction that removes a `load_capability` exchange now records the load again as one,
+  where 0.63 wrote a call and return the model never made. The chat agent's history can therefore hold it after a
+  compaction, the capability stays loaded as before, and `message_key` keys the part by its position. `json-repair` left
+  the core, engram, studio and connectors locks, since only `Coder` and `RepairToolArguments` need it now, and the harness
+  keeps it through the `coder` extra.

@@ -126,7 +126,7 @@ sessions own the other workflows in a template.
 
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes
-installed) and `core[workflows-temporal]` (path sources), and `pydantic-ai-harness` from PyPI (`>=0.63.0`, versioned with pydantic-ai, 0.63 with 2.63). Every agent that holds
+installed) and `core[workflows-temporal]` (path sources), and `pydantic-ai-harness` from PyPI (`>=0.66.0`, versioned with pydantic-ai, 0.66 with 2.66). Every agent that holds
 a shell, file tools or skills runs in a `LocalWorkspace` (harness ADR 0023). A change in
 any of them must keep this app green. `docker-compose.yml` here brings up the Temporal dev server only.
 
