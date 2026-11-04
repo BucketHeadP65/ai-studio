@@ -38,6 +38,19 @@ def test_a_query_becomes_a_case_whose_gold_ids_are_its_relevant_documents(tmp_pa
     assert (report.cases, report.skipped) == (1, 0)
 
 
+def test_a_question_holding_unicode_line_separators_is_one_query(tmp_path: Path) -> None:
+    """A JSON line may hold U+2028, U+2029 or U+0085 unescaped inside a string, so only a newline ends a query."""
+    question = "Does one\u2028two\u2029three\x85four hold?"
+    source = tmp_path / "judgments.test.jsonl"
+    line = json.dumps({"query_id": "q1", "question": question, "judgments": {"d1": 1}}, ensure_ascii=False)
+    source.write_text(line + "\n", encoding="utf-8")
+
+    report = import_judgments(source, tmp_path / "out.yaml")
+
+    assert (report.cases, report.skipped) == (1, 0)
+    assert [case.name for case in load_dataset(tmp_path / "out.yaml").cases] == ["q1"]
+
+
 def test_a_query_with_no_relevant_document_is_skipped_and_counted(tmp_path: Path) -> None:
     source = _jsonl(
         tmp_path,
