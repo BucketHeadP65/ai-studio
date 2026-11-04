@@ -108,3 +108,11 @@ async def test_the_mounted_instructions_send_a_proposed_spec_through_check_draft
     assert "check_draft" in text
     assert "spec_yaml" not in text
     assert "structured slots" not in text
+
+
+async def test_the_mounted_instructions_send_library_steps_through_check_drafts_uses(tmp_path: Path) -> None:
+    """A draft on library steps is checked with `uses`, never saved first to get past the check."""
+    voice = _process(tmp_path).get_instructions()
+    ctx: RunContext[Runtime] = RunContext(deps=a_runtime(), model=TestModel(), usage=RunUsage())
+
+    assert "Name library steps in `check_draft`'s `uses` while drafting." in voice(ctx)
