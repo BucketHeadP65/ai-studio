@@ -482,11 +482,13 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Found:** 2026-11-04, after the archived step view learned to draw a refused answer (`e76ba0c5`). The same step drawn
   live showed the answer and the retry with nothing between them.
 - **What we did:** the archived step view reads the recorded messages and draws each `retry-feedback` part as a refusal
-  (`stepConversationToUiMessages` in `studio-client/src/api/step-chat.ts`, `e76ba0c5`). The live step drawer still draws
-  the stream and shows no refusal. The planned workaround is that the drawer reads the step's recorded messages once the
-  step settles. No harness route serves a running workflow's step messages yet, so the workaround waits on one.
-- **Upstream state:** present in 2.63.0. The open pull request pydantic/pydantic-ai#11939 adds
-  `ModelResponseRejectedEvent`, a `HandleResponseEvent` member carrying the rejected response and its `RetryFeedbackPart`.
+  (`stepConversationToUiMessages` in `studio-client/src/api/step-chat.ts`, `e76ba0c5`). The live step drawer reads the
+  recording too, once the step settles: `GET /api/sessions/{id}/run/steps/{node}/messages` answers a running workflow's
+  step messages in the archive's shape (`9ae9afa0`), and the drawer draws them through the same conversion, keeping the
+  live messages on screen until they arrive. While the step executes, the drawer draws the stream and shows no refusal.
+- **Upstream state:** present in 2.63.0 and in 2.66.0 (the repro below gives the same events and chunks). The open pull
+  request pydantic/pydantic-ai#11939 adds `ModelResponseRejectedEvent`, a `HandleResponseEvent` member carrying the
+  rejected response and its `RetryFeedbackPart`.
   The Vercel AI adapter sends it as a `data-model-response-rejected` part, ends the rejected step and streams the retry in
   a new one. That part carries the cause, the attempt and the run step but not the feedback text, so a client still could
   not show the words the model was shown. The ask on top of it: put the feedback (`content`) in the data part, as

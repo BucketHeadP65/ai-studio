@@ -7,16 +7,18 @@ import { ApiError, createApiClient } from "@/shared/api/client";
 
 import { dataLines } from "./chat-stream";
 import { NEVER_ANSWERED } from "./sessions";
+import { MessagePayloadSchema } from "./sessions-types";
 import { STUDIO_API_URL } from "./studio-config";
 
 import type { MessagePart, MessagePayload } from "./sessions-types";
 import type { UIMessage } from "ai";
 
-// The step chat's own wire: a session-scoped listing of every open agentic-step line, a
-// replayable SSE tail of one line's Vercel v6 UI-message stream, and a steer POST. The stream
-// speaks the same protocol the session chat's own stream does (`pydantic_ai.ui.vercel_ai`,
-// sdk_version 6): each frame is already `data: `-framed by the encoder, closed by `data:
-// [DONE]`, plus the line's own `data-steer` frame carrying a person's mid-step words.
+// The step chat's own wire: a session-scoped listing of every open agentic-step line, one line's
+// recorded messages, a replayable SSE tail of one line's Vercel v6 UI-message stream, and a steer
+// POST. The stream speaks the same protocol the session chat's own stream does
+// (`pydantic_ai.ui.vercel_ai`, sdk_version 6): each frame is already `data: `-framed by the
+// encoder, closed by `data: [DONE]`, plus the line's own `data-steer` frame carrying a person's
+// mid-step words.
 
 export const StepLineSchema = z.object({
   node: z.string(),
@@ -27,6 +29,11 @@ export const StepLineSchema = z.object({
 export type StepLine = z.infer<typeof StepLineSchema>;
 
 const StepLinesSchema = z.object({ steps: z.array(StepLineSchema) });
+
+// One line's recorded messages, each pydantic-ai's own ModelMessage as the run archive files it.
+// Held as unknown here and parsed one message at a time, so a message this app cannot read is
+// dropped rather than failing the whole line.
+const StepMessagesSchema = z.object({ messages: z.array(z.unknown()) });
 
 const { request } = createApiClient({ baseUrl: STUDIO_API_URL });
 
@@ -53,6 +60,17 @@ export const stepChatApi = {
       `/api/sessions/${encodeURIComponent(sessionId)}/run/steps`,
       StepLinesSchema,
     ).then((result) => result.steps),
+
+  messages: (sessionId: string, node: string, item: string): Promise<MessagePayload[]> =>
+    request<z.infer<typeof StepMessagesSchema>>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/run/steps/${encodeURIComponent(node)}/messages?${new URLSearchParams({ item }).toString()}`,
+      StepMessagesSchema,
+    ).then((result) =>
+      result.messages.flatMap((message) => {
+        const candidate = MessagePayloadSchema.safeParse(message);
+        return candidate.success ? [candidate.data] : [];
+      }),
+    ),
 
   steer: async (sessionId: string, node: string, item: string, message: string): Promise<void> => {
     const params = new URLSearchParams({ item });

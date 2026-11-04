@@ -28,6 +28,11 @@ import type { UIMessage } from "ai";
 // node click on the run canvas -- a live run passes this session's own id, a selected archived
 // run passes its stored `conversations` instead, exactly one of the two ever set.
 //
+// A live line that has settled draws what it recorded, read from the line's messages route,
+// because the live stream carries nothing for a plain-text answer the step refused and asked
+// again. The live messages stay on screen until the recording arrives, and a line that runs
+// again goes back to the live stream until it settles once more.
+//
 // A node that ran more than once (a map's per-item lines) shows a picker first; picking a line
 // lands on that line's own conversation. `AssistantTurn`'s own fold drops reasoning parts (it
 // was built for the orchestrator's turns, which never carry any), so this drawer renders a
@@ -207,6 +212,30 @@ export function StepChatDrawer({
   const streamEnabled = sessionId !== null && open && effectiveItem !== null;
   const liveStream = useStepStream(sessionId ?? "", node.id, effectiveItem ?? "", streamEnabled);
 
+  // Every settle this drawer sees reads its own recording, keyed by its count, so a line that ran
+  // again never shows the recording of an earlier settle while the new one loads. A recording
+  // that changes with no settle seen in between (a turn shorter than the lines poll) still
+  // refetches, since its key sits under the "run" root every run frame invalidates.
+  const lineSettled = sessionId !== null && activeLine?.settled === true && !activeLine.executing;
+  const [settles, setSettles] = useState(0);
+  const [sawSettled, setSawSettled] = useState(false);
+  if (lineSettled !== sawSettled) {
+    setSawSettled(lineSettled);
+    if (lineSettled) {
+      setSettles((count) => count + 1);
+    }
+  }
+  const recording = useQuery({
+    queryKey: [...stepKeys.messages(sessionId ?? "", node.id, effectiveItem ?? ""), settles],
+    queryFn: () => stepChatApi.messages(sessionId ?? "", node.id, effectiveItem ?? ""),
+    enabled: open && lineSettled,
+  });
+  const recordedMessages = useMemo(
+    () => (recording.data === undefined ? null : stepConversationToUiMessages(recording.data)),
+    [recording.data],
+  );
+  const showRecording = lineSettled && recordedMessages !== null;
+
   const steer = useMutation({
     mutationFn: (text: string) => stepChatApi.steer(sessionId ?? "", node.id, effectiveItem ?? "", text),
     onError: (error: unknown) => {
@@ -222,8 +251,13 @@ export function StepChatDrawer({
         : [],
     [recordConversations, node.id, effectiveItem],
   );
-  const messages: UIMessage[] = sessionId !== null ? liveStream.messages : archivedMessages;
-  const streaming = sessionId !== null ? liveStream.streaming : false;
+  const messages: UIMessage[] =
+    sessionId === null
+      ? archivedMessages
+      : recordedMessages !== null && lineSettled
+        ? recordedMessages
+        : liveStream.messages;
+  const streaming = sessionId !== null && !showRecording && liveStream.streaming;
   const speaker = speakerFor(node.id, effectiveItem ?? "");
 
   // The composer's own state comes from the line's `executing` flag, never from the stream's
@@ -242,7 +276,7 @@ export function StepChatDrawer({
           ? steerError
           : FINISHED_NOTICE;
   const loadingLines = sessionId !== null && linesQuery.isPending;
-  const droppedBefore = sessionId !== null && liveStream.droppedBefore;
+  const droppedBefore = sessionId !== null && !showRecording && liveStream.droppedBefore;
 
   return (
     <Drawer open={open} title={`Step ${node.id}`} onClose={onClose}>

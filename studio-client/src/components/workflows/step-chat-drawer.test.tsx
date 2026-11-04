@@ -214,6 +214,189 @@ describe("StepChatDrawer, archived", () => {
   });
 });
 
+const REFUSAL = "Invalid JSON: expected value at line 1 column 1";
+
+// What the live stream carries for a step that answered in plain text, was refused and answered
+// again: the two answers back to back, with nothing for the refusal between them.
+const REFUSED_STREAM_CHUNKS = [
+  { type: "start" },
+  { type: "start-step" },
+  { type: "text-start", id: "t-1" },
+  { type: "text-delta", id: "t-1", delta: "Here is the report." },
+  { type: "text-end", id: "t-1" },
+  { type: "text-start", id: "t-2" },
+  { type: "text-delta", id: "t-2", delta: "The report, as asked." },
+  { type: "text-end", id: "t-2" },
+  { type: "finish" },
+];
+
+// How the drawer draws that stream: one turn whose two answers run together.
+const LIVE_RUN_TOGETHER = "Here is the report.The report, as asked.";
+
+// What the same step recorded: the brief, the plain-text answer, the refusal that answered no
+// call, and the answer it retried.
+const REFUSED_RECORDING: MessagePayload[] = [
+  { kind: "request", parts: [{ part_kind: "user-prompt", content: "write the report" }] },
+  { kind: "response", parts: [{ part_kind: "text", content: "Here is the report." }] },
+  {
+    kind: "request",
+    parts: [
+      {
+        part_kind: "retry-feedback",
+        content: [{ type: "json_invalid", loc: [], msg: REFUSAL, input: "Here is the report." }],
+        retry: { cause: "validation_error" },
+      },
+    ],
+  },
+  { kind: "response", parts: [{ part_kind: "text", content: "The report, as asked." }] },
+];
+
+// A stream that stays open after its chunks, as a live step's stream does until the run ends.
+function openStreamOf(node: string, chunks: Array<Record<string, unknown>>) {
+  return http.get(`${BASE}/api/sessions/s-1/run/steps/${node}/stream`, () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+      },
+    });
+    return new HttpResponse(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+  });
+}
+
+function linesOf(executing: boolean) {
+  return http.get(`${BASE}/api/sessions/s-1/run/steps`, () =>
+    HttpResponse.json({ steps: [{ node: "draft", item: "", executing, settled: !executing }] }),
+  );
+}
+
+describe("StepChatDrawer, live, once a line settles", () => {
+  it("draws the recorded refusal of a settled line, which the live stream does not carry", async () => {
+    let asked = "";
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, ({ request }) => {
+        asked = new URL(request.url).search;
+        return HttpResponse.json({ messages: REFUSED_RECORDING });
+      }),
+    );
+
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+
+    const refusalText = await screen.findByText(REFUSAL);
+    expect(within(refusalText.parentElement as HTMLElement).getByText("Refused")).toBeInTheDocument();
+    expect(screen.getByText("write the report")).toBeInTheDocument();
+    expect(asked).toBe("?item=");
+  });
+
+  it("keeps drawing the live stream for an executing line and reads no recording", async () => {
+    let read = false;
+    server.use(
+      linesOf(true),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, () => {
+        read = true;
+        return HttpResponse.json({ messages: REFUSED_RECORDING });
+      }),
+    );
+
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled());
+    expect(screen.queryByText("Refused")).not.toBeInTheDocument();
+    expect(read).toBe(false);
+  });
+
+  it("keeps the live messages on screen until the recorded ones arrive", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let asked = false;
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, async () => {
+        asked = true;
+        await held;
+        return HttpResponse.json({ messages: REFUSED_RECORDING });
+      }),
+    );
+
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    await waitFor(() => expect(asked).toBe(true));
+    expect(screen.getByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    expect(screen.queryByText("Refused")).not.toBeInTheDocument();
+    expect(screen.queryByText("No conversation recorded for this step.")).not.toBeInTheDocument();
+
+    release();
+
+    expect(await screen.findByText("Refused")).toBeInTheDocument();
+    expect(screen.getByText("Here is the report.")).toBeInTheDocument();
+    expect(screen.getByText("The report, as asked.")).toBeInTheDocument();
+    expect(screen.queryByText(LIVE_RUN_TOGETHER)).not.toBeInTheDocument();
+  });
+
+  it("goes back to the live stream while the line runs again, and draws the new recording once it settles", async () => {
+    let executing = false;
+    let settledAgain = false;
+    let readsAfterSettlingAgain = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const secondRecording: MessagePayload[] = [
+      ...REFUSED_RECORDING,
+      { kind: "request", parts: [{ part_kind: "user-prompt", content: "now the summary" }] },
+      { kind: "response", parts: [{ part_kind: "text", content: "The summary." }] },
+    ];
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps`, () =>
+        HttpResponse.json({ steps: [{ node: "draft", item: "", executing, settled: !executing }] }),
+      ),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, async () => {
+        if (!settledAgain) {
+          return HttpResponse.json({ messages: REFUSED_RECORDING });
+        }
+        readsAfterSettlingAgain += 1;
+        await held;
+        return HttpResponse.json({ messages: secondRecording });
+      }),
+    );
+
+    const { queryClient } = render(
+      <StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />,
+    );
+
+    expect(await screen.findByText("Refused")).toBeInTheDocument();
+
+    executing = true;
+    await queryClient.invalidateQueries({ queryKey: ["run"] });
+    await waitFor(() => expect(screen.queryByText("Refused")).not.toBeInTheDocument());
+    expect(screen.getByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+
+    settledAgain = true;
+    executing = false;
+    await queryClient.invalidateQueries({ queryKey: ["run"] });
+    await waitFor(() => expect(readsAfterSettlingAgain).toBe(1));
+    // The first recording is not drawn again while the second is on its way.
+    expect(screen.queryByText("Refused")).not.toBeInTheDocument();
+    expect(screen.getByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+
+    release();
+
+    expect(await screen.findByText("The summary.")).toBeInTheDocument();
+    expect(screen.getByText("Refused")).toBeInTheDocument();
+  });
+});
+
 describe("StepChatDrawer, live", () => {
   it("disables the composer with the finished notice when no line is executing", async () => {
     server.use(
@@ -221,6 +404,9 @@ describe("StepChatDrawer, live", () => {
         HttpResponse.json({ steps: [{ node: "draft", item: "", executing: false, settled: true }] }),
       ),
       emptyStreamOf("draft"),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, () =>
+        HttpResponse.json({ messages: [{ kind: "response", parts: [{ part_kind: "text", content: "Done." }] }] }),
+      ),
     );
 
     render(
