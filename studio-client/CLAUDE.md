@@ -16,7 +16,7 @@ description and applicability, the parameters, every step in execution order wit
 output schema as a field table, and what a run hands back). The inspection station lives at `/inspection`: the
 findings list (a count line, four selects, one row per finding with its blame surfaces as chips), each finding's page at
 `/inspection/{id}` (the judgment table, the evidence as a story with a detail pane, a drawer that draws one step of the
-run as the chat does, and the inspector's trace folded into one bar of calls with the composer at its end), and each
+run as the chat does, and the inspector's conversation drawn as the chat draws one with the composer at its end), and each
 run's overview at `/inspection/runs/{run}` (the timeline, its leads, findings, questions and jobs), see
 `harness/docs/reference/inspection.md`. It talks to the Studio's agent backend (the `harness` app, :8770) for chat, the workflow inspector, the projects
 station, the knowledge-bases station's terminal, and the harness station, and `studio serve-http` (the knowledge base API,

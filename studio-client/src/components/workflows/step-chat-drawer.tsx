@@ -15,8 +15,8 @@ import {
 import type { GraphNode } from "@/api/studio-types";
 import { AssistantTurn } from "@/components/chat/assistant-turn";
 import { Composer, useComposerDraft } from "@/components/chat/composer";
+import { ReasoningNote } from "@/components/chat/reasoning-note";
 import { ThinkingMark } from "@/components/chat/thinking-mark";
-import { AgentMarkdown } from "@/components/conversation/markdown";
 import { Drawer } from "@/shared/ui/drawer";
 
 import type { UIMessage } from "ai";
@@ -77,25 +77,6 @@ function textOf(message: UIMessage): string {
     .filter(isTextUIPart)
     .map((part) => part.text)
     .join("");
-}
-
-type ReasoningPart = Extract<UIMessage["parts"][number], { type: "reasoning" }>;
-
-function isReasoningPart(part: UIMessage["parts"][number]): part is ReasoningPart {
-  return part.type === "reasoning";
-}
-
-function ReasoningNote({ message }: { message: UIMessage }): ReactElement | null {
-  const reasoning = message.parts.filter(isReasoningPart);
-  if (reasoning.length === 0) return null;
-  return (
-    <div className="flex w-full flex-col gap-1 rounded-md border border-line bg-well px-3 py-2">
-      <p className="text-label-3 text-micro font-semibold uppercase tracking-caps">Thinking</p>
-      {reasoning.map((part, index) => (
-        <AgentMarkdown key={`${message.id}-reasoning-${index}`} text={part.text} />
-      ))}
-    </div>
-  );
 }
 
 function UserBubble({ text }: { text: string }): ReactElement {

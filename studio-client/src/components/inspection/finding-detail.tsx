@@ -5,9 +5,8 @@ import { type ReactElement, useState } from "react";
 
 import type { Finding, FindingDetail } from "@/api/inspection";
 import { inspectionApi } from "@/api/inspection";
-import { citesOf, plural, runLocator, sentence, spaced, spanStep } from "@/api/inspection-words";
+import { citesOf, plural, quotedPhrases, runLocator, sentence, spaced, spanStep } from "@/api/inspection-words";
 import { inspectionKeys } from "@/api/query-keys";
-import { quotedPhrases } from "@/api/tree-text";
 
 import { EvidenceStory } from "./evidence-story";
 import { FindingHeader } from "./finding-header";
@@ -143,7 +142,7 @@ export function FindingDetailView({ detail }: { detail: FindingDetail }): ReactE
         </div>
       </section>
 
-      <Trace finding={finding} draft={draft} onDraft={setDraft} focusRequest={challenges} spans={spans} />
+      <Trace finding={finding} draft={draft} onDraft={setDraft} focusRequest={challenges} />
 
       <StepDrawer runId={locator} step={readingStep} onClose={() => setReadingStep(null)} />
     </div>

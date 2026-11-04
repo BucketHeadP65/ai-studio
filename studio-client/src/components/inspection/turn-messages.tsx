@@ -5,11 +5,13 @@ import type { ConversationMessage } from "@/api/inspection";
 import { conversationPayloads } from "@/api/inspection";
 import { stepConversationToUiMessages } from "@/api/step-chat";
 import { AssistantTurn } from "@/components/chat/assistant-turn";
+import { ReasoningNote } from "@/components/chat/reasoning-note";
 
 import { Folded } from "./folded";
 
-// One step's messages, drawn exactly as the chat draws a turn: a user bubble folded past 12
-// lines, then an assistant bubble per run of response rows. Used by the step drawer.
+// Recorded messages drawn exactly as the chat draws a turn: a user bubble folded past 12 lines,
+// then an assistant bubble per run of response rows, its thinking ahead of it the way the step
+// chat draws a step's. Used by the step drawer and by the inspector's conversation.
 
 function textOf(message: UIMessage): string {
   return message.parts
@@ -29,7 +31,7 @@ function UserTurn({ message }: { message: UIMessage }): ReactElement {
   );
 }
 
-export function TurnMessages({ messages }: { messages: ConversationMessage[] }): ReactElement {
+export function TurnMessages({ messages, speaker }: { messages: ConversationMessage[]; speaker?: string }): ReactElement {
   const payloads = conversationPayloads(messages);
   return (
     <div className="flex flex-col gap-3">
@@ -37,7 +39,10 @@ export function TurnMessages({ messages }: { messages: ConversationMessage[] }):
         message.role === "user" ? (
           <UserTurn key={message.id} message={message} />
         ) : (
-          <AssistantTurn key={message.id} message={message} foldSettled={false} />
+          <div key={message.id} className="flex flex-col gap-2">
+            <ReasoningNote message={message} />
+            <AssistantTurn message={message} speaker={speaker} foldSettled={false} />
+          </div>
         ),
       )}
     </div>
