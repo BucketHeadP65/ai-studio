@@ -6,12 +6,20 @@ map turn both carry it, counted against the step's own limit, once a `run_code` 
 
 from __future__ import annotations
 
+from types import NoneType
 from typing import TYPE_CHECKING
+
+import pytest
 
 from core.ai.tool_call_limit import ToolCallLimitWarning
 from core.ai.workflows.contracts import Briefing, FromNode, FromParameter, MapNode, ParameterSpec, Shape, Workflow, prepare, run_workflow
 from core.ai.workflows.domain.vocabulary import Budget, SameAs
-from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, ToolCallPart, UserPromptPart
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, ToolCallPart, UserPromptPart
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.usage import UsageLimits
+from pydantic_ai_harness.code_mode import CodeMode
 
 from harness.adapters.environment import step_guards
 from harness.session import ActiveRun
@@ -46,8 +54,48 @@ def _warnings_seen(messages: Sequence[ModelMessage]) -> list[str]:
     return texts
 
 
-def test_step_guards_mount_the_tool_call_warning() -> None:
-    assert len([guard for guard in step_guards(24) if isinstance(guard, ToolCallLimitWarning)]) == 1
+def test_step_guards_mount_the_tool_call_warning_saying_whether_program_calls_count() -> None:
+    (plain,) = [guard for guard in step_guards(24) if isinstance(guard, ToolCallLimitWarning)]
+    (coded,) = [guard for guard in step_guards(24, counts_program_calls=True) if isinstance(guard, ToolCallLimitWarning)]
+
+    assert plain.counts_program_calls is False
+    assert coded.counts_program_calls is True
+
+
+@pytest.mark.parametrize(("second", "fits"), [(3, True), (4, False)])
+async def test_the_program_size_the_warning_names_fits_and_one_more_call_does_not(second: int, *, fits: bool) -> None:
+    seen: list[list[str]] = []
+    calls: list[str] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        del info
+        seen.append(_warnings_seen(messages))
+        if len(seen) == 1:
+            return ModelResponse(parts=[ToolCallPart("run_code", {"code": _searches(10)})])
+        if len(seen) == 2:
+            return ModelResponse(parts=[ToolCallPart("run_code", {"code": _searches(second)})])
+        return ModelResponse(parts=[TextPart("done")])
+
+    agent = Agent(FunctionModel(respond), deps_type=NoneType, capabilities=[CodeMode(), ToolCallLimitWarning[None](counts_program_calls=True)])
+
+    @agent.tool_plain
+    def search(query: str) -> str:
+        """Search once."""
+        calls.append(query)
+        return "hit"
+
+    limits = UsageLimits(request_limit=10, tool_calls_limit=15)
+    if fits:
+        result = await agent.run("go", usage_limits=limits)
+        assert result.usage.tool_calls == 15
+    else:
+        with pytest.raises(UsageLimitExceeded, match="tool_calls_limit of 15"):
+            await agent.run("go", usage_limits=limits)
+
+    (warning,) = seen[1]
+    assert "Tool calls: 11/15 used (73%), 4 remaining." in warning
+    assert "so a program may make at most 3 more calls." in warning
+    assert len(calls) == 10 + min(second, 3)
 
 
 async def test_a_briefings_program_calls_count_toward_its_tool_call_warning() -> None:
@@ -81,6 +129,7 @@ async def test_a_briefings_program_calls_count_toward_its_tool_call_warning() ->
     (warning,) = seen[1]
     assert "CRITICAL: The run's tool call limit is approaching." in warning
     assert "Tool calls: 9/10 used (90%), 1 remaining." in warning, "eight calls inside the program and the run_code call itself"
+    assert "so a program may make at most 0 more calls." in warning
 
 
 async def test_a_map_turns_program_calls_count_toward_its_tool_call_warning() -> None:
@@ -128,3 +177,4 @@ async def test_a_map_turns_program_calls_count_toward_its_tool_call_warning() ->
     (warning,) = seen[2]
     assert "URGENT: The run's tool call limit is approaching." in warning
     assert "Tool calls: 11/15 used (73%), 4 remaining." in warning, "ten calls inside the program and the run_code call itself"
+    assert "so a program may make at most 3 more calls." in warning

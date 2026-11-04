@@ -228,7 +228,7 @@ def step_shell() -> Shell[None]:
     )
 
 
-def step_guards(budget: int, *, direct_reads: tuple[str, ...] = ()) -> list[AbstractCapability[object]]:
+def step_guards(budget: int, *, counts_program_calls: bool = False, direct_reads: tuple[str, ...] = ()) -> list[AbstractCapability[object]]:
     """What every step gets besides its tools: a loop guard, the budget warnings and an output limit.
 
     The set takes `object` deps, so any agent this app spawns can hold it. The output limit spills only what the model
@@ -238,6 +238,8 @@ def step_guards(budget: int, *, direct_reads: tuple[str, ...] = ()) -> list[Abst
 
     Args:
         budget: The iteration budget the request warning counts toward.
+        counts_program_calls: Whether the step runs `CodeMode`, whose program calls count toward the tool-call limit. The
+            tool-call warning then says so and names how many more calls a program may make.
         direct_reads: The read tools whose returns reach the step's own transcript with no sandbox in between, as a
             agent step's reads do. Each is spilled above `ACT_OUTPUT_LIMIT`. A briefing, whose reads run inside the
             sandbox, passes none.
@@ -248,7 +250,7 @@ def step_guards(budget: int, *, direct_reads: tuple[str, ...] = ()) -> list[Abst
     return [
         LoopDetection(on_loop="nudge"),
         WarnNearLimits(max_iterations=budget),
-        ToolCallLimitWarning[object](),
+        ToolCallLimitWarning[object](counts_program_calls=counts_program_calls),
         ToolOutputLimits(
             bands=[Band(over=PROGRAM_OUTPUT_LIMIT, action=Spill(preview_chars=3_000, then=Truncate(max_chars=PROGRAM_OUTPUT_LIMIT)))],
             per_tool={

@@ -10,7 +10,7 @@ import pytest
 from pydantic_ai import Agent
 from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, TextPart, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import FunctionModel
-from pydantic_ai.usage import UsageLimits
+from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.ai.tool_call_limit import ToolCallLimitWarning
 
@@ -84,8 +84,8 @@ async def test_an_urgent_warning_follows_the_request_that_crossed_the_threshold(
     (warning,) = seen[1]
     assert "URGENT: The run's tool call limit is approaching." in warning
     assert "Tool calls: 14/20 used (70%), 6 remaining." in warning
-    assert "`run_code` program makes counts" in warning
-    assert "Finish the task with what you have" in warning
+    assert "Finish the task with what you have and make only the tool calls you need." in warning
+    assert "run_code" not in warning, "a run whose program calls are not said to count hears nothing of programs"
 
 
 async def test_a_critical_warning_near_the_end_of_the_limit() -> None:
@@ -104,9 +104,55 @@ async def test_each_request_sees_only_its_own_warning_and_the_history_keeps_each
     assert "14/20 used" in seen[1][0]
     assert len(seen[2]) == 1, "the earlier warning is no longer sent"
     assert "16/20 used" in seen[2][0]
+    assert "URGENT: " in seen[2][0], "four remaining of twenty is still URGENT"
     kept = [part for message in history if isinstance(message, ModelRequest) for part in message.parts if isinstance(part, SystemPromptPart)]
     assert [part.scope for part in kept] == ["request", "request"]
     assert ["14/20 used" in kept[0].content, "16/20 used" in kept[1].content] == [True, True]
+
+
+async def _first_warning(warning: ToolCallLimitWarning[None], *, used: int, limit: int) -> str:
+    """The warning the first request of a run carries when the run has already made `used` of `limit` tool calls."""
+    seen: list[list[str]] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        del info
+        seen.append(_warnings_seen(messages))
+        return ModelResponse(parts=[TextPart("done")])
+
+    agent = Agent(FunctionModel(respond), deps_type=NoneType, capabilities=[warning])
+    await agent.run("go", usage=RunUsage(tool_calls=used), usage_limits=UsageLimits(tool_calls_limit=limit))
+    (text,) = seen[0]
+    return text
+
+
+@pytest.mark.parametrize(
+    ("used", "limit", "severity"),
+    [
+        (16, 20, "URGENT"),
+        (17, 20, "CRITICAL"),
+        (143, 160, "URGENT"),
+        (144, 160, "CRITICAL"),
+    ],
+)
+async def test_critical_starts_at_the_larger_of_three_and_a_tenth_of_the_limit(used: int, limit: int, severity: str) -> None:
+    warning = await _first_warning(ToolCallLimitWarning[None](), used=used, limit=limit)
+
+    assert f"{severity}: The run's tool call limit is approaching." in warning
+
+
+@pytest.mark.parametrize(
+    ("used", "room"),
+    [
+        (14, "at most 5 more calls."),
+        (18, "at most 1 more call."),
+        (20, "at most 0 more calls."),
+    ],
+)
+async def test_a_run_whose_program_calls_count_hears_how_many_one_more_program_may_make(used: int, room: str) -> None:
+    warning = await _first_warning(ToolCallLimitWarning[None](counts_program_calls=True), used=used, limit=20)
+
+    assert "Each tool call a `run_code` program makes counts, and so does the `run_code` call itself, so a program may make " in warning
+    assert room in warning
 
 
 @pytest.mark.parametrize(
@@ -114,6 +160,7 @@ async def test_each_request_sees_only_its_own_warning_and_the_history_keeps_each
     [
         (lambda: ToolCallLimitWarning[None](warning_threshold=0), "warning_threshold must be between"),
         (lambda: ToolCallLimitWarning[None](critical_remaining_tool_calls=-1), "critical_remaining_tool_calls must be non-negative"),
+        (lambda: ToolCallLimitWarning[None](critical_remaining_share=1.5), "critical_remaining_share must be between"),
     ],
 )
 def test_a_setting_it_cannot_warn_by_is_refused(build: Callable[[], ToolCallLimitWarning[None]], message: str) -> None:

@@ -386,9 +386,10 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
 - **What:** before each model request, once the run's `RunUsage.tool_calls` reaches 70 percent of the run's own
   `UsageLimits.tool_calls_limit` (read from `RunContext.usage_limits`), the capability enqueues a request-scoped
   `SystemPromptPart`, the same part `WarnNearLimits` sends, so the cached prefix stays valid and a later request no
-  longer shows it. It is URGENT past the threshold and CRITICAL with three or
-  fewer calls left. It names the calls used, the limit and what remains, and says each call a `run_code` program makes
-  counts as well as the `run_code` call itself. `WarnNearLimits` warns on `iterations`, `context_window` and
+  longer shows it. It is URGENT past the threshold, and CRITICAL once the calls left are at most the larger of 3 and a
+  tenth of the limit. It names the calls used, the limit and what remains. With `counts_program_calls`, which the harness
+  sets on a step under `CodeMode`, it also says each call a `run_code` program makes counts as well as the `run_code`
+  call itself, and names how many more calls a program may make, one fewer than remain. `WarnNearLimits` warns on `iterations`, `context_window` and
   `total_tokens` only, so a code-mode step whose programs make dozens of calls per request reached its
   `tool_calls_limit` with no warning. Found when a judge step spent its 160 tool calls in a few requests, failed at call
   161 and its gate fell to a person. The warning arrives between requests, so one program that spends past the limit
