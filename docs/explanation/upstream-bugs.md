@@ -354,8 +354,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Library:** pydantic-ai-harness 0.63.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `validate_posix_pattern`,
   lines 22-29, called from `run_posix_search` at line 53. `filesystem/_toolset.py`, `_command_search_files`, which falls
   back to it at line 1385 when `rg` is missing).
-- **Symptom:** in a workspace with no `rg` on its `PATH`, `search_files(pattern="(?i)proposition")` fails with `This regex
-  requires ripgrep; POSIX grep does not support that syntax. Use literal=True or install rg.` `search_files` takes only
+- **Symptom:** in a workspace with no `rg` on its `PATH`, `search_files(pattern="(?i)proposition")` fails with a refusal that says
+  POSIX grep does not support that syntax and ends `Use literal=True or install rg.` `search_files` takes only
   `pattern`, `path` and `include_glob` (`_search_files_tool`, `_toolset.py:1184`). `literal` belongs to the opt-in `grep`
   tool (`_grep_tool`, `_toolset.py:1624`), which `FileSystem` does not register by default. A model that follows the
   advice calls `search_files` with an argument it refuses.
@@ -373,7 +373,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `grep -i`.
 - **Issue:** not filed.
 - **Repro:** a `FileSystem(root_dir=tree)` toolset's `search_files("(?i)x", workspace=LocalWorkspaceBackend(tree,
-  env={"PATH": "/usr/bin:/bin"}))` raises `ModelRetry` with the text above.
+  env={"PATH": "/usr/bin:/bin"}))` raises `ModelRetry` with that refusal.
 
 ## UB-15. Without `rg`, `search_files` fails the whole search on a tracked symlink to a folder
 

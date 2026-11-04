@@ -58,6 +58,8 @@ async def _search(root: Path, pattern: str, *, path: str) -> str:
 )
 async def test_without_rg_the_fallback_fails_both_searches(tree: Path, pattern: str, refusal: str) -> None:
     """The control: the tree reproduces both fallback defects, so the search below proves `rg` is what fixes them."""
+    if shutil.which("rg", path=_SYSTEM_PATH):
+        pytest.skip("a system rg sits on /usr/bin:/bin, so the fallback cannot be reached from here")
     with pytest.raises(ModelRetry, match=refusal):
         await _search(tree, pattern, path=_SYSTEM_PATH)
 
