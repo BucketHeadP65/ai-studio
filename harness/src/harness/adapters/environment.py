@@ -17,6 +17,7 @@ from itertools import count
 from typing import TYPE_CHECKING, Any
 
 from core.ai.format_maps.contracts import FileContentCache
+from core.ai.tool_call_limit import WarnNearToolCallLimit
 from core.ai.tool_output_limits import ToolOutputLimits
 from pydantic import TypeAdapter
 from pydantic_ai.capabilities import LocalWorkspace
@@ -227,25 +228,29 @@ def step_shell() -> Shell[None]:
     )
 
 
-def step_guards(budget: int, *, direct_reads: tuple[str, ...] = ()) -> list[AbstractCapability[object]]:
-    """What every step gets besides its tools: a loop guard, a budget warning and an output limit.
+def step_guards(budget: int, *, tool_calls: int | None = None, direct_reads: tuple[str, ...] = ()) -> list[AbstractCapability[object]]:
+    """What every step gets besides its tools: a loop guard, the budget warnings and an output limit.
 
     The set takes `object` deps, so any agent this app spawns can hold it. The output limit spills only what the model
     reads: the sandbox's own return, and each tool in `direct_reads`. A tool called inside the sandbox is never limited,
     so a program always receives the tool's real return.
 
     Args:
-        budget: The iteration budget the warning counts toward.
+        budget: The iteration budget the request warning counts toward.
+        tool_calls: The tool-call limit the run enforces, which the tool-call warning counts toward, the calls a
+            program makes included. `None` mounts no tool-call warning.
         direct_reads: The read tools whose returns reach the step's own transcript with no sandbox in between, as a
             agent step's reads do. Each is spilled above `ACT_OUTPUT_LIMIT`. A briefing, whose reads run inside the
             sandbox, passes none.
 
     Returns:
-        The loop guard, the budget warning and the output limit, in that order.
+        The loop guard, the request warning, the tool-call warning when `tool_calls` is set, and the output limit, in
+        that order.
     """
     return [
         LoopDetection(on_loop="nudge"),
         WarnNearLimits(max_iterations=budget),
+        *([WarnNearToolCallLimit[object](max_tool_calls=tool_calls)] if tool_calls is not None else []),
         ToolOutputLimits(
             bands=[Band(over=PROGRAM_OUTPUT_LIMIT, action=Spill(preview_chars=3_000, then=Truncate(max_chars=PROGRAM_OUTPUT_LIMIT)))],
             per_tool={
