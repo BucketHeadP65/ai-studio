@@ -1190,6 +1190,9 @@ durable run carries its mode in core's Temporal `RunRequest.gate_mode`, `"wait"`
 workflow may also author an `orchestrator-gate` node in the graph itself, naming its own review brief for this run's
 orchestrator to decide against. That gate is answered the same way under every one of the three modes. A run's
 `gate_mode` only changes what happens to a `PersonGate`, the one kind that would otherwise wait on a person.
+Whichever gate the orchestrator decides, its turn reads the charge, the gate id, the arguments the run was started with
+(a `collection` argument named as the knowledge base the run works in, from `ActiveRun.params`) and the whole value
+under review.
 
 A `judge` node is answered by an inline step rather than by a person or this run's orchestrator directly: its `work`
 names a step file whose typed output carries the verdict, and the step answers `approve`, `reject` with feedback, or

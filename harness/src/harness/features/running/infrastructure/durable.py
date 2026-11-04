@@ -239,6 +239,7 @@ async def launch(  # noqa: PLR0913 (the same flat contract `service.start` forwa
     )
     session.active.workflow_id = workflow_id
     session.active.run_title = run_title
+    session.active.params = dict(params)
     session.active.result = ""
     session.active.paused_by_restart = False
     session.active.progress.reset()

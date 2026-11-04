@@ -281,6 +281,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
     run_events.record(session.state, RunLaunched(run_id=run_id, workflow_id=requested.workflow_id))
     session.active.workflow_id = requested.workflow_id
     session.active.run_id = run_id
+    session.active.params = run_log.state.params
     session.active.result = ""
     session.active.stopping = False
     session.active.paused_by_restart = False
