@@ -146,10 +146,12 @@ function parseMessageId(id: string): { runId: string; idx: number } | null {
 export interface TurnInspectorProps {
   sessionId: string;
   message: UIMessage;
+  /** The message is the turn still streaming in, so its text rows close half-arrived markdown. */
+  live: boolean;
   onClose: () => void;
 }
 
-export function TurnInspector({ sessionId, message, onClose }: TurnInspectorProps): ReactElement {
+export function TurnInspector({ sessionId, message, live, onClose }: TurnInspectorProps): ReactElement {
   const queryClient = useQueryClient();
   const [viewer, setViewer] = useState<{
     title: string;
@@ -192,7 +194,7 @@ export function TurnInspector({ sessionId, message, onClose }: TurnInspectorProp
         {rows.length === 0 ? (
           <p className="text-label-3 text-caption">Nothing recorded for this turn.</p>
         ) : (
-          rows.map((row) => <InspectorRow key={row.key} row={row} onView={openViewer} />)
+          rows.map((row) => <InspectorRow key={row.key} row={row} live={live} onView={openViewer} />)
         )}
       </div>
       <TextViewer
@@ -246,9 +248,11 @@ function ToolBadge({ toolName, act }: { toolName: string; act: string }): ReactE
 
 function InspectorRow({
   row,
+  live,
   onView,
 }: {
   row: Row;
+  live: boolean;
   onView: (title: string, text: string, mode?: "markdown" | "plain") => void;
 }): ReactElement {
   switch (row.kind) {
@@ -262,7 +266,7 @@ function InspectorRow({
     case "text":
       return (
         <div className="rounded-md bg-well px-2.5 py-2 text-label-2 text-caption">
-          <AgentMarkdown text={row.text} />
+          <AgentMarkdown text={row.text} live={live} />
         </div>
       );
     case "thinking":

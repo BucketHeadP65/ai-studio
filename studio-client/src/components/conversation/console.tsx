@@ -144,7 +144,7 @@ export function Console({
             {thinking ? (
               <div className="max-w-[92%] self-start rounded-lg bg-well px-3 py-2 text-body text-label-2">
                 {liveText !== "" && !liveIsJson ? (
-                  <AgentMarkdown text={liveText} />
+                  <AgentMarkdown text={liveText} live />
                 ) : (
                   <span className="animate-pulse text-label-3">
                     {live?.act ?? (liveIsJson ? "writing the reply..." : "thinking...")}
@@ -203,7 +203,7 @@ function Bubble({ who, text }: { who: "you" | "agent"; text: string }) {
         who === "you" ? "self-end bg-accent-soft text-label-1" : "self-start bg-well text-label-2",
       )}
     >
-      {who === "agent" ? <AgentMarkdown text={text} /> : text}
+      {who === "agent" ? <AgentMarkdown text={text} live={false} /> : text}
     </div>
   );
 }

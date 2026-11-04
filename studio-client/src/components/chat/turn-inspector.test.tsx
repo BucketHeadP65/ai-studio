@@ -21,11 +21,11 @@ function seededQueryClient(sessionId: string, transcript: TranscriptMessage[]): 
 
 function renderInspector(
   queryClient: QueryClient,
-  props: { sessionId: string; message: UIMessage; onClose: () => void },
+  props: { sessionId: string; message: UIMessage; live?: boolean; onClose: () => void },
 ): ReactElement {
   return (
     <QueryClientProvider client={queryClient}>
-      <TurnInspector {...props} />
+      <TurnInspector live={false} {...props} />
     </QueryClientProvider>
   );
 }
