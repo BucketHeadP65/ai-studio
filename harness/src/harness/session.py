@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from datetime import datetime
     from pathlib import Path
 
-    from core.ai.workflows.contracts import OrchestratorDecider
+    from core.ai.workflows.contracts import OrchestratorDecider, WorkflowArguments
     from core.cqrs.contracts import TopicSink
     from pydantic_ai import Agent
     from pydantic_ai.capabilities import AbstractCapability
@@ -172,6 +172,10 @@ class ActiveRun:
     run_id: str | None = None
     """This run's own id, minted at launch and shared by its evidence and its archive record.
     `None` until the first launch into this slot mints one."""
+    params: WorkflowArguments = field(default_factory=dict)
+    """The arguments this run was started with, one JSON value per parameter name. Set at every
+    launch, never carried over from the last run in this slot. A gate this run's orchestrator decides
+    names them in its prompt."""
     result: str = ""
     progress: LiveProgress = field(default_factory=LiveProgress)
     values: dict[str, object] = field(default_factory=dict)

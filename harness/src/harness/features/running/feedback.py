@@ -3,13 +3,15 @@
 `settled_turn` tells the conversation how a background run ended (finished, failed, stopped or
 paused), as one turn of the session's own agent once the run is closed. `orchestrator_decider`
 decides a gate that names no person: a declared orchestrator gate, or a person gate the run's
-`gate_mode` converted. Both wait out a busy session rather than skip it. A gate's rejection reaches
-neither. The graph hands its words to the rerun.
+`gate_mode` converted. Its prompt names the knowledge base and the arguments the run was started
+with. Both wait out a busy session rather than skip it. A gate's rejection reaches neither. The
+graph hands its words to the rerun.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 
 from typing import TYPE_CHECKING
 
@@ -23,7 +25,7 @@ from harness.features.running.infrastructure import run_events
 from harness.rendering import render_for_review
 
 if TYPE_CHECKING:
-    from core.ai.workflows.contracts import OrchestratorDecider
+    from core.ai.workflows.contracts import OrchestratorDecider, WorkflowArguments
 
     from harness.session import PooledSessions, Runtime
 
@@ -114,9 +116,11 @@ def orchestrator_decider(session: Runtime, sessions: PooledSessions | None = Non
     """This session's own structured turn, which answers a gate that names no person.
 
     The decider runs one agent turn with `GateVerdict` as its output type, over the whole value
-    uncut. It records the decision in the run's log as the orchestrator's, never a person's, and
-    hands the graph the exact feedback for the rerun. It raises `OrchestratorUnavailableError` when
-    the session stays busy past the run's gate timeout.
+    uncut. The prompt carries the charge, the gate id and the arguments the session's run was
+    started with, a `collection` argument named as the knowledge base the run works in. It records
+    the decision in the run's log as the orchestrator's, never a person's, and hands the graph the
+    exact feedback for the rerun. It raises `OrchestratorUnavailableError` when the session stays
+    busy past the run's gate timeout.
 
     Args:
         session: The session whose own agent decides every gate this decider is asked.
@@ -128,7 +132,11 @@ def orchestrator_decider(session: Runtime, sessions: PooledSessions | None = Non
 
     async def decide(gate_id: str, charge: str, value: object, /) -> GateDecision:
         rendered = render_for_review(value, limit=None)
-        prompt = f"{charge}\n\nGate: {gate_id}\n\nWhat is under review:\n{rendered}"
+        sections = [charge, f"Gate: {gate_id}"]
+        if arguments := _run_arguments(session.active.params):
+            sections.append(arguments)
+        sections.append(f"What is under review:\n{rendered}")
+        prompt = "\n\n".join(sections)
         hold = await _turn_within_gate_timeout(session, gate_id, sessions)
         try:
             # `output_type=GateVerdict` drops the deferred marker, so a verb that asks a person
@@ -156,3 +164,15 @@ def orchestrator_decider(session: Runtime, sessions: PooledSessions | None = Non
         return GateDecision(approve=verdict.approve, feedback=verdict.feedback, source="orchestrator")
 
     return decide
+
+
+def _run_arguments(params: WorkflowArguments) -> str:
+    """The run's arguments in plain words, a `collection` argument first as its knowledge base, or `""` for none."""
+    collection = params.get("collection")
+    named = isinstance(collection, str) and collection != ""
+    others = {name: value for name, value in params.items() if not (named and name == "collection")}
+    lines = [f"This run works in the knowledge base `{collection}`."] if named else []
+    if others:
+        lines.append("Its other arguments:" if named else "This run's arguments:")
+        lines.extend(f"- {name}: {json.dumps(value, ensure_ascii=False)}" for name, value in others.items())
+    return "\n".join(lines)

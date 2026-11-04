@@ -20,6 +20,7 @@ from core.ai.workflows.contracts import (
     Briefing,
     FromNode,
     OrchestratorGate,
+    ParameterSpec,
     PersonGate,
     RunEvidence,
     RunNode,
@@ -256,6 +257,31 @@ async def test_the_decider_reads_the_whole_value_not_a_screen_preview(registry: 
     assert len(heard) == 1
     assert len(heard[0]) > 4_000
     assert heard[0].endswith(str(drafts))
+
+
+async def test_a_gate_reviewer_is_told_the_knowledge_base_and_arguments_of_its_run(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+    """A bare page id names no knowledge base, so the reviewer hears which one the run works in, and the rest of its arguments."""
+    records = records_under(tmp_path)
+    collection = ParameterSpec(description="The knowledge base to work in, by collection name.", json_schema={"type": "string"})
+    spec = _orchestrated(quarterly_report)
+    spec = spec.model_copy(update={"parameters": {**spec.parameters, "collection": collection}})
+    heard: list[str] = []
+
+    async def respond(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
+        del info
+        heard.append(_prompt_of(messages))
+        return _final_result(approve=True)
+
+    session, _pool = _session_with_decider(registry, FunctionModel(respond), tmp_path)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.orchestrated-kb", params={"quarter": "Q3", "collection": "research"})
+    task = session.active.task
+    assert task is not None
+    await task
+
+    assert len(heard) == 1
+    briefing, _, _ = heard[0].partition("What is under review:")
+    assert "This run works in the knowledge base `research`." in briefing
+    assert '- quarter: "Q3"' in briefing
 
 
 # --- orchestrate mode converts a person gate ----------------------------------------------

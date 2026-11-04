@@ -2,7 +2,7 @@
 
 The session log gets `RunLaunched`. The run's own event file gets `RunLaunched` and, when the run
 ends, `RunFinished`, whichever entry started the run and whichever engine runs it. A pause is not
-an ending, so it records no finish.
+an ending, so it records no finish. Every entry also leaves the run's arguments on the session.
 """
 
 from __future__ import annotations
@@ -162,3 +162,36 @@ async def test_a_durable_run_records_its_launch_and_its_finish(registry: StepReg
         RunLaunched(run_id="run-abc", workflow_id=WORKFLOW_ID),
         RunFinished(run_id="run-abc", workflow_id=WORKFLOW_ID, status="completed"),
     ]
+
+
+async def test_a_chat_run_leaves_its_arguments_on_the_session(registry: StepRegistry, tmp_path: Path) -> None:
+    session = _session(registry, FakeSessionLog(), tmp_path)
+    session.conversation.last_workflow = _one_node_spec(WORKFLOW_ID)
+
+    await run_workflow(_ctx(session), "draft", {"quarter": "Q2"}, run=_collaborators(session, tmp_path))
+    await _settled(session)
+
+    assert session.active.params == {"quarter": "Q2"}
+
+
+async def test_a_durable_run_leaves_its_arguments_on_the_session(registry: StepRegistry, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    async def _finished_client(_run: RunSettings) -> _FinishedClient:
+        return _FinishedClient()
+
+    monkeypatch.setattr(durable, "_client", _finished_client)
+    session = _session(registry, FakeSessionLog(), tmp_path)
+
+    await durable.launch(
+        session,
+        records=records_under(tmp_path),
+        topics=FakeBroadcaster(),
+        run=RunSettings(run_engine="temporal"),
+        spec=_one_node_spec(WORKFLOW_ID),
+        workflow_id=WORKFLOW_ID,
+        params={"quarter": "Q2"},
+    )
+    task = session.active.task
+    assert task is not None
+    await task
+
+    assert session.active.params == {"quarter": "Q2"}
