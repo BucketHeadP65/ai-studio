@@ -305,6 +305,12 @@ prints *"(no saved workflow matches. Plan fresh instead of forcing a bad fit)"* 
 empty result. A step search answers its own empty case, *"(no reusable step matches. Plan
 fresh instead of forcing a bad fit)"*, so a search for one kind never reports on the other.
 
+With an evidence log on the port, each card carries an `earned:` line, and a fetch carries the same
+line in its summary. Both count `history_for` on the content address of the workflow the card's id
+holds now (I2), so a card and its fetch never state two trusts for one workflow. Runs of other
+content filed under the same id count for nothing. The card's line costs one host fetch per card, and
+a card whose workflow cannot be read carries no line rather than a guessed one.
+
 A host whose search tool fails is a distinct answer from a host with nothing to offer.
 `_search` catches the host failure and returns a string beginning `STORE SEARCH
 UNAVAILABLE`, explicitly saying *"This is NOT 'nothing matched'"*. An unchecked library is

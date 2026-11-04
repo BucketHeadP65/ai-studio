@@ -302,7 +302,8 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
     """The evidence log beside this library, if it has one.
 
     When set, search hits and fetches show the model what each workflow has earned, derived by
-    `trust_level` on every read and never stored. `None` shows no trust line at all."""
+    `trust_level` over the runs of its exact content on every read and never stored. A search then
+    reads each hit's workflow through the host's fetch tool. `None` shows no trust line at all."""
     save_requires_approval: bool = False
     """Mark the save tool as requiring approval, for hosts whose protocol can ask.
 
@@ -476,8 +477,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             fallback = await self._catalog_fallback(ctx)
             if fallback is not None:
                 return fallback
-        earned = {card.id: line for card in kept if (line := await self._earned_line(card.id)) is not None}
-        return render_cards(kept, earned=earned)
+        return render_cards(kept, earned=await self._earned_lines(ctx, kept))
 
     async def _catalog_fallback(self, ctx: RunContext[AgentDepsT]) -> str | None:
         """Up to ten saved workflows listed after a search by word found nothing, or None without a catalog tool."""
@@ -503,23 +503,33 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         if not catalog:
             return render_cards(catalog)  # nothing matched by word, and the library itself is empty
         total = self.vocabulary.catalog_total(raw) if self.vocabulary.catalog_total is not None else None
-        earned = {card.id: line for card in catalog if (line := await self._earned_line(card.id)) is not None}
         return "\n".join(
             (
                 _catalog_header(total, len(catalog)),
-                render_cards(catalog, earned=earned, applicability=False),
+                render_cards(catalog, earned=await self._earned_lines(ctx, catalog), applicability=False),
                 "Narrow with words from the request, or fetch one by id with fetch_workflow.",
             )
         )
 
-    async def _earned_line(self, workflow_id: str, workflow: Workflow | None = None) -> str | None:
-        """One trust line for this workflow, by content address when `workflow` is given, or None without an evidence log."""
+    async def _earned_lines(self, ctx: RunContext[AgentDepsT], cards: Sequence[SavedWorkflow]) -> dict[str, str]:
+        """Each card's trust line, counted by the workflow its id holds now. A card whose workflow cannot be read has none."""
+        if self.evidence_log is None:
+            return {}
+        earned: dict[str, str] = {}
+        for card in cards:
+            try:
+                workflow = await self.workflow_for(ctx, card.id)
+            except (ModelRetry, LibraryError, ValueError, KeyError, TypeError):
+                continue
+            if (line := await self._earned_line(workflow)) is not None:
+                earned[card.id] = line
+        return earned
+
+    async def _earned_line(self, workflow: Workflow) -> str | None:
+        """One trust line for this workflow, counted by its content address, or None without an evidence log."""
         if self.evidence_log is None:
             return None
-        if workflow is not None:
-            record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
-        else:
-            record = trust_level(await self.evidence_log.events_for(workflow_id))
+        record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
         failed = f", {record.failed_runs} failed" if record.failed_runs else ""
         grades = f", {record.structural_grades} structural grades, mean {record.structural_mean:.3f}" if record.structural_mean is not None else ""
         return f"{record.level}, {record.runs_with_evidence} runs with evidence{failed}{grades}"
@@ -872,7 +882,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         fit, fits_here = self._fit(works, brought=brought, stale=bool(staleness))
         if staleness:
             fit = f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. {fit}"
-        earned = await self._earned_line(workflow_id, workflow)
+        earned = await self._earned_line(workflow)
         return FetchedWorkflow(
             summary=(
                 f"{workflow.name} v{workflow.version}: {workflow.description}\n"
