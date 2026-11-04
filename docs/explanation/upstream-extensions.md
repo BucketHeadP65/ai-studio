@@ -207,9 +207,10 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   pydantic/pydantic-ai-harness repository, taken before that pull request closed.
 - **Since:** 2026-08-01, the repository's first commit.
 - **Upstream candidate:** already proposed upstream. Pull request #336 closed unmerged on 2026-09-28, when
-  pydantic-ai-harness moved into the pydantic-ai repository. The idea continues as pydantic/pydantic-ai#9008 ("Add a
-  `DetectLoops` capability to interrupt repeated-action loops"), with #336 linked as its reference implementation.
-  Replace this copy with `DetectLoops` once a release ships it.
+  pydantic-ai-harness moved into the pydantic-ai repository. The idea continued as pydantic/pydantic-ai#9008 ("Add a
+  `DetectLoops` capability to interrupt repeated-action loops"), with #336 linked as its reference implementation, and
+  shipped as `pydantic_ai_harness.DetectLoops` in pydantic-ai-harness 0.63.0 (pydantic/pydantic-ai#11471). Replacing this
+  copy with `DetectLoops` is open work.
 
 ### UE-17. `PathGuardedShell` (core): a shell that refuses a command naming a denied path
 
@@ -217,7 +218,7 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   guard, while `FileSystem` refuses paths by `denied_patterns`. This capability wraps a `Shell`'s toolset and refuses a
   `run_command`, `start_command` or `shell` call whose command names a path matching a denied pattern, before the command runs.
   A named path is every word, the part of a word after an `=`, and every file a glob word matches, read from the run's
-  workspace working directory at call time (`Shell.cwd` is ignored by pydantic-ai-harness 0.52), with links followed and matched the way `FileSystem` matches. The authoring agent's and each delegate's shell mount pass it
+  workspace working directory at call time (`Shell.cwd` is ignored by pydantic-ai-harness 0.52 to 0.66), with links followed and matched the way `FileSystem` matches. The authoring agent's and each delegate's shell mount pass it
   the list of the files plugin beside them.
 - **Where:** `core/src/core/ai/shell.py`, tests in `core/tests/unit/test_path_guarded_shell.py`.
 - **Since:** 2026-09-30.

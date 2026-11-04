@@ -83,9 +83,12 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   run_code`).
 - **What we did:** nothing in code yet. The digest brief tells the agent to fix exactly the named field on a refusal, and the
   refusals now name the registered values, which shortens the loop when the text does come through.
-- **Upstream state:** unknown. The ask would be a serializable exception payload for any exception a hosted tool raises, or a
-  documented limit on the exception text. The pydantic-ai 2.51.0 move left the Monty runtime at 0.0.21, so nothing here changed.
-- **Issue:** not filed.
+- **Upstream state:** fixed in pydantic-monty 0.0.22, most likely, as the same bug as UB-6. The worker's answer is the one
+  pydantic/monty#631 reports, and #631's trigger is any exception raised inside a call written across lines with its closing
+  parenthesis left of the callee. A `write_note(...)` call with one argument per line is that shape. The fix,
+  pydantic/monty#714, shipped in 0.0.22, and #631's repro returns the exception on Monty 1.4.0 (checked 2026-11-05). The
+  refusal itself was not replayed.
+- **Issue:** pydantic/monty#631, filed by others, closed by pydantic/monty#714. Nothing to file.
 
 ## UB-4. An output-validation retry reaches the model as if the person had sent it
 
@@ -163,25 +166,27 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   pydantic-ai reports `Code execution failed and the session was reset`, and the model loses every name it had bound in the
   session. A 300-character program with only tool calls also crashed the worker once (`The code crashed the sandbox worker`)
   with no payload at all.
-- **Cause:** not isolated. The two reproducible cases were 6374- and 6895-character programs whose syntax error sat inside a
-  multi-line string. The runtime's exception serializer builds a `StackFrame` whose end column precedes its start column, which
-  the protocol layer refuses instead of the syntax error reaching the model. Sibling of UB-3 (same serializer, a different bad
-  payload).
+- **Cause:** the two reproducible cases were 6374- and 6895-character programs whose syntax error sat inside a multi-line
+  string. The host side of Monty's worker protocol compared a `StackFrame`'s end column with its start column even when the
+  frame spans lines, so it refused the frame of any error whose span ends on a later line left of where it starts, and the
+  error never reached the model (pydantic/monty#631). The length of the program did not matter. Same bug as UB-3, most likely.
 - **Found:** 2026-08-30, the studio orchestrator adapting `wf.research-compound.v5` inside `run_code` (logfire, 23:38:52Z and
   23:39:26Z, span `execute_tool run_code`), then hitting `run_code`'s three-retry ceiling. The 300-character crash was a digest
   worker at 22:39:57Z. Recurred 2026-08-31 (20:56:59Z and 20:57:43Z, same session): two programs carrying twelve edit ops as
   literals crashed the worker with `StackFrame.end.column: 2 is before start column 16`, each reset destroying the ops the model
   had built, and the turn again died at the retry ceiling.
-- **What we did:** the sandbox doctrine (`core/src/core/ai/sandbox.py`) now tells the agent to build data as Python literals, never to
-  paste prose or markdown into a program as code, and to keep any one program under a few thousand characters, naming the crash
-  as the reason. The digest brief says the same for pages. Nothing in the runtime. After the recurrence, `SandboxDiscipline`
-  also converts `run_code`'s retry ceiling into a result the model reads instead of an `UnexpectedModelBehavior` that ends the
-  turn, so a crash loop costs retries, not the conversation. It does so only for an agent whose answer a person reads (the
-  chat agent). A workflow step still fails at the ceiling, and the run's `on_error` decides.
-- **Upstream state:** unknown. The ask is the same as UB-3's: an exception payload that serializes for any exception the runtime
-  raises, syntax errors included, so a bad program costs one retry with the error in hand rather than a session reset. The
-  pydantic-ai 2.51.0 move left the Monty runtime at 0.0.21.
-- **Issue:** not filed.
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) told the agent to build data as
+  Python literals, never to paste prose or markdown into a program as code, and to keep any one program under a few thousand
+  characters, naming the crash as the reason. The digest brief says the same for pages. Nothing in the runtime. After the
+  recurrence, `SandboxDiscipline` also converts `run_code`'s retry ceiling into a result the model reads instead of an
+  `UnexpectedModelBehavior` that ends the turn, so a crash loop costs retries, not the conversation. It does so only for an
+  agent whose answer a person reads (the chat agent). A workflow step still fails at the ceiling, and the run's `on_error`
+  decides. Since the fix below, the dialect no longer asks for short programs. The rule on literals and the retry ceiling
+  conversion stay.
+- **Upstream state:** fixed in pydantic-monty 0.0.22 (pydantic/monty#714, closing #631). On Monty 1.4.0, #631's repro and
+  syntax errors inside multi-line strings, brackets and continuations each come back as a `MontyRuntimeError` or
+  `MontySyntaxError` (checked 2026-11-05). #631 does not explain the 300-character crash with no payload.
+- **Issue:** pydantic/monty#631, filed by others, closed by pydantic/monty#714. Nothing to file.
 
 ## UB-7. A `run_code` result no serializer knows ends the whole run instead of reaching the model
 
@@ -221,8 +226,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   silently did nothing.
 - **What we did:** the failure is caught inside the block and carried out as a value, and the caller raises its own error after
   the block has exited (`_run_blind` in `engram/src/engram/evals/harness/service.py`).
-- **Upstream state:** still present in 2.51.0, reproduced with the repro below on 2.36.0 and 2.51.0 (2026-09-27). The ask is that `_extract_error` only unwrap the transform it was written for
-  and leave an exception the caller raised itself alone.
+- **Upstream state:** still present in 2.66.0, reproduced with the repro below on 2.36.0, 2.51.0 (2026-09-27) and 2.66.0
+  (2026-11-05), where `_extract_error` sits at lines 5112-5115 of `pydantic_ai/agent/__init__.py`. The ask is that
+  `_extract_error` only unwrap the transform it was written for and leave an exception the caller raised itself alone.
 - **Issue:** not filed.
 - **Repro:** run an agent over a `FunctionModel` whose function raises `UnexpectedModelBehavior`. Inside
   `async with agent.iter(prompt) as run`, catch `AgentRunError` around `async for _ in run` and raise `RuntimeError("converted")`.
@@ -247,8 +253,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** a chat run's delivery task is on the session (`session.active.delivery`), and those tests await it, so no
   outcome turn is cancelled mid-flight (`harness/tests/unit/test_chat_run_visibility.py`, `test_run_launch_events.py`,
   `test_restore_every_session.py`). Production shutdown is unchanged.
-- **Upstream state:** present in 2.60.0, and `gather` is unchanged in 2.63.0. The ask is that `gather` close every coroutine it
-  never started.
+- **Upstream state:** present in 2.60.0 and 2.66.0, reproduced with the repro below on 2.66.0 (2026-11-05). In 2.66.0
+  `gather` sits at lines 299-332 and awaits a single coroutine directly, and its path for two or more is unchanged. The ask
+  is that `gather` close every coroutine it never started.
 - **Issue:** not filed.
 - **Repro:** create two job coroutines, wrap `pydantic_ai._utils.gather(*jobs)` in a task, cancel it before it first runs, and
   collect garbage: two "coroutine 'job' was never awaited" warnings. The same with `asyncio.gather` gives none.
@@ -269,8 +276,9 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Found:** 2026-10-30, Task 49, the harness unit tier on 2.63: 53 warnings, all from `harness.features.authoring.wire`.
 - **What we did:** `messages_of` drops every client message's metadata before `sanitize_messages`, so nothing reserved is left
   to drop (`34e13af`).
-- **Upstream state:** present in 2.63.0. The ask is that `sanitize_messages` keep or silently drop the UI message id that
-  `load_messages` wrote, or that the three helpers be public.
+- **Upstream state:** present in 2.63.0 and 2.66.0, reproduced with the repro below on 2.66.0 (2026-11-05). The ask is
+  that `sanitize_messages` keep or silently drop the UI message id that `load_messages` wrote, or that the three helpers be
+  public.
 - **Issue:** not filed.
 - **Repro:** `sanitize_messages(VercelAIAdapter.load_messages([UIMessage(id="m-1", role="user", parts=[TextUIPart(text="hi")])]))`
   under `warnings.simplefilter("error")` raises the `UserWarning` above.
@@ -289,7 +297,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Grade:** a narrow race, present before 0.61 too, when nothing took a lock.
 - **Found:** 2026-10-30, Task 49 review, adapting `FileCustomCapabilities` to 0.61.
 - **What we did:** nothing in code. `write` lands the entry disabled right after the store's `write` (`34e13af`).
-- **Upstream state:** present in 0.63.0. The ask is a landing status on `CapabilityStore.write` (for example
+- **Upstream state:** present in 0.63.0 and 0.66.0: `write` (line 120) takes no status, and `_directory_lock` (line 50) is
+  still private (checked 2026-11-05). The ask is a landing status on `CapabilityStore.write` (for example
   `write(name, code, status='disabled')`), or a public directory lock a subclass can hold around its own manifest writes.
 - **Issue:** not filed.
 
@@ -322,8 +331,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   streamed, is now handed back with its parts removed, so the agent records its usage and history like any other
   response's and raises `ContentFilterError` itself, and `content_filter_message` reads the category sentence back from
   the error's body.
-- **Upstream state:** present in 2.63.0. The open pull request pydantic-ai#12039 makes `ModelFallback` fall back on a
-  refusal with text, but leaves the default and the message as they are. The ask is that a `content_filter` response never
+- **Upstream state:** present in 2.63.0 and 2.66.0, reproduced with the repro below on 2.66.0 (2026-11-05). pydantic-ai#12039,
+  merged in 2.65.0, makes `ModelFallback` fall back on a refusal with text and leaves the default as it is. Since 2.65.0
+  (pydantic-ai#12036) the message also carries the refusal text a provider sends beside its finish reason, still no filter
+  category, and `OpenAIResponsesModel` still reads `content_filters` only from a refused prompt's HTTP 400. The ask is that a `content_filter` response never
   be retried as output (raise `ContentFilterError`, or at least send no output retry for it), that `OpenAIResponsesModel`
   keep Azure's `content_filters` in the provider details by default, and that `ContentFilterError` name the flagged
   categories when the provider details hold them.
@@ -335,7 +346,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-13. Monty's `json.dumps` refuses `default=`
 
-- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.63.0's `CodeMode` (`run_code`).
+- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`).
 - **Symptom:** `json.dumps(value, default=str)` in a program fails with `TypeError: JSONEncoder.__init__() got an
   unexpected keyword argument 'default'`. `indent=` works. `run_code`'s description lists `json` among the importable
   modules with no caveat, so a model writes the CPython call it knows and spends a retry on it.
@@ -347,9 +358,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   called `json.dumps(..., default=str)` and was refused.
 - **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says `json.dumps` takes no
   `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
-- **Upstream state:** present in pydantic-monty 1.4.0. The ask is that `json.dumps` accept `default=` as CPython does, or
-  that `run_code`'s description name the `json` keywords Monty leaves out.
-- **Issue:** not filed.
+- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repro below (2026-11-05). pydantic/monty#1171,
+  which adds `default=` to `json.dumps` and `json.dump`, merged on 2026-10-29, after 1.4.0, and no release carries it yet.
+  The dialect's sentence stays until a release does.
+- **Issue:** pydantic/monty#739, filed by others, open. Nothing to file.
 - **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
   `session.feed_run('import json\njson.dumps({"a": 1}, default=str)')` raises `MontyRuntimeError: TypeError:
   JSONEncoder.__init__() got an unexpected keyword argument 'default'`. The same call with `indent=1` in place of
@@ -357,13 +369,13 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-14. Without `rg`, `search_files` refuses an inline regex flag and advises an argument it does not take
 
-- **Library:** pydantic-ai-harness 0.63.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `validate_posix_pattern`,
+- **Library:** pydantic-ai-harness 0.63.0 to 0.66.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `validate_posix_pattern`,
   lines 22-29, called from `run_posix_search` at line 53. `filesystem/_toolset.py`, `_command_search_files`, which falls
-  back to it at line 1385 when `rg` is missing).
+  back to it at line 1402 when `rg` is missing). Line numbers are 0.66.0's.
 - **Symptom:** in a workspace with no `rg` on its `PATH`, `search_files(pattern="(?i)proposition")` fails with a refusal that says
   POSIX grep does not support that syntax and ends `Use literal=True or install rg.` `search_files` takes only
-  `pattern`, `path` and `include_glob` (`_search_files_tool`, `_toolset.py:1184`). `literal` belongs to the opt-in `grep`
-  tool (`_grep_tool`, `_toolset.py:1624`), which `FileSystem` does not register by default. A model that follows the
+  `pattern`, `path` and `include_glob` (`_search_files_tool`, `_toolset.py:1201`). `literal` belongs to the opt-in `grep`
+  tool (`_grep_tool`, `_toolset.py:1641`), which `FileSystem` does not register by default. A model that follows the
   advice calls `search_files` with an argument it refuses.
 - **Cause:** the fallback runs `grep -E`, which has no inline flags, `\d`, `\w` or lazy quantifiers, so the check refuses
   them. The refusal text is shared by both tools and written for `grep`'s arguments.
@@ -374,7 +386,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** the harness depends on pydantic-ai-harness's `coder` extra, which installs `rg` (ripgrep 14.1.0) into
   its environment, so `rg` is on the `PATH` every workspace inherits under `uv run` and the fallback never runs there.
   `harness/tests/unit/test_file_search.py` holds the control and the fix.
-- **Upstream state:** present in 0.63.0. The ask is that the refusal name only what the calling tool takes (for
+- **Upstream state:** present in 0.63.0 and 0.66.0: the control in `test_file_search.py` passes on 0.66.0 (2026-11-05).
+  The ask is that the refusal name only what the calling tool takes (for
   `search_files`, "rewrite it without the inline flag, or install rg"), or that the fallback translate `(?i)` into
   `grep -i`.
 - **Issue:** not filed.
@@ -383,7 +396,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-15. Without `rg`, `search_files` fails the whole search on a tracked symlink to a folder
 
-- **Library:** pydantic-ai-harness 0.63.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `run_posix_search`: the
+- **Library:** pydantic-ai-harness 0.63.0 to 0.66.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `run_posix_search`: the
   enumeration at lines 59-71, whose `git ls-files -co` is line 63, and the per-file `grep` at lines 93-97).
 - **Symptom:** in a git work tree that tracks a symlink to a folder, with no `rg` on the workspace's `PATH`, every
   `search_files` call whose path covers the symlink fails with `POSIX search failed: grep: skills/agent-threads: Is a
@@ -396,7 +409,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Grade:** costly. One symlink anywhere under the search path makes every content search there fail.
 - **Found:** the harness inspector's finding 30, confirmed 2026-11-04 on this repository's tree.
 - **What we did:** the same `coder` extra as UB-14, so the harness searches with `rg`. The same test file proves it.
-- **Upstream state:** present in 0.63.0. The ask is that the fallback skip a listed path that is not a regular file, as
+- **Upstream state:** present in 0.63.0 and 0.66.0: the control in `test_file_search.py` passes on 0.66.0 (2026-11-05).
+  The ask is that the fallback skip a listed path that is not a regular file, as
   `rg` does, for example by testing each listed path with `[ -f "$file" ]` before it greps it.
 - **Issue:** not filed.
 - **Repro:** in an empty folder, `mkdir real && echo x > real/a && ln -s real link && git init -q && git add -A`, then a
@@ -424,9 +438,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   the top of the agent's capabilities, beside the plugin's switch, and the mount reads the plugin's state itself.
   `harness/tests/unit/test_agent_mounts.py` (`TestMemoryReachesTheSandbox`) holds every memory function to `run_code`'s
   catalog.
-- **Upstream state:** present in 2.63.0 and 2.66.0. The ask is that `DynamicToolset.for_run` call `for_run` on the
-  toolset its factory returns, as the agent does for a toolset at the top.
-- **Issue:** not filed.
+- **Upstream state:** present in 2.63.0 and 2.66.0, reproduced with the repro below on 2.66.0 (2026-11-05). The open pull
+  request pydantic/pydantic-ai#11271 forwards `for_run` and `for_run_step` to the toolset the factory returns.
+- **Issue:** pydantic/pydantic-ai#11266, filed by others with the same root cause (a `PrefixTools` over a `Toolset`
+  factory inside a dynamic capability), open. Nothing to file.
 - **Repro:** `Agent(FunctionModel(answer), capabilities=[DynamicCapability(lambda _ctx: DynamicCapability(lambda _ctx:
   Toolset(FunctionToolset([ping])), id="inner"), id="outer")])` offers the model no tools, while the inner
   `DynamicCapability` alone offers `ping`. Patching `DynamicToolset.for_run` to call `for_run` on the toolset its factory
@@ -434,8 +449,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-17. A join finalized in the same pass as another join fires before that join's new task can feed it
 
-- **Library:** pydantic-graph 2.63.0 (`pydantic_graph/graph_builder.py`, `_GraphIterator`, the per-result loop at lines
-  726-740 and `_get_completed_fork_runs` at lines 994-1011).
+- **Library:** pydantic-graph 2.63.0 to 2.66.0 (`pydantic_graph/graph_builder.py`, `_GraphIterator`, in 2.66.0 the
+  per-result loop at lines 743-758 and `_get_completed_fork_runs` at lines 1011-1028).
 - **Symptom:** a node waiting on two producers starts with only one of them. In a stance refresh where `write_stances`
   waited on `list_changes` and on the rewrite judge, and the proposals waited on `write_stances`, `write_stances` started
   right after `merge_work`, before any rewrite ran, and failed with `KeyError('check_stances')`. In the plain graph below,
@@ -454,7 +469,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** the stance refresh avoids the shape. `write_stances` reads `merge_work` instead of `list_changes`.
   `merge_work` already sits upstream of the rewrite judge `write_stances` waits on, so no join of `write_stances` holds
   an item while `merge_work`'s join is finalized (`cafa27f9`).
-- **Upstream state:** open as pydantic/pydantic-ai#9629, fix in PR pydantic/pydantic-ai#10426 (not in 2.66.0). Checking
+- **Upstream state:** present in 2.66.0, whose per-result loop still takes one snapshot of the active tasks for every
+  join it finalizes (checked 2026-11-05). Open as pydantic/pydantic-ai#9629, fix in PR pydantic/pydantic-ai#10426. Checking
   each finalized join again against the live tasks plus the tasks this pass already dispatched, as the sweep does, fixes
   the graph below and the stance refresh shape.
 - **Issue:** pydantic/pydantic-ai#9629, filed by others with the same root cause. Nothing to file.
@@ -531,7 +547,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** `ContentFilterGuard` maps a `ModelHTTPError` with status 400 whose error code is `content_filter` to
   `ContentFilterError`, its provider details built the way `_check_azure_content_filter` builds them, so the sentence names
   the categories as for a filtered response (UE-26).
-- **Upstream state:** present in 2.63.0. The ask is that `_check_azure_content_filter` run for any provider when the 400 body
+- **Upstream state:** present in 2.63.0 and 2.66.0, whose `_is_azure` still checks only the system and the client type
+  (checked 2026-11-05). The ask is that `_check_azure_content_filter` run for any provider when the 400 body
   carries Azure's `content_filter` error, or that `AzureProvider` accept an `AsyncOpenAI` client on the v1 endpoint, Entra
   token provider included.
 - **Issue:** not filed.
