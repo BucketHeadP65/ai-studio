@@ -1,14 +1,14 @@
 """A step with a tool-call limit is warned as its calls near it, and a program's own calls count.
 
-The warning is core's `WarnNearToolCallLimit`. These tests pin that `step_guards` mounts it with the step's own limit,
-and that a briefing and a map turn both carry it once a `run_code` program has spent most of that limit.
+The warning is core's `ToolCallLimitWarning`. These tests pin that `step_guards` mounts it, and that a briefing and a
+map turn both carry it, counted against the step's own limit, once a `run_code` program has spent most of that limit.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.ai.tool_call_limit import WarnNearToolCallLimit
+from core.ai.tool_call_limit import ToolCallLimitWarning
 from core.ai.workflows.contracts import Briefing, FromNode, FromParameter, MapNode, ParameterSpec, Shape, Workflow, prepare, run_workflow
 from core.ai.workflows.domain.vocabulary import Budget, SameAs
 from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, ToolCallPart, UserPromptPart
@@ -46,11 +46,8 @@ def _warnings_seen(messages: Sequence[ModelMessage]) -> list[str]:
     return texts
 
 
-def test_step_guards_mount_the_tool_call_warning_with_the_steps_own_limit() -> None:
-    (warning,) = [guard for guard in step_guards(24, tool_calls=160) if isinstance(guard, WarnNearToolCallLimit)]
-
-    assert warning.max_tool_calls == 160
-    assert not [guard for guard in step_guards(24) if isinstance(guard, WarnNearToolCallLimit)], "no limit, no warning"
+def test_step_guards_mount_the_tool_call_warning() -> None:
+    assert len([guard for guard in step_guards(24) if isinstance(guard, ToolCallLimitWarning)]) == 1
 
 
 async def test_a_briefings_program_calls_count_toward_its_tool_call_warning() -> None:

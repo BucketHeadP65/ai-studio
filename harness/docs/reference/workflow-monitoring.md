@@ -354,7 +354,7 @@ number in its own first turn. In a code-mode step, `tool_calls` counts every cal
 the `run_code` call itself (pydantic-ai-harness 0.59.0 and later). A program's call that would cross it ends the step
 with `UsageLimitExceeded` in the middle of the program, and catching that inside the program does not help. A step
 whose budget names `tool_calls` is warned before each model request once its calls reach 70 percent of the limit
-(URGENT), and again with three or fewer left (CRITICAL). The warning (core's `WarnNearToolCallLimit`, mounted by
+(URGENT), and again with three or fewer left (CRITICAL). The warning (core's `ToolCallLimitWarning`, mounted by
 `step_guards`) names the calls used, the limit and what remains, and says a program's calls count. It reaches the model
 only between requests, so one program that spends past the limit still ends the step. The shipped template steps
 that search inside code mode carry doubled budgets for this: `check_adrs` 24, `draft_decision_brief` 28 and

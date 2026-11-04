@@ -12,7 +12,7 @@ from pydantic_ai.messages import ModelRequest, ModelResponse, SystemPromptPart, 
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import UsageLimits
 
-from core.ai.tool_call_limit import WarnNearToolCallLimit
+from core.ai.tool_call_limit import ToolCallLimitWarning
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -37,8 +37,8 @@ def _warnings_seen(messages: Sequence[ModelMessage]) -> list[str]:
     return texts
 
 
-async def _run(calls_per_request: Sequence[int], *, limit: int) -> tuple[list[list[str]], list[ModelMessage]]:
-    """Run an agent whose model makes the given parallel tool calls per request, then answers.
+async def _run(calls_per_request: Sequence[int], *, limit: int | None) -> tuple[list[list[str]], list[ModelMessage]]:
+    """Run an agent whose model makes the given parallel tool calls per request, then answers, under a tool-call limit.
 
     Returns the warnings each request carried, in request order, and the run's whole history.
     """
@@ -52,7 +52,7 @@ async def _run(calls_per_request: Sequence[int], *, limit: int) -> tuple[list[li
             return ModelResponse(parts=[ToolCallPart("look", {"n": n}, tool_call_id=f"c{index}-{n}") for n in range(calls_per_request[index])])
         return ModelResponse(parts=[TextPart("done")])
 
-    agent = Agent(FunctionModel(respond), deps_type=NoneType, capabilities=[WarnNearToolCallLimit[None](max_tool_calls=limit)])
+    agent = Agent(FunctionModel(respond), deps_type=NoneType, capabilities=[ToolCallLimitWarning[None]()])
 
     @agent.tool_plain
     def look(n: int) -> str:
@@ -65,6 +65,13 @@ async def _run(calls_per_request: Sequence[int], *, limit: int) -> tuple[list[li
 
 async def test_no_warning_below_seventy_percent_of_the_limit() -> None:
     seen, history = await _run([13], limit=20)
+
+    assert seen == [[], []]
+    assert _warnings_seen(history) == []
+
+
+async def test_a_run_without_a_tool_call_limit_is_never_warned() -> None:
+    seen, history = await _run([30], limit=None)
 
     assert seen == [[], []]
     assert _warnings_seen(history) == []
@@ -105,11 +112,10 @@ async def test_each_request_sees_only_its_own_warning_and_the_history_keeps_each
 @pytest.mark.parametrize(
     ("build", "message"),
     [
-        (lambda: WarnNearToolCallLimit[None](max_tool_calls=0), "max_tool_calls must be positive"),
-        (lambda: WarnNearToolCallLimit[None](max_tool_calls=10, warning_threshold=0), "warning_threshold must be between"),
-        (lambda: WarnNearToolCallLimit[None](max_tool_calls=10, critical_remaining_tool_calls=-1), "critical_remaining_tool_calls must be non-negative"),
+        (lambda: ToolCallLimitWarning[None](warning_threshold=0), "warning_threshold must be between"),
+        (lambda: ToolCallLimitWarning[None](critical_remaining_tool_calls=-1), "critical_remaining_tool_calls must be non-negative"),
     ],
 )
-def test_a_limit_it_cannot_warn_against_is_refused(build: Callable[[], WarnNearToolCallLimit[None]], message: str) -> None:
+def test_a_setting_it_cannot_warn_by_is_refused(build: Callable[[], ToolCallLimitWarning[None]], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         build()
