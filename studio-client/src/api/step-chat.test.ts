@@ -211,6 +211,26 @@ describe("stepConversationToUiMessages", () => {
     ]);
   });
 
+  it("reads arguments the model sent as a JSON string as the object they hold, as the live stream does", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-1", args: '{"step":0,"resource":"messages"}' },
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-2", args: "not json" },
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-3", args: "[1, 2]" },
+        ],
+      },
+    ]);
+
+    expect(messages[1]?.parts.slice(1).map((part) => ("input" in part ? part.input : null))).toEqual([
+      { step: 0, resource: "messages" },
+      "not json",
+      "[1, 2]",
+    ]);
+  });
+
   it("draws a call whose return asked for it again as an error carrying the refusal", () => {
     const messages = stepConversationToUiMessages([
       userPrompt("go"),

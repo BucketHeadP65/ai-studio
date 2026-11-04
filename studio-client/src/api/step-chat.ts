@@ -531,6 +531,20 @@ function errorItemText(item: unknown): string {
   return typeof item === "string" ? item : JSON.stringify(item);
 }
 
+// A call's arguments as the live stream carries them: a JSON string that holds an object reads as
+// that object, anything else stays as it was sent.
+function callInput(args: MessagePart["args"]): unknown {
+  if (typeof args !== "string") {
+    return args;
+  }
+  try {
+    const parsed: unknown = JSON.parse(args);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : args;
+  } catch {
+    return args;
+  }
+}
+
 function toolReturnTimestampsByCallId(messages: MessagePayload[]): Map<string, string> {
   const timestamps = new Map<string, string>();
   for (const payload of messages) {
@@ -600,7 +614,7 @@ function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, Mes
           type,
           toolCallId: part.tool_call_id,
           state: "output-error",
-          input: part.args,
+          input: callInput(part.args),
           errorText: refusalText(returned.content),
         });
       } else {
@@ -608,7 +622,7 @@ function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, Mes
           type,
           toolCallId: part.tool_call_id,
           state: "output-available",
-          input: part.args,
+          input: callInput(part.args),
           output: returned === undefined ? NEVER_ANSWERED : returned.content,
         });
       }
