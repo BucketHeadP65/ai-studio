@@ -16,7 +16,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.exceptions import ModelRetry, ToolRetryError, UnexpectedModelBehavior
 from pydantic_ai.tools import AgentDepsT
 
-from harness.domain.contracts import SANDBOX
+from core.ai.retrieval.contracts import RUN_CODE
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -107,7 +107,7 @@ class SandboxDiscipline(AbstractCapability[AgentDepsT]):
             Exception: Any other error, exactly as it arrived.
         """
         del ctx, call
-        if tool_def.name != SANDBOX:
+        if tool_def.name != RUN_CODE:
             return await handler(args)
         try:
             return await handler(args)

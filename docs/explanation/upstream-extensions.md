@@ -177,7 +177,7 @@ harness). Listed here because each is a behaviour the libraries do not ship. "Up
 `NoteOverlay` (owner notes), `Preferences`, `FrictionFlagging` (a friction flag logged from the model's own
 note), `Switched` (owner plugins that remove a capability's tools outright), `SandboxDiscipline`, `Corpus`, `WorkflowProcess`,
 `RuntimeVoiced`, and the self-authoring set (`AgentCreation`, `LeafCreation`, `ProfileCreation`, `ProfileVoice`). All in
-`harness/src/harness/` and `core/src/core/ai/voice.py`. Upstream candidates: no, they carry the product's own concepts. `Switched`
+`harness/src/harness/`, `core/src/core/ai/voice.py` and `core/src/core/ai/sandbox.py`. Upstream candidates: no, they carry the product's own concepts. `Switched`
 (an owner-controlled on/off plugin over any capability) is the one worth a second look later.
 
 ### UE-14. `BudgetedModel` (harness): admission before a request, exact settlement after it

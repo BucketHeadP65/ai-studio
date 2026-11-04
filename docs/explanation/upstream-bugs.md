@@ -170,7 +170,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   worker at 22:39:57Z. Recurred 2026-08-31 (20:56:59Z and 20:57:43Z, same session): two programs carrying twelve edit ops as
   literals crashed the worker with `StackFrame.end.column: 2 is before start column 16`, each reset destroying the ops the model
   had built, and the turn again died at the retry ceiling.
-- **What we did:** the sandbox doctrine (`harness/sandbox.py`) now tells the agent to build data as Python literals, never to
+- **What we did:** the sandbox doctrine (`core/src/core/ai/sandbox.py`) now tells the agent to build data as Python literals, never to
   paste prose or markdown into a program as code, and to keep any one program under a few thousand characters, naming the crash
   as the reason. The digest brief says the same for pages. Nothing in the runtime. After the recurrence, `SandboxDiscipline`
   also converts `run_code`'s retry ceiling into a result the model reads instead of an `UnexpectedModelBehavior` that ends the
@@ -339,7 +339,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   never needs `default=` to dump one.
 - **Found:** the harness inspector's finding 5, confirmed 2026-11-04 by a review of its findings: a chat model's program
   called `json.dumps(..., default=str)` and was refused.
-- **What we did:** the sandbox dialect (`harness/src/harness/sandbox.py`, `_DIALECT`) says `json.dumps` takes no
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT`) says `json.dumps` takes no
   `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
 - **Upstream state:** present in pydantic-monty 1.4.0. The ask is that `json.dumps` accept `default=` as CPython does, or
   that `run_code`'s description name the `json` keywords Monty leaves out.

@@ -18,6 +18,7 @@ from core.ai.empty_answer import EmptyAnswerRetry
 from core.ai.filesystem import UnnumberedFileSystem
 from core.ai.format_maps.contracts import FormatMaps, MappedTool, command_starts
 from core.ai.history.contracts import RequestParametersSink, recording_capabilities
+from core.ai.sandbox import SandboxDiscipline
 from core.ai.shell import PathGuardedShell
 from core.ai.tool_output_limits import ToolOutputLimits
 from core.ai.voice import RuntimeVoiced
@@ -80,7 +81,6 @@ from harness.features.selfauthoring.contracts import (
 )
 from harness.features.sessions.contracts import CompactionConfig, FrictionFlagging, ProjectConfig, project_config
 from harness.plugins import Switched
-from harness.sandbox import SandboxDiscipline
 from harness.session import Runtime, SessionContextUsage, SessionConversationSearch
 from harness.settings import CHECKOUT, SKILLS, WORKSPACE, StateSettings
 from harness.vendor.loop_detection import LoopDetection
