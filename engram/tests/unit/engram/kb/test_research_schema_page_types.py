@@ -67,7 +67,7 @@ def test_flag_kind_choices_are_declared() -> None:
     flag = research_spec().page_type("flag")
     assert flag is not None
     flag_kind_field = next(field for field in flag.frontmatter_fields if field.name == "flag_kind")
-    assert set(flag_kind_field.choices) == {"idea", "feature", "risk", "question"}
+    assert set(flag_kind_field.choices) == {"idea", "feature", "risk", "question", "stance"}
 
 
 def test_flag_carries_the_decision_block() -> None:

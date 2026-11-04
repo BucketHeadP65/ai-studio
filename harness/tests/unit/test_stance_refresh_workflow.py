@@ -244,6 +244,16 @@ def _stance(slug: str, record: str, **fields: object) -> dict[str, object]:
     }
 
 
+@dataclass(frozen=True)
+class FlagFile:
+    """One flag page of the scripted research base as its file holds it: status, kind, path and created date."""
+
+    status: str = "pending"
+    flag_kind: str = "stance"
+    path: str = ""
+    created: str = "2026-10-30"
+
+
 @dataclass
 class Bases:
     """The records base and the research base the programs read and write, scripted.
@@ -253,10 +263,13 @@ class Bases:
     read_page refuses. A research id held by none of them is one read_page cannot find. A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
     names records pages whose file lies in an app's own docs folder, beyond the records base's root, which list_pages
     lists and read_page refuses the way the real tool does. `unreadable` names stance ids list_pages lists and
-    read_page refuses. `refusing` names the page ids write_note refuses. `flags` holds each flag's status by id, which
-    list_pages lists and read_page answers with the date `flag_created` names, and `refuses_flag_listing` makes
-    list_pages refuse the flags. `writes` and `flag_writes` record every write_note of a stance and of a flag, and
-    `listed` and `reads` every list_pages and read_page call, in order.
+    read_page refuses. `refusing` names the page ids write_note refuses. `flags` holds each indexed flag's file by id,
+    which read_page reads, at `Wiki/Flags/<id without flag.>.md` unless its path says otherwise. list_pages lists each
+    at its file's status, or at the status `indexed_status` names for an index that has not caught up with the file.
+    `refused_flags` names flag ids read_page refuses, `refuses_flag_listing` makes list_pages refuse the flags, and
+    `unindexed_files` names the paths read_notes finds on disk that the index does not list. `writes` and
+    `flag_writes` record every write_note of a stance and of a flag, and `listed`, `reads` and `notes_read` every
+    list_pages, read_page and read_notes call, in order.
     """
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -266,13 +279,16 @@ class Bases:
     outside_root: frozenset[str] = frozenset()
     unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
-    flags: dict[str, str] = field(default_factory=dict)
-    flag_created: dict[str, str] = field(default_factory=dict)
+    flags: dict[str, FlagFile] = field(default_factory=dict)
+    indexed_status: dict[str, str] = field(default_factory=dict)
+    refused_flags: frozenset[str] = frozenset()
     refuses_flag_listing: bool = False
+    unindexed_files: frozenset[str] = frozenset()
     writes: list[WriteCall] = field(default_factory=list)
     flag_writes: list[FlagWriteCall] = field(default_factory=list)
     listed: list[dict[str, object]] = field(default_factory=list)
     reads: list[tuple[str, str]] = field(default_factory=list)
+    notes_read: list[str] = field(default_factory=list)
 
     async def call(self, name: str, args: dict[str, object], /) -> object:
         if name == "read_page":
@@ -281,6 +297,10 @@ class Bases:
         if name == "list_pages":
             self.listed.append(dict(args))
             return self._list(str(args["knowledge_base"]), str(args["page_type"]), str(args.get("status", "")))
+        if name == "read_notes":
+            path = str(args["path"])
+            self.notes_read.append(path)
+            return {"path": path, "exists": path in self.unindexed_files, "text": "", "threads": []}
         if name == "write_note":
             payload: FlagPayload = to_jsonable_python(args["payload"])
             page_id = str(payload["frontmatter"]["id"])
@@ -316,15 +336,21 @@ class Bases:
         if knowledge_base == "research" and page_id in self.refused_digests:
             msg = f"{page_id} at Wiki/{page_id}.md cannot be read as a payload: claim ^c1 does not read back"
             raise ModelRetry(msg)
+        if knowledge_base == "research" and page_id in self.refused_flags:
+            msg = f"{page_id} at Wiki/Flags/{page_id.removeprefix('flag.')}.md cannot be read as a payload: text before the first heading"
+            raise ModelRetry(msg)
         if knowledge_base == "research" and page_id in self.flags:
+            flag = self.flags[page_id]
             frontmatter = {
                 "id": page_id,
                 "type": "flag",
                 "title": page_id,
-                "status": self.flags[page_id],
-                "created": self.flag_created.get(page_id),
+                "status": flag.status,
+                "flag_kind": flag.flag_kind,
+                "about": ["[[paper.dense-retrieval]]"],
+                "created": flag.created,
             }
-            return {"page_id": page_id, "path": f"Wiki/Flags/{page_id.removeprefix('flag.')}.md", "payload": {"frontmatter": frontmatter}}
+            return {"page_id": page_id, "path": flag.path or _flag_path(page_id), "payload": {"frontmatter": frontmatter}}
         if knowledge_base == "research" and page_id in self.digests:
             digest = self.digests[page_id]
             frontmatter = {"id": page_id, "type": digest.page_type, "title": f"Title of {page_id}", "status": digest.status}
@@ -333,6 +359,12 @@ class Bases:
             return {"page_id": page_id, "path": f"Wiki/{page_id}.md", "payload": payload}
         msg = f"no indexed page {page_id!r} in knowledge base {knowledge_base!r}, list_pages and search answer the page ids it holds"
         raise ModelRetry(msg)
+
+    def _listed_status(self, flag_id: str) -> str:
+        """The status the index lists one flag at."""
+        if flag_id in self.indexed_status:
+            return self.indexed_status[flag_id]
+        return self.flags[flag_id].status if flag_id in self.flags else "pending"
 
     def _list(self, knowledge_base: str, page_type: str, status: str) -> list[dict[str, str]]:
         if knowledge_base == "research" and page_type == "stance":
@@ -344,13 +376,21 @@ class Bases:
             if self.refuses_flag_listing:
                 msg = "no page_type 'flag' in knowledge base 'research', the page_types are paper, stance"
                 raise ModelRetry(msg)
-            return [{"page_id": flag_id, "page_type": "flag", "title": flag_id, "status": status} for flag_id, status in self.flags.items()]
+            listed = [*self.flags, *sorted(self.refused_flags)]
+            return [
+                {"page_id": flag_id, "page_type": "flag", "title": flag_id, "status": self._listed_status(flag_id)} for flag_id in listed
+            ]
         assert knowledge_base == "repo-docs", f"no program in this workflow lists the {page_type!r} pages of {knowledge_base!r}"
         return [
             {"page_id": page_id, "page_type": front["type"], "title": front["title"], "status": front["status"]}
             for page_id, front in self.records.items()
             if front["type"] == page_type and front["status"] == status
         ]
+
+
+def _flag_path(flag_id: str) -> str:
+    """Where a flag's file sits in the flag type's own folder."""
+    return f"Wiki/Flags/{flag_id.removeprefix('flag.')}.md"
 
 
 def _skip_all(group: Group) -> list[dict[str, object]]:
@@ -1455,11 +1495,30 @@ MEMORY_FLAG = FlagPayload(
 """The flag page stance.agent-memory is written as, when adr-1 proposes it and BACKED backs it."""
 
 
-def _flag_written(bases: Bases) -> FlagPayload:
-    """The payload of the one flag write_note was handed, which lands in the flag type's own folder."""
+def _flag_written(bases: Bases, *, path: str = "") -> FlagPayload:
+    """The payload of the one flag write_note was handed, checked to land at `path`, or in the flag type's own folder."""
     [write] = bases.flag_writes
-    assert "path" not in write, "a flag lands in its page type's own folder"
+    assert write.get("path", "") == path, "a flag is written where its file sits, or in the flag type's own folder when new"
     return write["payload"]
+
+
+def _flag_bases(
+    *,
+    flags: dict[str, FlagFile] | None = None,
+    indexed_status: dict[str, str] | None = None,
+    refused_flags: frozenset[str] = frozenset(),
+    unindexed_files: frozenset[str] = frozenset(),
+) -> Bases:
+    """A records base where adr-1 is placed as a new stance, beside the research base's digests and these flags."""
+    return Bases(
+        records={"adr-1": _record("adr-1")},
+        stances={"stance.x": _stance("x", record="adr-other")},
+        digests=DIGESTS,
+        flags=flags or {},
+        indexed_status=indexed_status or {},
+        refused_flags=refused_flags,
+        unindexed_files=unindexed_files,
+    )
 
 
 async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(sandbox: AsyncMonty) -> None:
@@ -1469,6 +1528,7 @@ async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(s
 
     assert _flag_written(bases) == MEMORY_FLAG
     assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+    assert bases.notes_read == ["Wiki/Flags/stance-agent-memory.md"], "a new flag's path is checked on disk first"
     assert bases.writes == [], "no stance page is written for a proposal"
 
 
@@ -1477,13 +1537,12 @@ async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_an
         records={"adr-1": _record("adr-1")},
         stances={"stance.x": _stance("x", record="adr-other")},
         digests=DIGESTS,
-        flags={"flag.stance-agent-memory": "pending"},
-        flag_created={"flag.stance-agent-memory": "2026-10-30"},
+        flags={"flag.stance-agent-memory": FlagFile()},
     )
 
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
-    written = _flag_written(bases)
+    written = _flag_written(bases, path="Wiki/Flags/stance-agent-memory.md")
     assert written["frontmatter"] == {**MEMORY_FLAG["frontmatter"], "created": "2026-10-30"}
     assert written["sections"] == MEMORY_FLAG["sections"]
     assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
@@ -1495,7 +1554,7 @@ async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_lis
         records={"adr-1": _record("adr-1")},
         stances={"stance.x": _stance("x", record="adr-other")},
         digests=DIGESTS,
-        flags={"flag.stance-agent-memory": status},
+        flags={"flag.stance-agent-memory": FlagFile(status=status)},
     )
 
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
@@ -1542,3 +1601,97 @@ async def test_the_research_schema_takes_a_stance_flag_as_the_run_writes_it(sand
     note = parse(render(payload, spec=schema), source_path="Wiki/Flags/stance-agent-memory.md", spec=schema)
 
     assert (note.frontmatter.id, note.frontmatter.type, note.frontmatter.status) == ("flag.stance-agent-memory", "flag", "pending")
+
+
+async def test_a_stance_flag_accepted_on_disk_before_the_index_caught_up_is_never_written_again(sandbox: AsyncMonty) -> None:
+    bases = _flag_bases(
+        flags={"flag.stance-agent-memory": FlagFile(status="accepted")}, indexed_status={"flag.stance-agent-memory": "pending"}
+    )
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    assert bases.flag_writes == [], "the owner's decision in the file wins over the index"
+    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": []}
+
+
+async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sits(sandbox: AsyncMonty) -> None:
+    moved = "Wiki/Flags/Done/stance-agent-memory.md"
+    bases = _flag_bases(flags={"flag.stance-agent-memory": FlagFile(path=moved)})
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    assert _flag_written(bases, path=moved)["sections"] == MEMORY_FLAG["sections"]
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+
+
+@pytest.mark.parametrize(
+    ("bases_of", "reason"),
+    [
+        pytest.param(
+            lambda: _flag_bases(refused_flags=frozenset({"flag.stance-agent-memory"})),
+            "read_page refused the flag, so it was left as it is: ",
+            id="a-flag-read-page-refuses",
+        ),
+        pytest.param(
+            lambda: _flag_bases(flags={"flag.stance-agent-memory": FlagFile(flag_kind="idea")}),
+            "a flag of kind idea already holds this id, so it was left as it is",
+            id="a-flag-of-another-kind",
+        ),
+        pytest.param(
+            lambda: _flag_bases(unindexed_files=frozenset({"Wiki/Flags/stance-agent-memory.md"})),
+            "a file the index does not list sits at Wiki/Flags/stance-agent-memory.md, so it was left as it is.",
+            id="a-file-the-index-does-not-list",
+        ),
+    ],
+)
+async def test_a_page_the_run_cannot_safely_replace_is_named_and_left_alone(
+    sandbox: AsyncMonty, bases_of: Callable[[], Bases], reason: str
+) -> None:
+    bases = bases_of()
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    assert bases.flag_writes == []
+    result = _value(state, "write_stance_flags")
+    assert (result["written"], result["kept_decided"]) == ([], [])
+    failed: list[dict[str, str]] = to_jsonable_python(result["failed"])
+    assert [entry["flag_id"] for entry in failed] == ["flag.stance-agent-memory"]
+    assert failed[0]["reason"].startswith(reason)
+    assert _outcome(state) == "noop", "the run still ends as it would have"
+
+
+@pytest.mark.parametrize(
+    ("backed", "summary", "about"),
+    [
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1", "supports"), _finding("art.memory-survey#^c3", "contests")],
+            "A proposed stance with 1 finding that supports it and 1 that contests it.",
+            ["[[paper.dense-retrieval]]", "[[art.memory-survey]]"],
+            id="one-of-each",
+        ),
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1", "contests"), _finding("art.memory-survey#^c3", "contests")],
+            "A proposed stance the literature argues against: all 2 of its findings contest it.",
+            ["[[paper.dense-retrieval]]", "[[art.memory-survey]]"],
+            id="all-contest",
+        ),
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1"), _finding("paper.dense-retrieval#^c2"), _finding("art.memory-survey#^c3")],
+            "A proposed stance with 3 findings that support it and 0 that contest it.",
+            ["[[paper.dense-retrieval]]", "[[art.memory-survey]]"],
+            id="one-digest-cited-twice",
+        ),
+    ],
+)
+async def test_a_stance_flag_counts_its_findings_in_its_summary_and_links_each_digest_once(
+    sandbox: AsyncMonty, backed: list[Finding], summary: str, about: list[str]
+) -> None:
+    bases = _flag_bases()
+
+    def back(_: Proposal) -> list[Finding]:
+        return backed
+
+    await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory"), back=back), changed="adr-1")
+
+    frontmatter = _flag_written(bases)["frontmatter"]
+    assert (frontmatter["summary"], frontmatter["about"]) == (summary, about)

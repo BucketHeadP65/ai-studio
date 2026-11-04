@@ -804,17 +804,18 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
 
 
 def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
-    """The stance flag writer: it lists the base's flags, and since none carries the proposal's id it writes one pending flag."""
+    """The stance flag writer: no listed flag carries the proposal's id and no file sits at its path, so it writes one pending flag."""
     assert to_jsonable_python(ran["write_stance_flags"]) == {"written": ["flag.stance-y"], "kept_decided": [], "failed": []}
-    assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "write_note"]
+    assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note"]
     assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
-    written = to_jsonable_python(called_by_step["write_stance_flags"][1][1])
+    assert called_by_step["write_stance_flags"][1][1] == {"knowledge_base": "research", "path": "Wiki/Flags/stance-y.md"}
+    written = to_jsonable_python(called_by_step["write_stance_flags"][2][1])
     assert written["knowledge_base"] == "research"
     assert written["payload"]["frontmatter"] == {
         "id": "flag.stance-y",
         "type": "flag",
         "title": "Y",
-        "summary": "A proposed stance with 1 findings that support it and 1 that contest it.",
+        "summary": "A proposed stance with 1 finding that supports it and 1 that contests it.",
         "status": "pending",
         "flag_kind": "stance",
         "about": ["[[paper.a]]", "[[art.b]]"],
@@ -897,6 +898,8 @@ async def test_every_shipped_program_runs_in_the_real_sandbox_and_calls_the_tool
         called.append((name, dict(args)))
         if name == "compounding_work":
             return _COMPOUNDING_ANSWERS[str(args["name"])]
+        if name == "read_notes" and str(args["path"]).startswith("Wiki/Flags/"):
+            return {"path": args["path"], "exists": False, "text": "", "threads": []}
         return _TOOL_ANSWERS[name]
 
     steps = _steps()

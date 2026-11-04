@@ -12,7 +12,7 @@ uses:
   - st.back_proposal.v3
   - st.judge_proposals.v1
   - st.write_stances.v6
-  - st.write_stance_flags.v1
+  - st.write_stance_flags.v2
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -30,8 +30,8 @@ presentation:
     the run left behind and written as a pending flag of kind stance, `flag.stance-` and the proposed id without
     `stance.`, with its records pages and the reason placement gave for each, and each finding as a claim link with
     its side and one sentence on how. A proposal whose findings all contest it is marked as one the literature argues
-    against. A pending flag is written again with newer findings, and a flag you accepted, dismissed or completed is
-    left as it is and listed. The proposals are backed and judged only after every rewrite is written, so a run whose
+    against. A pending flag is written again with newer findings, and a flag you accepted, dismissed or completed, read
+    from its file, is left as it is and listed. The proposals are backed and judged only after every rewrite is written, so a run whose
     proposals fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed once per
     run indexes them when the run ends, and under a `wait` gate policy a judge that cannot decide holds that index
     until you answer. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge
@@ -61,7 +61,7 @@ presentation:
     - {label: "Stance flags written, left as the owner decided them, and refused (recorded)", path: values.write_stance_flags}
 workflow:
   name: research-stance-refresh
-  version: 15
+  version: 16
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, list every approved proposal with its pages and findings as placement made it, and write each as a pending stance flag, drafting no stance and never writing a flag the owner decided.
   parameters:
     collection:
@@ -605,10 +605,15 @@ the proposed stance and `about` links each digest a finding cites. Why names eac
 with the reason placement gave, because a link into the records knowledge base would not resolve here. Proposal says
 that accepting the flag asks for a new stance page. Evidence lists each finding as a claim link, such as
 `[[paper.ace-2025#^c8]]`, with its side and its sentence. A flag whose findings all contest the stance says so in its
-summary. It lists the base's flags first. A flag at `pending` is written again with the newer findings and keeps its
-`created` date. One the owner accepted, dismissed or completed is never written and is answered in `kept_decided`. A
-write the base refuses is named in `failed` with the reason and never fails the run, and when the flags cannot be
-listed no flag is written. Its answer is the run's output.
+summary. It lists the base's flags first and decides on each listed flag from its file, read with `read_page`, never
+from the index, so a decision the owner made before the base was indexed again still holds. A flag of another kind
+under the same id, such as an idea flag whose title makes the same id, is left as it is and named in `failed`. A flag
+whose file is not at `pending`, one the owner accepted, dismissed or completed, is never written and is answered in
+`kept_decided`. A pending stance flag is written again at the path it was read from, so a flag the owner moved stays
+one file, with the newer findings and its `created` date. A listed flag `read_page` refuses is named in `failed` and
+not written. A flag the index does not list is written to `Wiki/Flags`, unless `read_notes` finds a file already at
+that path, which is named in `failed` and left as it is. A write the base refuses is named in `failed` with the reason
+and never fails the run, and when the flags cannot be listed no flag is written. Its answer is the run's output.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite
 is written, and so does one whose backing map aborts. Each rewrite is written to its file at once. A knowledge base

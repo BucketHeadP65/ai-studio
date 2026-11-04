@@ -1,16 +1,16 @@
 ---
 title: Write stance flags
 summary: Each approved stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest.
-version: 1
+version: 2
 step:
   name: write_stance_flags
   source: |
-    held = {}
+    indexed = {}
     listed = True
     refusal = ""
     try:
         for row in await list_pages(knowledge_base=collection, page_type="flag", limit=10000):
-            held[row["page_id"]] = row["status"]
+            indexed[row["page_id"]] = True
     except Exception as error:
         listed = False
         refusal = "list_pages refused the flags, so no flag was written: " + str(error)
@@ -24,16 +24,39 @@ step:
         if not listed:
             failed.append({"flag_id": flag_id, "reason": refusal})
             continue
-        status = held.get(flag_id)
-        if status is not None and status != "pending":
-            kept_decided.append(flag_id)
-            continue
+        path = ""
+        created = ""
+        if flag_id in indexed:
+            try:
+                page = await read_page(knowledge_base=collection, page_id=flag_id)
+            except Exception as error:
+                failed.append({"flag_id": flag_id, "reason": "read_page refused the flag, so it was left as it is: " + str(error)})
+                continue
+            front = page["payload"]["frontmatter"]
+            if front.get("flag_kind") != "stance":
+                failed.append({"flag_id": flag_id, "reason": "a flag of kind " + str(front.get("flag_kind")) + " already holds this id, so it was left as it is"})
+                continue
+            if front.get("status") != "pending":
+                kept_decided.append(flag_id)
+                continue
+            path = page["path"]
+            created = str(front.get("created") or "")
+        else:
+            target = "Wiki/Flags/" + flag_id[len("flag."):] + ".md"
+            try:
+                found = await read_notes(knowledge_base=collection, path=target)
+            except Exception as error:
+                failed.append({"flag_id": flag_id, "reason": "read_notes refused " + target + ", so no flag was written: " + str(error)})
+                continue
+            if found["exists"]:
+                failed.append({"flag_id": flag_id, "reason": "a file the index does not list sits at " + target + ", so it was left as it is. Index the knowledge base and run again."})
+                continue
         reasons = {}
         for entry in proposal["reasons"]:
             reasons[entry["page_id"]] = entry["reason"]
         why = ["The stance refresh proposed this stance from these records pages. They live in another knowledge base, so each is named by its id.", ""]
-        for page in proposal["pages"]:
-            why.append("- `" + page["page_id"] + "` (" + page["page_type"] + ", " + page["status"] + "): " + reasons.get(page["page_id"], page["title"]))
+        for page_entry in proposal["pages"]:
+            why.append("- `" + page_entry["page_id"] + "` (" + page_entry["page_type"] + ", " + page_entry["status"] + "): " + reasons.get(page_entry["page_id"], page_entry["title"]))
         evidence = []
         about = []
         supports = 0
@@ -48,25 +71,24 @@ step:
         if proposal["contests_only"]:
             summary = "A proposed stance the literature argues against: all " + str(contests) + " of its findings contest it."
         else:
-            summary = "A proposed stance with " + str(supports) + " findings that support it and " + str(contests) + " that contest it."
+            for_it = "1 finding that supports it" if supports == 1 else str(supports) + " findings that support it"
+            against_it = "1 that contests it" if contests == 1 else str(contests) + " that contest it"
+            summary = "A proposed stance with " + for_it + " and " + against_it + "."
         frontmatter = {"id": flag_id, "type": "flag", "title": proposal["title"], "summary": summary, "status": "pending", "flag_kind": "stance", "about": about}
-        if status == "pending":
-            created = None
-            try:
-                page = await read_page(knowledge_base=collection, page_id=flag_id)
-                created = page["payload"]["frontmatter"].get("created")
-            except Exception as error:
-                created = None
-            if created:
-                frontmatter["created"] = created
+        if created:
+            frontmatter["created"] = created
         proposal_text = "Accepting this flag asks for a new stance page that holds this stance: " + proposal["title"] + ". It is drafted by hand from the evidence below."
         sections = [
             {"heading": "Why", "body": "\n".join(why)},
             {"heading": "Proposal", "body": proposal_text},
             {"heading": "Evidence", "body": "\n".join(evidence)},
         ]
+        payload = {"frontmatter": frontmatter, "sections": sections}
         try:
-            await write_note(knowledge_base=collection, payload={"frontmatter": frontmatter, "sections": sections})
+            if path:
+                await write_note(knowledge_base=collection, payload=payload, path=path)
+            else:
+                await write_note(knowledge_base=collection, payload=payload)
         except Exception as error:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
@@ -99,17 +121,22 @@ step:
             properties:
               flag_id: {type: string}
               reason: {type: string}
-  tools: [list_pages, read_page, write_note]
+  tools: [list_pages, read_page, read_notes, write_note]
 ---
 
 Use as the tail of a stance refresh, after its proposals are judged and listed, with `collection` set to the research
 knowledge base. Each proposal becomes the flag `flag.stance-` followed by its stance id without `stance.`, of kind
-`stance` at status `pending`, in the flag type's own folder. Its title is the proposed stance. `about` links each digest
-a finding cites. Why names each records page by its id in backticks, with the reason placement gave, since a records
-page lives in another knowledge base and a link to it would not resolve. Proposal says that accepting the flag asks for
-a new stance page. Evidence lists each finding as a claim link, its side and its sentence. A flag whose findings all
-contest the stance says so in its summary. A flag at `pending` is written again with the run's newer findings and keeps
-its `created` date. A flag the owner accepted, dismissed or completed is never written and is answered in
-`kept_decided`. A write `write_note` refuses is caught and answered in `failed` with the reason, and every other flag
-still lands. When `list_pages` refuses the flags, no flag is written, so none the owner decided is ever replaced, and
-each is answered in `failed`.
+`stance` at status `pending`. Its title is the proposed stance. `about` links each digest a finding cites, once. Why
+names each records page by its id in backticks, with the reason placement gave, since a records page lives in another
+knowledge base and a link to it would not resolve. Proposal says that accepting the flag asks for a new stance page.
+Evidence lists each finding as a claim link, its side and its sentence. The summary counts the findings for and
+against the stance, or says that the literature argues against it when they all contest it.
+
+It lists the base's flags first, and decides on each listed flag from its file, read with `read_page`, never from the
+index. A flag of another kind under the same id is left as it is and answered in `failed`. A flag whose file is not at
+`pending`, one the owner accepted, dismissed or completed, is never written and is answered in `kept_decided`. A
+pending stance flag is written again at the path it was read from, with the run's newer findings and its `created`
+date. A flag the index lists that `read_page` refuses is answered in `failed` and not written. A flag the index does
+not list is written to `Wiki/Flags`, unless `read_notes` finds a file already at that path, which is answered in
+`failed` and left as it is. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
+other flag still lands. When `list_pages` refuses the flags, no flag is written, and each is answered in `failed`.
