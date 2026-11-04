@@ -186,6 +186,8 @@ def normalize_ref(unit_id: str, collection: str, *, reground: str = _REGROUND_WI
 def parse_ref(ref: str, default_collection: str, *, reground: str = _REGROUND_WITH_SEARCH) -> ResolvedRef:
     """Accept a bare or collection-qualified retrieval handle and separate its identity fields.
 
+    A claim cited as a block reference, `<page>#^<anchor>`, reads as the claim's own id `<page>#<anchor>`.
+
     Args:
         ref: The handle to parse.
         default_collection: The knowledge base a ref with no collection segment of its own resolves within.
@@ -217,7 +219,7 @@ def _bare_ref(ref: str, default_collection: str, *, reground: str) -> ResolvedRe
     if ref == default_collection:
         return ResolvedRef(default_collection, "collection", "")
     kind: RefType = "section" if "#" in ref else "page"
-    return ResolvedRef(default_collection, kind, ref)
+    return ResolvedRef(default_collection, kind, _without_block_caret(ref))
 
 
 def _collection_ref(ref: str, raw: str, *, reground: str) -> ResolvedRef:
@@ -241,10 +243,16 @@ def _unit_ref(ref: str, prefix: str, raw: str, default_collection: str, *, regro
     if slash:
         if not collection or not unit_id:
             _bad_ref(ref, reground=reground)
-        return ResolvedRef(collection, _unit_type(prefix, reground=reground), unit_id)
+        return ResolvedRef(collection, _unit_type(prefix, reground=reground), _without_block_caret(unit_id))
     if not raw:
         _bad_ref(ref, reground=reground)
-    return ResolvedRef(default_collection, _unit_type(prefix, reground=reground), raw)
+    return ResolvedRef(default_collection, _unit_type(prefix, reground=reground), _without_block_caret(raw))
+
+
+def _without_block_caret(unit_id: str) -> str:
+    """`unit_id` with the caret of a block reference dropped, so `<page>#^c3` names the claim `<page>#c3`."""
+    page, hash_sign, anchor = unit_id.partition("#")
+    return f"{page}#{anchor.removeprefix('^')}" if hash_sign else unit_id
 
 
 def qualify_ref(ref: str, owning_collection: str, *, reground: str = _REGROUND_WITH_SEARCH) -> str:

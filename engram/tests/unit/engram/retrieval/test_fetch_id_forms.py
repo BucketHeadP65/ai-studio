@@ -714,3 +714,44 @@ class TestRefusalsNameOnlyTheGraphToolsServed:
 
         assert "`find_paths`" in description
         assert "graph_expand" not in description
+
+
+_CITED_CLAIM_SPELLINGS = ("note.alpha#^c1", f"unit:{_HOME}/note.alpha#^c1", f"page:{_HOME}/note.alpha#^c1", f"section:{_HOME}/note.alpha#^c1")
+"""A claim cited the way a wikilink cites it, `<page>#^cN`, bare and under each qualified prefix."""
+
+
+class TestAClaimCitedAsABlockReferenceReadsTheClaim:
+    """A flag's evidence cites a claim as `[[<page>#^cN]]`, and every `fetch` reads that as the claim `<page>#cN`."""
+
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_flat_toolset_reads_the_claim(self, spelling: str):
+        gateway = _gateway()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME)
+
+        unit = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.id == _CLAIM
+        assert gateway.fetched == [_CLAIM]
+
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_leveled_toolset_reads_the_claim(self, spelling: str):
+        gateway = _gateway()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+        unit = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.ref == f"unit:{_HOME}/{_CLAIM}"
+        assert unit.body == f"Full text of {_CLAIM}."
+
+    @pytest.mark.parametrize("dial", ["leveled", "flat"])
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_capability_reads_the_claim(self, spelling: str, dial: str):
+        dials = ReadDials(fetch="flat") if dial == "flat" else ReadDials()
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME), _surface(_OTHER)), dials_source=lambda: dials)
+
+        unit = await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.ref == f"unit:{_HOME}/{_CLAIM}"

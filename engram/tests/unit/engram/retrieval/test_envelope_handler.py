@@ -1182,6 +1182,21 @@ def test_parse_ref_accepts_legacy_and_qualified_forms(raw: str, default: str, ex
     assert parse_ref(raw, default) == expected
 
 
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("paper.x#^c3", ResolvedRef("research", "section", "paper.x#c3")),
+        ("page:paper.x#^c3", ResolvedRef("research", "page", "paper.x#c3")),
+        ("unit:research/paper.x#^c3", ResolvedRef("research", "unit", "paper.x#c3")),
+        ("section:research/paper.x#^c3", ResolvedRef("research", "section", "paper.x#c3")),
+    ],
+)
+def test_a_claim_cited_as_a_block_reference_reads_as_the_claims_own_id(raw: str, expected: ResolvedRef) -> None:
+    """A wikilink cites a claim as `<page>#^cN`, and the claim's unit id is `<page>#cN`."""
+    assert parse_ref(raw, "research") == expected
+    assert qualify_ref(raw, "research") == f"{expected.kind}:research/paper.x#c3"
+
+
 def test_qualified_ref_round_trips() -> None:
     ref = qualify_ref("section:paper.x#findings", "research")
     assert ref == "section:research/paper.x#findings"

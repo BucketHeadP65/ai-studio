@@ -93,7 +93,9 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `flat_fetch`, the leveled read `leveled_fetch`, the routed pair, or `RetrievalKnowledgeBase` under
   either dial) reads a `page:<collection>/<id>`, `section:<collection>/<id>` or
   `unit:<collection>/<id>` ref exactly as `search`, a listing or a graph answer returned it, and the
-  bare id, and both read one unit. No surface hands out a ref its own `fetch` refuses: a
+  bare id, and both read one unit. A claim cited the way a wikilink cites it, `<page>#^cN`, bare
+  or under any of the three prefixes, reads as the claim's own id `<page>#cN` (`parse_ref`), and
+  so does every eval guard and scorer that reads refs through it. No surface hands out a ref its own `fetch` refuses: a
   single-source `search` reads only its own collection, a `search` offers the map only when the
   `fetch` beside it opens one (never beside the flat read, never on a `search_only` knowledge base),
   and the eval guard rebuilds a search answer under the same rule. The flat read refuses a

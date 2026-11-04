@@ -536,6 +536,8 @@ class TestAWithheldUnitIsRefusedUnderEverySpelling:
             "page:research/paper.x#c1",
             "section:research/paper.x#c1",
             "unit:research/paper.x#c1",
+            "paper.x#^c1",
+            "unit:research/paper.x#^c1",
         ],
     )
     async def test_a_claim_withheld_as_a_unit_ref_is_refused_under_every_spelling(self, tmp_path: Path, spelling: str):
