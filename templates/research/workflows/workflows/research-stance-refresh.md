@@ -32,7 +32,8 @@ presentation:
     against. The proposals are backed and judged only after every rewrite is written, so a run whose proposals then
     fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed once per run indexes
     them when the run ends, and under a `wait` gate policy a judge that cannot decide holds that index until you
-    answer.
+    answer. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes
+    after each write.
   owner_participation: >-
     Nothing during a run, unless a judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -56,7 +57,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 13
+  version: 14
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, and list every approved proposal with its pages and findings as placement made it, drafting none.
   parameters:
     collection:
@@ -344,21 +345,30 @@ workflow:
         listed = []
         for made in proposals:
             wanted = {page["page_id"]: True for page in made["pages"]}
-            entry = None
+            order = []
+            first = {}
+            sides = {}
             for held in approved:
                 if held["stance_id"] != made["stance_id"] or held["title"] != made["title"]:
                     continue
                 if {page["page_id"]: True for page in held["pages"]} != wanted:
                     continue
-                if entry is None:
-                    entry = {"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "findings": [], "contests_only": True}
                 for finding in held["findings"]:
-                    if finding["claim"] not in [shown["claim"] for shown in entry["findings"]]:
-                        entry["findings"].append(finding)
-                        if finding["side"] != "contests":
-                            entry["contests_only"] = False
-            if entry is not None:
-                listed.append(entry)
+                    claim = finding["claim"]
+                    if claim not in first:
+                        order.append(claim)
+                        first[claim] = finding
+                        sides[claim] = {}
+                    sides[claim][finding["side"]] = True
+            findings = [first[claim] for claim in order if len(sides[claim]) == 1]
+            digests = {finding["claim"].split("#")[0]: True for finding in findings}
+            if len(digests) < 2:
+                continue
+            contests_only = True
+            for finding in findings:
+                if finding["side"] != "contests":
+                    contests_only = False
+            listed.append({"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "findings": findings, "contests_only": contests_only})
         listed
       inputs:
         approved: {like: check_findings}
@@ -518,7 +528,9 @@ proposal that duplicates an existing stance. A rejection backs every proposal ag
 reruns the rewrites. An empty list is approved without a read, and still costs that judge one call.
 `list_proposals` lists each proposal `merge_proposals` made that has an approved backing with its stance_id and title
 and the same records pages in any order, with its pages as `merge_proposals` made them and the findings of every such
-backing, each claim once. The map collects its answers as they finish, so nothing is paired by position. A backing
+backing, each claim once. A claim two such backings give opposite sides is left out under both, `contests_only` counts
+only the findings that remain, and a proposal left with findings from fewer than two digests is dropped. The map
+collects its answers as they finish, so nothing is paired by position. A backing
 that matches no proposal, such as one whose worker reworded its copy, added or left out a page, or took another
 proposal's id, puts nothing on the card, and the honest backing of that proposal still does. Its list is the run's
 output and its `proposed_stances` artifact, and it writes no page.
@@ -526,5 +538,7 @@ output and its `proposed_stances` artifact, and it writes no page.
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite
 is written, and so does one whose backing map aborts. Each rewrite is written to its file at once. A knowledge base
 indexed on each write indexes it then. One indexed once per run indexes the run's writes when the run ends, fails or
-pauses, so under a `wait` gate policy a proposals judge that cannot decide holds that index until the person answers. Three consecutive identical failures in any map
+pauses, so under a `wait` gate policy a proposals judge that cannot decide holds that index until the person answers.
+Under the opt-in Temporal engine writes are never held for the run, so even a knowledge base indexed once per run
+indexes after each write. Three consecutive identical failures in any map
 abort the run as failed.

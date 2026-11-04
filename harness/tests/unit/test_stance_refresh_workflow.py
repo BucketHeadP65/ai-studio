@@ -27,7 +27,8 @@ order: the proposals start only once every rewrite is written, so a rewrite judg
 write, and a proposals judge that spends its last attempt, one nobody answers and a backing map that aborts each fail
 the run with the rewrite written. A proposal whose backing worker altered its copy is dropped after the judge, one that
 only reordered its pages is kept, and a backing that took another proposal's id leaves the honest proposal on the card,
-since the map collects its answers as they finish. Last, the budgets of the backing worker and the rewrite judge.
+since the map collects its answers as they finish. A claim two matching backings give opposite sides is dropped
+whichever finishes first. Last, the budgets of the backing worker and the rewrite judge.
 """
 
 from __future__ import annotations
@@ -1307,6 +1308,59 @@ async def test_a_backing_that_takes_another_proposals_id_is_dropped_and_the_hone
         assert claims == ["art.memory-survey#^c3", "paper.dense-retrieval#^c1", "talk.agent-loops#^c4"], (
             "the proposal carries the honest backing's findings beside the copy's, each claim once"
         )
+
+
+@pytest.mark.parametrize("first", ["stance.agent-memory", "stance.reranking"], ids=["the-honest-backing-first", "the-copy-first"])
+@pytest.mark.parametrize(
+    ("copied", "shown"),
+    [
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1", "contests"), _finding("talk.agent-loops#^c4", "contests")],
+            [("art.memory-survey#^c3", "contests"), ("talk.agent-loops#^c4", "contests")],
+            id="the-rest-all-contest",
+        ),
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1", "contests"), _finding("art.memory-survey#^c3", "contests")],
+            [("art.memory-survey#^c3", "contests")],
+            id="one-digest-left",
+        ),
+    ],
+)
+async def test_a_claim_two_matching_backings_give_opposite_sides_is_dropped_whichever_finishes_first(
+    sandbox: AsyncMonty, first: str, copied: list[Finding], shown: list[tuple[str, str]]
+) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        digests=DIGESTS,
+    )
+    honest = [_finding("paper.dense-retrieval#^c1", "supports"), _finding("art.memory-survey#^c3", "contests")]
+
+    def copy(proposal: Proposal) -> Mapping[str, object]:
+        taken = {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}
+        return {**proposal, **taken} if proposal["stance_id"] == "stance.reranking" else proposal
+
+    def back(proposal: Proposal) -> list[Finding]:
+        return honest if proposal["stance_id"] == "stance.agent-memory" else copied
+
+    later = "stance.reranking" if first == "stance.agent-memory" else "stance.agent-memory"
+    scripted = Scripted(place=_two_proposals, back=back, copy=copy, delays={later: 0.2})
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2")
+
+    answered: list[dict[str, object]] = to_jsonable_python(state.values["back_proposals"])
+    assert answered[0]["findings"] == (honest if first == "stance.agent-memory" else copied)
+    listed = _proposals(state)
+    if len({claim.split("#")[0] for claim, _ in shown}) < 2:
+        assert listed == [], "a proposal left with findings from one digest leaves the card"
+        return
+    assert [(proposal["stance_id"], proposal["title"], proposal["pages"]) for proposal in listed] == [
+        ("stance.agent-memory", "Agent memory", [_listed("adr-1")])
+    ]
+    assert sorted((finding["claim"], finding["side"]) for finding in _findings_of(listed[0])) == shown, (
+        "the claim the backings disagree on is on the card under neither side"
+    )
+    assert listed[0]["contests_only"] is True, "contests_only counts only what remains"
 
 
 def _findings_of(proposal: dict[str, object]) -> list[dict[str, str]]:

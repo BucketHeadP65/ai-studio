@@ -35,7 +35,8 @@ from this template can register its own vocabulary for any research domain.
   one the literature only argues against, so you draft the ones you pick by hand. A proposal whose worker changed its
   id or title, or added or left out a page, is left off. A run whose proposals fail keeps its rewrites: each is
   written to its file at once, a knowledge base indexed once per run indexes them when the run ends, and under a
-  `wait` gate policy a proposals judge that cannot decide holds that index until you answer.
+  `wait` gate policy a proposals judge that cannot decide holds that index until you answer. Under the opt-in Temporal
+  engine writes are never held for the run, so even such a knowledge base indexes after each write.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.
