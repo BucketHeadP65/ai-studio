@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({
 // Imported after the mock so ScheduleCard sees the mocked module.
 import { ScheduleCard, cadenceWords, formatNextRun } from "./schedule-card";
 
-// One card's own acts (switch, run now, open the run, delete) and the two pure formatters it
+// One card's own acts (switch, run now, open the run, edit, delete) and the two pure formatters it
 // leans on: cadence text in words, and a next-run instant in words (formatRelative's
 // future-facing sibling, since that helper only ever reads a past instant correctly). The whole
 // card opens its workflow; a click on one of the card's own acts never navigates.
@@ -53,6 +53,7 @@ function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
 function renderCard(overrides: Partial<Schedule> = {}, now?: number) {
   const onToggleEnabled = vi.fn();
   const onRunNow = vi.fn();
+  const onEdit = vi.fn();
   const onDelete = vi.fn();
   render(
     <ul>
@@ -63,12 +64,13 @@ function renderCard(overrides: Partial<Schedule> = {}, now?: number) {
         runningNow={false}
         onToggleEnabled={onToggleEnabled}
         onRunNow={onRunNow}
+        onEdit={onEdit}
         onDelete={onDelete}
         now={now}
       />
     </ul>,
   );
-  return { onToggleEnabled, onRunNow, onDelete };
+  return { onToggleEnabled, onRunNow, onEdit, onDelete };
 }
 
 describe("cadenceWords", () => {
@@ -274,6 +276,15 @@ describe("ScheduleCard, an active schedule", () => {
     expect(routerPush).not.toHaveBeenCalled();
   });
 
+  it("shows Edit beside Delete and asks to edit without opening the workflow", async () => {
+    const { onEdit, onDelete } = renderCard();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit schedule" }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
   it("asks to delete without navigating away", async () => {
     const { onDelete } = renderCard();
 
@@ -323,11 +334,14 @@ describe("ScheduleCard, a paused schedule", () => {
     expect(screen.queryByRole("link", { name: "Open the run" })).toBeNull();
   });
 
-  it("still flips its switch and deletes without navigating", async () => {
-    const { onToggleEnabled, onDelete } = renderCard({ enabled: false });
+  it("still flips its switch, edits and deletes without navigating", async () => {
+    const { onToggleEnabled, onEdit, onDelete } = renderCard({ enabled: false });
 
     await userEvent.click(screen.getByRole("switch", { name: "Schedule off" }));
     expect(onToggleEnabled).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit schedule" }));
+    expect(onEdit).toHaveBeenCalledTimes(1);
 
     await userEvent.click(screen.getByRole("button", { name: "Delete schedule" }));
     expect(onDelete).toHaveBeenCalledTimes(1);

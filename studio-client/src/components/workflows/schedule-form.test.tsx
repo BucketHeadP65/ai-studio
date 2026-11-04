@@ -3,14 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
+import type { Schedule } from "@/api/schedules";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
 
 import { ScheduleForm } from "./schedule-form";
 
-// The create-only route onto a schedule: a workflow (fixed or picked), its declared parameters,
-// a cadence with a live preview, and the gate mode options. Every request its mount can fire is
-// mocked here (MSW errors on anything unhandled).
+// The route onto a new schedule and onto a change to one: a workflow (fixed or picked, or the
+// edited schedule's own), its declared parameters, a cadence with a live preview, and the gate
+// mode options. Every request its mount can fire is mocked here (MSW errors on anything
+// unhandled).
 
 const BASE = "http://studio.test";
 
@@ -23,7 +25,15 @@ const CARD = {
   summary: "",
   provisional: false,
   score: 1,
-  trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
+  trust: {
+    structural_grades: 0,
+    structural_mean: null,
+    structural_last: null,
+    approved_by: [],
+    level: "machine-confirmed",
+    runs_with_evidence: 1,
+    failed_runs: 0,
+  },
   needs: [],
   missing: [],
   brings: [],
@@ -91,7 +101,15 @@ function workflowFixture() {
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 1, failed_runs: 0 },
+    trust: {
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+      approved_by: [],
+      level: "machine-confirmed",
+      runs_with_evidence: 1,
+      failed_runs: 0,
+    },
   };
 }
 
@@ -105,16 +123,61 @@ function mountApi(): void {
     http.get(`${BASE}/api/workflow/wf-costs`, () =>
       HttpResponse.json({ ...workflowFixture(), id: "wf-costs", name: "wf-costs" }),
     ),
-    http.post(`${BASE}/api/schedules/preview`, () =>
-      HttpResponse.json({
+    // An event cadence has no set times, so the preview answers none for it.
+    http.post(`${BASE}/api/schedules/preview`, async ({ request }) => {
+      const { cadence } = (await request.json()) as { cadence: string };
+      if (/^(on |after )/.test(cadence)) return HttpResponse.json({ next: [] });
+      return HttpResponse.json({
         next: [
           "2026-08-24T00:00:00+00:00",
           "2026-08-24T00:30:00+00:00",
           "2026-08-24T01:00:00+00:00",
         ],
-      }),
-    ),
+      });
+    }),
   );
+}
+
+function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
+  return {
+    id: "sched-1",
+    workflow_id: "wf-sales",
+    arguments: { quarter: "Q1" },
+    cadence: "every 30m",
+    enabled: true,
+    gate_policy: "wait",
+    gate_mode: "wait",
+    capacity_key: null,
+    capacity_limit: null,
+    blackout: null,
+    catch_up: false,
+    session_id: "",
+    created_at: "2026-08-23T10:00:00+00:00",
+    last_run_at: null,
+    last_outcome: "",
+    next_run_at: "2026-08-23T10:30:00+00:00",
+    live: null,
+    paused_at: null,
+    spend_today_usd: "0",
+    spend_week_usd: "0",
+    spend_today_unpriced: 0,
+    spend_week_unpriced: 0,
+    ...overrides,
+  };
+}
+
+function renderEdit(overrides: Partial<Schedule> = {}) {
+  const onSave = vi.fn();
+  render(
+    <ScheduleForm
+      open
+      schedule={scheduleFixture(overrides)}
+      submitting={false}
+      onSave={onSave}
+      onCancel={vi.fn()}
+    />,
+  );
+  return { onSave };
 }
 
 describe("ScheduleForm", () => {
@@ -544,6 +607,33 @@ describe("ScheduleForm", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it("creates a schedule that waits for an event, saying it has no set times", async () => {
+    mountApi();
+    const onSubmit = vi.fn();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-sales"
+        submitting={false}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await userEvent.type(await screen.findByLabelText("quarter"), "Q1");
+    await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+    expect(screen.getByText(/to run after a refresh brings in new sources/)).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Event" }), "after research-digest");
+
+    expect(
+      await screen.findByText("Waits for that event instead of running at set times."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ cadence: "after research-digest" }),
+    );
+  });
+
   it("shows the create mutation's own error", async () => {
     mountApi();
     render(
@@ -558,5 +648,136 @@ describe("ScheduleForm", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent("this app cannot run it");
+  });
+});
+
+describe("ScheduleForm, editing a schedule", () => {
+  it("opens on the schedule's own values, titled as an edit, with its workflow fixed", async () => {
+    mountApi();
+    renderEdit({
+      gate_policy: "fail_after:120",
+      gate_mode: "auto",
+      capacity_key: "gpu-pool",
+      capacity_limit: 3,
+      blackout: "22:00-06:00",
+      catch_up: true,
+    });
+
+    expect(screen.getByRole("heading", { name: "Edit schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeInTheDocument();
+    expect(screen.getByText("wf-sales")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Workflow" })).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    expect(screen.getByRole("radio", { name: /Fail after/ })).toBeChecked();
+    expect(screen.getByLabelText("Seconds before failing")).toHaveValue("120");
+    expect(
+      screen.getByRole("radio", { name: "Pass automatically (recorded as automatic)" }),
+    ).toBeChecked();
+    expect(screen.getByLabelText("Capacity key")).toHaveValue("gpu-pool");
+    expect(screen.getByLabelText("Capacity limit")).toHaveValue("3");
+    expect(screen.getByLabelText("Blackout windows")).toHaveValue("22:00-06:00");
+    expect(
+      screen.getByRole("checkbox", { name: "Catch up a missed fire when possible" }),
+    ).toBeChecked();
+  });
+
+  it("splits an interval into its count and unit", async () => {
+    mountApi();
+    renderEdit({ cadence: "every 2h" });
+
+    expect(screen.getByRole("radio", { name: /^Every/ })).toBeChecked();
+    expect(screen.getByLabelText("Interval count")).toHaveValue("2");
+    expect(screen.getByLabelText("Interval unit")).toHaveValue("h");
+    expect(await screen.findByText(/Next three fires/)).toBeInTheDocument();
+  });
+
+  it("puts a cron expression in the cron box", async () => {
+    mountApi();
+    renderEdit({ cadence: "0 9 * * 1" });
+
+    expect(screen.getByRole("radio", { name: /Cron expression/ })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Cron expression" })).toHaveValue("0 9 * * 1");
+  });
+
+  it.each(["on refresh", "after research-digest", "on index repo-docs quiet 30m"])(
+    "puts the event cadence %s in the event box",
+    async (cadence) => {
+      mountApi();
+      renderEdit({ cadence });
+
+      expect(screen.getByRole("radio", { name: /On an event/ })).toBeChecked();
+      expect(screen.getByRole("textbox", { name: "Event" })).toHaveValue(cadence);
+      expect(screen.queryByText(/kept here as written/)).toBeNull();
+      expect(
+        await screen.findByText("Waits for that event instead of running at set times."),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("keeps an interval the unit select cannot show in the event box as written", async () => {
+    mountApi();
+    renderEdit({ cadence: "every 45s" });
+
+    expect(screen.getByRole("radio", { name: /On an event/ })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Event" })).toHaveValue("every 45s");
+    expect(
+      screen.getByText("The other fields cannot show this cadence, so it is kept here as written."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps Save changes off until a field changes, then hands back only that field", async () => {
+    mountApi();
+    const { onSave } = renderEdit();
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("radio", { name: "The orchestrator decides" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith({ gate_mode: "orchestrate" });
+  });
+
+  it("sends every argument once one of them changes", async () => {
+    mountApi();
+    const { onSave } = renderEdit();
+
+    const quarter = await screen.findByLabelText("quarter");
+    await waitFor(() => expect(quarter).toHaveValue("Q1"));
+    await userEvent.clear(quarter);
+    await userEvent.type(quarter, "Q2");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith({ arguments: { quarter: "Q2", dry_run: false } });
+  });
+
+  it("sends no cadence it only rewrote while opening", async () => {
+    mountApi();
+    const { onSave } = renderEdit({ cadence: "EVERY 30M" });
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    expect(screen.getByLabelText("Interval unit")).toHaveValue("m");
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: "Catch up a missed fire when possible" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith({ catch_up: true });
+  });
+
+  it("refuses to save an emptied blackout, saying why", async () => {
+    mountApi();
+    const { onSave } = renderEdit({ blackout: "22:00-06:00" });
+
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.clear(screen.getByLabelText("Blackout windows"));
+
+    expect(
+      screen.getByText(
+        "The saved blackout windows cannot be emptied. Put a value back to save your changes.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

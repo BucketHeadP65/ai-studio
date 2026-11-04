@@ -5,7 +5,7 @@ import { CalendarClock } from "lucide-react";
 import { type ReactElement, useState } from "react";
 
 import { scheduleKeys } from "@/api/query-keys";
-import type { Schedule } from "@/api/schedules";
+import type { Schedule, ScheduleUpdateInput } from "@/api/schedules";
 import { schedulesApi } from "@/api/schedules";
 import { studioApi, studioErrorMessage } from "@/api/studio";
 import { ScheduleCard, formatNextRun } from "@/components/workflows/schedule-card";
@@ -53,6 +53,8 @@ export function SchedulesPage(): ReactElement {
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [condemned, setCondemned] = useState<string | null>(null);
+  // The schedule as it stood when Edit was clicked, held still while the list refreshes under it.
+  const [editing, setEditing] = useState<Schedule | null>(null);
 
   const schedulesQuery = useQuery({
     queryKey: scheduleKeys.all,
@@ -90,6 +92,19 @@ export function SchedulesPage(): ReactElement {
       }),
     onSuccess: () => {
       setFormOpen(false);
+      invalidateSchedules();
+    },
+  });
+  const editSchedule = useMutation({
+    mutationFn: ({
+      id,
+      changes,
+    }: {
+      id: string;
+      changes: ScheduleUpdateInput;
+    }): Promise<Schedule> => schedulesApi.update(id, changes),
+    onSuccess: () => {
+      setEditing(null);
       invalidateSchedules();
     },
   });
@@ -160,6 +175,10 @@ export function SchedulesPage(): ReactElement {
                   toggleSchedule.mutate({ id: schedule.id, enabled: !schedule.enabled })
                 }
                 onRunNow={() => runScheduleNow.mutate(schedule.id)}
+                onEdit={() => {
+                  editSchedule.reset();
+                  setEditing(schedule);
+                }}
                 onDelete={() => setCondemned(schedule.id)}
               />
             ))}
@@ -174,6 +193,17 @@ export function SchedulesPage(): ReactElement {
         onSubmit={(payload) => createSchedule.mutate(payload)}
         onCancel={() => setFormOpen(false)}
       />
+
+      {editing !== null ? (
+        <ScheduleForm
+          open
+          schedule={editing}
+          submitting={editSchedule.isPending}
+          error={editSchedule.isError ? studioErrorMessage(editSchedule.error) : null}
+          onSave={(changes) => editSchedule.mutate({ id: editing.id, changes })}
+          onCancel={() => setEditing(null)}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={condemned !== null}

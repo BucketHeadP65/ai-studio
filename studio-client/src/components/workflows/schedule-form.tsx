@@ -6,13 +6,14 @@ import { useEffect, useId, useMemo, useState } from "react";
 
 import { knowledgeBaseApi } from "@/api/knowledge-base";
 import { knowledgeBaseKeys } from "@/api/query-keys";
-import { schedulesApi } from "@/api/schedules";
+import { type Schedule, type ScheduleUpdateInput, schedulesApi } from "@/api/schedules";
 import { studioApi, studioErrorMessage } from "@/api/studio";
 import type { GateMode, JsonValue } from "@/api/studio-types";
 import {
   type KnowledgeBaseRegistry,
   type ParameterDraft,
   ParameterFields,
+  draftFrom,
   emptyDraft,
   parameterFields,
   readParameters,
@@ -23,35 +24,177 @@ import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Select } from "@/shared/ui/select";
 
-// The one route onto a new schedule: pick a workflow (fixed, when the caller already knows which
-// one; a select fed by `studioApi.library()` otherwise), answer its declared parameters through
-// the same field renderer a run is set up with (fetched via `studioApi.workflow`, the same route
-// `RunControls` reads), name a cadence with a live three-fire preview, and choose how its gates
-// behave unattended. Editing an existing schedule is not this form's job (creation only). The
-// lane's own switch, run-now, and delete cover the rest.
+// The one route onto a new schedule, and onto a change to an existing one. Creating, it picks a
+// workflow (fixed, when the caller already knows which one, a select fed by `studioApi.library()`
+// otherwise). Editing, it opens on the schedule's own values and its workflow cannot change. Either
+// way it answers the workflow's declared parameters through the same field renderer a run is set
+// up with (fetched via `studioApi.workflow`, the same route `RunControls` reads), names a cadence
+// (an interval, a cron expression or an event) with a live preview, and chooses how its gates
+// behave unattended. An edit hands back only the fields that changed.
 
-type CadenceMode = "interval" | "cron";
+type CadenceMode = "interval" | "cron" | "event";
 type IntervalUnit = "m" | "h" | "d";
 type GatePolicyMode = "wait" | "fail_after";
 
 const UNIT_LABEL: Record<IntervalUnit, string> = { m: "minutes", h: "hours", d: "days" };
 
-function composeCadence(
-  mode: CadenceMode,
-  intervalCount: string,
-  intervalUnit: IntervalUnit,
-  cronText: string,
-): string {
-  if (mode === "cron") return cronText.trim();
-  const trimmed = intervalCount.trim();
+// Every field the form holds besides the arguments, as typed.
+interface FormValues {
+  cadenceMode: CadenceMode;
+  intervalCount: string;
+  intervalUnit: IntervalUnit;
+  cronText: string;
+  eventText: string;
+  gatePolicyMode: GatePolicyMode;
+  failAfterSeconds: string;
+  gateMode: GateMode;
+  capacityKey: string;
+  capacityLimit: string;
+  blackout: string;
+  catchUp: boolean;
+}
+
+const BLANK_VALUES: FormValues = {
+  cadenceMode: "interval",
+  intervalCount: "30",
+  intervalUnit: "m",
+  cronText: "",
+  eventText: "",
+  gatePolicyMode: "wait",
+  failAfterSeconds: "300",
+  gateMode: "wait",
+  capacityKey: "",
+  capacityLimit: "",
+  blackout: "",
+  catchUp: false,
+};
+
+// The interval fields hold minutes, hours and days. An interval in seconds is kept as written.
+const INTERVAL = /^every\s+(\d+)\s*([mhd])$/i;
+const EVENT_CADENCES = [
+  /^on\s+refresh$/i,
+  /^after\s+\S+$/i,
+  /^on\s+index\s+\S+(?:\s+quiet\s+\d+\s*[smh])?$/i,
+];
+// Checked after the event cadences, since "on index docs quiet 30m" also has five words.
+const CRON = /^\S+(?:\s+\S+){4}$/;
+const FAIL_AFTER = /^fail_after:(.*)$/;
+
+function isEventCadence(text: string): boolean {
+  return EVENT_CADENCES.some((pattern) => pattern.test(text));
+}
+
+// A stored cadence split back into the fields that show it. Anything the interval and cron fields
+// cannot show lands in the event box exactly as written.
+function cadenceValues(cadence: string): Partial<FormValues> {
+  const text = cadence.trim();
+  const interval = INTERVAL.exec(text);
+  if (interval !== null) {
+    const unit = interval[2].toLowerCase();
+    return {
+      cadenceMode: "interval",
+      intervalCount: interval[1],
+      intervalUnit: unit === "h" ? "h" : unit === "d" ? "d" : "m",
+    };
+  }
+  if (!isEventCadence(text) && CRON.test(text)) return { cadenceMode: "cron", cronText: text };
+  return { cadenceMode: "event", eventText: text };
+}
+
+function valuesFrom(schedule: Schedule): FormValues {
+  const failAfter = FAIL_AFTER.exec(schedule.gate_policy);
+  return {
+    ...BLANK_VALUES,
+    ...cadenceValues(schedule.cadence),
+    gatePolicyMode: failAfter === null ? "wait" : "fail_after",
+    failAfterSeconds: failAfter === null ? BLANK_VALUES.failAfterSeconds : failAfter[1],
+    gateMode: schedule.gate_mode,
+    capacityKey: schedule.capacity_key ?? "",
+    capacityLimit: schedule.capacity_limit === null ? "" : String(schedule.capacity_limit),
+    blackout: schedule.blackout ?? "",
+    catchUp: schedule.catch_up,
+  };
+}
+
+function composeCadence(values: FormValues): string {
+  if (values.cadenceMode === "cron") return values.cronText.trim();
+  if (values.cadenceMode === "event") return values.eventText.trim();
+  const trimmed = values.intervalCount.trim();
   const n = Number(trimmed);
   if (trimmed === "" || !Number.isFinite(n) || n <= 0) return "";
-  return `every ${trimmed}${intervalUnit}`;
+  return `every ${trimmed}${values.intervalUnit}`;
 }
 
 function composeGatePolicy(mode: GatePolicyMode, failAfterSeconds: string): string {
   if (mode === "wait") return "wait";
   return `fail_after:${failAfterSeconds.trim()}`;
+}
+
+function composePayload(
+  workflowId: string,
+  argumentValues: Record<string, JsonValue>,
+  values: FormValues,
+): ScheduleFormPayload {
+  const trimmedCapacityKey = values.capacityKey.trim();
+  const trimmedCapacityLimit = values.capacityLimit.trim();
+  const parsedCapacityLimit = Number(trimmedCapacityLimit);
+  const trimmedBlackout = values.blackout.trim();
+  return {
+    workflowId,
+    arguments: argumentValues,
+    cadence: composeCadence(values),
+    gatePolicy: composeGatePolicy(values.gatePolicyMode, values.failAfterSeconds),
+    gateMode: values.gateMode,
+    capacityKey: trimmedCapacityKey === "" ? null : trimmedCapacityKey,
+    capacityLimit:
+      trimmedCapacityKey === "" ||
+      trimmedCapacityLimit === "" ||
+      !Number.isFinite(parsedCapacityLimit)
+        ? null
+        : parsedCapacityLimit,
+    blackout: trimmedBlackout === "" ? null : trimmedBlackout,
+    catchUp: values.catchUp,
+  };
+}
+
+// The fields `current` changes from `opened`, both composed the same way, so a value the form only
+// rewrote (such as "EVERY 30M" reopened as "every 30m") is never sent. Arguments go whole, since a
+// change replaces every stored argument.
+function scheduleChanges(
+  opened: ScheduleFormPayload,
+  current: ScheduleFormPayload,
+): ScheduleUpdateInput {
+  const changes: ScheduleUpdateInput = {};
+  if (JSON.stringify(current.arguments) !== JSON.stringify(opened.arguments)) {
+    changes.arguments = current.arguments;
+  }
+  if (current.cadence !== opened.cadence) changes.cadence = current.cadence;
+  if (current.gatePolicy !== opened.gatePolicy) changes.gate_policy = current.gatePolicy;
+  if (current.gateMode !== opened.gateMode) changes.gate_mode = current.gateMode;
+  if (current.capacityKey !== opened.capacityKey) changes.capacity_key = current.capacityKey;
+  if (current.capacityLimit !== opened.capacityLimit) {
+    changes.capacity_limit = current.capacityLimit;
+  }
+  if (current.blackout !== opened.blackout) changes.blackout = current.blackout;
+  if (current.catchUp !== opened.catchUp) changes.catch_up = current.catchUp;
+  return changes;
+}
+
+// The saved fields this edit empties. The backend keeps a capacity key, capacity limit or blackout
+// once set and ignores an empty one, so the form refuses to save rather than drop the change.
+function emptiedFields(opened: ScheduleFormPayload, current: ScheduleFormPayload): string[] {
+  const emptied: string[] = [];
+  if (opened.capacityKey !== null && current.capacityKey === null) emptied.push("capacity key");
+  if (opened.capacityLimit !== null && current.capacityLimit === null) {
+    emptied.push("capacity limit");
+  }
+  if (opened.blackout !== null && current.blackout === null) emptied.push("blackout windows");
+  return emptied;
+}
+
+function joinWords(words: string[]): string {
+  if (words.length <= 1) return words.join("");
+  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
 // A loose shape check for a nudge only — the backend's own refusal sentence (rendered through
@@ -122,26 +265,37 @@ export interface ScheduleFormPayload {
   catchUp: boolean;
 }
 
-export interface ScheduleFormProps {
+interface ScheduleFormCommonProps {
   open: boolean;
-  // Preselected when opened from a workflow's own page; absent when opened standalone from the
-  // fleet's Scheduled lane, in which case a select (fed by `studioApi.library()`) lets a person
-  // choose one here.
-  workflowId?: string;
   submitting: boolean;
   error?: string | null;
-  onSubmit: (payload: ScheduleFormPayload) => void;
   onCancel: () => void;
 }
 
-export function ScheduleForm({
-  open,
-  workflowId,
-  submitting,
-  error,
-  onSubmit,
-  onCancel,
-}: ScheduleFormProps) {
+export interface NewScheduleFormProps extends ScheduleFormCommonProps {
+  // Preselected when opened from a workflow's own page. Absent when opened standalone from the
+  // schedules station, in which case a select (fed by `studioApi.library()`) lets a person choose
+  // one here.
+  workflowId?: string;
+  schedule?: undefined;
+  onSubmit: (payload: ScheduleFormPayload) => void;
+}
+
+export interface EditScheduleFormProps extends ScheduleFormCommonProps {
+  // The schedule as it stood when its edit began. The form opens on its values, and its workflow
+  // is shown but cannot change.
+  schedule: Schedule;
+  workflowId?: undefined;
+  // Called with only the fields that changed. Saving is off until something has.
+  onSave: (changes: ScheduleUpdateInput) => void;
+}
+
+export type ScheduleFormProps = NewScheduleFormProps | EditScheduleFormProps;
+
+export function ScheduleForm(props: ScheduleFormProps) {
+  const { open, submitting, error, onCancel, schedule } = props;
+  const editing = schedule !== undefined;
+  const workflowId = schedule?.workflow_id ?? props.workflowId;
   const titleId = useId();
   const workflowSelectId = useId();
   const capacityKeyId = useId();
@@ -149,18 +303,25 @@ export function ScheduleForm({
   const blackoutId = useId();
   const standalone = workflowId === undefined;
 
+  // What every field opens on: the schedule's own values when editing, the defaults otherwise.
+  const opening = useMemo(
+    () => (schedule === undefined ? BLANK_VALUES : valuesFrom(schedule)),
+    [schedule],
+  );
+
   const [pickedWorkflowId, setPickedWorkflowId] = useState("");
-  const [cadenceMode, setCadenceMode] = useState<CadenceMode>("interval");
-  const [intervalCount, setIntervalCount] = useState("30");
-  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>("m");
-  const [cronText, setCronText] = useState("");
-  const [gatePolicyMode, setGatePolicyMode] = useState<GatePolicyMode>("wait");
-  const [failAfterSeconds, setFailAfterSeconds] = useState("300");
-  const [gateMode, setGateMode] = useState<GateMode>("wait");
-  const [capacityKey, setCapacityKey] = useState("");
-  const [capacityLimit, setCapacityLimit] = useState("");
-  const [blackout, setBlackout] = useState("");
-  const [catchUp, setCatchUp] = useState(false);
+  const [cadenceMode, setCadenceMode] = useState<CadenceMode>(opening.cadenceMode);
+  const [intervalCount, setIntervalCount] = useState(opening.intervalCount);
+  const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>(opening.intervalUnit);
+  const [cronText, setCronText] = useState(opening.cronText);
+  const [eventText, setEventText] = useState(opening.eventText);
+  const [gatePolicyMode, setGatePolicyMode] = useState<GatePolicyMode>(opening.gatePolicyMode);
+  const [failAfterSeconds, setFailAfterSeconds] = useState(opening.failAfterSeconds);
+  const [gateMode, setGateMode] = useState<GateMode>(opening.gateMode);
+  const [capacityKey, setCapacityKey] = useState(opening.capacityKey);
+  const [capacityLimit, setCapacityLimit] = useState(opening.capacityLimit);
+  const [blackout, setBlackout] = useState(opening.blackout);
+  const [catchUp, setCatchUp] = useState(opening.catchUp);
   const [draft, setDraft] = useState<ParameterDraft>({});
   const [showErrors, setShowErrors] = useState(false);
   const [preview, setPreview] = useState<{ occurrences: string[] | null; error: string | null }>({
@@ -169,26 +330,48 @@ export function ScheduleForm({
   });
 
   const effectiveWorkflowId = workflowId ?? pickedWorkflowId;
-  const cadence = composeCadence(cadenceMode, intervalCount, intervalUnit, cronText);
+  const values: FormValues = {
+    cadenceMode,
+    intervalCount,
+    intervalUnit,
+    cronText,
+    eventText,
+    gatePolicyMode,
+    failAfterSeconds,
+    gateMode,
+    capacityKey,
+    capacityLimit,
+    blackout,
+    catchUp,
+  };
+  const cadence = composeCadence(values);
+  // A stored cadence the interval and cron fields cannot show, such as "every 45s", kept as written.
+  const keptAsWritten =
+    editing &&
+    opening.cadenceMode === "event" &&
+    !isEventCadence(opening.eventText) &&
+    cadenceMode === "event" &&
+    eventText === opening.eventText;
 
-  // A fresh form every time the dialog opens — it stays mounted between opens, so nothing typed
-  // for a discarded attempt should linger into the next one.
+  // The form starts over every time the dialog opens. It stays mounted between opens, so nothing
+  // typed for a discarded attempt lingers into the next one.
   useEffect(() => {
     if (!open) return;
     setPickedWorkflowId("");
-    setCadenceMode("interval");
-    setIntervalCount("30");
-    setIntervalUnit("m");
-    setCronText("");
-    setGatePolicyMode("wait");
-    setFailAfterSeconds("300");
-    setGateMode("wait");
-    setCapacityKey("");
-    setCapacityLimit("");
-    setBlackout("");
-    setCatchUp(false);
+    setCadenceMode(opening.cadenceMode);
+    setIntervalCount(opening.intervalCount);
+    setIntervalUnit(opening.intervalUnit);
+    setCronText(opening.cronText);
+    setEventText(opening.eventText);
+    setGatePolicyMode(opening.gatePolicyMode);
+    setFailAfterSeconds(opening.failAfterSeconds);
+    setGateMode(opening.gateMode);
+    setCapacityKey(opening.capacityKey);
+    setCapacityLimit(opening.capacityLimit);
+    setBlackout(opening.blackout);
+    setCatchUp(opening.catchUp);
     setPreview({ occurrences: null, error: null });
-  }, [open]);
+  }, [open, opening]);
 
   useEffect(() => {
     if (!open) return;
@@ -255,7 +438,7 @@ export function ScheduleForm({
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the field shape, never on the identity of an array a fetch re-derives.
   useEffect(() => {
-    setDraft(emptyDraft(fields));
+    setDraft(schedule === undefined ? emptyDraft(fields) : draftFrom(fields, schedule.arguments));
     setShowErrors(false);
   }, [open, fieldShape]);
 
@@ -273,35 +456,38 @@ export function ScheduleForm({
   };
   const read = readParameters(fields, draft, { knowledgeBases });
   const unanswered = Object.keys(read.errors).length;
+  const payload = composePayload(effectiveWorkflowId, read.values, values);
+  // The schedule as the form opened on it, composed the same way as what is typed now.
+  const opened =
+    schedule === undefined
+      ? null
+      : composePayload(
+          schedule.workflow_id,
+          readParameters(fields, draftFrom(fields, schedule.arguments), { knowledgeBases }).values,
+          opening,
+        );
+  const changes = opened === null ? null : scheduleChanges(opened, payload);
+  const emptied = opened === null ? [] : emptiedFields(opened, payload);
+  const nothingChanged = changes !== null && Object.keys(changes).length === 0;
 
   if (!open) return null;
 
-  const canSubmit = effectiveWorkflowId !== "" && cadence !== "" && !submitting;
+  const canSubmit =
+    effectiveWorkflowId !== "" &&
+    cadence !== "" &&
+    !submitting &&
+    !nothingChanged &&
+    emptied.length === 0;
 
   function submit() {
     if (!canSubmit) return;
     setShowErrors(true);
     if (unanswered > 0) return;
-    const trimmedCapacityKey = capacityKey.trim();
-    const trimmedCapacityLimit = capacityLimit.trim();
-    const parsedCapacityLimit = Number(trimmedCapacityLimit);
-    const trimmedBlackout = blackout.trim();
-    onSubmit({
-      workflowId: effectiveWorkflowId,
-      arguments: read.values,
-      cadence,
-      gatePolicy: composeGatePolicy(gatePolicyMode, failAfterSeconds),
-      gateMode,
-      capacityKey: trimmedCapacityKey === "" ? null : trimmedCapacityKey,
-      capacityLimit:
-        trimmedCapacityKey === "" ||
-        trimmedCapacityLimit === "" ||
-        !Number.isFinite(parsedCapacityLimit)
-          ? null
-          : parsedCapacityLimit,
-      blackout: trimmedBlackout === "" ? null : trimmedBlackout,
-      catchUp,
-    });
+    if (props.schedule !== undefined) {
+      if (changes !== null) props.onSave(changes);
+      return;
+    }
+    props.onSubmit(payload);
   }
 
   return (
@@ -321,7 +507,7 @@ export function ScheduleForm({
       />
       <div className="relative z-10 flex max-h-[85vh] w-full max-w-lg flex-col gap-3 overflow-y-auto rounded-lg bg-surface p-5 shadow-lg ring-1 ring-line">
         <h2 id={titleId} className="font-semibold text-label-1 text-subtitle">
-          New schedule
+          {editing ? "Edit schedule" : "New schedule"}
         </h2>
 
         {standalone ? (
@@ -425,11 +611,54 @@ export function ScheduleForm({
               className="flex-1 font-mono"
             />
           </label>
+          <label
+            className={cn(
+              "flex items-center gap-2 rounded-md border p-2.5 text-body transition-colors",
+              cadenceMode === "event"
+                ? "border-label-1 bg-well text-label-1"
+                : "border-line bg-surface text-label-2 hover:border-line-strong",
+            )}
+          >
+            <input
+              type="radio"
+              name="cadence-mode"
+              checked={cadenceMode === "event"}
+              onChange={() => setCadenceMode("event")}
+              className="accent-[var(--label-1)]"
+            />
+            On an event
+            <Input
+              aria-label="Event"
+              value={eventText}
+              onChange={(event) => setEventText(event.target.value)}
+              disabled={cadenceMode !== "event"}
+              placeholder="on refresh"
+              className="flex-1 font-mono"
+            />
+          </label>
+          {cadenceMode === "event" ? (
+            <p className="text-label-3 text-micro">
+              Write <code className="font-mono">on refresh</code> to run after a refresh brings in
+              new sources, <code className="font-mono">after &lt;workflow name&gt;</code> to run
+              after another workflow&apos;s run ends, or{" "}
+              <code className="font-mono">on index &lt;knowledge base&gt; quiet 30m</code> to run
+              after a knowledge base is indexed.
+            </p>
+          ) : null}
+          {keptAsWritten ? (
+            <p className="text-label-3 text-micro">
+              The other fields cannot show this cadence, so it is kept here as written.
+            </p>
+          ) : null}
         </fieldset>
 
         {preview.error ? (
           <p role="alert" className="text-caption text-danger-ink">
             {preview.error}
+          </p>
+        ) : preview.occurrences?.length === 0 ? (
+          <p className="text-caption text-label-3">
+            Waits for that event instead of running at set times.
           </p>
         ) : preview.occurrences ? (
           <p className="text-caption text-label-3">
@@ -567,6 +796,12 @@ export function ScheduleForm({
           </p>
         ) : null}
 
+        {emptied.length > 0 ? (
+          <p className="text-caption text-warn-ink">
+            The saved {joinWords(emptied)} cannot be emptied. Put a value back to save your changes.
+          </p>
+        ) : null}
+
         {error ? (
           <p role="alert" className="text-caption text-danger-ink">
             {error}
@@ -578,7 +813,13 @@ export function ScheduleForm({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit}>
-            {submitting ? "Creating..." : "Create"}
+            {editing
+              ? submitting
+                ? "Saving..."
+                : "Save changes"
+              : submitting
+                ? "Creating..."
+                : "Create"}
           </Button>
         </div>
       </div>

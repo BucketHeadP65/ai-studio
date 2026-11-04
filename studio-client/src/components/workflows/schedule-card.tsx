@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, MinusCircle, Trash2, XCircle } from "lucide-react";
+import { CheckCircle2, MinusCircle, Pencil, Trash2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MouseEvent, ReactElement, ReactNode } from "react";
@@ -16,12 +16,12 @@ import { formatRelative } from "@/shared/lib/format-relative";
 import { Button } from "@/shared/ui/button";
 
 // One card on the schedules station: a workflow's standing, cadence-driven trigger, with the
-// acts an owner has over it inline (enable/disable, run it now, delete it) and the state a
-// glance needs (what it is doing now, what its cadence and property tags are, how its last fire
-// went). A paused schedule reads as a single sentence instead, since nothing on it can move.
-// The whole card opens the workflow; a click on one of the card's own controls keeps its own
-// meaning instead. Editing a schedule's cadence or arguments is the create form's job, not this
-// card's -- a card only ever shows what a schedule already carries.
+// acts an owner has over it inline (turn it on or off, run it now, edit it, delete it) and the
+// state a glance needs (what it is doing now, what its cadence and property tags are, how its
+// last fire went). A paused schedule reads as a single sentence instead, since it will not fire,
+// and it can still be edited. The whole card opens the workflow. A click on one of the card's own
+// controls keeps its own meaning instead. Edit hands the schedule to the caller, which opens the
+// schedule form on it.
 
 const INTERVAL = /^every\s+(\d+)\s*(s|m|h|d)$/i;
 const ON_REFRESH = /^on\s+refresh$/i;
@@ -156,6 +156,19 @@ function ScheduleSwitch({
   );
 }
 
+function EditButton({ onEdit }: { onEdit: () => void }): ReactElement {
+  return (
+    <button
+      type="button"
+      aria-label="Edit schedule"
+      onClick={onEdit}
+      className="shrink-0 rounded-md p-1.5 text-label-3 transition-colors hover:bg-well hover:text-label-1 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+    >
+      <Pencil size={14} />
+    </button>
+  );
+}
+
 function DeleteButton({ onDelete }: { onDelete: () => void }): ReactElement {
   return (
     <button
@@ -236,6 +249,7 @@ export interface ScheduleCardProps {
   runningNow: boolean;
   onToggleEnabled: () => void;
   onRunNow: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   now?: number;
 }
@@ -247,6 +261,7 @@ export function ScheduleCard({
   runningNow,
   onToggleEnabled,
   onRunNow,
+  onEdit,
   onDelete,
   now = Date.now(),
 }: ScheduleCardProps): ReactElement {
@@ -281,6 +296,7 @@ export function ScheduleCard({
           <StatePill tone={RUN_STATE_PILL.paused.tone} size="sm">
             {RUN_STATE_PILL.paused.word}
           </StatePill>
+          <EditButton onEdit={onEdit} />
           <DeleteButton onDelete={onDelete} />
         </div>
         <p className="px-5 pb-4 text-caption text-label-2">{pausedSentence(schedule, now)}</p>
@@ -312,6 +328,7 @@ export function ScheduleCard({
         <StatePill tone={pill.tone} size="sm">
           {pill.word}
         </StatePill>
+        <EditButton onEdit={onEdit} />
         <DeleteButton onDelete={onDelete} />
       </div>
 

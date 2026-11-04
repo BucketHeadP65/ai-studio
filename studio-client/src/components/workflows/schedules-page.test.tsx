@@ -1,14 +1,15 @@
 import { screen, waitFor } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Schedule } from "@/api/schedules";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
 
+const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPush }),
 }));
 
 // Imported after the mock so ScheduleCard (each card navigates its own workflow) sees the
@@ -18,10 +19,15 @@ import { SchedulesPage } from "./schedules-page";
 // The schedules station body: renders every schedule off `schedulesApi.list()`, on schedules
 // first (soonest fire first), then paused ones, each card's name joined from `studioApi.library()`
 // by workflow id, the create route (`ScheduleForm` in standalone mode, posting every field it
-// collects), and the toggle/run-now/delete mutations. Every request the mount can fire is mocked
-// here (MSW errors on anything left unhandled).
+// collects), the edit route (`ScheduleForm` on one schedule, patching only what changed), and the
+// toggle/run-now/delete mutations. Every request the mount can fire is mocked here (MSW errors on
+// anything left unhandled).
 
 const BASE = "http://studio.test";
+
+afterEach(() => {
+  routerPush.mockClear();
+});
 
 function scheduleFixture(overrides: Partial<Schedule> = {}): Schedule {
   return {
@@ -84,6 +90,56 @@ function mountApi(
         })),
       ),
     ),
+  );
+}
+
+// A workflow that declares no parameters, as its detail route answers it.
+function workflowDetail(id: string) {
+  return {
+    ok: true,
+    id,
+    name: "sales",
+    version: 1,
+    description: "",
+    title: "Sales",
+    summary: "",
+    applicability: "",
+    provisional: false,
+    archived_at: null,
+    graph: { name: "sales", version: 1, nodes: [], edges: [] },
+    issues: [],
+    fits: true,
+    missing: [],
+    brings: [],
+    spec_yaml: "name: sales\n",
+    staleness: [],
+    lineage: null,
+    birth: [],
+    carried: null,
+    predictions: null,
+    prediction_record: null,
+    trust: {
+      approved_by: [],
+      level: "unverified",
+      runs_with_evidence: 0,
+      failed_runs: 0,
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+  };
+}
+
+function mountForm(workflowId: string): void {
+  server.use(
+    http.get(`${BASE}/api/workflow/${workflowId}`, () =>
+      HttpResponse.json(workflowDetail(workflowId)),
+    ),
+    http.post(`${BASE}/api/schedules/preview`, async ({ request }) => {
+      const { cadence } = (await request.json()) as { cadence: string };
+      if (/^(on |after )/.test(cadence)) return HttpResponse.json({ next: [] });
+      return HttpResponse.json({ next: ["2026-08-24T00:00:00+00:00"] });
+    }),
   );
 }
 
@@ -302,5 +358,101 @@ describe("SchedulesPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Delete it" }));
 
     await screen.findByText("No schedules yet.");
+  });
+
+  it("opens the edit form from a card's Edit, not the workflow", async () => {
+    mountApi([scheduleFixture({ cadence: "after research-digest" })]);
+    mountForm("wf.sales.v1");
+    render(<SchedulesPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit schedule" }));
+
+    expect(await screen.findByRole("heading", { name: "Edit schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Event" })).toHaveValue("after research-digest");
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("saves an edit as a PATCH holding only the changed field, then shows the new value", async () => {
+    const schedules = [scheduleFixture({ cadence: "every 30m" })];
+    let patched: unknown = null;
+    mountApi(schedules);
+    mountForm("wf.sales.v1");
+    server.use(
+      http.get(`${BASE}/api/schedules`, () => HttpResponse.json({ schedules })),
+      http.patch(`${BASE}/api/schedules/sched-1`, async ({ request }) => {
+        patched = await request.json();
+        schedules[0] = { ...schedules[0], cadence: "every 15m" };
+        return HttpResponse.json({ schedule: schedules[0] });
+      }),
+    );
+    render(<SchedulesPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit schedule" }));
+    const count = await screen.findByLabelText("Interval count");
+    await userEvent.clear(count);
+    await userEvent.type(count, "15");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(patched).toEqual({ cadence: "every 15m" }));
+    expect(await screen.findByText("every 15m")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("shows a refused edit's reason in the form", async () => {
+    mountApi([scheduleFixture()]);
+    mountForm("wf.sales.v1");
+    server.use(
+      http.patch(`${BASE}/api/schedules/sched-1`, () =>
+        HttpResponse.json(
+          {
+            ok: false,
+            message:
+              "a schedule of 'sales' cannot fire after 'sales', because every run that succeeds would fire it again",
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    render(<SchedulesPage />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Edit schedule" }));
+    await userEvent.click(await screen.findByRole("radio", { name: /On an event/ }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Event" }), "after sales");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "a schedule of 'sales' cannot fire after 'sales', because every run that succeeds would fire it again",
+    );
+    expect(screen.getByRole("heading", { name: "Edit schedule" })).toBeInTheDocument();
+  });
+
+  it("creates a schedule that waits for an event, posting that cadence", async () => {
+    mountApi([], [{ id: "wf-sales", title: "Sales" }]);
+    mountForm("wf-sales");
+    let posted: { cadence?: string } | null = null;
+    server.use(
+      http.post(`${BASE}/api/schedules`, async ({ request }) => {
+        posted = (await request.json()) as { cadence?: string };
+        return HttpResponse.json({ schedule: scheduleFixture({ id: "sched-9" }) });
+      }),
+    );
+    render(<SchedulesPage />);
+
+    await screen.findByText("No schedules yet.");
+    await userEvent.click(screen.getAllByRole("button", { name: "New schedule" })[0]);
+    await userEvent.selectOptions(
+      await screen.findByLabelText("Workflow"),
+      screen.getByRole("option", { name: "Sales" }),
+    );
+    await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Event" }),
+      "on index repo-docs quiet 30m",
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Create" }));
+
+    await waitFor(() =>
+      expect(posted).toEqual(expect.objectContaining({ cadence: "on index repo-docs quiet 30m" })),
+    );
   });
 });
