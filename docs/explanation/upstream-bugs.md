@@ -327,6 +327,28 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `retries={'output': 4}`, raises `UnexpectedModelBehavior: Exceeded maximum output retries (4)` after 5 model calls.
   With `capabilities=[RaiseContentFilterError()]` it raises `ContentFilterError` after 1.
 
+## UB-13. Monty's `json.dumps` refuses `default=`
+
+- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.63.0's `CodeMode` (`run_code`).
+- **Symptom:** `json.dumps(value, default=str)` in a program fails with `TypeError: JSONEncoder.__init__() got an
+  unexpected keyword argument 'default'`. `indent=` works. `run_code`'s description lists `json` among the importable
+  modules with no caveat, so a model writes the CPython call it knows and spends a retry on it.
+- **Cause:** Monty's `json.dumps` takes a subset of CPython's keywords, and `default` is not among them. Neither Monty nor
+  the `run_code` description says which keywords are missing.
+- **Grade:** cheap. It costs one retry. A tool's return reaches a program already converted to JSON values, so a program
+  never needs `default=` to dump one.
+- **Found:** the harness inspector's finding 5, confirmed 2026-11-04 by a review of its findings: a chat model's program
+  called `json.dumps(..., default=str)` and was refused.
+- **What we did:** the sandbox dialect (`harness/src/harness/sandbox.py`, `_DIALECT`) says `json.dumps` takes no
+  `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
+- **Upstream state:** present in pydantic-monty 1.4.0. The ask is that `json.dumps` accept `default=` as CPython does, or
+  that `run_code`'s description name the `json` keywords Monty leaves out.
+- **Issue:** not filed.
+- **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
+  `session.feed_run('import json\njson.dumps({"a": 1}, default=str)')` raises `MontyRuntimeError: TypeError:
+  JSONEncoder.__init__() got an unexpected keyword argument 'default'`. The same call with `indent=1` in place of
+  `default=str` returns `'{\n "a": 1\n}'`.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our

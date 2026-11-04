@@ -69,6 +69,40 @@ async def test_an_unknown_function_refusal_names_the_way_out() -> None:
     assert "cannot hand a variable" in content
 
 
+async def test_a_name_the_agent_cannot_see_is_sent_to_load_capability_not_given_up() -> None:
+    """Live, `list_skills` sat behind a deferred capability and the hint told the model it did not exist, so it gave up."""
+    raised = await _wrapped(SANDBOX, _retry(_REFUSAL.replace("adapt_workflow", "list_skills")))
+
+    assert isinstance(raised, ToolRetryError)
+    content = raised.tool_retry.content
+    assert isinstance(content, str)
+    assert "load_capability" in content
+    assert "it does not exist here" not in content.split("load_capability")[0], "the way out comes before any verdict that it is gone"
+
+
+def _dialect() -> str:
+    """The instructions `SandboxDiscipline` adds to the agent."""
+    return SandboxDiscipline[Any]().get_instructions()(cast("Any", None))
+
+
+def test_the_dialect_says_up_front_that_a_program_reaches_only_the_sandboxs_functions() -> None:
+    """Live, models called `fetch`, `save_workflow` and `list_skills` inside a program and learned the rule only from a refusal."""
+    dialect = _dialect()
+
+    rule = dialect.index("available inside the sandbox")
+    assert rule < dialect.index("top-level script"), "the rule comes before the rest of the dialect"
+    assert "its own tool call" in dialect
+    assert "load_capability" in dialect
+
+
+def test_the_dialect_says_json_dumps_takes_no_default() -> None:
+    """Live, `json.dumps(value, default=str)` failed in the sandbox, whose `json` takes no `default=`."""
+    dialect = _dialect()
+
+    assert "`json.dumps` takes no `default=`" in dialect
+    assert "already a JSON value" in dialect
+
+
 async def test_the_type_checkers_refusal_of_the_same_name_gets_the_same_hint() -> None:
     """A fresh program is type-checked before it runs, and that voice refused `adapt_workflow` three times live with no hint."""
     raised = await _wrapped(SANDBOX, _retry(_TYPE_CHECK_REFUSAL))
