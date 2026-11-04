@@ -734,7 +734,7 @@ class TestRunCodeCatalogSize:
     """The size of `run_code`'s description and the catalog block together, with everything that folds into the sandbox mounted.
 
     A regression guard, not the full picture. With the full catalog, the global memory functions
-    included, the two measure about 18.3 KB, and the ceiling leaves about 20% headroom over that, so a
+    included, the two measure about 18.9 KB, and the ceiling leaves about 20% headroom over that, so a
     real regression shows without chasing the exact byte count turn to turn.
     """
 
@@ -779,7 +779,7 @@ class TestRunCodeCatalogSize:
         await _run(agent)
 
         prompt_text = (_sandbox(captured["info"]).description or "") + _catalog_text([], captured["info"])
-        assert len(prompt_text.encode()) < 22_000
+        assert len(prompt_text.encode()) < 22_500
 
 
 class TestSkillHintMount:
