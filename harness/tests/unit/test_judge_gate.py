@@ -105,6 +105,28 @@ async def test_a_tooled_step_with_no_budget_gets_the_defined_step_default() -> N
     assert prompts[-1].endswith("You have 24 model requests for this task. When they are nearly gone, answer with what you have.")
 
 
+async def test_a_code_mode_steps_budget_line_says_a_programs_calls_count() -> None:
+    prompts: list[str] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        prompts.append(_prompt_of(messages))
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "ok"})])
+
+    environment = await world_over(streaming_function_model(respond))
+    ready = prepare(spec_for(_task(budget=Budget(requests=3, tool_calls=20), tools=("search",))), environment)
+    assert ready.report.ok, ready.report.issues
+    implementation = ready.registry.get("dig")
+    assert implementation is not None
+
+    await implementation.function(question="what does the knowledge base say?")
+
+    assert prompts
+    assert prompts[-1].endswith(
+        "You have 3 model requests and 20 tool calls for this task. Each tool call a `run_code` program makes counts as one of "
+        "those tool calls, and so does the `run_code` call itself. When they are nearly gone, answer with what you have."
+    )
+
+
 async def test_a_step_that_never_answers_hits_its_own_requests_budget() -> None:
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         del messages, info

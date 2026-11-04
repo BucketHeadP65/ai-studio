@@ -134,12 +134,14 @@ async def test_a_briefings_program_calls_count_toward_its_tool_call_warning() ->
 
 async def test_a_map_turns_program_calls_count_toward_its_tool_call_warning() -> None:
     seen: list[list[str]] = []
+    turn_prompts: list[str] = []
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         seen.append(_warnings_seen(messages))
         if len(seen) == 1:
             return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "worth a look"})])
         if len(seen) == 2:
+            turn_prompts.extend(part.content for part in messages[-1].parts if isinstance(part, UserPromptPart) and isinstance(part.content, str))
             return ModelResponse(parts=[ToolCallPart("run_code", {"code": _searches(10)})])
         return ModelResponse(parts=[ToolCallPart(info.output_tools[1].name, {"note": "found it"})])
 
@@ -178,3 +180,8 @@ async def test_a_map_turns_program_calls_count_toward_its_tool_call_warning() ->
     assert "URGENT: The run's tool call limit is approaching." in warning
     assert "Tool calls: 11/15 used (73%), 4 remaining." in warning, "ten calls inside the program and the run_code call itself"
     assert "so a program may make at most 3 more calls." in warning
+    (turn_prompt,) = turn_prompts
+    assert turn_prompt.endswith(
+        "You have 4 model requests and 15 tool calls for this task. Each tool call a `run_code` program makes counts as one of "
+        "those tool calls, and so does the `run_code` call itself. When they are nearly gone, answer with what you have."
+    )

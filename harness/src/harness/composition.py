@@ -388,13 +388,16 @@ def build_worker_agent(  # noqa: PLR0913 (each keyword is a separate term the ho
     )
 
 
-def _budget_line(budget: int, tool_calls: int | None) -> str:
-    """The sentence a defined step's own prompt ends with, naming what it may spend before it starts."""
+def _budget_line(budget: int, tool_calls: int | None, *, counts_program_calls: bool) -> str:
+    """The sentence a defined step's prompt ends with: what it may spend, and under code mode that a program's calls count."""
     if tool_calls is None:
         return f"You have {budget} model requests for this task. When they are nearly gone, answer with what you have."
-    return (
-        f"You have {budget} model requests and {tool_calls} tool calls for this task. When they are nearly gone, answer with what you have."
+    counted = (
+        " Each tool call a `run_code` program makes counts as one of those tool calls, and so does the `run_code` call itself."
+        if counts_program_calls
+        else ""
     )
+    return f"You have {budget} model requests and {tool_calls} tool calls for this task.{counted} When they are nearly gone, answer with what you have."
 
 
 def step_baggage(active: ActiveRun, step: str) -> AbstractContextManager[None]:
@@ -669,7 +672,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
             briefing = "\n\n".join(f"### {name}\n{as_text(value)}" for name, value in inputs.items())
             prompt = briefing or "You have no inputs. Work from your instructions alone."
             prompt = _repair_asked_for(prompt)
-            prompt += "\n\n" + _budget_line(budget, tool_calls)
+            prompt += "\n\n" + _budget_line(budget, tool_calls, counts_program_calls=bool(task.tools))
             steering = StepSteerDelivery(line)
             stopped = _keeping_a_stopped_turn(
                 line, history=(), steering=steering, billed=lambda produced: _record_spend(current, task.name, produced, records.spend)
@@ -712,7 +715,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
             written = task.instructions if not briefing else f"{task.instructions}\n\n{briefing}"
             written += f"\n\nAnswer this task with {_shape_name(output_type)}."
             written = _repair_asked_for(written)
-            return written + "\n\n" + _budget_line(budget, tool_calls)
+            return written + "\n\n" + _budget_line(budget, tool_calls, counts_program_calls=bool(granted))
 
         continuing = CONTINUING_STEP_CONVERSATION.get()
         if turns is not None and continuing is not None:

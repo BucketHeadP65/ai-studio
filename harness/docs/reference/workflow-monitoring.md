@@ -351,7 +351,7 @@ Approve ignores `feedback` outright. It is read only on a rejection. A reject-wi
 retry, and the revised value comes back to the same gate for a person to read, unless automode is on for that run. A
 step file may also carry `budget` (`requests`, optional `tool_calls`). The run enforces it, and the step reads the
 number in its own first turn. In a code-mode step, `tool_calls` counts every call a `run_code` program makes as well as
-the `run_code` call itself (pydantic-ai-harness 0.59.0 and later). A program's call that would cross it ends the step
+the `run_code` call itself (pydantic-ai-harness 0.59.0 and later), and that first-turn line says so. A program's call that would cross it ends the step
 with `UsageLimitExceeded` in the middle of the program, and catching that inside the program does not help. A step
 whose budget names `tool_calls` is warned before each model request once its calls reach 70 percent of the limit
 (URGENT), and again once the calls left are at most the larger of 3 and a tenth of the limit (CRITICAL). The warning
