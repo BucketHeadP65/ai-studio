@@ -1,7 +1,34 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import { useLayoutEffect } from "react";
 import { describe, expect, it } from "vitest";
 
 import { AgentMarkdown } from "./markdown";
+
+const FENCE_THEN_OPEN_BRACKET = "Here:\n\n```ts\nconst answer = 42;\n```\n\nSee [the plan";
+
+function isCodeColoured(): boolean {
+  const body = document.querySelector('[data-streamdown="code-block-body"]');
+  return body !== null && /--sdm-c: ?#/.test(body.innerHTML);
+}
+
+// Whether the code body is coloured at each commit, read in a layout effect, before the browser paints.
+const colouredAtCommit: boolean[] = [];
+
+function CommitProbe(): null {
+  useLayoutEffect(() => {
+    colouredAtCommit.push(isCodeColoured());
+  });
+  return null;
+}
+
+function BubbleWithProbe({ live }: { live: boolean }) {
+  return (
+    <>
+      <AgentMarkdown live={live} text={FENCE_THEN_OPEN_BRACKET} />
+      <CommitProbe />
+    </>
+  );
+}
 
 // jsdom computes no layout, so the guarantee these pin is the one the browser reads off the
 // classes: the block never takes its width from its content, and a fence scrolls inside itself.
@@ -67,5 +94,16 @@ describe("AgentMarkdown", () => {
     expect(container.innerHTML).not.toContain("incomplete-link");
     expect(container.textContent).toContain("[2, [3");
     expect(container.textContent).toContain("[pass found nothing.");
+  });
+
+  it("keeps a highlighted fence coloured in the commit that settles the text", async () => {
+    const { container, rerender } = render(<BubbleWithProbe live />);
+    await waitFor(() => expect(isCodeColoured()).toBe(true), { timeout: 10000 });
+    colouredAtCommit.length = 0;
+
+    rerender(<BubbleWithProbe live={false} />);
+
+    expect(colouredAtCommit[0]).toBe(true);
+    expect(container.innerHTML).not.toContain("incomplete-link");
   });
 });

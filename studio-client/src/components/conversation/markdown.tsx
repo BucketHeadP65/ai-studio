@@ -31,10 +31,11 @@ const LINKS_ARE_ANCHORS = { enabled: false };
 export const AgentMarkdown = memo(function AgentMarkdown({ text, live }: { text: string; live: boolean }) {
   return (
     <div className="w-full min-w-0 max-w-full space-y-2 break-words [&_a]:text-accent [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre_code]:whitespace-pre [&_table]:max-w-full">
-      {/* Streamdown's memo ignores `parseIncompleteMarkdown`, so the same text under a new flag
-          re-renders only with a new key. */}
+      {/* `data-live` is not dead markup. Streamdown's memo ignores `parseIncompleteMarkdown` but
+          compares data attributes, so this attribute is what re-renders a turn that settles with
+          unchanged text. Its blocks stay mounted and only the repaired block re-renders. */}
       <Streamdown
-        key={live ? "streaming" : "finished"}
+        data-live={live ? "true" : "false"}
         lineNumbers={false}
         plugins={PLUGINS}
         linkSafety={LINKS_ARE_ANCHORS}

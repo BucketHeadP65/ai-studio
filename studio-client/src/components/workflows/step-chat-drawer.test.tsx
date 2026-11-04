@@ -340,6 +340,51 @@ describe("StepChatDrawer, live", () => {
     expect(screen.queryByRole("button", { name: "View turn detail" })).not.toBeInTheDocument();
   });
 
+  it("closes an unmatched bracket in the thinking and the bubble only while the step streams", async () => {
+    const encoder = new TextEncoder();
+    const held: { stream: ReadableStreamDefaultController<Uint8Array> | null } = { stream: null };
+    const send = (chunk: Record<string, unknown> | "[DONE]"): void => {
+      const data = chunk === "[DONE]" ? chunk : JSON.stringify(chunk);
+      held.stream?.enqueue(encoder.encode(`data: ${data}\n\n`));
+    };
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps`, () =>
+        HttpResponse.json({ steps: [{ node: "draft", item: "", executing: true, settled: false }] }),
+      ),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/stream`, () => {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            held.stream = controller;
+          },
+        });
+        return new HttpResponse(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+      }),
+    );
+    const placeholders = (): number => document.body.innerHTML.split("streamdown:incomplete-link").length - 1;
+
+    render(
+      <StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />,
+    );
+    await waitFor(() => expect(held.stream).not.toBeNull());
+    send({ type: "start" });
+    send({ type: "reasoning-start", id: "r-1" });
+    send({ type: "reasoning-delta", id: "r-1", delta: "Check [the source" });
+    send({ type: "reasoning-end", id: "r-1" });
+    send({ type: "text-start", id: "t-1" });
+    send({ type: "text-delta", id: "t-1", delta: "Read [the plan" });
+
+    await waitFor(() => expect(placeholders()).toBe(2));
+
+    send({ type: "text-end", id: "t-1" });
+    send({ type: "finish" });
+    send("[DONE]");
+    held.stream?.close();
+
+    await waitFor(() => expect(placeholders()).toBe(0));
+    expect(document.body.textContent).toContain("Check [the source");
+    expect(document.body.textContent).toContain("Read [the plan");
+  });
+
   it("shows no gate-mode caption -- the drawer steers a step, not a run", async () => {
     server.use(
       http.get(`${BASE}/api/sessions/s-1/run/steps`, () =>
