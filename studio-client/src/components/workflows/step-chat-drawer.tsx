@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { isTextUIPart } from "ai";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { stepKeys } from "@/api/query-keys";
 import type { MessagePayload } from "@/api/sessions-types";
@@ -56,6 +56,7 @@ interface DrawerLine {
 const FINISHED_NOTICE = "This step has finished. Its conversation is read only.";
 const NOT_STARTED_NOTICE = "This step has not started yet.";
 const COULD_NOT_READ_NOTICE = "Could not read this step.";
+const COULD_NOT_READ_RECORDING_NOTICE = "Could not read what this step recorded.";
 const DROPPED_NOTICE =
   "Earlier output was dropped from the live buffer. The full conversation is archived when the run ends.";
 
@@ -106,17 +107,50 @@ function speakerFor(nodeId: string, item: string): string {
   return item === "" ? `Step ${nodeId}` : `Step ${nodeId} (${item})`;
 }
 
+// Where the messages on screen come from. A live line switches between its stream and its
+// recording, and every bubble is drawn anew at the switch.
+type ConversationSource = "live" | "recording" | "archive";
+
 function StepConversation({
   messages,
   streaming,
   speaker,
+  source,
 }: {
   messages: UIMessage[];
   streaming: boolean;
   speaker: string;
+  source: ConversationSource;
 }): ReactElement {
+  // The reader's distance from the bottom, kept after every scroll and every render, and put back
+  // when the source switches. The recording adds the step's brief above the answers, so a scroll
+  // offset kept as it was would push a reader at the bottom up by the brief's height.
+  const logRef = useRef<HTMLDivElement>(null);
+  const distanceFromBottom = useRef(0);
+  const shownSource = useRef(source);
+  function keepDistance(): void {
+    const log = logRef.current;
+    if (log !== null) {
+      distanceFromBottom.current = log.scrollHeight - log.scrollTop;
+    }
+  }
+  useLayoutEffect(() => {
+    const log = logRef.current;
+    if (log === null || shownSource.current === source) {
+      return;
+    }
+    shownSource.current = source;
+    log.scrollTop = log.scrollHeight - distanceFromBottom.current;
+  }, [source]);
+  useLayoutEffect(keepDistance);
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+    <div
+      ref={logRef}
+      role="log"
+      aria-label="Step conversation"
+      onScroll={keepDistance}
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+    >
       {messages.map((message, index) => {
         if (message.role === "user") {
           return <UserBubble key={message.id} text={textOf(message)} />;
@@ -213,12 +247,15 @@ export function StepChatDrawer({
   const liveStream = useStepStream(sessionId ?? "", node.id, effectiveItem ?? "", streamEnabled);
 
   // Every settle this drawer sees reads its own recording, keyed by its count, so a line that ran
-  // again never shows the recording of an earlier settle while the new one loads. A recording
-  // that changes with no settle seen in between (a turn shorter than the lines poll) still
-  // refetches, since its key sits under the "run" root every run frame invalidates.
+  // again never shows the recording of an earlier settle while the new one loads. The count
+  // starts again on every open, so a recording leaves the cache once nothing shows it. A
+  // recording that changes with no settle seen in between (a turn shorter than the lines poll)
+  // still refetches, since its key sits under the "run" root every run frame invalidates.
   const lineSettled = sessionId !== null && activeLine?.settled === true && !activeLine.executing;
-  const [settles, setSettles] = useState(0);
-  const [sawSettled, setSawSettled] = useState(false);
+  // A drawer opened on a line already settled starts at its first settle, so its first render
+  // reads one recording rather than starting a read it drops at once.
+  const [settles, setSettles] = useState(lineSettled ? 1 : 0);
+  const [sawSettled, setSawSettled] = useState(lineSettled);
   if (lineSettled !== sawSettled) {
     setSawSettled(lineSettled);
     if (lineSettled) {
@@ -226,15 +263,17 @@ export function StepChatDrawer({
     }
   }
   const recording = useQuery({
-    queryKey: [...stepKeys.messages(sessionId ?? "", node.id, effectiveItem ?? ""), settles],
+    queryKey: stepKeys.messages(sessionId ?? "", node.id, effectiveItem ?? "", settles),
     queryFn: () => stepChatApi.messages(sessionId ?? "", node.id, effectiveItem ?? ""),
     enabled: open && lineSettled,
+    gcTime: 0,
   });
   const recordedMessages = useMemo(
     () => (recording.data === undefined ? null : stepConversationToUiMessages(recording.data)),
     [recording.data],
   );
-  const showRecording = lineSettled && recordedMessages !== null;
+  // A recording none of whose messages this app can read draws nothing, so the live messages stay.
+  const showRecording = lineSettled && recordedMessages !== null && recordedMessages.length > 0;
 
   const steer = useMutation({
     mutationFn: (text: string) => stepChatApi.steer(sessionId ?? "", node.id, effectiveItem ?? "", text),
@@ -251,20 +290,22 @@ export function StepChatDrawer({
         : [],
     [recordConversations, node.id, effectiveItem],
   );
+  const source: ConversationSource = sessionId === null ? "archive" : showRecording ? "recording" : "live";
   const messages: UIMessage[] =
-    sessionId === null
+    source === "archive"
       ? archivedMessages
-      : recordedMessages !== null && lineSettled
+      : source === "recording" && recordedMessages !== null
         ? recordedMessages
         : liveStream.messages;
   const streaming = sessionId !== null && !showRecording && liveStream.streaming;
   const speaker = speakerFor(node.id, effectiveItem ?? "");
 
   // The composer's own state comes from the line's `executing` flag, never from the stream's
-  // `streaming` bit -- that bit cannot tell a fetch failure from a settled line. Three notices,
+  // `streaming` bit -- that bit cannot tell a fetch failure from a settled line. Four notices,
   // live only (an archived run always finds its line in `recordConversations` and reads as
-  // finished, unchanged): a failed lines fetch reads as unreadable rather than finished; no line
-  // yet for this node or item reads as not started; only a line that answered and stopped reads
+  // finished, unchanged). A failed lines fetch reads as unreadable rather than finished. No line
+  // yet for this node or item reads as not started. A settled line whose recording could not be
+  // read says so, over the live messages it keeps. Only a line that answered and stopped reads
   // as finished.
   const executing = activeLine?.executing ?? false;
   const notice =
@@ -272,9 +313,11 @@ export function StepChatDrawer({
       ? COULD_NOT_READ_NOTICE
       : sessionId !== null && activeLine === null
         ? NOT_STARTED_NOTICE
-        : executing
-          ? steerError
-          : FINISHED_NOTICE;
+        : lineSettled && recording.isError
+          ? COULD_NOT_READ_RECORDING_NOTICE
+          : executing
+            ? steerError
+            : FINISHED_NOTICE;
   const loadingLines = sessionId !== null && linesQuery.isPending;
   const droppedBefore = sessionId !== null && !showRecording && liveStream.droppedBefore;
 
@@ -301,7 +344,7 @@ export function StepChatDrawer({
             {droppedBefore ? (
               <p className="px-4 pt-3 text-caption text-label-3">{DROPPED_NOTICE}</p>
             ) : null}
-            <StepConversation messages={messages} streaming={streaming} speaker={speaker} />
+            <StepConversation messages={messages} streaming={streaming} speaker={speaker} source={source} />
             <Composer
               onSend={(text) => {
                 setSteerError(null);

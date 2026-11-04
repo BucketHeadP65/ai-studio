@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/dom";
+import { fireEvent, screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
@@ -394,6 +394,126 @@ describe("StepChatDrawer, live, once a line settles", () => {
 
     expect(await screen.findByText("The summary.")).toBeInTheDocument();
     expect(screen.getByText("Refused")).toBeInTheDocument();
+  });
+
+  it("never shows an earlier recording when the drawer is opened again on a line that ran since", async () => {
+    let reopened = false;
+    let readsAfterReopening = 0;
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const laterRecording: MessagePayload[] = [
+      { kind: "request", parts: [{ part_kind: "user-prompt", content: "write the report" }] },
+      { kind: "response", parts: [{ part_kind: "text", content: "The summary." }] },
+    ];
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, async () => {
+        if (!reopened) {
+          return HttpResponse.json({ messages: REFUSED_RECORDING });
+        }
+        readsAfterReopening += 1;
+        await held;
+        return HttpResponse.json({ messages: laterRecording });
+      }),
+    );
+    const drawer = <StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />;
+
+    const { rerender } = render(drawer);
+    expect(await screen.findByText("Refused")).toBeInTheDocument();
+
+    // Closed, as the page closes it: the drawer leaves the tree, and a later click mounts a new one.
+    rerender(<div />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    reopened = true;
+    rerender(drawer);
+
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    await waitFor(() => expect(readsAfterReopening).toBe(1));
+    expect(screen.queryByText("Refused")).not.toBeInTheDocument();
+
+    release();
+
+    expect(await screen.findByText("The summary.")).toBeInTheDocument();
+    expect(screen.queryByText("Refused")).not.toBeInTheDocument();
+  });
+
+  it("keeps the live messages and says so when the recording cannot be read", async () => {
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, () =>
+        HttpResponse.json({ ok: false, message: "Not Found" }, { status: 404 }),
+      ),
+    );
+
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+
+    expect(await screen.findByText("Could not read what this step recorded.")).toBeInTheDocument();
+    expect(screen.getByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled();
+  });
+
+  it("keeps the live messages when no recorded message can be read", async () => {
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, () =>
+        HttpResponse.json({ messages: [{ parts: "not a message" }] }),
+      ),
+    );
+
+    const { queryClient } = render(
+      <StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />,
+    );
+
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        queryClient
+          .getQueryCache()
+          .findAll({ queryKey: ["run", "steps", "s-1", "messages"] })
+          .some((query) => query.state.status === "success"),
+      ).toBe(true),
+    );
+    expect(screen.getByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+    expect(screen.queryByText("No conversation recorded for this step.")).not.toBeInTheDocument();
+  });
+
+  it("keeps the reader's distance from the bottom when the recording replaces the live messages", async () => {
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      linesOf(false),
+      openStreamOf("draft", REFUSED_STREAM_CHUNKS),
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, async () => {
+        await held;
+        return HttpResponse.json({ messages: REFUSED_RECORDING });
+      }),
+    );
+
+    render(<StepChatDrawer sessionId="s-1" recordConversations={null} node={NODE} open onClose={vi.fn()} />);
+    expect(await screen.findByText(LIVE_RUN_TOGETHER)).toBeInTheDocument();
+
+    // jsdom lays nothing out, so the log's heights are given: the recording, with the brief above
+    // the answers and the refusal between them, stands 300px taller than the live messages.
+    const log = screen.getByRole("log", { name: "Step conversation" });
+    Object.defineProperty(log, "scrollHeight", {
+      configurable: true,
+      get: () => (log.textContent?.includes("Refused") ? 1300 : 1000),
+    });
+    Object.defineProperty(log, "scrollTop", { configurable: true, writable: true, value: 0 });
+    log.scrollTop = 600;
+    fireEvent.scroll(log);
+
+    release();
+
+    expect(await screen.findByText("Refused")).toBeInTheDocument();
+    expect(log.scrollTop).toBe(900);
   });
 });
 

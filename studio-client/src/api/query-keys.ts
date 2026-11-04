@@ -73,9 +73,12 @@ export const stepKeys = {
   // stranded: nothing publishes a `session.{id}` frame on a line transition.
   /** One session's open agentic-step lines, the step drawer's item picker and composer gate. */
   lines: (sessionId: string) => ["run", "steps", sessionId] as const,
-  /** One line's recorded messages, which the step drawer draws once that line has settled. */
-  messages: (sessionId: string, node: string, item: string) =>
-    ["run", "steps", sessionId, "messages", node, item] as const,
+  /**
+   * One line's recorded messages as of one settle, which the step drawer draws once that line has
+   * settled. `settles` counts the settles the open drawer has seen, so each reads its own.
+   */
+  messages: (sessionId: string, node: string, item: string, settles: number) =>
+    ["run", "steps", sessionId, "messages", node, item, settles] as const,
 };
 
 export const scheduleKeys = {
