@@ -55,7 +55,10 @@ dependencies = [
     "pydantic-ai>=2.63.0",
     # ``acp`` rides along for ``harness.acp`` — the studio served to ACP clients (Zed et al.)
     # with the save gesture as a protocol-level permission request; experimental upstream.
-    "pydantic-ai-harness[code-mode,acp]>=0.63.0",
+    # ``coder`` installs ``rg`` into this environment, whose ``bin`` ``uv run`` puts on the PATH every
+    # workspace inherits. Without it the files plugin's ``search_files`` runs a POSIX grep fallback that
+    # refuses inline regex flags and fails on a tracked symlink to a folder.
+    "pydantic-ai-harness[code-mode,acp,coder]>=0.63.0",
     # `from acp import ...` in harness.features.running.infrastructure.acp_gate — the dist behind the
     # harness's `acp` extra, declared for the same direct-import reason as fastmcp/monty.
     "agent-client-protocol>=0.11",
