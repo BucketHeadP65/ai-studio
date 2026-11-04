@@ -168,6 +168,11 @@ choice between options) is written into the destination as a page with a status 
 never only as a value on the run's record. A person reads pages and an agent searches them. The stable id lets the
 next run update its own pending page and leave a decided one alone.
 
+Before it writes over such a page, the next run reads the page itself. The person changes the status in the page, and
+an index of the pages catches up later, so a decision read from the index can be lost. It writes over only a page it
+made, of its own kind, because another writer may hold the same id. It writes the page back where the page now sits,
+because the person may have moved it. A new page goes to the very path the run checked was free.
+
 ## 7. Cost is a property of the graph, and you can read it
 
 Before landing a workflow, work out what one run costs at its widest: items times turns per item times tokens per
@@ -203,4 +208,6 @@ turn. Then check it against the spend rows after the first real run.
 - [ ] Does each judge review one concern, so a rejection reruns only that concern's work?
 - [ ] Is text that must be reproduced copied by a program from its source, the model naming it only by its handle?
 - [ ] Does a result that waits for a person land as a page with a status and a stable id?
+- [ ] Does the next run read the person's decision from the page itself, and write over only its own pending page,
+      where it sits?
 - [ ] Is each code-running step's tool-call budget sized for the calls its programs make?
