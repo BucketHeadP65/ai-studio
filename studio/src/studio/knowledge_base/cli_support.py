@@ -264,7 +264,8 @@ def read_feedback(path: Path) -> tuple[tuple[FeedbackEntry, ...], tuple[int, ...
         return (), ()
     entries: list[FeedbackEntry] = []
     unreadable: list[int] = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+    # Only a newline ends an entry: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+    for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), start=1):
         if not line.strip():
             continue
         try:
