@@ -20,9 +20,13 @@ write_stances' `proposed` and the `proposed_stances` artifact with its pages and
 the same id make one proposal, and an id a listed stance carries makes no proposal. Then the findings behind a
 proposal: each keeps the claim's own text copied from its digest, a missing anchor, a skipped digest, a page that is
 no digest and one digest cited twice never count toward the two digests, a digest read_page refuses drops only its own
-findings while the run still writes its rewrites, a proposal whose findings all contest it is kept and marked, a
-rejection by the proposals judge backs the proposals again and never reruns the rewrites, and a run with no proposal
-backs nothing and reads no digest. Last, the budgets of the backing worker and the rewrite judge.
+findings while the run still writes its rewrites, a claim cited as a search ref or a wikilink counts as its bare
+reference, a proposal whose findings all contest it is kept and marked, a rejection by the proposals judge backs the
+proposals again and never reruns the rewrites, and a run with no proposal backs nothing and reads no digest. Then the
+order: the proposals start only once every rewrite is written, so a rewrite judge's rejection redrafts before the
+write, and a proposals judge that spends its last attempt, one nobody answers and a backing map that aborts each fail
+the run with the rewrite written. A proposal whose backing worker altered its copy is dropped after the judge. Last,
+the budgets of the backing worker and the rewrite judge.
 """
 
 from __future__ import annotations
@@ -366,15 +370,17 @@ class Scripted:
     """The five model steps of the workflow, scripted. The programs run for real.
 
     `place` answers each group's placements, `rewrite` each item's draft and `back` each proposal's findings, beside
-    the stance_id, title and pages `copy` answers for it. The rewrite judge approves whatever it is handed. The proposals judge answers `proposal_verdicts` in order, then
-    approves. `calls` records every node performed, in order, and `groups`, `items`, `reviewed`, `backed` and `judged`
-    what each placement worker, refresh worker, rewrite judge call, backing worker and proposals judge call was handed.
+    the stance_id, title and pages `copy` answers for it. The rewrite judge answers `rewrite_verdicts` in order and the
+    proposals judge `proposal_verdicts`, each approving once its list runs out. `calls` records every node performed,
+    in order, and `groups`, `items`, `reviewed`, `backed` and `judged` what each placement worker, refresh worker,
+    rewrite judge call, backing worker and proposals judge call was handed.
     """
 
     place: Callable[[Group], list[dict[str, object]]] = _skip_all
     rewrite: Callable[[Item], dict[str, object]] = _rewritten
     back: Callable[[Proposal], list[Finding]] = _backed_by_two
     copy: Callable[[Proposal], Mapping[str, object]] = _as_handed
+    rewrite_verdicts: list[dict[str, str]] = field(default_factory=list)
     proposal_verdicts: list[dict[str, str]] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
@@ -395,7 +401,8 @@ class Scripted:
             return _typed(implementation, self.rewrite(item))
         if node_id == "check_stances":
             self.reviewed.append(to_jsonable_python(kwargs["drafts"]))
-            return _typed(implementation, {"outcome": "approve", "feedback": ""})
+            verdict = self.rewrite_verdicts.pop(0) if self.rewrite_verdicts else {"outcome": "approve", "feedback": ""}
+            return _typed(implementation, verdict)
         if node_id == "back_proposals":
             proposal: Proposal = to_jsonable_python(kwargs["proposal"])
             self.backed.append(proposal)
@@ -1193,3 +1200,31 @@ async def test_a_proposal_its_worker_copied_back_altered_is_dropped_after_the_ju
     assert [proposal["stance_id"] for proposal in approved] == ["stance.agent-memory", altered.get("stance_id", "stance.reranking")]
     assert _proposals(state) == [MEMORY], "the altered copy is dropped and the honest proposal passes"
     assert state.retry_feedback == {}, "dropping the altered copy sends nothing back to the workers"
+
+
+async def test_a_rewrite_judge_rejection_redrafts_once_and_the_proposals_still_wait_for_the_write(sandbox: AsyncMonty) -> None:
+    bases = _rewrite_and_propose()
+
+    def rewrite(item: Item) -> dict[str, object]:
+        return _rewritten(item, changing="Position" if len(scripted.items) == 1 else "Why")
+
+    feedback = "stance.x: the Position names no records page."
+    scripted = Scripted(
+        place=_proposing("stance.agent-memory", "Agent memory"),
+        rewrite=rewrite,
+        rewrite_verdicts=[{"outcome": "reject", "feedback": feedback}],
+    )
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
+
+    assert (scripted.calls.count("refresh_stances"), scripted.calls.count("check_stances")) == (2, 2)
+    assert scripted.calls.count("write_stances") == 1, "the rewrite is written once, after the second judgement"
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
+    bodies = {section["heading"]: section["body"] for section in bases.writes[0]["payload"]["sections"]}
+    assert bodies["Why"] == "Rewritten, resting on `adr-x`.", "the approved second draft is the one written"
+    assert bodies["Position"] == "Position of x, citing [[paper.a]].", "the rejected first draft is not"
+    assert scripted.calls.index("write_stances") < scripted.calls.index("merge_proposals"), "the proposals still wait on the write"
+    assert {node_id: [entry.feedback for entry in entries] for node_id, entries in state.retry_feedback.items()} == {
+        "refresh_stances": [feedback]
+    }
+    assert _proposals(state) == [MEMORY]
