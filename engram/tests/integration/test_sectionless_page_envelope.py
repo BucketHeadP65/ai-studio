@@ -5,7 +5,7 @@ The about page an index builds from `_meta/` is such a page: a `kb.pages` row wh
 
 What this pins:
 
-* the about page's envelope carries its whole text in `content`, not `None`;
+* the about page's envelope carries its whole text in `content`, not `None`.
 * a page with sections still reads its text from its sections.
 """
 

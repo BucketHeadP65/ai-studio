@@ -451,7 +451,7 @@ class EnvelopeHandler:
         return DisclosureEnvelope(ref=ref, kind="group", title=title, content=degrade_note, children=children, mode=self.mode)
 
     async def _page_envelope(self, ref: str, page_id: str) -> DisclosureEnvelope:
-        """Render a page, children its sections, content its whole text when the page is small."""
+        """Render a page, children its sections, content its whole text when it is small or has no sections."""
         result = await self._gateway.rows(
             _PAGE_ENVELOPE_SQL, {"collection": self._collection, "page_id": page_id}, cap=_ROW_CAP + 1
         )
