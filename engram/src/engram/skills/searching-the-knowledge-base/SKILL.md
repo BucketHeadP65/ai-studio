@@ -62,14 +62,14 @@ The plugin registers these tools automatically when the MCP server is running. W
 
 Reach for it when a task needs **several retrieval calls plus local filtering/aggregation**, and doing that as separate tool calls would be many slow round-trips: `run_code` runs your Python in a Monty sandbox (a Python subset) where engram's retrieval functions are bound as callables, so loops, conditionals, `asyncio.gather`, dedup, and ranking all happen in ONE round-trip. For a single lookup, just call `search`/`fetch` directly. `run_code` earns its keep only when you're composing.
 
-Bound functions (call them directly, do **not** import or redefine them):
+Bound functions. `run_code`'s own description lists every function its sandbox binds, with its arguments, and that list is the one to trust. A function it does not list is not there, and calling one fails as an unknown function. The list below is what engram's own MCP server binds. Another host may bind fewer, so call any tool its sandbox does not list as its own tool call. Call the bound functions directly with keyword arguments, and do **not** import or redefine them:
 
-- `await search(query, k=12, task=None)` returns a list of hit dicts
-- `await fetch(unit_id)` returns the unit dict (or raises if the id is unknown, re-ground with `search`)
-- `await graph_expand(seed_ids, hops=2)` returns the reached subgraph (`{nodes, edges}`)
-- `await find_paths(from_id, to_id)` returns a list of ranked path dicts
-- `await run_sql(sql, row_limit=50)` returns a list of row dicts (one per row, `column => value`)
-- `describe_schema()` returns the M-Schema text (the one non-structured return, it's a document)
+- `await search(query=..., k=12)` returns a dict: `hits`, a list of hit dicts best first, and `next_steps`.
+- `await fetch(unit_id=...)` returns the unit as a dict carrying `next_steps`. A section, or a page small enough to arrive whole, carries its text in `content`. A larger page lists its sections in `children` instead, each with the id to fetch next. A claim or a raw chunk carries its text in `body`. No `unit_id` opens the knowledge base map. An unknown id raises, so re-ground it with `search`.
+- `await graph_expand(seed_ids=[...], hops=2)` returns the reached subgraph, a dict with `nodes` and `edges`.
+- `await find_paths(from_id=..., to_id=...)` returns a dict: `paths`, the ranked routes, and `next_steps`.
+- `await run_sql(sql=..., row_limit=50)` returns a list of row dicts, one per row (`column => value`).
+- `await describe_schema()` returns the M-Schema text, the one return that is a document rather than structured data.
 
 Key rules, all consistent with the tool's own description:
 
@@ -78,7 +78,7 @@ Key rules, all consistent with the tool's own description:
 - **Read-only.** Everything goes through the same read-only `api.*` surface (the `kb_reader` role) and the 50-row cap, exactly the constraints of calling the tools directly. A rejected SQL statement raises inside the sandbox.
 - **Return the value, don't print it.** The last expression's value is captured as the result. Use `print()` only for debug logging.
 
-Worked example: search two phrasings in parallel, dedupe by id, then fetch the single top hit's full text, all in one call:
+Worked example: search two phrasings in parallel, dedupe by id, then fetch the single top hit's text, all in one call:
 
 ```python
 import asyncio
@@ -89,17 +89,18 @@ a, b = await asyncio.gather(
     search(query="multi-hop question answering over a knowledge graph", k=10),
 )
 
-# Merge + dedupe by id, keeping the highest score seen for each.
-best: dict[str, dict] = {}
-for hit in [*a, *b]:
+# Merge + dedupe by id, keeping the highest score seen for each. Each search returns a dict: its hits are under "hits".
+best = {}
+for hit in [*a["hits"], *b["hits"]]:
     cur = best.get(hit["id"])
     if cur is None or hit["score"] > cur["score"]:
         best[hit["id"]] = hit
 
 ranked = sorted(best.values(), key=lambda h: h["score"], reverse=True)
-top = await fetch(unit_id=ranked[0]["id"])   # full text of the single best hit
+top = await fetch(unit_id=ranked[0]["id"])   # the single best hit
 
-{"top_id": ranked[0]["id"], "candidates": [h["id"] for h in ranked], "body": top["body"]}
+# A small page or a section carries its text in "content", a claim or a raw chunk in "body".
+{"top_id": ranked[0]["id"], "candidates": [h["id"] for h in ranked], "text": top.get("content") or top.get("body")}
 ```
 
 ### 2. CLI fallback (when MCP is not attached)
