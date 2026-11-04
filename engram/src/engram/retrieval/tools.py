@@ -52,6 +52,8 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, create_model
 from pydantic_ai.exceptions import ModelRetry
 
+from engram.indexing.contracts import META_ID_PREFIX, query_orientation_page_id
+
 # These domain types are constructed at runtime by the tools below.
 from .budget import fits_budget, longest_fitting, with_fallback_steps
 from .domain import (
@@ -1482,19 +1484,49 @@ def reground_phrase(tools: frozenset[str]) -> str:
     return "the ids supplied with the task" if graph is None else f"{graph}, or the ids supplied with the task"
 
 
-def no_unit_refusal(unit_id: str, collection: str | None, *, named: str = "", reground: str = _REGROUND_WITH_SEARCH) -> str:
+def no_unit_refusal(
+    unit_id: str,
+    collection: str | None,
+    *,
+    named: str = "",
+    reground: str = _REGROUND_WITH_SEARCH,
+    reads_orientation: bool = False,
+) -> str:
     """The refusal for an id that names no unit, naming every id form `fetch` takes.
 
+    An id of a `_meta/` page (`meta`, or one starting `meta.`) is refused as never indexed instead, since no
+    re-grounding finds it. With `reads_orientation` that refusal names the page that holds the knowledge base's purpose.
+
     Args:
-        unit_id: The id that named nothing.
+        unit_id: The id that named nothing, bare or as a ref.
         collection: The knowledge base the forms name. `None` names a stand-in, for a reader over several.
         named: Text naming the knowledge base that was asked, such as ` in 'notes'`, or empty.
         reground: How the refusal tells the agent to find a good id (`reground_phrase`).
+        reads_orientation: Whether the refusing `fetch` reads the orientation page `meta.about@<collection>`.
+            Only a leveled read does.
 
     Returns:
         The refusal text.
     """
-    return f"No unit found with id {unit_id!r}{named}. {fetchable_forms(collection)} Re-ground the id with {reground} and try again."
+    missing = f"No unit found with id {unit_id!r}{named}."
+    owner = "<collection>" if collection is None else collection
+    orientation_id = query_orientation_page_id(owner)
+    bare = _bare_id(unit_id, owner)
+    # `meta` alone names the `_meta/` folder too.
+    if bare != orientation_id and f"{bare}.".startswith(META_ID_PREFIX):
+        not_indexed = f"Pages under `_meta/` (ids that start with `{META_ID_PREFIX}`) are not indexed under their own ids"
+        if reads_orientation:
+            return f"{missing} {not_indexed}. Read this knowledge base's purpose and scope with fetch 'page:{owner}/{orientation_id}'."
+        return f"{missing} {not_indexed}, and this `fetch` reads none of them."
+    return f"{missing} {fetchable_forms(collection)} Re-ground the id with {reground} and try again."
+
+
+def _bare_id(unit_id: str, collection: str) -> str:
+    """The bare unit id `unit_id` names, or `unit_id` itself when it is no ref."""
+    try:
+        return parse_ref(unit_id, collection).unit_id
+    except BadRefError:
+        return unit_id
 
 
 def no_map_refusal(reground: str = _REGROUND_WITH_SEARCH) -> str:
@@ -1602,7 +1634,7 @@ def leveled_fetch(
         """The flat full-text read for an id with no leveled surface, returned as a `FetchUnit`."""
         unit = await fetch_unit(handlers, unit_id)
         if unit is None:
-            raise ModelRetry(no_unit_refusal(unit_id, collection, named=named, reground=reground))
+            raise ModelRetry(no_unit_refusal(unit_id, collection, named=named, reground=reground, reads_orientation=True))
         qualified = unit.model_copy(update={"ref": qualify_ref(f"unit:{unit.id}", collection)})
         return FetchUnit(
             **qualified.model_dump(exclude={"knowledge_base"}),

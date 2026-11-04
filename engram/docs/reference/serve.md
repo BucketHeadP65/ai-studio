@@ -102,7 +102,12 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `collection:` or `group:` ref. A ref naming another collection is refused naming both on a
   single-source surface, and on the routed pair opens in that knowledge base when it is registered,
   else is refused naming the registered ones. An id that names no unit is refused, and the refusal
-  names the forms `fetch` takes. Every refusal sends the agent only to tools the surface registers
+  names the forms `fetch` takes. An id of a `_meta/` page (`meta`, or one starting `meta.`) is
+  refused differently, since the index holds no `_meta/` file under its own id (it builds the
+  orientation pages `meta.about@<collection>` and `meta.authoring@<collection>` from them instead) and
+  no re-grounding finds one. A leveled read names `page:<collection>/meta.about@<collection>`, which
+  holds the knowledge base's purpose, and a flat read, which serves no `meta.*` id, says it reads none
+  of them (`no_unit_refusal`). Every refusal sends the agent only to tools the surface registers
   (`reground_phrase`). The tool descriptions name the forms too (`fetchable_forms`,
   `src/engram/retrieval/envelope.py`).
 - **Facets over several knowledge bases:** `RetrievalKnowledgeBase` (the capability

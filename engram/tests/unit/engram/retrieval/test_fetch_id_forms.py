@@ -801,3 +801,97 @@ class TestAPageWithNoSectionsArrivesWhole:
 
         assert isinstance(page, DisclosureEnvelope)
         assert page.content == _ABOUT_TEXT
+
+
+_META_SPELLINGS = ("meta.purpose", f"page:{_HOME}/meta.purpose", f"unit:{_HOME}/meta.schema", "meta")
+"""Ids of `_meta/` pages, which the index never holds under their own ids."""
+
+_NOT_INDEXED = "Pages under `_meta/` (ids that start with `meta.`) are not indexed under their own ids"
+
+
+def _about_pointer(collection: str) -> str:
+    return f"fetch 'page:{collection}/meta.about@{collection}'"
+
+
+class TestAMetaIdIsRefusedNamingWhereThePurposeIsRead:
+    """A `_meta/` page's id is refused as never indexed, sending the reader to the about page where a read serves it."""
+
+    @pytest.mark.parametrize("spelling", _META_SPELLINGS)
+    async def test_the_leveled_toolset_names_the_about_page_and_the_about_page_reads(self, spelling: str):
+        gateway = _gateway_with_about()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": spelling})
+        about = await _call(toolset, "fetch", {"unit_id": f"page:{_HOME}/{_ABOUT}"})
+
+        message = str(refused.value)
+        assert _NOT_INDEXED in message
+        assert _about_pointer(_HOME) in message
+        assert "Re-ground" not in message
+        assert isinstance(about, DisclosureEnvelope)
+        assert about.content == _ABOUT_TEXT
+
+    async def test_the_flat_toolset_says_it_reads_none_of_them(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway_with_about()), collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "meta.purpose"})
+
+        message = str(refused.value)
+        assert _NOT_INDEXED in message
+        assert "this `fetch` reads none of them" in message
+        assert "meta.about" not in message
+
+    async def test_the_capability_naming_its_knowledge_base_names_the_about_page(self):
+        gateway = _gateway_with_about()
+        surface = ReadSurface(
+            name=_HOME,
+            collection=_HOME,
+            handlers=_handlers(gateway),
+            envelope=EnvelopeHandler(gateway, collection=_HOME),
+            domain=f"The {_HOME} knowledge base.",
+        )
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(surface, _surface(_OTHER)))
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": "meta.purpose"})
+
+        assert _about_pointer(_HOME) in str(refused.value)
+
+    async def test_the_capability_over_one_knowledge_base_names_the_about_page(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME),))
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        assert _about_pointer(_HOME) in str(refused.value)
+
+    async def test_the_capability_over_several_knowledge_bases_names_the_about_page_form(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME), _surface(_OTHER)), cross_search=True)
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        assert _about_pointer("<collection>") in str(refused.value)
+
+    async def test_the_capability_under_the_flat_dial_says_it_reads_none_of_them(self):
+        dials = ReadDials(fetch="flat")
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME),), dials_source=lambda: dials)
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        message = str(refused.value)
+        assert _NOT_INDEXED in message
+        assert "meta.about" not in message
+
+    async def test_an_ordinary_missing_id_is_still_sent_to_re_ground(self):
+        toolset = build_retrieval_toolset(_handlers(_gateway()), collection=_HOME, envelope=EnvelopeHandler(_gateway(), collection=_HOME))
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "metadata.x"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with `search`" in message
+        assert "_meta/" not in message
