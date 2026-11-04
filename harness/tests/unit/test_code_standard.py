@@ -31,7 +31,6 @@ DOCUMENTED: tuple[str, ...] = (
     "harness.knowledge_base",
     "harness.main",
     "harness.plugins",
-    "harness.sandbox",
     "harness.session",
     "harness.settings",
     "harness.workspace",

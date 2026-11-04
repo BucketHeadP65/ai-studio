@@ -18,6 +18,7 @@ from decimal import Decimal
 from types import NoneType
 from typing import TYPE_CHECKING, get_args, get_origin
 
+from core.ai.sandbox import SandboxDiscipline
 from core.ai.spend_store import FileSpendStore
 from core.ai.workflows.contracts import (
     CURRENT_STEP,
@@ -658,7 +659,14 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 toolsets=toolsets,
                 capabilities=[
                     # The function catalog stays in `run_code`'s description, not in the instructions.
-                    *([CodeMode(tools=in_sandbox, dynamic_catalog=False)] if task.tools else []),
+                    *(
+                        [
+                            CodeMode(tools=in_sandbox, dynamic_catalog=False),
+                            SandboxDiscipline[None](loads_capabilities=False, answers_a_person=False),
+                        ]
+                        if task.tools
+                        else []
+                    ),
                     *([step_shell()] if SHELL_TOOL in granted else []),
                     *([step_workspace(writable=SHELL_TOOL in granted)] if SHELL_TOOL in granted or task.skills else []),
                     *step_guards(budget, counts_program_calls=bool(task.tools)),
@@ -695,7 +703,14 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 toolsets=toolsets,
                 capabilities=[
                     # The function catalog stays in `run_code`'s description, not in the instructions.
-                    *([CodeMode(tools=in_sandbox, dynamic_catalog=False)] if granted else []),
+                    *(
+                        [
+                            CodeMode(tools=in_sandbox, dynamic_catalog=False),
+                            SandboxDiscipline[None](loads_capabilities=False, answers_a_person=False),
+                        ]
+                        if granted
+                        else []
+                    ),
                     *([step_shell()] if SHELL_TOOL in granted else []),
                     *([step_workspace(writable=SHELL_TOOL in granted)] if SHELL_TOOL in granted or turn.skills else []),
                     *step_guards(budget, counts_program_calls=bool(granted)),

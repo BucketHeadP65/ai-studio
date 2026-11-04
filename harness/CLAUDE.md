@@ -25,7 +25,7 @@ only shrink. The tiers, inward first:
 - `domain/`: ports (`KnowledgeBaseSurface`, `ToolCaller`, `EmbeddingContract`) and the step-surface
   vocabulary. Imports nothing of ours.
 - `settings.py`: checkout geometry and deployment knobs. Imports domain only.
-- the kernel (`session`, `plugins`, `knowledge_base`, `rendering`, `sandbox`, `tracing`): the shared
+- the kernel (`session`, `plugins`, `knowledge_base`, `rendering`, `tracing`): the shared
   surface every slice may hold.
 - `adapters/` (third-party construction): `store` (the settings file, both DSN derivations, the
   pools, the record's own store over its own pool onto the same database, in its own schema), `knowledge_base` (the registered knowledge bases, terminal roots, engram's read/authoring plugins), `embedding`,

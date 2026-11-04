@@ -36,6 +36,8 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
 - `core.ai.shell`: `PathGuardedShell`, pydantic-ai-harness's `Shell` refusing a command that names a denied path
 - `core.ai.tool_output_limits`: `ToolOutputLimits`, pydantic-ai-harness's capability that also keeps a reduced return's `tools`
 - `core.ai.tool_call_limit`: `ToolCallLimitWarning`, the warning a model gets as its run's tool calls near their limit
+- `core.ai.sandbox`: `SandboxDiscipline`, the sandbox's dialect as instructions for an agent under pydantic-ai-harness's
+  `CodeMode`, and the way out it adds to a `run_code` refusal of an unknown name
 - `core.ai.content_filter`: `ContentFilterGuard`, the wrapper around every generation model the repo builds, which raises
   `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps
   Azure's content filter results in a response's provider details

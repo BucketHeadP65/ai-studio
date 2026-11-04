@@ -1,113 +1,42 @@
-"""The sandbox's refusal of a name it does not hold says what to do, instead of a bare `Unknown function`.
+"""Every harness agent that runs `run_code` carries the sandbox's rules, and the dialect names the function list by `CodeMode`'s heading.
 
-Watched live: the studio agent built twelve edit ops as a variable inside `run_code`, then called
-`adapt_workflow` (a direct tool) from the same program three times, read `NameError: Unknown
-function: adapt_workflow` three times, and burned the tool's retry budget without ever learning
-that a program cannot hand a variable to a direct tool.
-
-These tests drive `wrap_tool_execute` with the exception shapes the tool manager actually hands
-it. The first version of this guard sat on `on_tool_execute_error` and was tested by calling the
-hook directly with a raw `ModelRetry` -- which the manager never routes there (retry signals are
-control flow to it), so the guard was green in the suite and dead on the live path, and the same
-incident happened again with the hint nowhere in the model's history.
+`SandboxDiscipline` and its own tests live in core. These tests stay here because they run `CodeMode`, whose sandbox
+core does not install. A step worker mounts it beside its `CodeMode`, so a briefing or a map turn with tools reads the
+dialect up front and gets the way out of an unknown function refusal, and a step without tools reads neither. A step
+reads no text about loading a capability or about a person, and a step whose `run_code` retries are spent still ends on
+`UnexpectedModelBehavior`, so the run's own error handling decides.
 """
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
+from core.ai.retrieval.contracts import RUN_CODE
+from core.ai.sandbox import SandboxDiscipline
+from core.ai.workflows.contracts import Briefing, FromNode, FromParameter, MapNode, ParameterSpec, Shape, Workflow, prepare, run_workflow
+from core.ai.workflows.domain.vocabulary import SameAs
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import ModelRetry, ToolRetryError, UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryInfo, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
-from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai_harness import CodeMode
 
-from harness.domain.ports import SANDBOX
-from harness.sandbox import SandboxDiscipline
+from harness.session import ActiveRun
+from tests.conftest import ApproveAll
+from tests.support.environment import spec_for, world_over
+from tests.support.streaming import streaming_function_model
 
-_REFUSAL = 'Runtime error:\nTraceback (most recent call last):\n  File "<python-input-5>", line 1, in <module>\n    res = await adapt_workflow(ops=ops)\nNameError: Unknown function: adapt_workflow'
-
-_TYPE_CHECK_REFUSAL = (
-    "Type error in code:\nerror[unresolved-reference]: Name `adapt_workflow` used when not defined\n  --> main.py:24:17\n"
-    "   |\n24 |     res = await adapt_workflow(workflow_id='wf.research-compound.v6', ops=ops)\n   |                 ^^^^^^^^^^^^^^\n"
-)
-
-_CEILING = "Tool 'run_code' exceeded max retries count of 3. Consider raising the retry limit."
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
-async def _wrapped(tool: str, error: Exception) -> Exception | object:
-    """What the discipline does with a handler that fails this way: the exception it raised, or the result it returned."""
-
-    async def failing_handler(args: dict[str, Any]) -> object:
-        del args
-        raise error
-
-    try:
-        return await SandboxDiscipline[Any]().wrap_tool_execute(
-            cast("Any", None),
-            call=ToolCallPart(tool_name=tool, args={}),
-            tool_def=ToolDefinition(name=tool),
-            args={},
-            handler=failing_handler,
-        )
-    except Exception as raised:  # noqa: BLE001 -- the hook's contract is to raise or return, and the test reads which
-        return raised
-
-
-def _retry(message: str) -> ToolRetryError:
-    """The shape the tool manager hands the wrap hook: the tool's `ModelRetry`, counted and wrapped."""
-    return ToolRetryError(ToolReturnPart(tool_name=SANDBOX, content=message, outcome="retried", retry=RetryInfo(cause="model_retry")))
-
-
-async def test_an_unknown_function_refusal_names_the_way_out() -> None:
-    raised = await _wrapped(SANDBOX, _retry(_REFUSAL))
-
-    assert isinstance(raised, ToolRetryError), "rewritten in the shape it arrived in, so the counted retry is not counted again"
-    content = raised.tool_retry.content
-    assert isinstance(content, str)
-    assert content.startswith(_REFUSAL), "the sandbox's own words stay first"
-    assert "`adapt_workflow` is not a function inside the sandbox" in content
-    assert "call it as its own tool call" in content
-    assert "cannot hand a variable" in content
-
-
-async def test_a_name_the_agent_cannot_see_is_sent_to_load_capability_not_given_up() -> None:
-    """Live, `list_skills` sat behind a deferred capability and the hint told the model it did not exist, so it gave up."""
-    raised = await _wrapped(SANDBOX, _retry(_REFUSAL.replace("adapt_workflow", "list_skills")))
-
-    assert isinstance(raised, ToolRetryError)
-    content = raised.tool_retry.content
-    assert isinstance(content, str)
-    assert "If `list_skills` is in neither your tool list nor the sandbox's function list" in content
-    assert "load the one whose description names it" in content
-    assert "it does not exist here" not in content.split("load_capability")[0], "the way out comes before any verdict that it is gone"
-
-
-def _dialect() -> str:
-    """The instructions `SandboxDiscipline` adds to the agent."""
-    return SandboxDiscipline[Any]().get_instructions()(cast("Any", None))
-
-
-def test_the_dialect_says_up_front_that_a_program_calls_only_the_sandboxs_functions() -> None:
-    """Live, models called `fetch`, `save_workflow` and `list_skills` inside a program and learned the rule only from a refusal."""
-    dialect = _dialect()
-
-    rule = dialect.index("the only tools you can call are the functions listed as available inside the sandbox")
-    assert rule < dialect.index("top-level script"), "the rule comes before the rest of the dialect"
-    assert "its own tool call" in dialect
-    assert "load_capability" in dialect
-
-
-def test_the_dialect_says_json_dumps_takes_no_default() -> None:
-    """Live, `json.dumps(value, default=str)` failed in the sandbox, whose `json` takes no `default=`."""
-    dialect = _dialect()
-
-    assert "`json.dumps` takes no `default=`" in dialect
-    assert "already a JSON value" in dialect
+def _dialect(*, chat: bool) -> str:
+    """The instructions `SandboxDiscipline` adds to the chat agent, or to a step worker."""
+    discipline = SandboxDiscipline[Any](loads_capabilities=chat, answers_a_person=chat)
+    return discipline.get_instructions()(cast("Any", None))
 
 
 _CATALOG_HEADING = "available inside the sandbox"
@@ -125,7 +54,7 @@ async def _what_the_model_reads(*, dynamic_catalog: bool) -> tuple[str, str]:
         return "pong"
 
     def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        seen["description"] = next(tool.description or "" for tool in info.function_tools if tool.name == SANDBOX)
+        seen["description"] = next(tool.description or "" for tool in info.function_tools if tool.name == RUN_CODE)
         last = messages[-1]
         seen["instructions"] = (last.instructions or "") if isinstance(last, ModelRequest) else ""
         return ModelResponse(parts=[TextPart("ok")])
@@ -142,71 +71,177 @@ async def test_codemode_heads_the_sandboxs_functions_with_the_words_the_dialect_
     """The dialect names the function list by `CodeMode`'s heading, so an upstream rewording of it must fail here first."""
     description, catalog = await _what_the_model_reads(dynamic_catalog=dynamic_catalog)
 
-    assert _CATALOG_HEADING in _dialect()
+    assert _CATALOG_HEADING in _dialect(chat=dynamic_catalog), "the chat agent mounts the dynamic catalog, a step does not"
     if dynamic_catalog:
         assert _CATALOG_HEADING in catalog, "the chat agent's mount carries the list in the catalog instruction"
     else:
         assert _CATALOG_HEADING in description, "a briefing's mount carries the list in `run_code`'s description"
 
 
-async def test_the_type_checkers_refusal_of_the_same_name_gets_the_same_hint() -> None:
-    """A fresh program is type-checked before it runs, and that voice refused `adapt_workflow` three times live with no hint."""
-    raised = await _wrapped(SANDBOX, _retry(_TYPE_CHECK_REFUSAL))
+_DIALECT_HEADING = "## The sandbox's dialect"
+"""The first line of the dialect a worker reads in its instructions."""
 
-    assert isinstance(raised, ToolRetryError)
-    content = raised.tool_retry.content
-    assert isinstance(content, str)
-    assert content.startswith(_TYPE_CHECK_REFUSAL)
-    assert "`adapt_workflow` is not a function inside the sandbox" in content
+_UNKNOWN_CALL = "await adapt_workflow(ops=[])"
+"""A program that calls a name the sandbox does not hold."""
 
+_HINT = "`adapt_workflow` is not a function inside the sandbox"
+"""The start of the way out the discipline appends to that refusal."""
 
-async def test_the_unwrapped_voice_of_the_same_refusal_gets_the_same_hint() -> None:
-    """A caller that runs tools without retry wrapping hands the raw `ModelRetry`; the hint rides it the same way."""
-    raised = await _wrapped(SANDBOX, ModelRetry(_REFUSAL))
+_CHAT_ONLY = ("load_capability", "person")
+"""Words true for the chat agent and never for a step: a step loads no capability and no person reads its answer."""
 
-    assert isinstance(raised, ModelRetry)
-    assert raised.message.startswith(_REFUSAL)
-    assert "`adapt_workflow` is not a function inside the sandbox" in raised.message
+_NOTE = {"type": "object", "title": "Note", "properties": {"note": {"type": "string"}}, "required": ["note"]}
+_ITEM = {"type": "object", "title": "Item", "properties": {"title": {"type": "string"}}, "required": ["title"]}
 
 
-async def test_any_other_sandbox_refusal_passes_through_untouched() -> None:
-    original = _retry("Syntax error in code:\n  something else entirely")
-    assert await _wrapped(SANDBOX, original) is original
+def _refusals(request: ModelRequest) -> list[str]:
+    """The `run_code` refusals one request hands back to the model."""
+    return [
+        part.content
+        for part in request.parts
+        if isinstance(part, ToolReturnPart) and part.tool_name == RUN_CODE and part.outcome == "retried" and isinstance(part.content, str)
+    ]
 
 
-async def test_the_retry_ceiling_comes_back_as_a_result_not_a_dead_turn() -> None:
-    """Live, the fourth refusal raised `UnexpectedModelBehavior` and the person watched the turn die."""
-    result = await _wrapped(SANDBOX, UnexpectedModelBehavior(_CEILING))
-
-    assert isinstance(result, str), "a result the model reads, not an exception that ends the run"
-    assert "retry budget" in result
-    assert "its own tool call" in result
-
-
-async def test_other_unexpected_behavior_is_not_swallowed() -> None:
-    original = UnexpectedModelBehavior("Received empty model response")
-    assert await _wrapped(SANDBOX, original) is original
-
-
-async def test_another_tools_error_is_not_the_sandboxs_business() -> None:
-    original = _retry(_REFUSAL)
-    assert await _wrapped("fetch", original) is original
-    ceiling = UnexpectedModelBehavior(_CEILING.replace("run_code", "fetch"))
-    assert await _wrapped("fetch", ceiling) is ceiling
-    plain = RuntimeError("boom")
-    assert await _wrapped(SANDBOX, plain) is plain
-
-
-async def test_a_healthy_program_result_passes_through() -> None:
-    async def handler(args: dict[str, Any]) -> object:
-        del args
-        return "the program's own answer"
-
-    result = await SandboxDiscipline[Any]().wrap_tool_execute(
-        cast("Any", None),
-        call=ToolCallPart(tool_name=SANDBOX, args={}),
-        tool_def=ToolDefinition(name=SANDBOX),
-        args={},
-        handler=handler,
+def _briefing(*, tools: tuple[str, ...]) -> Briefing:
+    return Briefing(
+        name="dig",
+        instructions="Find what the knowledge base says about the question and report it in a single note.",
+        inputs={"question": Shape(json_schema={"type": "string"})},
+        output=Shape(json_schema=_NOTE),
+        tools=tools,
     )
-    assert result == "the program's own answer"
+
+
+async def _run_briefing(task: Briefing, respond: Callable[[list[ModelMessage], AgentInfo], ModelResponse]) -> None:
+    ready = prepare(spec_for(task), await world_over(streaming_function_model(respond)))
+    assert ready.report.ok, ready.report.issues
+    implementation = ready.registry.get("dig")
+    assert implementation is not None
+    await implementation.function(question="what does the knowledge base say?")
+
+
+def _triage_then_dig(*, tools: tuple[str, ...]) -> Workflow:
+    """A map whose item is triaged in one turn and dug into in a second turn holding `tools`."""
+    triage = Briefing(
+        name="triage",
+        instructions="Read the item and write one short triage note about it, nothing more.",
+        inputs={"item": Shape(json_schema=_ITEM)},
+        output=Shape(json_schema=_NOTE),
+    )
+    dig = Briefing(
+        name="dig",
+        instructions="Using your triage note, search the knowledge base and report what it says about the item.",
+        inputs={"triage": SameAs(like="triage")},
+        output=Shape(json_schema={**_NOTE, "title": "Finding"}),
+        tools=tools,
+    )
+    return Workflow(
+        name="triage-then-dig",
+        version=1,
+        description="One worker triages an item, then digs into it, as one conversation.",
+        parameters={"items": ParameterSpec(description="items to dig into", json_schema={"type": "array", "items": _ITEM})},
+        inline=(triage, dig),
+        nodes=(MapNode(id="dig_each", turns=("triage", "dig"), over=FromParameter(parameter="items"), each="item"),),
+        output=FromNode(node="dig_each"),
+    )
+
+
+async def _run_map(spec: Workflow, respond: Callable[[list[ModelMessage], AgentInfo], ModelResponse]) -> None:
+    environment = await world_over(streaming_function_model(respond), active=ActiveRun())
+    await run_workflow(spec, environment, params={"items": [{"title": "quantum computing"}]}, approval=ApproveAll())
+
+
+async def test_a_briefing_with_tools_reads_the_dialect_and_the_way_out_of_an_unknown_function() -> None:
+    requests: list[ModelRequest] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        last = messages[-1]
+        assert isinstance(last, ModelRequest)
+        requests.append(last)
+        if len(requests) == 1:
+            return ModelResponse(parts=[ToolCallPart(RUN_CODE, {"code": _UNKNOWN_CALL})])
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "ok"})])
+
+    await _run_briefing(_briefing(tools=("search",)), respond)
+
+    instructions = requests[0].instructions or ""
+    assert _DIALECT_HEADING in instructions
+    (refusal,) = _refusals(requests[1])
+    assert _HINT in refusal, refusal
+    assert not [word for word in _CHAT_ONLY if word in instructions or word in refusal]
+
+
+async def test_a_briefing_without_tools_reads_no_sandbox_rules() -> None:
+    requests: list[ModelRequest] = []
+    tools_offered: list[str] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        last = messages[-1]
+        assert isinstance(last, ModelRequest)
+        requests.append(last)
+        tools_offered.extend(tool.name for tool in info.function_tools)
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "ok"})])
+
+    await _run_briefing(_briefing(tools=()), respond)
+
+    assert RUN_CODE not in tools_offered
+    assert all(_DIALECT_HEADING not in (request.instructions or "") for request in requests)
+
+
+async def test_a_map_turn_with_tools_reads_the_dialect_and_the_way_out_of_an_unknown_function() -> None:
+    requests: list[ModelRequest] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        last = messages[-1]
+        assert isinstance(last, ModelRequest)
+        requests.append(last)
+        if len(requests) == 1:
+            return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "worth a look"})])
+        if len(requests) == 2:
+            return ModelResponse(parts=[ToolCallPart(RUN_CODE, {"code": _UNKNOWN_CALL})])
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[1].name, {"note": "found it"})])
+
+    await _run_map(_triage_then_dig(tools=("search",)), respond)
+
+    instructions = requests[1].instructions or ""
+    assert _DIALECT_HEADING in instructions, "the turn that holds the tools reads the dialect"
+    (refusal,) = _refusals(requests[2])
+    assert _HINT in refusal, refusal
+    assert not [word for word in _CHAT_ONLY if word in instructions or word in refusal]
+
+
+async def test_a_map_turn_without_tools_reads_no_sandbox_rules() -> None:
+    requests: list[ModelRequest] = []
+    tools_offered: list[str] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        last = messages[-1]
+        assert isinstance(last, ModelRequest)
+        requests.append(last)
+        tools_offered.extend(tool.name for tool in info.function_tools)
+        index = 0 if len(requests) == 1 else 1
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[index].name, {"note": "ok"})])
+
+    await _run_map(_triage_then_dig(tools=()), respond)
+
+    assert len(requests) == 2, "one request per turn"
+    assert RUN_CODE not in tools_offered
+    assert all(_DIALECT_HEADING not in (request.instructions or "") for request in requests)
+
+
+async def test_a_briefing_whose_run_code_retries_are_spent_still_fails() -> None:
+    calls = 0
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        nonlocal calls
+        del messages
+        calls += 1
+        if calls <= 4:
+            return ModelResponse(parts=[ToolCallPart(RUN_CODE, {"code": _UNKNOWN_CALL})])
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "the program could not call adapt_workflow"})])
+
+    with pytest.raises(UnexpectedModelBehavior, match="exceeded max retries"):
+        await _run_briefing(_briefing(tools=("search",)), respond)
+
+    assert calls == 4, "the fourth refusal ends the step, and the model is never asked to answer"

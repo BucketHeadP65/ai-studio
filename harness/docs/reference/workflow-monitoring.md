@@ -360,7 +360,11 @@ code-mode step it also says a program's calls count, and names how many more cal
 remain, as the `run_code` call itself takes one. It reaches the model only between requests, so one program that spends
 past the limit still ends the step. The shipped template steps
 that search inside code mode carry doubled budgets for this: `check_adrs` 24, `draft_decision_brief` 28 and
-`review_decision_brief` 20. A step file may also carry `skills` (names from the skills registry,
+`review_decision_brief` 20. A briefing or map turn that holds tools runs them inside `run_code` and reads the
+sandbox's dialect in its instructions (core's `SandboxDiscipline`, mounted for a step that loads no capabilities and
+answers no person). A refusal of a name the sandbox does not hold comes back with the way out: call a tool in the tool
+list as its own tool call, as nothing else exists. Once `run_code` has spent its retries the step still fails on
+`UnexpectedModelBehavior`, and the run's `on_error` decides. A step file may also carry `skills` (names from the skills registry,
 [ADR 0013](../adr/0013-skills-registry.md)), mounted on that one step alone.
 
 ### What a rejection carries into the rerun
