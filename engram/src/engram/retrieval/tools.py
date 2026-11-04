@@ -52,7 +52,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field, create_model
 from pydantic_ai.exceptions import ModelRetry
 
-from engram.indexing.contracts import META_ID_PREFIX, query_orientation_page_id
+from engram.indexing.contracts import META_ID_PREFIX, about_page_id, orientation_page_ids
 
 # These domain types are constructed at runtime by the tools below.
 from .budget import fits_budget, longest_fitting, with_fallback_steps
@@ -89,6 +89,7 @@ if TYPE_CHECKING:
 
     from .capability import EnvelopeQueries, ReadSurface
     from .domain import SqlResult
+    from .envelope import ResolvedRef
 
     Refuse = Callable[[str], Exception]
     """How the surface being registered on reports a refusal: `ToolError` on MCP, `ModelRetry` in a toolset."""
@@ -1491,34 +1492,47 @@ def no_unit_refusal(
     named: str = "",
     reground: str = _REGROUND_WITH_SEARCH,
     reads_orientation: bool = False,
+    can_sql: bool = False,
 ) -> str:
-    """The refusal for an id that names no unit, naming every id form `fetch` takes.
+    """The refusal for an id that names no unit.
 
-    An id of a `_meta/` page (`meta`, or one starting `meta.`) is refused as never indexed instead, since no
-    re-grounding finds it. With `reads_orientation` that refusal names the page that holds the knowledge base's purpose.
+    An ordinary id is refused naming every id form `fetch` takes and how to re-ground it. An id that starts
+    with `meta.`, or `meta` alone, is never sent to re-ground. A read that serves the orientation pages
+    (`reads_orientation`) names the page that holds the purpose, or says an orientation page of its own is
+    absent. Any other read says it serves no `meta.` id, and names the `run_sql` query that reads the
+    purpose when `can_sql` is set.
 
     Args:
         unit_id: The id that named nothing, bare or as a ref.
         collection: The knowledge base the forms name. `None` names a stand-in, for a reader over several.
         named: Text naming the knowledge base that was asked, such as ` in 'notes'`, or empty.
         reground: How the refusal tells the agent to find a good id (`reground_phrase`).
-        reads_orientation: Whether the refusing `fetch` reads the orientation page `meta.about@<collection>`.
-            Only a leveled read does.
+        reads_orientation: Whether the refusing `fetch` reads the orientation pages. Only a leveled read does.
+        can_sql: Whether the surface also serves `run_sql`.
 
     Returns:
         The refusal text.
     """
     missing = f"No unit found with id {unit_id!r}{named}."
     owner = "<collection>" if collection is None else collection
-    orientation_id = query_orientation_page_id(owner)
     bare = _bare_id(unit_id, owner)
     # `meta` alone names the `_meta/` folder too.
-    if bare != orientation_id and f"{bare}.".startswith(META_ID_PREFIX):
-        not_indexed = f"Pages under `_meta/` (ids that start with `{META_ID_PREFIX}`) are not indexed under their own ids"
-        if reads_orientation:
-            return f"{missing} {not_indexed}. Read this knowledge base's purpose and scope with fetch 'page:{owner}/{orientation_id}'."
-        return f"{missing} {not_indexed}, and this `fetch` reads none of them."
-    return f"{missing} {fetchable_forms(collection)} Re-ground the id with {reground} and try again."
+    if not f"{bare}.".startswith(META_ID_PREFIX):
+        return f"{missing} {fetchable_forms(collection)} Re-ground the id with {reground} and try again."
+    purpose = "When this knowledge base declares a purpose and scope,"
+    if not reads_orientation:
+        reads_none = (
+            f"{missing} Ids that start with `{META_ID_PREFIX}` name pages under `_meta/` or the orientation pages built from them, "
+            "and this `fetch` reads none of them."
+        )
+        purpose_sql = f"SELECT * FROM api.collection_about('{owner}')"  # noqa: S608 (refusal text an agent reads, never run here)
+        return f"{reads_none} {purpose} run_sql reads them: {purpose_sql}." if can_sql else reads_none
+    if bare in orientation_page_ids(owner):
+        return f"{missing} This knowledge base has no orientation page with that id."
+    return (
+        f"{missing} The pages under `_meta/` are not indexed under their own `{META_ID_PREFIX}<name>` ids. "
+        f"{purpose} fetch 'page:{owner}/{about_page_id(owner)}' reads them."
+    )
 
 
 def _bare_id(unit_id: str, collection: str) -> str:
@@ -1555,6 +1569,7 @@ def flat_fetch(
     stamp: StampSource | None = None,
     reground: str = _REGROUND_WITH_SEARCH,
     refuse: Refuse = ModelRetry,
+    can_sql: bool = False,
 ) -> Callable[[str], Awaitable[FetchResult]]:
     """The flat `fetch` tool function: one unit's full text, read by any id form the other tools hand out.
 
@@ -1569,6 +1584,8 @@ def flat_fetch(
             leaves it unset.
         reground: How every refusal tells the agent to find a good id (`reground_phrase`).
         refuse: Builds the error a refusal raises: `ModelRetry` in a toolset, `ToolError` on MCP.
+        can_sql: Whether the surface also serves `run_sql`, so a refusal of a `meta.` id can name the query
+            that reads the knowledge base's purpose.
 
     Returns:
         The `fetch` callable for this one knowledge base.
@@ -1586,7 +1603,7 @@ def flat_fetch(
         async with read_snapshot():
             unit = await fetch_one(handler, resolved.unit_id)
             if unit is None:
-                raise refuse(no_unit_refusal(resolved.unit_id, collection, reground=reground))
+                raise refuse(no_unit_refusal(resolved.unit_id, collection, reground=reground, can_sql=can_sql))
             return unit if stamp is None else unit.model_copy(update={"knowledge_base": await stamp()})
 
     return fetch
@@ -1604,7 +1621,8 @@ def leveled_fetch(
     """The leveled `fetch` tool function: envelope-shaped reads with a flat full-text fallback.
 
     Refs from an earlier listing pass through. A bare id from a `search` hit reads as a section when
-    it holds `#`, else as a page. No argument opens the knowledge base map. An id outside the leveled
+    it holds `#`, else as a page. No argument opens the knowledge base map. A `unit:` ref of one of the
+    knowledge base's orientation pages reads as that page. An id outside the leveled
     surface, such as a claim or a raw chunk, is read through the flat `api.fetch`. A ref the grammar
     cannot read, and a well-formed ref that is refused (another knowledge base's `collection:` or
     `group:` ref, or a group value this collection never had), raise `RefRefusal` with their own
@@ -1629,6 +1647,7 @@ def leveled_fetch(
     default_ref = f"collection:{collection}"
     named = f" in {knowledge_base!r}" if knowledge_base else ""
     reground = reground_phrase(tools)
+    orientation_ids = orientation_page_ids(collection)
 
     async def flat(unit_id: str) -> FetchUnit:
         """The flat full-text read for an id with no leveled surface, returned as a `FetchUnit`."""
@@ -1651,6 +1670,7 @@ def leveled_fetch(
             raise RefRefusal(str(exc)) from None
         if resolved.collection != collection:
             raise RefRefusal(str(WrongCollectionError(collection, resolved.collection, reground=reground)))
+        ref, resolved = _as_orientation_page(ref, resolved, orientation_ids)
         disclosed: DisclosureEnvelope | None = None
         if resolved.kind != "unit":
             try:
@@ -1668,6 +1688,15 @@ def leveled_fetch(
         )
 
     return _in_one_snapshot(read, default_ref)
+
+
+def _as_orientation_page(ref: str, resolved: ResolvedRef, orientation_ids: frozenset[str]) -> tuple[str, ResolvedRef]:
+    """A `unit:` ref of an orientation page as its `page:` ref, any other ref unchanged."""
+    if resolved.kind != "unit" or resolved.unit_id not in orientation_ids:
+        return ref, resolved
+    # The flat read serves no `meta.` id, so an orientation page reads through its page envelope.
+    page_ref = qualify_ref(f"page:{resolved.unit_id}", resolved.collection)
+    return page_ref, parse_ref(page_ref, resolved.collection)
 
 
 def _in_one_snapshot(read: Callable[[str], Awaitable[FetchEnvelope | FetchUnit]], default_ref: str) -> Callable[[str], Awaitable[FetchEnvelope | FetchUnit]]:
@@ -1811,7 +1840,7 @@ def build_retrieval_toolset(
         )
     elif FETCH in selected:
         toolset.add_function(
-            flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected)),
+            flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), can_sql=can_sql),
             takes_ctx=False,
             name=FETCH,
             description=final[FETCH],
@@ -1837,7 +1866,8 @@ def register_mcp_tools(
 ) -> None:
     """Register engram's four retrieval tools on an MCP `server`.
 
-    The tools and descriptions match what `build_retrieval_toolset` builds.
+    The tools and descriptions match what `build_retrieval_toolset` builds. The `server` must also serve
+    `run_sql`, which the `search` description and the flat `fetch` refusals name.
 
     Args:
         server: The `MCPServer` instance to register the tools on.
@@ -1909,7 +1939,7 @@ def register_mcp_tools(
             can_fetch=FETCH in selected,
         )
     if not leveled and FETCH in selected:
-        flat = flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), refuse=ToolError)
+        flat = flat_fetch(handlers.fetch, collection, stamp=stamp, reground=reground_phrase(selected), refuse=ToolError, can_sql=True)
         server.add_tool(flat, name=FETCH, description=final[FETCH])
     if leveled and envelope is not None:
         inner = leveled_fetch(handlers, envelope, collection, stamp=stamp, tools=selected)

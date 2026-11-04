@@ -63,7 +63,7 @@ from engram.indexing.read_models import PageKeyRowResult, PendingEmbedChunk, Pen
 from engram.indexing.service.cut_plan_stage import CutPlanStage
 from engram.indexing.service.index import INDEXER_VERSION, IndexKnowledgeBaseHandler, indexer_version
 from engram.indexing.service.ingest import IngestPageHandler
-from engram.indexing.service.orientation import META_ID_PREFIX, query_orientation_page_id
+from engram.indexing.service.orientation import META_ID_PREFIX, about_page_id, orientation_page_ids
 from engram.indexing.service.summary_stage import SummaryStage
 from engram.indexing.service.vocab import load_vocab
 
@@ -128,11 +128,12 @@ __all__ = [
     "ValidationReport",
     "ValidationReportSink",
     "VocabGovernance",
+    "about_page_id",
     "content_hash",
     "cut_plan_identity",
     "indexer_version",
     "load_vocab",
-    "query_orientation_page_id",
+    "orientation_page_ids",
     "register_pgvector",
     "resolve",
     "section_loc",

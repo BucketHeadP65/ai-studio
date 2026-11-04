@@ -58,7 +58,7 @@ def orientation_page_ids(collection: str) -> frozenset[str]:
     return frozenset(orientation_page_id(page_id, collection) for page_id, _title in ORIENTATION_PAGES.values())
 
 
-def query_orientation_page_id(collection: str) -> str:
+def about_page_id(collection: str) -> str:
     """The stored id of the orientation page for the query audience, which holds the knowledge base's purpose.
 
     Args:

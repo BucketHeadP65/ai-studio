@@ -93,8 +93,8 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `flat_fetch`, the leveled read `leveled_fetch`, the routed pair, or `RetrievalKnowledgeBase` under
   either dial) reads a `page:<collection>/<id>`, `section:<collection>/<id>` or
   `unit:<collection>/<id>` ref exactly as `search`, a listing or a graph answer returned it, and the
-  bare id, and both read one unit. A claim cited the way a wikilink cites it, `<page>#^cN`, bare
-  or under any of the three prefixes, reads as the claim's own id `<page>#cN` (`parse_ref`), and
+  bare id, and both read one unit. A claim cited as `<page-id>#^cN`, bare or under any of the
+  three prefixes, reads as the claim's own id `<page-id>#cN` (`parse_ref`), and
   so does every eval guard and scorer that reads refs through it. No surface hands out a ref its own `fetch` refuses: a
   single-source `search` reads only its own collection, a `search` offers the map only when the
   `fetch` beside it opens one (never beside the flat read, never on a `search_only` knowledge base),
@@ -102,12 +102,15 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `collection:` or `group:` ref. A ref naming another collection is refused naming both on a
   single-source surface, and on the routed pair opens in that knowledge base when it is registered,
   else is refused naming the registered ones. An id that names no unit is refused, and the refusal
-  names the forms `fetch` takes. An id of a `_meta/` page (`meta`, or one starting `meta.`) is
-  refused differently, since the index holds no `_meta/` file under its own id (it builds the
-  orientation pages `meta.about@<collection>` and `meta.authoring@<collection>` from them instead) and
-  no re-grounding finds one. A leveled read names `page:<collection>/meta.about@<collection>`, which
-  holds the knowledge base's purpose, and a flat read, which serves no `meta.*` id, says it reads none
-  of them (`no_unit_refusal`). Every refusal sends the agent only to tools the surface registers
+  names the forms `fetch` takes. An id that starts with `meta.`, or `meta` alone, is never sent to
+  re-ground (`no_unit_refusal`). The index holds no `_meta/` file under its own id. It builds the
+  orientation pages `meta.about@<collection>` and `meta.authoring@<collection>` from them, and the flat
+  read serves no `meta.` id at all. A leveled read serves the orientation pages, a `unit:` ref of one
+  reading as its page. It refuses a `_meta/` id naming `page:<collection>/meta.about@<collection>`,
+  which holds the knowledge base's purpose when it declares one, and refuses a missing orientation
+  page of its own as absent. A flat read says it reads no `meta.` id, and where `run_sql` is served
+  (`can_sql`, and always on the MCP server) names `SELECT * FROM api.collection_about('<collection>')`,
+  which reads the purpose. Every refusal sends the agent only to tools the surface registers
   (`reground_phrase`). The tool descriptions name the forms too (`fetchable_forms`,
   `src/engram/retrieval/envelope.py`).
 - **Facets over several knowledge bases:** `RetrievalKnowledgeBase` (the capability
