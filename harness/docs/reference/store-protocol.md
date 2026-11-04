@@ -155,8 +155,9 @@ the object was built" from leaking into the key: a field written at its default 
 hash the same. Leaving defaults out also keeps a field added to the format with a default from
 re-keying every saved workflow. Changing an existing field's default is not free: both libraries
 keep the full dump with defaults written in, so every stored page that wrote the field at its old
-default changes identity. Only a document that left the field out keeps its identity, and then runs
-under the new default with its trust carried over. The dump leaves out `FromNode.turn`, a gate's
+default, or at the value that becomes the new default, changes identity. A page that wrote any other
+value keeps its identity, and a document that left the field out keeps it too and then runs under
+the new default with its trust carried over. The dump leaves out `FromNode.turn`, a gate's
 `max_attempts`, an artifact's `field` and the workflow's `result` at their defaults. Core
 [ADR 0004](../../../core/docs/adr/0004-a-workflows-identity-leaves-default-values-out.md) records the rule. A future pydantic that serialises differently
 would still shift every hash and orphan all the evidence written before it, the same class of

@@ -133,8 +133,9 @@ def spec_identity(workflow: Workflow) -> str:
     with `mode="json"`, keys sorted and every field at its default left out at every depth, so a field
     written at its default, a field left out and a field added to the format later with a default all hash
     the same. Each node keeps its `kind`. A changed default moves the identity of a workflow whose document
-    wrote the field at its old default, and keeps it only where the document left the field out. A value that
-    is not JSON raises rather than being hashed as text.
+    wrote the field at its old default or at the value that becomes the new default. A document that left the
+    field out, or wrote any other value, keeps its identity. A value that is not JSON raises rather than being
+    hashed as text.
 
     Args:
         workflow: The workflow to address.

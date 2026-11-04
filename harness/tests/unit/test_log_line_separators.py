@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-SEPARATED = "one two three\x85four"
+SEPARATED = "one\u2028two\u2029three\x85four"
 """A value holding all three characters `str.splitlines` splits at and JSON leaves unescaped."""
 
 
@@ -35,7 +35,7 @@ def _unescaped(path: Path) -> None:
     """Rewrite every line of `path` with non-ASCII characters left unescaped, and check the separators are now raw."""
     lines = [json.dumps(json.loads(line), ensure_ascii=False) for line in path.read_text(encoding="utf-8").split("\n") if line]
     path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
-    assert " " in path.read_text(encoding="utf-8")
+    assert "\u2028" in path.read_text(encoding="utf-8")
 
 
 def _run_events(path: Path) -> list[str]:
