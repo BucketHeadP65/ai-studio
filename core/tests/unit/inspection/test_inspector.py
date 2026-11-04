@@ -480,3 +480,11 @@ def test_a_scan_names_only_symptoms_that_cite_a_part_its_run_added() -> None:
 
     assert sentence in SCAN_INSTRUCTIONS
 
+
+def test_both_sets_of_instructions_read_what_the_agent_was_given_before_blaming_a_tool() -> None:
+    for instructions in (INSPECTOR_INSTRUCTIONS, SCAN_INSTRUCTIONS):
+        assert "Before blaming a tool's description or schema, read what the agent was given for that call" in instructions
+        assert "read(step=N, resource='instructions')" in instructions
+        assert "`capability:<skill name>`" in instructions
+        assert "instructions_say_nothing or instructions_say_wrong on that skill" in instructions
+        assert "Blame a tool's description or schema only for what the tool's own definition should have said." in instructions
