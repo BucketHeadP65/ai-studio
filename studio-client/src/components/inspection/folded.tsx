@@ -2,12 +2,9 @@
 
 import { type ReactElement, useState } from "react";
 
-import { cn } from "@/shared/lib/cn";
-
 // A block of text that folds past a line count, once, no animation (the owner's Reduce Motion
-// is always on). A caller decides `mono` by what the text is, not by taste. Folded, past its
-// line count, is cut by its own box, never by an ellipsis character; `fade` lightens the cut
-// with a bottom mask instead of a hard edge.
+// is always on). Folded, past its line count, it is cut at a whole line, never by an ellipsis
+// character. `FOLD_FADE_CLASS` lightens a cut with a bottom mask instead of a hard edge.
 
 export const FOLD_FADE_CLASS = "overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)]";
 
@@ -35,29 +32,14 @@ export function useFolded(text: string, lines: number): FoldState {
 export interface FoldedProps {
   text: string;
   lines?: number;
-  mono?: boolean;
-  fade?: boolean;
-  // Overrides the toggle's own words -- `closed` shown while folded, `open` shown while
-  // expanded -- for a caller whose fold reads better than "Show all (N lines)".
-  words?: { open: string; closed: string };
 }
 
-export function Folded({ text, lines = 20, mono = false, fade = false, words }: FoldedProps): ReactElement {
-  const { shownLines, overflow, open, toggle, label: defaultLabel } = useFolded(text, lines);
-  const label = words === undefined ? defaultLabel : open ? words.open : words.closed;
-  const folded = fade && overflow && !open;
+export function Folded({ text, lines = 20 }: FoldedProps): ReactElement {
+  const { shownLines, overflow, toggle, label } = useFolded(text, lines);
 
   return (
     <div className="flex flex-col items-start gap-1">
-      <pre
-        className={cn(
-          "whitespace-pre-wrap break-words",
-          mono ? "font-mono text-caption" : "font-sans text-body",
-          folded && FOLD_FADE_CLASS,
-        )}
-      >
-        {shownLines.join("\n")}
-      </pre>
+      <pre className="whitespace-pre-wrap break-words font-sans text-body">{shownLines.join("\n")}</pre>
       {overflow ? (
         <button type="button" onClick={toggle} className="text-caption text-label-3 underline">
           {label}
