@@ -16,6 +16,7 @@ from uuid import uuid4
 import anyio
 import yaml
 
+from core.ai.content_filter import content_filter_message
 from core.ai.history.contracts import StepUsageTap
 from core.ai.workflows.contracts import (
     LibraryError,
@@ -35,7 +36,7 @@ from core.ai.workflows.contracts import (
 )
 from core.observability import get_logger
 from pydantic import ValidationError
-from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_ai.messages import ModelRequest, UserPromptPart
 from pydantic_ai.models import Model
 from pydantic_ai.run import AgentRunResultEvent
@@ -728,7 +729,8 @@ class ChatService:
                 session.session_log.record(TurnFailed(error=error, started_seq=started.seq, prompt_excerpt=asked.text[:300] or None))
             ending.recorded = True
             await self._rescue(session, session_id, prompt, before_run_id, ended=TURN_FAILED.format(error=error))
-            raise PlainTurnError(plain_error(str(exc))) from exc
+            said = content_filter_message(exc) if isinstance(exc, ContentFilterError) else plain_error(str(exc))
+            raise PlainTurnError(said) from exc
         finally:
             if not ending.recorded and started is not None:
                 session.session_log.record(TurnAbandoned(started_seq=started.seq))

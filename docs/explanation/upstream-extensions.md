@@ -361,24 +361,31 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
 
 ### UE-26. A response a content filter cut ends the turn at once, naming the filter (core)
 
-- **What:** `ContentFilterGuard` is a `WrapperModel` that raises pydantic-ai's `ContentFilterError` for every response
-  that finishes on `content_filter`, whatever text it carries, when a request returns or when a streamed request's body
-  exits. The response never reaches output validation, so no output retry is spent on it. Both engines perform the turn
-  once: the in-process engine performs a turn again only for a `ModelConnectionError`, and the Temporal engine's default
-  retry policy lists `ContentFilterError` as non-retryable. `FilterReportingResponsesModel` subclasses
+- **What:** `ContentFilterGuard` is a `WrapperModel` that makes every response finishing on `content_filter` end the
+  turn with pydantic-ai's `ContentFilterError`, whatever text it carries. A streamed request raises it when its body
+  exits. A request returns the response with its parts removed, so the agent records its usage and keeps it in the run's
+  history like any other response, and then raises `ContentFilterError` itself, since a model has no hook after the
+  agent commits a response. A prompt Azure refuses with HTTP 400 and the error code `content_filter` raises it at once
+  (UB-19). The response never reaches output validation, so no output retry is spent on it. Both engines perform the
+  turn once: the in-process engine performs a turn again only for a `ModelConnectionError`, and the Temporal engine's
+  default retry policy lists `ContentFilterError` as non-retryable. `FilterReportingResponsesModel` subclasses
   `OpenAIResponsesModel` and overrides the `_process_provider_details` hook to keep the top-level `content_filters` list
-  Azure sends, as sent, in the provider details, streamed or not. The error's first line opens as pydantic-ai's own and
-  ends by naming each category that filtered or detected, with its source and severity, or by saying the response holds no
-  filter result. That line is what a failed map item records as its reason. Its body is the whole response as JSON. A
-  streamed response stays in the run's history marked `interrupted`. pydantic-ai's own `RaiseContentFilterError` raises
-  for the same responses, but it is a capability each of some twenty agents would have to carry, and its message names no
-  category.
+  Azure sends, as sent, in the provider details, streamed or not. `content_filter_message(error)` reads the response back
+  from the error's body and answers one sentence that opens as pydantic-ai's own and ends by naming each category that
+  filtered or detected, with its source and severity, or by saying the response holds no filter result. That sentence is
+  what a failed map item records as its reason and what the chat shows, whole. The error's body is the whole response as
+  JSON. A streamed response stays in the run's history marked `interrupted`, and a whole one with no parts.
+  pydantic-ai's own `RaiseContentFilterError` raises for the same responses, but it is a capability each of some twenty
+  agents would have to carry, and its message names no category.
 - **Where:** `core/src/core/ai/content_filter.py`, applied in `create_azure_model` and `create_gateway_model`
   (`core/src/core/ai/models.py`), in the harness's `_openrouter_model` (`harness/src/harness/adapters/models.py`) and in
   the connectors' `build_xai_model` (`connectors/src/engram_connectors/xai.py`). The Temporal retry policy is
   `_DEFAULT_ACTIVITY_CONFIG` (`core/src/core/ai/workflows/infrastructure/temporal.py`). Tests in
   `core/tests/unit/test_content_filter.py`, `core/tests/unit/workflows/test_temporal_adapter.py`,
-  `harness/tests/unit/test_model_catalog.py` and `connectors/tests/unit/test_xai.py`. `decision_model` is not guarded.
+  `core/tests/unit/workflows/test_map_and_judge.py`, `harness/tests/unit/test_model_catalog.py`,
+  `harness/tests/unit/test_authoring_stream.py` and `connectors/tests/unit/test_xai.py`. The failure reason is
+  `_failure_text` in `core/src/core/ai/workflows/graph_builder.py`, and the chat's is the turn's `except` in
+  `harness/src/harness/features/authoring/service.py`. `decision_model` is not guarded.
 - **Since:** 2026-10-31, after the filtered items of a workflow run spent their output retries for nothing (UB-12).
 - **Upstream candidate:** yes, as an issue: a `content_filter` response never retried as output by default, Azure's
   `content_filters` kept by `OpenAIResponsesModel`, and the flagged categories in `ContentFilterError`'s message.

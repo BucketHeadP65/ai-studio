@@ -19,8 +19,16 @@ import anyio
 import pytest
 
 from pydantic_ai import Agent, ModelRetry
-from pydantic_ai.exceptions import ModelHTTPError
-from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.toolsets import FunctionToolset
 from pydantic_ai_harness.step_persistence import ContinuableSnapshot, InMemoryStepStore, RunRecord, StepPersistence
@@ -598,6 +606,37 @@ async def test_a_reply_that_looks_like_the_old_envelope_streams_and_settles_verb
     assert streamed_text == reply, "text deltas pass through untouched"
     settled = next(chunk for chunk in chunks if chunk.get("type") == "data-settle")
     assert settled["data"]["message"] == reply, "the settle payload carries the reply verbatim too"
+
+
+def _agent_a_content_filter_stops() -> Agent[Runtime, str]:
+    """An agent whose every answer a content filter cuts, flagging four categories, so the sentence naming them is long.
+
+    The model raises what the agent raises for a filtered answer with no parts: pydantic-ai's own message, the response as the body.
+    """
+    flagged = {category: {"filtered": True, "severity": "medium"} for category in ("hate", "self_harm", "sexual", "violence")}
+    filtered = ModelResponse(
+        parts=[],
+        finish_reason="content_filter",
+        provider_details={"finish_reason": "content_filter", "content_filters": [{"blocked": True, "source_type": "completion", "content_filter_results": flagged}]},
+    )
+
+    def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
+        del messages, info
+        msg = "Content filter triggered. Finish reason: 'content_filter'"
+        raise ContentFilterError(msg, body=ModelMessagesTypeAdapter.dump_json([filtered]).decode())
+
+    return Agent(streaming_function_model(function), deps_type=Runtime)
+
+
+async def test_a_content_filter_stop_shows_the_whole_sentence_naming_every_category(tmp_path: Path) -> None:
+    chat, _session, _pool, session_id = _talking_to(_agent_a_content_filter_stops(), state=tmp_path)
+
+    chunks = await a_turn(chat, session_id, submit("hi"))
+
+    (error,) = [chunk for chunk in chunks if chunk.get("type") == "error"]
+    said = error["errorText"]
+    assert len(said) > 200, said
+    assert said.endswith("completion violence filtered at severity medium."), said
 
 
 def test_a_provider_refusal_becomes_one_plain_sentence() -> None:
