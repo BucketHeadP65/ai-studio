@@ -36,14 +36,16 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   text was then about 14.5 KB). 2026-10-01, the content shape, by running a load end to end on 2.52 and calling the revealed
   tool: with `tools` kept the call was still refused.
 - **What we did:** first threaded `tools` through the rebuild in a fork (`07a7fa54`), then
-  `core.ai.tool_output_limits.ToolOutputLimits`, a subclass that puts `ToolReturn.tools` back after the upstream reduction
-  (`core/tests/unit/test_tool_output_limits.py`). Since 2026-10-01 the chat agent also keeps `load_capability` out of its
-  output limits (`CONTEXT_BOUND` in `harness/src/harness/features/authoring/agent.py`), so a load always arrives whole, and
-  `test_loading_the_capability_reveals_its_tool` checks that the tool is offered after the load, not only named.
-- **Upstream state:** unfixed in pydantic-ai-harness 0.52.0 and on `main` (2026-10-01). Not checked on 2.51. Affects any user
-  combining `ToolOutputLimits` with a deferred capability whose instructions exceed a band, unless `tool_filter` leaves
-  `load_capability` out.
-- **Issue:** drafted, not filed.
+  `core.ai.tool_output_limits.ToolOutputLimits`, a subclass that put `ToolReturn.tools` back after the upstream reduction.
+  Since 2026-10-01 the chat agent also keeps `load_capability` out of its output limits (`CONTEXT_BOUND` in
+  `harness/src/harness/features/authoring/agent.py`), so a load always arrives whole, and
+  `test_loading_the_capability_reveals_its_tool` checks that the tool is offered after the load, not only named. With the
+  upgrade to 0.66.0 the subclass and its test were removed, and the harness mounts the upstream `ToolOutputLimits`. The
+  load test stays as the regression check.
+- **Upstream state:** fixed in pydantic-ai-harness 0.62.0 (pydantic/pydantic-ai#11446): `_EXEMPT_KINDS` returns a
+  `load_capability` or `search_tools` return untouched, whatever `tool_filter` says. `_assemble` still rebuilds a reduced
+  return of any other tool without `tools` (checked on 0.66.0), and no tool here returns `ToolReturn.tools`.
+- **Issue:** pydantic/pydantic-ai#9531, closed by #11446.
 - **Repro:** mount `ToolOutputLimits` with a band below the instructions' length and a capability with `defer_loading=True`
   that brings a tool. Call `load_capability` on it, then the tool. The call is refused. With `tool_filter` excluding
   `load_capability` it works.

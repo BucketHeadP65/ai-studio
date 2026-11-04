@@ -48,15 +48,6 @@ Entry shape: what it does, where it lives, since when, upstream candidate (yes, 
 - **Upstream candidate:** yes, as an option beside `dynamic_catalog`. The trade-off (per-argument descriptions and structured
   type fields leave the catalog, the stubs keep them) is worth stating in the issue.
 
-### UE-3. `ToolOutputLimits` carries `tools` through a spill
-
-- **What:** a reduced return keeps `ToolReturn.tools` ([UB-1](upstream-bugs.md)). On pydantic-ai 2.52 that does not make a
-  shortened load count as loaded, so the chat agent also keeps `load_capability` out of its output limits.
-- **Where:** `core/src/core/ai/tool_output_limits.py`, a subclass that puts `ToolReturn.tools` back after the upstream reduction,
-  tests in `core/tests/unit/test_tool_output_limits.py`. Moved out of the fork on 2026-09-29.
-- **Since:** 2026-08-25 (`07a7fa54`).
-- **Upstream candidate:** yes, as the bug report.
-
 ### UE-10. An ACP **client**: driving another agent over the protocol
 
 - **What:** the reverse direction of `experimental.acp`. `ExternalAgent.run(brief, *, cwd, permission, on_update,

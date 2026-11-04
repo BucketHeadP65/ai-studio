@@ -51,7 +51,7 @@ applications are kept clean of:
   import-boundary test in each Python project.
 - **`pydantic-ai-harness`** comes from PyPI (`>=0.66.0`), released from the pydantic-ai repository
   (`src/pydantic_ai_harness`). It versions with pydantic-ai (0.66 goes with 2.66). Our additions over it live in our own code: `core.ai.format_maps`,
-  `core.ai.filesystem`, `core.ai.tool_output_limits`, `harness.adapters.acp_client` and `engram.evals.harness.code_mode`. Upstream
+  `core.ai.filesystem`, `harness.adapters.acp_client` and `engram.evals.harness.code_mode`. Upstream
   contributions are filed as ISSUES on `pydantic/pydantic-ai`, never PRs. Two records feed those issues
   and are updated in the same change that lands the fix or the feature: a bug found in pydantic-ai or
   the harness goes to `docs/explanation/upstream-bugs.md` (UB-n), anything we add over the libraries
