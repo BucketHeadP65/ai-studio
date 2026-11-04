@@ -1528,7 +1528,7 @@ def no_unit_refusal(
         purpose_sql = f"SELECT * FROM api.collection_about('{owner}')"  # noqa: S608 (refusal text an agent reads, never run here)
         return f"{reads_none} {purpose} run_sql reads them: {purpose_sql}." if can_sql else reads_none
     if bare in orientation_page_ids(owner):
-        return f"{missing} This knowledge base has no orientation page with that id."
+        return f"{missing} This knowledge base has no orientation page with that id. fetch 'collection:{owner}' opens its map."
     return (
         f"{missing} The pages under `_meta/` are not indexed under their own `{META_ID_PREFIX}<name>` ids. "
         f"{purpose} fetch 'page:{owner}/{about_page_id(owner)}' reads them."

@@ -870,7 +870,7 @@ class TestAMetaIdIsRefusedNamingWhereThePurposeIsRead:
         assert _NO_ORIENTATION in message
         assert _NOT_INDEXED not in message
         assert "Re-ground" not in message
-        assert "fetch '" not in message
+        assert f"fetch 'collection:{_HOME}' opens its map." in message
 
     @pytest.mark.parametrize("spelling", _FLAT_META_SPELLINGS)
     async def test_the_flat_toolset_says_it_reads_none_of_them(self, spelling: str):
