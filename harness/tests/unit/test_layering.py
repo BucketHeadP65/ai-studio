@@ -2,7 +2,7 @@
 
 The tiers, inward first: `domain/` (ports and contract vocabulary, imports nothing of ours),
 `settings` (geometry and knobs, imports domain only), the kernel (`session`, `plugins`, `knowledge_base`,
-`rendering`, `tracing`, `workspace` -- the shared surface every slice may hold), `adapters/`
+`rendering`, `tracing`, `workspace`: the shared surface every slice may hold), `adapters/`
 (third-party construction: databases, the settings file, embeddings, models, the step environment),
 `features/<slice>` (a slice may reach inward and sideways into its own slice, never into another
 slice or outward), `composition` (the one module that knows every slice, the container,

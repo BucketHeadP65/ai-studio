@@ -175,10 +175,12 @@ harness). Listed here because each is a behaviour the libraries do not ship. "Up
 ### UE-13. The harness's mounts
 
 `NoteOverlay` (owner notes), `Preferences`, `FrictionFlagging` (a friction flag logged from the model's own
-note), `Switched` (owner plugins that remove a capability's tools outright), `SandboxDiscipline`, `Corpus`, `WorkflowProcess`,
+note), `Switched` (owner plugins that remove a capability's tools outright), `SandboxDiscipline` (on the chat agent and on each step worker that runs `CodeMode`, each told whether it loads capabilities and whether a person reads its answer), `Corpus`, `WorkflowProcess`,
 `RuntimeVoiced`, and the self-authoring set (`AgentCreation`, `LeafCreation`, `ProfileCreation`, `ProfileVoice`). All in
-`harness/src/harness/`, `core/src/core/ai/voice.py` and `core/src/core/ai/sandbox.py`. Upstream candidates: no, they carry the product's own concepts. `Switched`
-(an owner-controlled on/off plugin over any capability) is the one worth a second look later.
+`harness/src/harness/`, `core/src/core/ai/voice.py` and `core/src/core/ai/sandbox.py`. Upstream candidates: no for the
+rest, they carry the product's own concepts. Two are worth a second look later: `Switched` (an owner-controlled on/off
+plugin over any capability), and `SandboxDiscipline`, whose rules state facts about the Monty sandbox and carry no
+product concept, so the dialect it adds could live in `CodeMode`'s own instructions.
 
 ### UE-14. `BudgetedModel` (harness): admission before a request, exact settlement after it
 

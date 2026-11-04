@@ -174,7 +174,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   paste prose or markdown into a program as code, and to keep any one program under a few thousand characters, naming the crash
   as the reason. The digest brief says the same for pages. Nothing in the runtime. After the recurrence, `SandboxDiscipline`
   also converts `run_code`'s retry ceiling into a result the model reads instead of an `UnexpectedModelBehavior` that ends the
-  turn, so a crash loop costs retries, not the conversation.
+  turn, so a crash loop costs retries, not the conversation. It does so only for an agent whose answer a person reads (the
+  chat agent). A workflow step still fails at the ceiling, and the run's `on_error` decides.
 - **Upstream state:** unknown. The ask is the same as UB-3's: an exception payload that serializes for any exception the runtime
   raises, syntax errors included, so a bad program costs one retry with the error in hand rather than a session reset. The
   pydantic-ai 2.51.0 move left the Monty runtime at 0.0.21.
@@ -339,7 +340,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   never needs `default=` to dump one.
 - **Found:** the harness inspector's finding 5, confirmed 2026-11-04 by a review of its findings: a chat model's program
   called `json.dumps(..., default=str)` and was refused.
-- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT`) says `json.dumps` takes no
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says `json.dumps` takes no
   `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
 - **Upstream state:** present in pydantic-monty 1.4.0. The ask is that `json.dumps` accept `default=` as CPython does, or
   that `run_code`'s description name the `json` keywords Monty leaves out.

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from core.ai.empty_answer import EmptyAnswerRetry
+from core.ai.sandbox import SandboxDiscipline
 from core.ai.shell import PathGuardedShell
 from core.ai.voice import RuntimeVoiced
 from core.ai.workflows.contracts import StepRegistry, WorkflowContract
@@ -168,6 +169,16 @@ class TestCompactionMount:
         agent._root_capability.apply(lambda cap: mounted.append(cap) if isinstance(cap, ReportContextUsage) else None)
 
         assert len(mounted) == 1
+
+    def test_the_sandbox_rules_are_mounted_once_for_an_agent_that_loads_capabilities_and_answers_a_person(self, tmp_path: Path) -> None:
+        agent = _build(ProjectConfig(), tmp_path)
+
+        mounted: list[SandboxDiscipline[Runtime]] = []
+        agent._root_capability.apply(lambda cap: mounted.append(cap) if isinstance(cap, SandboxDiscipline) else None)
+
+        (discipline,) = mounted
+        assert discipline.loads_capabilities, "the chat agent reaches deferred capabilities through `load_capability`"
+        assert discipline.answers_a_person, "a person reads the chat agent's answer"
 
     def test_retry_on_empty_answer_is_always_mounted_once(self, tmp_path: Path) -> None:
         agent = _build(ProjectConfig(), tmp_path)

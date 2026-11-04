@@ -478,7 +478,7 @@ def build_agent(
                 cache=content_cache(),
             ),
             CodeMode(tools=lambda _ctx, tool: _in_code_mode(tool.name, rides_sandbox)),
-            SandboxDiscipline[Runtime](),
+            SandboxDiscipline[Runtime](loads_capabilities=True, answers_a_person=True),
             LoopDetection(on_loop="nudge"),
             # The project's context policy: escalating tiers, or the provider's own compaction.
             # `SessionContextUsage` must stay right after it, so its reading shows what the
