@@ -184,6 +184,89 @@ describe("stepConversationToUiMessages", () => {
 
     expect(messages.map((m) => m.role)).toEqual(["user"]);
   });
+
+  it("drops a thinking part with no text, the reasoning a model returns hidden", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [
+          { part_kind: "thinking", content: "", id: "rs-1" },
+          { part_kind: "thinking", content: "  \n" },
+          { part_kind: "tool-call", tool_name: "outline", tool_call_id: "c-1", args: {} },
+        ],
+      },
+      { kind: "response", parts: [{ part_kind: "thinking", content: "" }] },
+    ]);
+
+    expect(messages.map((m) => [m.role, m.parts])).toEqual([
+      ["user", [{ type: "text", text: "go" }]],
+      [
+        "assistant",
+        [
+          { type: "step-start" },
+          { type: "tool-outline", toolCallId: "c-1", state: "output-available", input: {}, output: "pending" },
+        ],
+      ],
+    ]);
+  });
+
+  it("draws a call whose return asked for it again as an error carrying the refusal", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [{ part_kind: "tool-call", tool_name: "final_result_Seen", tool_call_id: "c-1", args: { items: [] } }],
+      },
+      {
+        kind: "request",
+        parts: [
+          {
+            part_kind: "tool-return",
+            tool_name: "final_result_Seen",
+            tool_call_id: "c-1",
+            content: "wrong_tool_chosen must cite a tool-call part",
+            outcome: "retried",
+          },
+        ],
+      },
+      {
+        kind: "response",
+        parts: [{ part_kind: "tool-call", tool_name: "final_result_Seen", tool_call_id: "c-2", args: { items: [] } }],
+      },
+      {
+        kind: "request",
+        parts: [
+          {
+            part_kind: "tool-return",
+            tool_name: "final_result_Seen",
+            tool_call_id: "c-2",
+            content: [{ msg: "field required" }, { msg: "symptom unknown" }],
+            outcome: "retried",
+          },
+        ],
+      },
+    ]);
+
+    expect(messages[1]?.parts).toEqual([
+      { type: "step-start" },
+      {
+        type: "tool-final_result_Seen",
+        toolCallId: "c-1",
+        state: "output-error",
+        input: { items: [] },
+        errorText: "wrong_tool_chosen must cite a tool-call part",
+      },
+      { type: "step-start" },
+      {
+        type: "tool-final_result_Seen",
+        toolCallId: "c-2",
+        state: "output-error",
+        input: { items: [] },
+        errorText: "field required, symptom unknown",
+      },
+    ]);
+  });
 });
 
 describe("useStepStream", () => {
@@ -230,6 +313,35 @@ describe("useStepStream", () => {
     ]);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "check the appendix too" }]);
     expect(result.current.messages[2]?.parts).toEqual([{ type: "text", text: "On it.", state: "done" }]);
+  });
+
+  it("draws no reasoning part that carries no text, and keeps one that does", async () => {
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/stream`, () =>
+        streamOf([
+          { type: "start", messageId: "m-1" },
+          { type: "start-step" },
+          { type: "reasoning-start", id: "r-1" },
+          { type: "reasoning-end", id: "r-1" },
+          { type: "reasoning-start", id: "r-2" },
+          { type: "reasoning-delta", id: "r-2", delta: "Read the outline first." },
+          { type: "reasoning-end", id: "r-2" },
+          { type: "tool-input-available", toolCallId: "c-1", toolName: "outline", input: {} },
+          { type: "tool-output-available", toolCallId: "c-1", output: "step 0" },
+          { type: "finish" },
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useStepStream("s-1", "draft", "item-0", true));
+
+    await waitFor(() => expect(result.current.streaming).toBe(false));
+
+    expect(result.current.messages[0]?.parts).toEqual([
+      { type: "step-start" },
+      { type: "reasoning", text: "Read the outline first.", state: "done" },
+      { type: "tool-outline", toolCallId: "c-1", state: "output-available", input: {}, output: "step 0" },
+    ]);
   });
 
   it("reconnects on a drop at the number of chunks already seen, and stops on [DONE]", async () => {

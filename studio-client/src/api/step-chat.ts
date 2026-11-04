@@ -9,7 +9,7 @@ import { dataLines } from "./chat-stream";
 import { NEVER_ANSWERED } from "./sessions";
 import { STUDIO_API_URL } from "./studio-config";
 
-import type { MessagePayload } from "./sessions-types";
+import type { MessagePart, MessagePayload } from "./sessions-types";
 import type { UIMessage } from "ai";
 
 // The step chat's own wire: a session-scoped listing of every open agentic-step line, a
@@ -143,10 +143,24 @@ function replacePart(builder: Builder, index: number, part: Part): void {
   builder.current = { ...builder.current, parts };
 }
 
+// A reasoning part with no text, the reasoning a model returns hidden or one that has not
+// streamed a word yet, draws nothing.
+function isBlankReasoning(part: Part): boolean {
+  return part.type === "reasoning" && part.text.trim() === "";
+}
+
+// What the drawer draws: the closed messages and the open one, each without its blank reasoning.
+// The builder keeps every part in place, so the indexes its maps hold stay true.
 function snapshot(builder: Builder): UIMessage[] {
-  return builder.current !== null && builder.current.parts.length > 0
-    ? [...builder.messages, builder.current]
-    : builder.messages;
+  const messages =
+    builder.current !== null && builder.current.parts.length > 0
+      ? [...builder.messages, builder.current]
+      : builder.messages;
+  return messages.map((message) =>
+    message.parts.some(isBlankReasoning)
+      ? { ...message, parts: message.parts.filter((part) => !isBlankReasoning(part)) }
+      : message,
+  );
 }
 
 const ChunkSchema = z.looseObject({ type: z.string() });
@@ -479,19 +493,42 @@ function userPromptText(payload: MessagePayload): string {
     .join("");
 }
 
-function toolReturnsByCallId(messages: MessagePayload[]): Map<string, unknown> {
-  const returns = new Map<string, unknown>();
+// Each call's own return part, keyed by the call it answers.
+function toolReturnsByCallId(messages: MessagePayload[]): Map<string, MessagePart> {
+  const returns = new Map<string, MessagePart>();
   for (const payload of messages) {
     if (payload.kind !== "request") {
       continue;
     }
     for (const part of payload.parts) {
       if (part.part_kind === "tool-return" && part.tool_call_id !== undefined) {
-        returns.set(part.tool_call_id, part.content);
+        returns.set(part.tool_call_id, part);
       }
     }
   }
   return returns;
+}
+
+// One item of a validation error list, read for its message alone.
+const ErrorItemSchema = z.object({ msg: z.string() });
+
+// A refusal's own words: a string as it is, or a validation error list joined with ", ".
+function refusalText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content.map(errorItemText).join(", ");
+  }
+  return content === undefined || content === null ? "" : JSON.stringify(content);
+}
+
+function errorItemText(item: unknown): string {
+  const parsed = ErrorItemSchema.safeParse(item);
+  if (parsed.success) {
+    return parsed.data.msg;
+  }
+  return typeof item === "string" ? item : JSON.stringify(item);
 }
 
 function toolReturnTimestampsByCallId(messages: MessagePayload[]): Map<string, string> {
@@ -545,24 +582,36 @@ function stepDataPart(payload: MessagePayload, toolReturnTimestamps: Map<string,
 }
 
 // One response row's own parts, in the order the model produced them: its thinking (kept, unlike
-// the session transcript's own rebuild), its text, and EVERY tool call it made (not filtered to
-// companion tools -- a step's tool calls are its content), each carrying its own return.
-function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, unknown>): Part[] {
+// the session transcript's own rebuild, when it has text), its text, and EVERY tool call it made
+// (not filtered to companion tools, since a step's tool calls are its content), each carrying its
+// own return. A call whose return asked for it again reads as an error carrying the refusal.
+function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, MessagePart>): Part[] {
   const parts: Part[] = [];
   for (const part of payload.parts) {
     if (part.part_kind === "text" && typeof part.content === "string") {
       parts.push({ type: "text", text: part.content });
-    } else if (part.part_kind === "thinking" && typeof part.content === "string") {
+    } else if (part.part_kind === "thinking" && typeof part.content === "string" && part.content.trim() !== "") {
       parts.push({ type: "reasoning", text: part.content });
     } else if (part.part_kind === "tool-call" && part.tool_name !== undefined && part.tool_call_id !== undefined) {
       const returned = toolReturns.get(part.tool_call_id);
-      parts.push({
-        type: `tool-${part.tool_name}`,
-        toolCallId: part.tool_call_id,
-        state: "output-available",
-        input: part.args,
-        output: returned === undefined ? NEVER_ANSWERED : returned,
-      });
+      const type = `tool-${part.tool_name}` as const;
+      if (returned?.outcome === "retried") {
+        parts.push({
+          type,
+          toolCallId: part.tool_call_id,
+          state: "output-error",
+          input: part.args,
+          errorText: refusalText(returned.content),
+        });
+      } else {
+        parts.push({
+          type,
+          toolCallId: part.tool_call_id,
+          state: "output-available",
+          input: part.args,
+          output: returned === undefined ? NEVER_ANSWERED : returned.content,
+        });
+      }
     }
   }
   return parts;
