@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -368,18 +369,24 @@ async def test_messages_404s_on_an_unknown_line_or_session() -> None:
         assert unknown_session.status_code == 404
 
 
-async def test_messages_refuses_a_line_whose_messages_have_no_json_form() -> None:
+async def test_messages_refuses_a_line_whose_messages_have_no_json_form_and_logs_why(caplog: pytest.LogCaptureFixture) -> None:
     async with _studio() as (client, pool):
         runtime = await pool.create(None)
         conversations = runtime.active.conversations
-        _open(conversations, ("draft", ""))
+        _open(conversations, ("summarize", "row-1"))
         unwritable = ModelRequest(parts=[ToolReturnPart(tool_name="fetch", content=object(), tool_call_id="call-1")])
-        conversations.settle(("draft", ""), messages=[unwritable])
+        conversations.settle(("summarize", "row-1"), messages=[unwritable])
 
-        read = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/draft/messages")
+        with caplog.at_level(logging.ERROR):
+            read = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/summarize/messages", params={"item": "row-1"})
 
         assert read.status_code == 500
         assert read.json() == {"ok": False, "message": running_controller._UNWRITABLE_STEP_MESSAGES}
+        (logged,) = [record for record in caplog.records if record.levelno == logging.ERROR]
+        assert "summarize" in logged.getMessage()
+        assert "row-1" in logged.getMessage()
+        assert logged.exc_info is not None
+        assert "Unable to serialize unknown type" in str(logged.exc_info[1])
 
 
 if __name__ == "__main__":  # pragma: no cover

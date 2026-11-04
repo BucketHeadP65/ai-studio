@@ -667,7 +667,8 @@ class RunningController:
     async def session_run_step_messages(self, session_id: str, node: str, item: str = "") -> JSONResponse:
         """One step's recorded messages, each in the shape the run archive files it, its refused answers and dropped attempts included.
 
-        A step that is executing again answers what it recorded up to its last settled turn.
+        A step that is executing again answers what it recorded up to its last settled turn, and any attempt of the
+        current turn that lost its connection.
         """
         session = await self._session_for(session_id)
         if session is None:
@@ -678,6 +679,7 @@ class RunningController:
         try:
             messages = service.jsonable_messages(conversation.exchanged)
         except ValueError:
+            _logger.exception("step {node} item {item}: its messages could not be sent as JSON", node=node, item=item)
             return JSONResponse({"ok": False, "message": _UNWRITABLE_STEP_MESSAGES}, status_code=500)
         return JSONResponse({"messages": messages})
 

@@ -228,7 +228,7 @@ POST   /api/sessions/{id}/run/steps/{node}/steer?item=  {"message"} -> {"ok": tr
 
 The messages route answers a line's recorded messages before the run ends, each in the shape the archive's
 `conversations` map holds it, dropped attempts included. A line executing again answers what it recorded up to its last
-settled turn. A message holding a value with no JSON form answers 500, where the archive leaves that line out. The step
+settled turn, and any attempt of the current turn that lost its connection. A message holding a value with no JSON form answers 500, where the archive leaves that line out. The step
 chat reads it once a line has settled, because the stream carries no event for a refused answer that called no tool
 (UB-18 in `docs/explanation/upstream-bugs.md`), while the recorded messages hold that refusal.
 
