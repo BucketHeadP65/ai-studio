@@ -38,7 +38,7 @@ presentation:
       artifact_ids: [approved_flags]
 workflow:
   name: research-compound
-  version: 12
+  version: 13
   description: Propose flags and defects over new digests in parallel groups of five, merge, gate, then write the flags and repair the defects side by side, and notify. digest_ids names exact digests, whatever their age.
   parameters:
     collection:
@@ -152,7 +152,7 @@ workflow:
     abort_after_repeats: 3
   - id: check_flags
     kind: orchestrator-gate
-    charge: Review the merged object's two lists. Reject any flag that only restates a digest, names no evidence, or proposes something the base already holds (search it before deciding). Reject the object, naming each item to move, when a flag's proposal would only edit our own pages (it is a defect) or a defect is really a claim about the subject (it is a flag). A flag that cites a defective page stays a flag, since the page's content is still evidence. Reject a defect whose evidence does not show the page misstating its own source or falling outside the base's purpose, or whose page_ids are not digests this run read. Approve the rest, and say which items you dropped or moved and why.
+    charge: Review the merged object's two lists. Reject any flag that only restates a digest, names no evidence, or proposes something the base already holds (search it before deciding). Reject the object, naming each item to move, when a flag's proposal would only edit our own pages (it is a defect) or a defect is really a claim about the subject (it is a flag). A flag that cites a defective page stays a flag, since the page's content is still evidence. Reject a defect whose evidence does not show the page misstating its own source or falling outside the base's purpose, or whose page_ids are not digest pages in this knowledge base (fetch each one to check). Approve the rest, and say which items you dropped or moved and why.
     reviews: {node: merge_candidates}
     rejected_to: merge_candidates
   - id: write_flags

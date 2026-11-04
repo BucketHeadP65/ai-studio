@@ -352,7 +352,7 @@ async def test_importing_every_template_folder_writes_every_step_then_every_work
         assert types == sorted(types, key=lambda kind: kind != "step"), f"{source.name} wrote a workflow before a step it uses"
         written.extend(ids)
     assert [page_id for page_id in written if page_id.startswith("wf.")] == [
-        "wf.research-compound.v12",
+        "wf.research-compound.v13",
         "wf.research-decision-brief.v1",
         "wf.research-digest.v16",
         "wf.research-stance-refresh.v10",
