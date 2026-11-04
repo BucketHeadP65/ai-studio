@@ -448,9 +448,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** the stance refresh avoids the shape. `write_stances` reads `merge_work` instead of `list_changes`.
   `merge_work` already sits upstream of the rewrite judge `write_stances` waits on, so no join of `write_stances` holds
   an item while `merge_work`'s join is finalized (`cafa27f9`).
-- **Upstream state:** present in 2.63.0. Checking each finalized join again against the live tasks plus the tasks this
-  pass already dispatched, as the sweep does, fixes the graph below and the stance refresh shape. The ask is that fix.
-- **Issue:** not filed. Draft I8 in `void/upstream-issues-to-file.md`.
+- **Upstream state:** open as pydantic/pydantic-ai#9629, fix in PR pydantic/pydantic-ai#10426 (not in 2.66.0). Checking
+  each finalized join again against the live tasks plus the tasks this pass already dispatched, as the sweep does, fixes
+  the graph below and the stance refresh shape.
+- **Issue:** pydantic/pydantic-ai#9629, filed by others with the same root cause. Nothing to file.
 - **Repro:** `src` broadcasts to `b`, `mid_join` and `tail_join`. `b` goes to `mid_join` and `last_join`. `mid_join`
   goes to `mid`, `mid` to `tail_join`, `tail_join` to `tail`, `tail` to `last_join`, `last_join` to `last`, and `last` to
   the end. Each join collects its items into a list. `tail` is handed `['src']`, then `['mid']`, where it should be
