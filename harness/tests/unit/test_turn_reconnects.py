@@ -27,7 +27,7 @@ from core.ai.workflows.contracts import (
     WorkflowArguments,
     run_workflow,
 )
-from pydantic_ai.exceptions import ModelConnectionError
+from pydantic_ai.exceptions import ContentFilterError, ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 
@@ -243,6 +243,33 @@ async def test_a_steer_the_broken_attempt_took_in_reaches_the_next_attempt(tmp_p
     assert not any(isinstance(message, ModelResponse) for message in calls[2]), "the next attempt starts from the turn's own start"
     assert steered(calls[2]), "and the steer reaches it again"
     assert _the_items_line(active).steer_inbox == []
+
+
+async def test_a_turn_a_content_filter_ended_files_its_responses_in_the_spend_rows(tmp_path: Path) -> None:
+    """The item fails once its second answer is cut. Both answers were billed, so both reach the run's spend rows."""
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        del info
+        calls.append(list(messages))
+        if len(calls) == 1:
+            yield WORKING
+            return
+        yield HALF_SAID
+        msg = "Content filter triggered. Finish reason: 'content_filter'"
+        raise ContentFilterError(msg)
+
+    active = _active_run()
+    ledger = FiledRows()
+    records = replace(records_under(tmp_path), spend=ledger)
+    environment = await _environment(FunctionModel(stream_function=stream), active, tmp_path, records)
+
+    result = await run_workflow(SPEC, environment, params=ITEMS, approval=ApproveAll(), sleep=_no_wait)
+
+    assert result == [], "the item failed and was skipped"
+    assert len(calls) == 2, "a content filter ends the turn at once"
+    assert [row.step for row in ledger.rows] == ["digest"] * 2, "the answer refused as text, then the answer the filter cut"
+    assert all(row.output_tokens > 0 for row in ledger.rows)
 
 
 def _asked(prompt: str) -> ModelRequest:

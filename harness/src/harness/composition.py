@@ -280,7 +280,11 @@ def _keeping_a_stopped_turn(
     steering: StepSteerDelivery,
     billed: Callable[[Sequence[ModelMessage]], None],
 ) -> Generator[None]:
-    """Write a failed or cut-off turn onto `line`, an attempt a `ModelConnectionError` ended apart from its history, billed, its steers put back."""
+    """Write a failed or cut-off turn onto `line` and bill what it produced.
+
+    An attempt a `ModelConnectionError` ended is kept apart from its history, its steers put back. Any other ending
+    leaves the turn's messages on the line.
+    """
     with capture_run_messages() as messages:
         try:
             yield
@@ -292,6 +296,7 @@ def _keeping_a_stopped_turn(
             raise
         except BaseException:
             line.messages = list(messages)
+            billed(tuple(messages[_given_length(history) :]))
             raise
 
 
