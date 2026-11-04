@@ -76,7 +76,9 @@ _DIALECT_PROGRAM = (
     "program that skips the import fails on NameError. The last expression is the program's "
     "result: end on the value, not on a bare function name. Build data as Python literals, and "
     "never paste a page's prose or markdown into the program as code. `json.dumps` "
-    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. There "
+    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. A "
+    "generator expression is a list inside the sandbox, so take its first match with `next(iter(...))` "
+    "or a comprehension's `[0]`, never `next(<generator expression>)`. There "
     "is no file system (`open` on any path is refused) and no `dir`/`hasattr`/`type` introspection: "
     "keep values in variables between programs, and inspect one by printing or subscripting it."
 )

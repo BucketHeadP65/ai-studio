@@ -557,6 +557,28 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   {"self_harm": {"filtered": true, "severity": "medium"}}}}}`, raises `ModelRequestRejectedError`, where the same body
   through `AzureProvider` returns a `content_filter` response.
 
+## UB-20. Monty builds a generator expression as a list, so `next()` on one fails
+
+- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`).
+- **Symptom:** `next(x for x in items if ...)` in a program fails with `TypeError: 'list' object is not an iterator`, and so
+  does `next((x for x in items if ...), None)`. A model writes the CPython idiom for a first match and spends a retry on it.
+  `sum`, `any` and the other functions that take an iterable work on a generator expression.
+- **Cause:** Monty has no generator expressions. It evaluates one into a list, so `type((x for x in [1, 2])).__name__` is
+  `list`, and a list is iterable but not an iterator.
+- **Grade:** cheap. It costs one retry, and `next(iter(...))` is a one-word fix.
+- **Found:** 2026-11-05, a live run's program called `next()` on a generator expression and was refused.
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says a generator expression is
+  a list inside the sandbox, and to take its first match with `next(iter(...))` or a comprehension's `[0]`. Nothing in the
+  runtime. The sentence and this entry go once a Monty release with generator expressions is installed.
+- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repro below (2026-11-05). Two open pull requests
+  add generators: pydantic/monty#784 ("implement generator expressions") and pydantic/monty#1020 ("Support Python
+  generators and `yield from`").
+- **Issue:** pydantic/monty#364, filed by others, open. Nothing to file.
+- **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
+  `session.feed_run('next(x for x in [1, 2, 3] if x > 1)')` raises `MontyRuntimeError: TypeError: 'list' object is not an
+  iterator`. `session.feed_run('type((x for x in [1, 2])).__name__')` returns `'list'`, and `next(iter(x for x in [1, 2, 3]
+  if x > 1))` returns `2`.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
