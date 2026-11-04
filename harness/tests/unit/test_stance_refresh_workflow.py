@@ -1,7 +1,7 @@
 """The shipped stance-refresh workflow, run end to end off its own files.
 
 The graph and the steps come from the real documents under `templates/research/workflows`, never from a copy typed
-out here. The five model steps are scripted and no model is reached. The five programs run for real in the
+out here. The five model steps are scripted and no model is reached. The six programs run for real in the
 sandbox, and every tool they call answers from a scripted records base and a scripted research base, so nothing
 reaches a real knowledge base.
 
