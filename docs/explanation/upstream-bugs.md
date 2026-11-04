@@ -458,6 +458,52 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   the end. Each join collects its items into a list. `tail` is handed `['src']`, then `['mid']`, where it should be
   handed `['mid', 'src']` once.
 
+## UB-18. A plain-text answer the agent refuses and retries leaves nothing in the event stream
+
+- **Library:** pydantic-ai 2.63.0, read in the harness venv's installed copy. The retry: `pydantic_ai/_agent_graph.py`,
+  the `except ToolRetryError` blocks of `CallToolsNode` at lines 2883-2886 and 2989-2991, and
+  `ModelRequestNode._build_retry_node` at lines 2699-2715. The event union: `AgentStreamEvent` (`pydantic_ai/messages.py`, line 7507) and its `HandleResponseEvent`
+  member (line 6995). The Vercel AI adapter: `pydantic_ai/ui/vercel_ai/_event_stream.py`,
+  `VercelAIEventStream._handle_tool_result`, the `ERROR_OUTCOMES` branch at lines 528-534, and
+  `UIEventStream.transform_stream` (`pydantic_ai/ui/_event_stream.py`, the `ToolCallEvent` branch at lines 251-262).
+- **Symptom:** a workflow step that must answer with a structured output answers in plain text. The agent refuses the text
+  with a `RetryFeedbackPart` ("Invalid JSON: expected value at line 1 column 1") and the model tries again. The live step
+  drawer draws the step's Vercel AI stream, so it shows the plain-text answer and then the retry's tool call in one step
+  of one reply, with nothing between them. The step's recorded messages hold the refusal, and the archived step view
+  draws it as a "Refused" note.
+- **Cause:** a retry that answers a tool call is that call's own `ToolReturnPart` with `outcome='retried'`. It reaches
+  `run_stream_events()` as a `FunctionToolResultEvent` or an `OutputToolResultEvent`, and `_handle_tool_result` turns it
+  into a `tool-output-error` chunk whose `errorText` is the feedback. A retry that answers no call is a
+  `RetryFeedbackPart`. `CallToolsNode` puts it into the next `ModelRequest` and yields no event, and no member of
+  `AgentStreamEvent` could carry it. The adapter has nothing to translate. `transform_stream` also turns to the request
+  side only on a `ToolCallEvent`, so the retried response opens no new `start-step` and streams inside the refused one.
+- **Grade:** misleading. A person watching the stream cannot tell that the first answer was refused, or why. The
+  recording loses nothing.
+- **Found:** 2026-11-04, after the archived step view learned to draw a refused answer (`e76ba0c5`). The same step drawn
+  live showed the answer and the retry with nothing between them.
+- **What we did:** the archived step view reads the recorded messages and draws each `retry-feedback` part as a refusal
+  (`stepConversationToUiMessages` in `studio-client/src/api/step-chat.ts`, `e76ba0c5`). The live step drawer still draws
+  the stream and shows no refusal. The planned workaround is that the drawer reads the step's recorded messages once the
+  step settles. No harness route serves a running workflow's step messages yet, so the workaround waits on one.
+- **Upstream state:** present in 2.63.0. The open pull request pydantic/pydantic-ai#11939 adds
+  `ModelResponseRejectedEvent`, a `HandleResponseEvent` member carrying the rejected response and its `RetryFeedbackPart`.
+  The Vercel AI adapter sends it as a `data-model-response-rejected` part, ends the rejected step and streams the retry in
+  a new one. That part carries the cause, the attempt and the run step but not the feedback text, so a client still could
+  not show the words the model was shown. The ask on top of it: put the feedback (`content`) in the data part, as
+  `tool-output-error` carries it for a retried call.
+- **Issue:** pydantic/pydantic-ai#9991, filed by others with the same root cause. Nothing to file. A comment there can
+  carry the ask for the feedback text.
+- **Repro:** an agent over a `FunctionModel` with a `stream_function` and `output_type=Verdict`, a pydantic model, whose
+  first response is `TextPart("Here is my verdict: ok.")` and whose second calls the output tool with `{"ok": true}`.
+  `run_stream_events()` yields `PartStartEvent` and `PartEndEvent` for the text, then the second response's
+  `PartStartEvent`, with nothing for the `RetryFeedbackPart` that `all_messages()` holds between them
+  (`cause='validation_error'`, "Invalid JSON: expected value at line 1 column 1"). Through
+  `VercelAIEventStream(sdk_version=6).transform_stream` the chunks are `start`, `start-step`, `text-start`, `text-delta`,
+  `text-end`, `tool-input-start`, `tool-input-delta`, `tool-input-available`, `tool-output-available`, `message-metadata`,
+  `finish-step`, `finish`, `done`. The same agent with a function tool that raises `ModelRetry` once streams
+  `tool-output-error` with `errorText` "no such key, try again", then `finish-step` and a new `start-step`. With
+  `PromptedOutput(Verdict)` a plain-text first answer streams as two text blocks back to back in one step.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
