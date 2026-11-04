@@ -89,14 +89,15 @@ Every truncation names the next call and offset. The instructions resource inclu
 
 Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. A part an earlier run of the conversation recorded first is marked `[tool-call, from an earlier run]`, and the outline of such a run opens with how many of its messages came from earlier runs. Both sets of inspector instructions say what each mark means, and the scan names only symptoms that cite at least one part its run added.
 
-Before blaming a tool's description or schema, both sets of instructions have the inspector read what the agent was given for that call, and blame the surface that should have given a missing or wrong fact: `instructions_say_nothing` or `instructions_say_wrong` on the skill or on the `system_prompt`, or `user_prompt` when the symptom allows it. What it reads, and where:
+Before blaming `tool_description`, `tool_schema`, `instructions_say_nothing` or `instructions_say_wrong`, both sets of instructions have the inspector read what the agent was given for that call, and blame the surface that should have given a missing or wrong fact: `instructions_say_nothing` or `instructions_say_wrong` on the skill or on the `system_prompt`, or the root cause `user_prompt`, on the skill or the `system_prompt`, when the symptom lists it. What it reads, and where:
 
 | What the agent was given | Where the inspector reads it |
 |---|---|
 | The prompt | `read(step)`, the `user-prompt` part. |
 | The run's arguments | Only as text the prompt states (the orchestrator's gate prompt names them). The record keeps no separate copy, so the inspector cannot read them on their own. |
 | Instructions and system prompts | `read(step, resource="instructions")`. |
-| Loaded skills | `read(step, resource="instructions")` as an `instruction-delta` for `capability:<skill name>`. Runs recorded under an older pydantic-ai carry the skill's text in the `load_capability` return instead, read with `read(step)`. |
+| Loaded skills | `read(step, resource="instructions")` as an `instruction-delta` for `capability:<skill name>`. When no such `instruction-delta` is recorded, the skill's text is in the `load_capability` tool return, read with `read(step)`. |
+| Tool definitions | `read(step, resource="tools")`. |
 | Skills it could have loaded | `read(step, resource="tools")`, the `deferred_capability_ids` list. |
 
 `find(text)` searches all of these.

@@ -262,9 +262,7 @@ async def step_parameters(connection: Connection, run_id: str) -> dict[int, dict
 
 
 async def ordinals_from_earlier_runs(connection: Connection, found: RunRow, ordinals: Sequence[int]) -> frozenset[int]:
-    """Read which of these messages of the run's conversation another run recorded first.
-
-    A message the run holds that another run recorded first was recorded by an earlier run of the conversation.
+    """Read which of the run's messages an earlier run of its conversation recorded first.
 
     Args:
         connection: The connection the caller holds.
