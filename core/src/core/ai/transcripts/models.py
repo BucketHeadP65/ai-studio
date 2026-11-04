@@ -159,6 +159,22 @@ class Transcript(BaseModel):
         """
         return self.steps[span.step].messages[: span.message]
 
+    def first_recorded(self, span: Span) -> Span:
+        """Where the part at `span` was first recorded: the same part, in the first step whose history held its message.
+
+        Args:
+            span: The step, the message in it and the part in that message.
+
+        Returns:
+            The span of that first recording, equal to `span` when its own step is the first to hold the message.
+
+        Raises:
+            IndexError: when the span's step or message is outside the transcript.
+        """
+        ordinal = self.steps[span.step].ordinals[span.message]
+        step_index, step = next((index, step) for index, step in enumerate(self.steps) if ordinal in step.ordinals)
+        return Span(step=step_index, message=step.ordinals.index(ordinal), part=span.part)
+
     def recorded(self) -> Iterator[tuple[Span, ModelMessage]]:
         """Every message once, in the form of the first step that held it.
 

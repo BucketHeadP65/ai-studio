@@ -1,4 +1,4 @@
-"""The shipped flag workflow v12, run end to end off its own files: defects go to the repair map, flags to write_flags."""
+"""The shipped flag workflow v13, run end to end off its own files: defects go to the repair map, flags to write_flags."""
 
 from __future__ import annotations
 

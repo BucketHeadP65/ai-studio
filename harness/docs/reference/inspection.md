@@ -85,13 +85,15 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 
 Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
+Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. Both sets of inspector instructions say what that mark means.
+
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 
 ## Questions
 
 Each attribution or scan gets a question row linked to its own recorded conversation. The composition attaches `StepPersistence` and `RequestParametersRecorder`. Each tier has its own question, and retries stay in that question's conversation. A follow-up continues that conversation on the tier's current model.
 
-Output validation happens inside the agent run. Unknown taxonomy names, incompatible causes, invalid spans and schema-invalid answers become recorded retries. Exhausted invalid output remains `invalid`. Provider/network failures remain job failures that can retry. A skipped output tool or an output without the framework's processing confirmation is not presented as an accepted diagnosis.
+Output validation happens inside the agent run. Unknown taxonomy names, incompatible causes, invalid spans and schema-invalid answers become recorded retries. A scan that cites one span twice, or two spans of one part shown at two steps, is refused with the span the part was first recorded at, and told to drop a symptom that rests on the part happening twice. Exhausted invalid output remains `invalid`. Provider/network failures remain job failures that can retry. A skipped output tool or an output without the framework's processing confirmation is not presented as an accepted diagnosis.
 
 Lead outcomes are explicit:
 
@@ -122,7 +124,7 @@ Eight routes, served by `InspectionController` (`harness/src/harness/features/in
 | `GET /api/inspection/runs/{run_id}/steps/{step}` | The messages the run added at one step, in the same five fields the turn route answers, none cited. 404 in words when the run cannot be read or has no such step. |
 | `POST /api/inspection/questions/{question_id}/ask` | One more question to the inspector that answered, on the question's own tier, with the same tools over the same run, recorded under the same conversation. Body `{"text": "..."}`, answer `{"answer": "...", "conversation_id": "...", "model": "..."}`, the model the tier actually ran on now, which may differ from the question's own `model` when the owner has since changed the tier. |
 
-The SPA draws a findings list at `/inspection`, one finding with evidence and the inspector's trace at `/inspection/{id}`, and the run overview at `/inspection/runs/{run}`. The list filters the newest 200 findings. The overview shows leads, findings, questions and jobs, distinguishing dismissed, uncertain and invalid outcomes. The ask route returns one JSON body. The trace shows recorded validation retries and distinguishes processed, skipped and unvalidated structured outputs.
+The SPA draws a findings list at `/inspection`, one finding with evidence and the inspector's conversation at `/inspection/{id}`, and the run overview at `/inspection/runs/{run}`. The list filters the newest 200 findings. The overview shows leads, findings, questions and jobs, distinguishing dismissed, uncertain and invalid outcomes. The ask route returns one JSON body. The finding page draws the inspector's conversation the way the chat draws a turn, and a follow-up appears as a new turn. A refused output call is an error card that carries the refusal. A refused text answer is followed by a note marked Refused that carries the refusal, between the answer and the retry. Every other output call shows what its return said (processed, or not used), and one with no recorded return reads as pending. A thinking part with no text is not drawn.
 
 ## Operating it
 

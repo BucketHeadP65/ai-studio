@@ -1292,6 +1292,7 @@ def _relaunch_logged_run(session: Runtime, path: Path, records: RunRecords, topi
         session.active.workflow_id = waiting.workflow_id
         session.active.run_id = waiting.run_id or None
         session.active.run_title = waiting.run_title
+        session.active.params = dict(waiting.params)
         session.active.result = "A restart stopped this run. Resume it to carry on."
         session.active.started_at = waiting.started_at
         session.active.gate_mode = waiting.gate_mode

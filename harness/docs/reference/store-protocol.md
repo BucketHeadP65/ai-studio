@@ -305,6 +305,12 @@ prints *"(no saved workflow matches. Plan fresh instead of forcing a bad fit)"* 
 empty result. A step search answers its own empty case, *"(no reusable step matches. Plan
 fresh instead of forcing a bad fit)"*, so a search for one kind never reports on the other.
 
+With an evidence log on the port, each card carries an `earned:` line, and a fetch carries the same
+line in its summary. Both count `history_for` on the content address of the workflow the card's id
+holds now (I2), so a card and its fetch never state two trusts for one workflow. Runs of other
+content filed under the same id count for nothing. The card's line costs one host fetch per card, and
+a card whose workflow cannot be read carries no line rather than a guessed one.
+
 A host whose search tool fails is a distinct answer from a host with nothing to offer.
 `_search` catches the host failure and returns a string beginning `STORE SEARCH
 UNAVAILABLE`, explicitly saying *"This is NOT 'nothing matched'"*. An unchecked library is
@@ -333,7 +339,8 @@ validator.
 compares the steps the spec names against this run's registry and answers three ways:
 
 - `FITS THIS RUN` / `fits_here: True`, every named step is registered here, or the
- workflow brings its own steps and this run can perform a briefing.
+ workflow brings its own steps and this run can perform a briefing. A stale workflow that fits
+ keeps `fits_here: True` without the words `FITS THIS RUN` (see below).
 - `DOES NOT FIT THIS RUN` / `fits_here: False`, a named step is missing, or the workflow
  brings steps and `registry.performs_briefings` is false. The prose names the missing
  steps and adds *"do not keep re-reading it"*.
@@ -346,7 +353,11 @@ a tool that does not exist, or one the model must remember to reach for, is wors
 instruction: the model spends calls hunting for it, and when it cannot find it, it guesses.
 The same ruling governs staleness, which `_staleness` computes on the same fetch and folds
 into the `fit` prose with a `STALE:` prefix when the environment moved. Both verdicts arrive
-where the decision is made, unasked.
+where the decision is made, unasked. A stale workflow whose steps all resolve keeps `fits_here: True`,
+but its prose never says `FITS THIS RUN` or "as it stands". It says what moved may change what the
+workflow does, and tells the reader to tell the person what drifted before offering or running it, and
+to run it only if they still want it. That is the one re-check every reader can make, whatever host
+tools sit beside the port.
 
 `staleness` is a tri-state and each state is a different claim: `[]` is checked and fresh,
 a non-empty list names exactly what moved, `None` means the workflow carries no readable

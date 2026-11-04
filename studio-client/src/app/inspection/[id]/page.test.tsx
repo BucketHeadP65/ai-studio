@@ -449,19 +449,18 @@ describe("FindingPage", () => {
     render(<FindingPage />);
 
     await screen.findByRole("heading", { name: "warning ignored" });
-    await userEvent.click(await screen.findByRole("button", { name: /Expand the trace/ }));
+    await screen.findByText("Symptom: warning_ignored.");
     const textbox = screen.getByRole("textbox", { name: "Ask the inspector about this finding" });
     await userEvent.type(textbox, "why not the instructions?");
     await userEvent.click(screen.getByRole("button", { name: "Ask" }));
 
-    expect(screen.queryByText("Answered by test-model.")).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getAllByText("why not the instructions?")).toHaveLength(1);
-      expect(
-        screen.getAllByText((_, element) => element?.textContent === "claude-test answered").length,
-      ).toBeGreaterThan(0);
       expect(screen.getAllByText(FOLLOW_UP_ANSWER)).toHaveLength(1);
+      // The chat names each assistant turn in a paragraph of its own: the inspector's calls, then its answer.
+      expect(screen.getAllByText("claude-test", { selector: "p" })).toHaveLength(2);
     });
+    expect(screen.queryByText("test-model")).not.toBeInTheDocument();
   });
 
   it("lands a challenge on a blame in the composer with the blame quoted, even clicked before the composer is ready", async () => {
@@ -488,17 +487,14 @@ describe("FindingPage", () => {
     });
   });
 
-  it("opens with the trace expanded at #trace", async () => {
+  it("answers to #trace with the section that draws the inspector's conversation", async () => {
     mountApi();
-    window.location.hash = "#trace";
-    try {
-      render(<FindingPage />);
+    render(<FindingPage />);
 
-      await screen.findByRole("heading", { name: "warning ignored" });
-      expect(await screen.findByText("What it was told")).toBeInTheDocument();
-    } finally {
-      window.location.hash = "";
-    }
+    await screen.findByRole("heading", { name: "warning ignored" });
+    const section = document.getElementById("trace") as HTMLElement;
+    expect(within(section).getByRole("heading", { name: "What the inspector read" })).toBeInTheDocument();
+    expect(await within(section).findByText("Symptom: warning_ignored.")).toBeInTheDocument();
   });
 
   it("says so when a rule decided the finding and there is no conversation to read", async () => {

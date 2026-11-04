@@ -327,6 +327,76 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `retries={'output': 4}`, raises `UnexpectedModelBehavior: Exceeded maximum output retries (4)` after 5 model calls.
   With `capabilities=[RaiseContentFilterError()]` it raises `ContentFilterError` after 1.
 
+## UB-13. Monty's `json.dumps` refuses `default=`
+
+- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.63.0's `CodeMode` (`run_code`).
+- **Symptom:** `json.dumps(value, default=str)` in a program fails with `TypeError: JSONEncoder.__init__() got an
+  unexpected keyword argument 'default'`. `indent=` works. `run_code`'s description lists `json` among the importable
+  modules with no caveat, so a model writes the CPython call it knows and spends a retry on it.
+- **Cause:** Monty's `json.dumps` takes a subset of CPython's keywords, and `default` is not among them. Neither Monty nor
+  the `run_code` description says which keywords are missing.
+- **Grade:** cheap. It costs one retry. A tool's return reaches a program already converted to JSON values, so a program
+  never needs `default=` to dump one.
+- **Found:** the harness inspector's finding 5, confirmed 2026-11-04 by a review of its findings: a chat model's program
+  called `json.dumps(..., default=str)` and was refused.
+- **What we did:** the sandbox dialect (`harness/src/harness/sandbox.py`, `_DIALECT`) says `json.dumps` takes no
+  `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
+- **Upstream state:** present in pydantic-monty 1.4.0. The ask is that `json.dumps` accept `default=` as CPython does, or
+  that `run_code`'s description name the `json` keywords Monty leaves out.
+- **Issue:** not filed.
+- **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
+  `session.feed_run('import json\njson.dumps({"a": 1}, default=str)')` raises `MontyRuntimeError: TypeError:
+  JSONEncoder.__init__() got an unexpected keyword argument 'default'`. The same call with `indent=1` in place of
+  `default=str` returns `'{\n "a": 1\n}'`.
+
+## UB-14. Without `rg`, `search_files` refuses an inline regex flag and advises an argument it does not take
+
+- **Library:** pydantic-ai-harness 0.63.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `validate_posix_pattern`,
+  lines 22-29, called from `run_posix_search` at line 53. `filesystem/_toolset.py`, `_command_search_files`, which falls
+  back to it at line 1385 when `rg` is missing).
+- **Symptom:** in a workspace with no `rg` on its `PATH`, `search_files(pattern="(?i)proposition")` fails with a refusal that says
+  POSIX grep does not support that syntax and ends `Use literal=True or install rg.` `search_files` takes only
+  `pattern`, `path` and `include_glob` (`_search_files_tool`, `_toolset.py:1184`). `literal` belongs to the opt-in `grep`
+  tool (`_grep_tool`, `_toolset.py:1624`), which `FileSystem` does not register by default. A model that follows the
+  advice calls `search_files` with an argument it refuses.
+- **Cause:** the fallback runs `grep -E`, which has no inline flags, `\d`, `\w` or lazy quantifiers, so the check refuses
+  them. The refusal text is shared by both tools and written for `grep`'s arguments.
+- **Grade:** costly in a workspace without `rg`. The model spends retries on a flag and an argument it cannot use, and
+  `search_files` offers no case-insensitive search at all.
+- **Found:** the harness inspector's findings 15, 20, 21 and 23 (one conversation, filed four times), confirmed
+  2026-11-04: the harness's environment had no `rg`, so every search the harness ran took the fallback.
+- **What we did:** the harness depends on pydantic-ai-harness's `coder` extra, which installs `rg` (ripgrep 14.1.0) into
+  its environment, so `rg` is on the `PATH` every workspace inherits under `uv run` and the fallback never runs there.
+  `harness/tests/unit/test_file_search.py` holds the control and the fix.
+- **Upstream state:** present in 0.63.0. The ask is that the refusal name only what the calling tool takes (for
+  `search_files`, "rewrite it without the inline flag, or install rg"), or that the fallback translate `(?i)` into
+  `grep -i`.
+- **Issue:** not filed.
+- **Repro:** a `FileSystem(root_dir=tree)` toolset's `search_files("(?i)x", workspace=LocalWorkspaceBackend(tree,
+  env={"PATH": "/usr/bin:/bin"}))` raises `ModelRetry` with that refusal.
+
+## UB-15. Without `rg`, `search_files` fails the whole search on a tracked symlink to a folder
+
+- **Library:** pydantic-ai-harness 0.63.0 (`pydantic_ai_harness/filesystem/_command_search.py`, `run_posix_search`: the
+  enumeration at lines 59-71, whose `git ls-files -co` is line 63, and the per-file `grep` at lines 93-97).
+- **Symptom:** in a git work tree that tracks a symlink to a folder, with no `rg` on the workspace's `PATH`, every
+  `search_files` call whose path covers the symlink fails with `POSIX search failed: grep: skills/agent-threads: Is a
+  directory`. No match from the rest of the tree comes back. In this repository the symlink is
+  `engram/plugin/skills/agent-threads`.
+- **Cause:** `git ls-files -co` lists a tracked symlink as a file, whatever it points at. The fallback greps each listed
+  path, and `grep` exits 2 on a folder. A path that exits above 1 ends the search unless it is unreadable, and the check
+  (`[ -r "$file" ] || [ ! -e "$file" ]`) holds for a readable folder, so the loop exits 2 and the search fails. `rg` does
+  not follow symlinks while it walks, so it skips the path.
+- **Grade:** costly. One symlink anywhere under the search path makes every content search there fail.
+- **Found:** the harness inspector's finding 30, confirmed 2026-11-04 on this repository's tree.
+- **What we did:** the same `coder` extra as UB-14, so the harness searches with `rg`. The same test file proves it.
+- **Upstream state:** present in 0.63.0. The ask is that the fallback skip a listed path that is not a regular file, as
+  `rg` does, for example by testing each listed path with `[ -f "$file" ]` before it greps it.
+- **Issue:** not filed.
+- **Repro:** in an empty folder, `mkdir real && echo x > real/a && ln -s real link && git init -q && git add -A`, then a
+  `FileSystem(root_dir=folder)` toolset's `search_files("x", workspace=LocalWorkspaceBackend(folder, env={"PATH":
+  "/usr/bin:/bin"}))` raises `ModelRetry: POSIX search failed: grep: link: Is a directory`.
+
 ## UB-16. A dynamic capability inside another dynamic capability contributes no tools
 
 - **Library:** pydantic-ai 2.63.0, unchanged in 2.66.0 (`pydantic_ai/toolsets/_dynamic.py`, `DynamicToolset.for_run`.

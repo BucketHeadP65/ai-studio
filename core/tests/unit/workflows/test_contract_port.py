@@ -15,6 +15,7 @@ by trusting a prompt.
 from __future__ import annotations
 
 import json
+import re
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
@@ -366,8 +367,81 @@ async def test_the_ledger_puts_earned_trust_on_the_search_and_fetch_surface(
     result = await _agent(script, port).run("find and read one", usage_limits=LIMITS)
 
     returns = {part.tool_name: str(part.content) for message in result.all_messages() for part in message.parts if isinstance(part, ToolReturnPart)}
-    assert "earned: machine-confirmed, 1 runs with evidence" in returns["search_workflows"], "the card carries what the id earned"
+    assert "earned: machine-confirmed, 1 runs with evidence" in returns["search_workflows"], "the card carries what its workflow earned"
     assert "earned: machine-confirmed, 1 runs with evidence" in returns["fetch_workflow"], "the fetch carries the hash-keyed record"
+
+
+def _confirmed_run(workflow_id: str, spec: Workflow) -> RunEvidence:
+    return RunEvidence(
+        workflow_id=workflow_id,
+        spec_hash=spec_identity(spec),
+        workflow_version=spec.version,
+        outcome="completed",
+        result=Outcome(status="succeeded", summary="the report was published"),
+        runner="test",
+        gates_auto=(),
+        gates_orchestrated=(),
+    )
+
+
+EARNED = re.compile(r"earned: [a-z-]+, \d+ runs with evidence")
+"""One trust line, as a card or a fetch states it."""
+
+
+async def _trust_lines(port: WorkflowContract[None], workflow_id: str) -> dict[str, str]:
+    script = Script(
+        calls=[
+            ToolCallPart("search_workflows", {"task": "close the quarter", "limit": 3}),
+            ToolCallPart("fetch_workflow", {"workflow_id": workflow_id}),
+        ]
+    )
+    result = await _agent(script, port).run("find and read one", usage_limits=LIMITS)
+    returns = {
+        part.tool_name: str(part.content) for message in result.all_messages() for part in message.parts if isinstance(part, ToolReturnPart)
+    }
+    return {tool: match.group() for tool, text in returns.items() if (match := EARNED.search(text)) is not None}
+
+
+async def test_a_card_and_its_fetch_state_one_trust_counted_by_what_ran_not_by_the_id(
+    quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
+) -> None:
+    """Runs of other content filed under this id confirm nothing about the workflow the id holds now."""
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    edited = quarterly_report.model_copy(update={"description": "an earlier edit kept under the same id"})
+    await ledger.append(_confirmed_run("wf-quarterly-report", edited))
+    host = FakeHost(rows={"wf-quarterly-report": yaml.safe_dump(quarterly_report.model_dump(mode="json"))})
+    port = WorkflowContract[None](source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger)
+
+    lines = await _trust_lines(port, "wf-quarterly-report")
+
+    assert lines["search_workflows"] == lines["fetch_workflow"], "one workflow, one trust"
+    assert "unverified, 0 runs with evidence" in lines["search_workflows"]
+
+
+async def test_a_card_keeps_the_runs_its_workflow_earned_under_another_id(
+    quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
+) -> None:
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    await ledger.append(_confirmed_run("wf-before-the-move", quarterly_report))
+    host = FakeHost(rows={"wf-quarterly-report": yaml.safe_dump(quarterly_report.model_dump(mode="json"))})
+    port = WorkflowContract[None](source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger)
+
+    lines = await _trust_lines(port, "wf-quarterly-report")
+
+    assert lines["search_workflows"] == lines["fetch_workflow"], "one workflow, one trust"
+    assert "machine-confirmed, 1 runs with evidence" in lines["search_workflows"]
+
+
+async def test_a_card_whose_workflow_cannot_be_read_claims_no_trust(registry: StepRegistry, tmp_path: Path) -> None:
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    host = FakeHost(rows={"wf-broken": "name: only-a-name"})
+    port = WorkflowContract[None](source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger)
+    script = Script(calls=[ToolCallPart("search_workflows", {"task": "close the quarter", "limit": 3})])
+
+    result = await _agent(script, port).run("find one", usage_limits=LIMITS)
+
+    assert "wf-broken" in result.output
+    assert "earned:" not in result.output
 
 
 async def test_without_a_ledger_no_trust_is_invented(quarterly_report: Workflow, registry: StepRegistry) -> None:

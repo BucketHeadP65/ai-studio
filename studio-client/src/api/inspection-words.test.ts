@@ -7,6 +7,7 @@ import {
   longDate,
   partWords,
   plural,
+  quotedPhrases,
   runLocator,
   runName,
   sentence,
@@ -82,5 +83,47 @@ describe("inspection words", () => {
     const text = "output:\n  summary: looked fine\n  fit: re-check before trusting it\n  fits_here: true";
     expect(keyLine(text, ["re-check before trusting it"])).toBe("  fit: re-check before trusting it");
     expect(keyLine("\n\nfirst words\nmore", [])).toBe("first words");
+  });
+});
+
+describe("quotedPhrases", () => {
+  it("reads a phrase quoted in double straight quotes, an apostrophe elsewhere left alone", () => {
+    expect(quotedPhrases(`the tool's own return said "re-check before trusting it"`)).toEqual([
+      "re-check before trusting it",
+    ]);
+  });
+
+  it("never pairs the apostrophe of a possessive with a quote that opens later", () => {
+    expect(
+      quotedPhrases("The spec fetch's fit field opened with a warning 'STALE: re-check before trusting it' and the field's 'it fits this run' claim"),
+    ).toEqual(["STALE: re-check before trusting it", "it fits this run"]);
+  });
+
+  it("splits a phrase the writer shortened with an ellipsis into the pieces on each side of it", () => {
+    expect(quotedPhrases("it warned 'STALE: the world moved under this artifact... re-check before trusting it' twice")).toEqual([
+      "STALE: the world moved under this artifact",
+      "re-check before trusting it",
+    ]);
+  });
+
+  it("reads a phrase quoted in single straight quotes", () => {
+    expect(quotedPhrases("the return said the words 'trust nothing it returns'")).toEqual([
+      "trust nothing it returns",
+    ]);
+  });
+
+  it("reads every phrase quoted, in order", () => {
+    expect(quotedPhrases(`it promised "a check the tool" but ran "no such check at all"`)).toEqual([
+      "a check the tool",
+      "no such check at all",
+    ]);
+  });
+
+  it("ignores a quoted stretch under eight characters", () => {
+    expect(quotedPhrases(`the tool answered "ok" and nothing else`)).toEqual([]);
+  });
+
+  it("reads nothing out of a why that quotes nothing", () => {
+    expect(quotedPhrases("the tool never made the check its own description promised")).toEqual([]);
   });
 });

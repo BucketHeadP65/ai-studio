@@ -180,6 +180,12 @@ class FetchedWorkflow(TypedDict):
     fingerprint, which is neither fresh nor stale."""
 
 
+_STALE_FIT = (
+    "but what moved may change what it does. "
+    "Tell the person what drifted before you offer or run it, and run it only if they still want it."
+)
+"""How a fit sentence ends for a stale workflow whose steps all resolve here."""
+
 _NOTE_LIMIT = 200
 """How much of the author's own prose one card line carries. A card is scanned, not read."""
 
@@ -296,7 +302,8 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
     """The evidence log beside this library, if it has one.
 
     When set, search hits and fetches show the model what each workflow has earned, derived by
-    `trust_level` on every read and never stored. `None` shows no trust line at all."""
+    `trust_level` over the runs of its exact content on every read and never stored. A search then
+    reads each hit's workflow through the host's fetch tool. `None` shows no trust line at all."""
     save_requires_approval: bool = False
     """Mark the save tool as requiring approval, for hosts whose protocol can ask.
 
@@ -470,8 +477,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             fallback = await self._catalog_fallback(ctx)
             if fallback is not None:
                 return fallback
-        earned = {card.id: line for card in kept if (line := await self._earned_line(card.id)) is not None}
-        return render_cards(kept, earned=earned)
+        return render_cards(kept, earned=await self._earned_lines(ctx, kept))
 
     async def _catalog_fallback(self, ctx: RunContext[AgentDepsT]) -> str | None:
         """Up to ten saved workflows listed after a search by word found nothing, or None without a catalog tool."""
@@ -497,23 +503,33 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         if not catalog:
             return render_cards(catalog)  # nothing matched by word, and the library itself is empty
         total = self.vocabulary.catalog_total(raw) if self.vocabulary.catalog_total is not None else None
-        earned = {card.id: line for card in catalog if (line := await self._earned_line(card.id)) is not None}
         return "\n".join(
             (
                 _catalog_header(total, len(catalog)),
-                render_cards(catalog, earned=earned, applicability=False),
+                render_cards(catalog, earned=await self._earned_lines(ctx, catalog), applicability=False),
                 "Narrow with words from the request, or fetch one by id with fetch_workflow.",
             )
         )
 
-    async def _earned_line(self, workflow_id: str, workflow: Workflow | None = None) -> str | None:
-        """One trust line for this workflow, by content address when `workflow` is given, or None without an evidence log."""
+    async def _earned_lines(self, ctx: RunContext[AgentDepsT], cards: Sequence[SavedWorkflow]) -> dict[str, str]:
+        """Each card's trust line, counted by the workflow its id holds now. A card whose workflow cannot be read has none."""
+        if self.evidence_log is None:
+            return {}
+        earned: dict[str, str] = {}
+        for card in cards:
+            try:
+                workflow = await self.workflow_for(ctx, card.id)
+            except (ModelRetry, LibraryError, ValueError, KeyError, TypeError):
+                continue
+            if (line := await self._earned_line(workflow)) is not None:
+                earned[card.id] = line
+        return earned
+
+    async def _earned_line(self, workflow: Workflow) -> str | None:
+        """One trust line for this workflow, counted by its content address, or None without an evidence log."""
         if self.evidence_log is None:
             return None
-        if workflow is not None:
-            record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
-        else:
-            record = trust_level(await self.evidence_log.events_for(workflow_id))
+        record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
         failed = f", {record.failed_runs} failed" if record.failed_runs else ""
         grades = f", {record.structural_grades} structural grades, mean {record.structural_mean:.3f}" if record.structural_mean is not None else ""
         return f"{record.level}, {record.runs_with_evidence} runs with evidence{failed}{grades}"
@@ -862,14 +878,11 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         works = tuple(dict.fromkeys(node.work for node in workflow.nodes if node.kind == "run"))
         gates = ", ".join(node.id for node in workflow.nodes if node.kind == "gate") or "none"
         brought = tuple(task.name for task in workflow.inline)
-        fit, fits_here = self._fit(works, brought=brought)
         staleness = self._staleness(raw, workflow)
+        fit, fits_here = self._fit(works, brought=brought, stale=bool(staleness))
         if staleness:
-            fit = (
-                f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. "
-                f"It may still validate, so re-check before trusting it. {fit}"
-            )
-        earned = await self._earned_line(workflow_id, workflow)
+            fit = f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. {fit}"
+        earned = await self._earned_line(workflow)
         return FetchedWorkflow(
             summary=(
                 f"{workflow.name} v{workflow.version}: {workflow.description}\n"
@@ -896,7 +909,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             return None
         return list(drift(recorded, fingerprint(workflow, self.registry, environment=dict(self.environment))))
 
-    def _fit(self, works: Sequence[str], *, brought: Sequence[str] = ()) -> tuple[str, bool | None]:
+    def _fit(self, works: Sequence[str], *, brought: Sequence[str] = (), stale: bool = False) -> tuple[str, bool | None]:
         """Whether this run can execute the workflow, as prose plus True, False, or None when no registry can say."""
         if self.registry is None:
             return "fit: unknown from here. This port has no registry, so nothing can say whether the steps exist.", None
@@ -913,14 +926,21 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
                 f"DOES NOT FIT THIS RUN: it brings {len(brought)} step(s) of its own ({', '.join(brought)}) and this "
                 f"run cannot perform a briefing. It can only execute workflows naming steps that already exist here."
             ), False
-        if brought:
-            # Said out loud because "it names a step you do not have" reads as not fitting: a
-            # workflow carrying its own steps does fit.
-            return (
-                f"FITS THIS RUN: the steps it names are registered here, and the {len(brought)} step(s) it brings "
-                f"with it ({', '.join(brought)}) can be built from their briefings, so it runs as it stands."
-            ), True
-        return "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands.", True
+        return _fits(brought, stale=stale), True
+
+
+def _fits(brought: Sequence[str], *, stale: bool) -> str:
+    """What a fit says of a workflow whose steps all resolve here, never runnable as it stands when it is stale."""
+    if brought:
+        # Said out loud because "it names a step you do not have" reads as not fitting: a
+        # workflow carrying its own steps does fit.
+        built = f"the {len(brought)} step(s) it brings with it ({', '.join(brought)}) can be built from their briefings"
+        if stale:
+            return f"The steps it names are still registered here, and {built}, {_STALE_FIT}"
+        return f"FITS THIS RUN: the steps it names are registered here, and {built}, so it runs as it stands."
+    if stale:
+        return f"Every step it names is still registered here, {_STALE_FIT}"
+    return "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands."
 
 
 def cards_from_mapping(

@@ -380,6 +380,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
     session.active.workflow_id = workflow_id
     session.active.run_title = run_title
     session.active.run_id = run_id
+    session.active.params = run_log.state.params
     session.active.result = ""
     session.active.stopping = False
     session.active.paused_by_restart = False
