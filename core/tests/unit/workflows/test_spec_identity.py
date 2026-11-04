@@ -325,6 +325,53 @@ def test_a_field_added_with_a_default_still_moves_the_identity_once_somebody_set
     assert spec_identity(revived) != spec_identity(quarterly_report)
 
 
+def test_a_changed_default_moves_the_identity_of_a_stored_document_that_wrote_the_old_default(quarterly_report: Workflow) -> None:
+    """A library keeps the full dump, so once the default changes the stored old default reads as a value somebody chose."""
+    before = create_model("WorkflowBefore", __base__=Workflow, review_note=(str, "none yet"))
+    after = create_model("WorkflowAfter", __base__=Workflow, review_note=(str, "pending"))
+    stored = before.model_validate(quarterly_report.model_dump(mode="json")).model_dump(mode="json")
+
+    assert stored["review_note"] == "none yet"
+    assert spec_identity(before.model_validate(stored)) == spec_identity(quarterly_report)
+    assert spec_identity(after.model_validate(stored)) != spec_identity(quarterly_report)
+
+
+def test_a_changed_default_keeps_the_identity_of_a_document_that_left_the_field_out(quarterly_report: Workflow) -> None:
+    """The identity stays, and the workflow runs under the new default."""
+    after = create_model("WorkflowAfter", __base__=Workflow, review_note=(str, "pending"))
+    revived = after.model_validate(quarterly_report.model_dump(mode="json"))
+
+    assert revived.model_dump(mode="json")["review_note"] == "pending"
+    assert spec_identity(revived) == spec_identity(quarterly_report)
+
+
+def test_the_stored_dump_writes_every_default_in_but_four() -> None:
+    """What a library keeps: every defaulted field written in, except the four the serializers leave out at their defaults."""
+    workflow = Workflow(
+        name="stored-defaults",
+        version=1,
+        description="A map, a step and a gate, every default left to the format.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        nodes=(
+            MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),
+            RunNode(id="report", work="report", inputs={"digests": FromNode(node="each")}),
+            PersonGate(id="approve", reviews=FromNode(node="report"), rejected_to="report"),
+        ),
+        output=FromNode(node="approve"),
+    )
+
+    stored = workflow.model_dump(mode="json")
+
+    assert stored["inline"] == []
+    assert stored["parameters"]["items"]["required"] is True
+    assert {key: stored["nodes"][0][key] for key in ("inputs", "max_parallel", "on_error", "abort_after_repeats", "tier")} == {
+        "inputs": {}, "max_parallel": None, "on_error": "fail", "abort_after_repeats": 3, "tier": None,
+    }
+    assert "turn" not in stored["nodes"][1]["inputs"]["digests"]
+    assert "max_attempts" not in stored["nodes"][2]
+    assert "result" not in stored
+
+
 def _sha256(document: object) -> str:
     return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 

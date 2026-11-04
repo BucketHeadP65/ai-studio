@@ -33,8 +33,13 @@ node's `kind` kept.
 
 - A field added to the format with a default moves no identity.
 - A field written at its default and a field left out are one identity, however the workflow was built or stored.
-- A changed default value of an existing field moves no identity either, so trust carries over that change. This is
-  the cost the owner accepted on 2026-11-04.
+- A changed default value of an existing field is not free. Both libraries keep the full dump of a workflow with its
+  defaults written in, so a stored page holds the old default as a value, the canonical document keeps it once it is
+  no longer the default, and the identity moves. Only where the document left the field out does the identity stay,
+  and that workflow then runs under the new default with its trust carried over. The dump leaves out four fields at
+  their defaults (`FromNode.turn`, a gate's `max_attempts`, an artifact's `field` and the workflow's `result`), and a
+  document a person writes may leave out any defaulted field. The owner accepted on 2026-11-04 that trust carries over
+  a changed default where the identity stays.
 - A node keeps its `kind` although `kind` has a default, because `kind` picks which node model a document is and is
   never a value somebody chose. A new union picked by a defaulted field must keep that field in the canonical document
   the same way, or two different workflows could share one identity and so one trust. A test holds that the canonical
@@ -48,6 +53,9 @@ new one, and an identity that matched no stored workflow stayed as it was.
 ## Consequences
 
 - Adding a field with a default to `Workflow` or any model inside it is a free change for trust.
+- Changing an existing field's default moves the identity of every stored page that wrote the field at its old
+  default, so those workflows lose their trust unless the evidence log is moved forward in the same change. A page
+  that left the field out keeps its identity and runs under the new default.
 - A pydantic release that serialises differently, or a field added without a default, still moves every identity.
   The pinned digests in core's identity tests fail when that happens, so it is a deliberate decision that comes with a
   forward migration of the evidence log, never a silent re-key.
