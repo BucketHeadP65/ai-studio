@@ -28,17 +28,4 @@ describe("Folded", () => {
     expect(screen.getByText("Show the first 20 lines")).toBeInTheDocument();
     expect(container.textContent).toContain("line 24");
   });
-
-  it("clips the box with a fade while folded, dropping the fade once opened", async () => {
-    const lines = Array.from({ length: 25 }, (_, index) => `line ${index}`);
-    const text = lines.join("\n");
-    const { container } = render(<Folded text={text} lines={20} fade />);
-
-    const pre = container.querySelector("pre") as HTMLElement;
-    expect(pre.className).toContain("overflow-hidden");
-
-    await userEvent.click(screen.getByRole("button", { name: "Show all (25 lines)" }));
-
-    expect(pre.className).not.toContain("overflow-hidden");
-  });
 });

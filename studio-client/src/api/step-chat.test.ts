@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { server } from "@/shared/test-support/msw/server";
 
-import { StepNotSteerableError, stepChatApi, stepConversationToUiMessages, useStepStream } from "./step-chat";
+import { StepNotSteerableError, refusalOf, stepChatApi, stepConversationToUiMessages, useStepStream } from "./step-chat";
 
 import type { MessagePayload } from "./sessions-types";
 
@@ -184,6 +184,169 @@ describe("stepConversationToUiMessages", () => {
 
     expect(messages.map((m) => m.role)).toEqual(["user"]);
   });
+
+  it("drops a thinking part with no text, the reasoning a model returns hidden", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [
+          { part_kind: "thinking", content: "", id: "rs-1" },
+          { part_kind: "thinking", content: "  \n" },
+          { part_kind: "tool-call", tool_name: "outline", tool_call_id: "c-1", args: {} },
+        ],
+      },
+      { kind: "response", parts: [{ part_kind: "thinking", content: "" }] },
+    ]);
+
+    expect(messages.map((m) => [m.role, m.parts])).toEqual([
+      ["user", [{ type: "text", text: "go" }]],
+      [
+        "assistant",
+        [
+          { type: "step-start" },
+          { type: "tool-outline", toolCallId: "c-1", state: "output-available", input: {}, output: "pending" },
+        ],
+      ],
+    ]);
+  });
+
+  it("reads arguments the model sent as a JSON string as the object they hold, as the live stream does", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-1", args: '{"step":0,"resource":"messages"}' },
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-2", args: "not json" },
+          { part_kind: "tool-call", tool_name: "read", tool_call_id: "c-3", args: "[1, 2]" },
+        ],
+      },
+    ]);
+
+    expect(messages[1]?.parts.slice(1).map((part) => ("input" in part ? part.input : null))).toEqual([
+      { step: 0, resource: "messages" },
+      "not json",
+      "[1, 2]",
+    ]);
+  });
+
+  it("draws a refused text answer's retry feedback as a refusal of its own, between the answer and the retry", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("Symptoms to look for"),
+      {
+        kind: "response",
+        parts: [
+          { part_kind: "thinking", content: "Let me decide my verdict." },
+          { part_kind: "text", content: "So the attributor run: steps 0-4." },
+        ],
+      },
+      {
+        kind: "request",
+        parts: [
+          {
+            part_kind: "retry-feedback",
+            content: [
+              {
+                type: "json_invalid",
+                loc: [],
+                msg: "Invalid JSON: expected value at line 1 column 1",
+                input: "So the attributor run: steps 0-4.",
+              },
+            ],
+            retry: { cause: "validation_error", attempt: null, max_retries: null },
+          },
+        ],
+      },
+      {
+        kind: "response",
+        parts: [{ part_kind: "tool-call", tool_name: "final_result_Seen", tool_call_id: "c-1", args: { items: [] } }],
+      },
+      {
+        kind: "request",
+        parts: [{ part_kind: "tool-return", tool_name: "final_result_Seen", tool_call_id: "c-1", content: "Final result processed." }],
+      },
+    ]);
+
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "system", "assistant"]);
+    expect(messages[2]?.parts).toEqual([
+      { type: "data-refusal", data: { text: "Invalid JSON: expected value at line 1 column 1" } },
+    ]);
+    expect(messages.map(refusalOf)).toEqual([null, null, "Invalid JSON: expected value at line 1 column 1", null]);
+  });
+
+  it("draws a call whose return failed as an error carrying the failure", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      { kind: "response", parts: [{ part_kind: "tool-call", tool_name: "read", tool_call_id: "c-1", args: { step: 9 } }] },
+      {
+        kind: "request",
+        parts: [{ part_kind: "tool-return", tool_name: "read", tool_call_id: "c-1", content: "no step 9", outcome: "failed" }],
+      },
+    ]);
+
+    expect(messages[1]?.parts).toEqual([
+      { type: "step-start" },
+      { type: "tool-read", toolCallId: "c-1", state: "output-error", input: { step: 9 }, errorText: "no step 9" },
+    ]);
+  });
+
+  it("draws a call whose return asked for it again as an error carrying the refusal", () => {
+    const messages = stepConversationToUiMessages([
+      userPrompt("go"),
+      {
+        kind: "response",
+        parts: [{ part_kind: "tool-call", tool_name: "final_result_Seen", tool_call_id: "c-1", args: { items: [] } }],
+      },
+      {
+        kind: "request",
+        parts: [
+          {
+            part_kind: "tool-return",
+            tool_name: "final_result_Seen",
+            tool_call_id: "c-1",
+            content: "wrong_tool_chosen must cite a tool-call part",
+            outcome: "retried",
+          },
+        ],
+      },
+      {
+        kind: "response",
+        parts: [{ part_kind: "tool-call", tool_name: "final_result_Seen", tool_call_id: "c-2", args: { items: [] } }],
+      },
+      {
+        kind: "request",
+        parts: [
+          {
+            part_kind: "tool-return",
+            tool_name: "final_result_Seen",
+            tool_call_id: "c-2",
+            content: [{ msg: "field required" }, { msg: "symptom unknown" }],
+            outcome: "retried",
+          },
+        ],
+      },
+    ]);
+
+    expect(messages[1]?.parts).toEqual([
+      { type: "step-start" },
+      {
+        type: "tool-final_result_Seen",
+        toolCallId: "c-1",
+        state: "output-error",
+        input: { items: [] },
+        errorText: "wrong_tool_chosen must cite a tool-call part",
+      },
+      { type: "step-start" },
+      {
+        type: "tool-final_result_Seen",
+        toolCallId: "c-2",
+        state: "output-error",
+        input: { items: [] },
+        errorText: "field required, symptom unknown",
+      },
+    ]);
+  });
 });
 
 describe("useStepStream", () => {
@@ -230,6 +393,35 @@ describe("useStepStream", () => {
     ]);
     expect(result.current.messages[1]?.parts).toEqual([{ type: "text", text: "check the appendix too" }]);
     expect(result.current.messages[2]?.parts).toEqual([{ type: "text", text: "On it.", state: "done" }]);
+  });
+
+  it("draws no reasoning part that carries no text, and keeps one that does", async () => {
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/stream`, () =>
+        streamOf([
+          { type: "start", messageId: "m-1" },
+          { type: "start-step" },
+          { type: "reasoning-start", id: "r-1" },
+          { type: "reasoning-end", id: "r-1" },
+          { type: "reasoning-start", id: "r-2" },
+          { type: "reasoning-delta", id: "r-2", delta: "Read the outline first." },
+          { type: "reasoning-end", id: "r-2" },
+          { type: "tool-input-available", toolCallId: "c-1", toolName: "outline", input: {} },
+          { type: "tool-output-available", toolCallId: "c-1", output: "step 0" },
+          { type: "finish" },
+        ]),
+      ),
+    );
+
+    const { result } = renderHook(() => useStepStream("s-1", "draft", "item-0", true));
+
+    await waitFor(() => expect(result.current.streaming).toBe(false));
+
+    expect(result.current.messages[0]?.parts).toEqual([
+      { type: "step-start" },
+      { type: "reasoning", text: "Read the outline first.", state: "done" },
+      { type: "tool-outline", toolCallId: "c-1", state: "output-available", input: {}, output: "step 0" },
+    ]);
   });
 
   it("reconnects on a drop at the number of chunks already seen, and stops on [DONE]", async () => {

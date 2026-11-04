@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/dom";
+import { screen, waitFor, within } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
@@ -111,6 +111,37 @@ describe("StepChatDrawer, archived", () => {
     );
 
     expect(await screen.findByText("I should check the source first.")).toBeInTheDocument();
+  });
+
+  it("shows a refused answer's retry feedback as a refusal between the two turns, never as the step speaking", async () => {
+    const refusal = "Invalid JSON: expected value at line 1 column 1";
+    const conversations: Record<string, MessagePayload[]> = {
+      "draft[]": [
+        { kind: "request", parts: [{ part_kind: "user-prompt", content: "go" }] },
+        { kind: "response", parts: [{ part_kind: "text", content: "Here is the report." }] },
+        {
+          kind: "request",
+          parts: [
+            {
+              part_kind: "retry-feedback",
+              content: [{ type: "json_invalid", loc: [], msg: refusal, input: "Here is the report." }],
+              retry: { cause: "validation_error" },
+            },
+          ],
+        },
+        { kind: "response", parts: [{ part_kind: "text", content: "The report, as asked." }] },
+      ],
+    };
+
+    render(
+      <StepChatDrawer sessionId={null} recordConversations={conversations} node={NODE} open onClose={vi.fn()} />,
+    );
+
+    const refusalText = await screen.findByText(refusal);
+    expect(within(refusalText.parentElement as HTMLElement).getByText("Refused")).toBeInTheDocument();
+    // "Step draft" names the drawer and each of the step's two turns, and nothing more.
+    expect(screen.getAllByText("Step draft")).toHaveLength(3);
+    expect(screen.getAllByText("You")).toHaveLength(1);
   });
 
   it("disables the composer with the finished notice (the archive is always read only)", async () => {

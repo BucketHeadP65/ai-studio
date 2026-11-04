@@ -9,7 +9,7 @@ import { dataLines } from "./chat-stream";
 import { NEVER_ANSWERED } from "./sessions";
 import { STUDIO_API_URL } from "./studio-config";
 
-import type { MessagePayload } from "./sessions-types";
+import type { MessagePart, MessagePayload } from "./sessions-types";
 import type { UIMessage } from "ai";
 
 // The step chat's own wire: a session-scoped listing of every open agentic-step line, a
@@ -143,10 +143,24 @@ function replacePart(builder: Builder, index: number, part: Part): void {
   builder.current = { ...builder.current, parts };
 }
 
+// A reasoning part with no text, the reasoning a model returns hidden or one that has not
+// streamed a word yet, draws nothing.
+function isBlankReasoning(part: Part): boolean {
+  return part.type === "reasoning" && part.text.trim() === "";
+}
+
+// What the drawer draws: the closed messages and the open one, each without its blank reasoning.
+// The builder keeps every part in place, so the indexes its maps hold stay true.
 function snapshot(builder: Builder): UIMessage[] {
-  return builder.current !== null && builder.current.parts.length > 0
-    ? [...builder.messages, builder.current]
-    : builder.messages;
+  const messages =
+    builder.current !== null && builder.current.parts.length > 0
+      ? [...builder.messages, builder.current]
+      : builder.messages;
+  return messages.map((message) =>
+    message.parts.some(isBlankReasoning)
+      ? { ...message, parts: message.parts.filter((part) => !isBlankReasoning(part)) }
+      : message,
+  );
 }
 
 const ChunkSchema = z.looseObject({ type: z.string() });
@@ -479,19 +493,82 @@ function userPromptText(payload: MessagePayload): string {
     .join("");
 }
 
-function toolReturnsByCallId(messages: MessagePayload[]): Map<string, unknown> {
-  const returns = new Map<string, unknown>();
+// The words of each retry feedback part a request row holds: the refusal of an answer that named
+// no tool, such as plain text where a structured answer was due.
+function retryFeedbackTexts(payload: MessagePayload): string[] {
+  return payload.parts.filter((part) => part.part_kind === "retry-feedback").map((part) => refusalText(part.content));
+}
+
+const RefusalDataSchema = z.object({ text: z.string() });
+
+// The words a refusal message carries, `null` for every other message. The step conversation
+// draws a refused answer's retry feedback as a `system` message holding one `data-refusal` part,
+// so neither the person nor the model is ever named as its speaker.
+export function refusalOf(message: UIMessage): string | null {
+  if (message.role !== "system") {
+    return null;
+  }
+  for (const part of message.parts) {
+    if (part.type === "data-refusal") {
+      const parsed = RefusalDataSchema.safeParse(part.data);
+      if (parsed.success) {
+        return parsed.data.text;
+      }
+    }
+  }
+  return null;
+}
+
+// Each call's own return part, keyed by the call it answers.
+function toolReturnsByCallId(messages: MessagePayload[]): Map<string, MessagePart> {
+  const returns = new Map<string, MessagePart>();
   for (const payload of messages) {
     if (payload.kind !== "request") {
       continue;
     }
     for (const part of payload.parts) {
       if (part.part_kind === "tool-return" && part.tool_call_id !== undefined) {
-        returns.set(part.tool_call_id, part.content);
+        returns.set(part.tool_call_id, part);
       }
     }
   }
   return returns;
+}
+
+// One item of a validation error list, read for its message alone.
+const ErrorItemSchema = z.object({ msg: z.string() });
+
+// A refusal's own words: a string as it is, or a validation error list joined with ", ".
+function refusalText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content.map(errorItemText).join(", ");
+  }
+  return content === undefined || content === null ? "" : JSON.stringify(content);
+}
+
+function errorItemText(item: unknown): string {
+  const parsed = ErrorItemSchema.safeParse(item);
+  if (parsed.success) {
+    return parsed.data.msg;
+  }
+  return typeof item === "string" ? item : JSON.stringify(item);
+}
+
+// A call's arguments as the live stream carries them: a JSON string that holds an object reads as
+// that object, anything else stays as it was sent.
+function callInput(args: MessagePart["args"]): unknown {
+  if (typeof args !== "string") {
+    return args;
+  }
+  try {
+    const parsed: unknown = JSON.parse(args);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : args;
+  } catch {
+    return args;
+  }
 }
 
 function toolReturnTimestampsByCallId(messages: MessagePayload[]): Map<string, string> {
@@ -545,24 +622,36 @@ function stepDataPart(payload: MessagePayload, toolReturnTimestamps: Map<string,
 }
 
 // One response row's own parts, in the order the model produced them: its thinking (kept, unlike
-// the session transcript's own rebuild), its text, and EVERY tool call it made (not filtered to
-// companion tools -- a step's tool calls are its content), each carrying its own return.
-function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, unknown>): Part[] {
+// the session transcript's own rebuild, when it has text), its text, and EVERY tool call it made
+// (not filtered to companion tools, since a step's tool calls are its content), each carrying its
+// own return. A call whose return asked for it again, or failed, reads as an error carrying its words.
+function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, MessagePart>): Part[] {
   const parts: Part[] = [];
   for (const part of payload.parts) {
     if (part.part_kind === "text" && typeof part.content === "string") {
       parts.push({ type: "text", text: part.content });
-    } else if (part.part_kind === "thinking" && typeof part.content === "string") {
+    } else if (part.part_kind === "thinking" && typeof part.content === "string" && part.content.trim() !== "") {
       parts.push({ type: "reasoning", text: part.content });
     } else if (part.part_kind === "tool-call" && part.tool_name !== undefined && part.tool_call_id !== undefined) {
       const returned = toolReturns.get(part.tool_call_id);
-      parts.push({
-        type: `tool-${part.tool_name}`,
-        toolCallId: part.tool_call_id,
-        state: "output-available",
-        input: part.args,
-        output: returned === undefined ? NEVER_ANSWERED : returned,
-      });
+      const type = `tool-${part.tool_name}` as const;
+      if (returned?.outcome === "retried" || returned?.outcome === "failed") {
+        parts.push({
+          type,
+          toolCallId: part.tool_call_id,
+          state: "output-error",
+          input: callInput(part.args),
+          errorText: refusalText(returned.content),
+        });
+      } else {
+        parts.push({
+          type,
+          toolCallId: part.tool_call_id,
+          state: "output-available",
+          input: callInput(part.args),
+          output: returned === undefined ? NEVER_ANSWERED : returned.content,
+        });
+      }
     }
   }
   return parts;
@@ -578,7 +667,8 @@ export interface StepConversationOptions {
 // A step's stored conversation -> one user bubble per prompt (the briefing that opened it, and
 // any later one a steer or a further turn added) and one assistant bubble per run of response
 // rows between them, each response opening with its own `step-start` (and `data-step` when the
-// row carries usage) the same way the session transcript's own bubbles do.
+// row carries usage) the same way the session transcript's own bubbles do. A retry feedback part
+// closes the bubble before it and reads as a refusal message of its own (see `refusalOf`).
 export function stepConversationToUiMessages(messages: MessagePayload[], options: StepConversationOptions = {}): UIMessage[] {
   const returnsFrom = options.toolReturnsFrom ?? messages;
   const toolReturns = toolReturnsByCallId(returnsFrom);
@@ -596,9 +686,19 @@ export function stepConversationToUiMessages(messages: MessagePayload[], options
 
   messages.forEach((payload, index) => {
     if (payload.kind === "request") {
+      const refusals = retryFeedbackTexts(payload);
       const text = userPromptText(payload);
-      if (text !== "") {
+      if (refusals.length > 0 || text !== "") {
         flushAssistant();
+      }
+      refusals.forEach((refusal, refusalIndex) => {
+        result.push({
+          id: `step-refusal-${index}-${refusalIndex}`,
+          role: "system",
+          parts: [{ type: "data-refusal", data: { text: refusal } }],
+        });
+      });
+      if (text !== "") {
         result.push({ id: `step-user-${index}`, role: "user", parts: [{ type: "text", text }] });
       }
       return;

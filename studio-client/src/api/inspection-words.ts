@@ -130,3 +130,25 @@ export function keyLine(text: string, phrases: string[]): string {
   });
   return quoted ?? lines.find((line) => line.trim() !== "") ?? "";
 }
+
+// Every phrase a blame's own words quote: the text between a matching pair of straight quotes
+// (' or "), long enough to be a real quotation rather than a stray apostrophe, at least eight
+// characters.
+// A quote opens after a non-word character and closes before one, so the apostrophe in "fetch's" pairs with nothing.
+const QUOTED_PHRASE = /(?<![\w])'([^']{8,})'(?![\w])|(?<![\w])"([^"]{8,})"(?![\w])/g;
+const ELLIPSIS = /\.{3}|\u2026/;
+const MIN_PHRASE = 8;
+
+export function quotedPhrases(why: string): string[] {
+  const phrases: string[] = [];
+  for (const match of why.matchAll(QUOTED_PHRASE)) {
+    const phrase = match[1] ?? match[2];
+    if (phrase === undefined) continue;
+    // A quote the writer shortened with an ellipsis is several phrases: each side of it is looked for on its own.
+    for (const piece of phrase.split(ELLIPSIS)) {
+      const trimmed = piece.trim();
+      if (trimmed.length >= MIN_PHRASE) phrases.push(trimmed);
+    }
+  }
+  return phrases;
+}
