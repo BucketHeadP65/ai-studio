@@ -397,6 +397,5 @@ note), `Switched` (owner plugins that remove a capability's tools outright), `Sa
   budget names `tool_calls` (`run_defined_step` in `harness/src/harness/composition.py`), tests in
   `harness/tests/unit/test_tool_call_warning.py`.
 - **Since:** 2026-11-04 (`fa4b2cd6`, mounted in `d7832457`).
-- **Upstream candidate:** yes, as a `tool_calls` kind on `WarnNearLimits`. Drafted as I8 in the owner's issue drafts.
-  pydantic/pydantic-ai#9019 (open) names the same gap inside a wider ask for continuous budget disclosure, and #4359
-  (open) asks for tool-call reminders after tool returns.
+- **Upstream candidate:** no new issue. pydantic/pydantic-ai#9019 (open) already names this gap inside a wider ask for
+  continuous budget disclosure, and #4359 (open) asks for tool-call reminders after tool returns.
