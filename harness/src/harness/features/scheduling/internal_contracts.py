@@ -102,6 +102,23 @@ class Schedules(Protocol):
         """
         ...
 
+    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
+        """Record one held fire in the tick log, with the runner session it would have used, and nothing else.
+
+        The schedule keeps the next fire and the pending changed pages it holds when this writes, so an arm made while
+        the fire was held stands.
+
+        Args:
+            schedule_id: The schedule's id.
+            last_run_at: When the fire was held.
+            last_outcome: Why the fire was held, in words.
+            session_id: The runner session the fire would have used.
+
+        Returns:
+            Whether a schedule had that id.
+        """
+        ...
+
     async def arm(self, schedule_ids: Sequence[UUID], *, at: datetime, event_id: UUID | None = None) -> Armed:
         """Give every enabled schedule among `schedule_ids` the next fire `at`, keeping an earlier arm it already holds.
 

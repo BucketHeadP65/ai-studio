@@ -242,6 +242,27 @@ class PostgresSchedules:
         )
         return result != "UPDATE 0"
 
+    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
+        """Update only the tick log columns of one row, leaving `next_run_at` and `pending_page_ids` as the row holds them.
+
+        Args:
+            schedule_id: The schedule's id.
+            last_run_at: When the fire was held.
+            last_outcome: Why the fire was held, in words.
+            session_id: The runner session the fire would have used.
+
+        Returns:
+            Whether a row had that id.
+        """
+        result = await self._pool.execute(
+            "UPDATE public.schedules SET last_run_at = $2, last_outcome = $3, session_id = $4 WHERE id = $1",
+            schedule_id,
+            last_run_at,
+            last_outcome,
+            session_id,
+        )
+        return result != "UPDATE 0"
+
     async def arm(self, schedule_ids: Sequence[UUID], *, at: datetime, event_id: UUID | None = None) -> Armed:
         """Record the event in `coordination.event_deliveries` and set the next fires in one transaction, so a repeat changes nothing.
 

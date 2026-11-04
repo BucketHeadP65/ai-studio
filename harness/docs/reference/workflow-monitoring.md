@@ -1288,6 +1288,9 @@ also selected, and the studio's report of an index with changed pages arms every
 that knowledge base. An `on refresh` or `after` schedule's knowledge base is read through its workflow card's
 knowledge-base selector, and an `on index` schedule names its own. The tick fires an armed schedule through the same
 holds as any other, an overlap or a blackout keeps the arm whatever `catch_up` says, and the fire leaves it resting.
+A hold that keeps the arm, as every capacity hold does, writes only the tick log (`last_run_at`, `last_outcome`,
+`session_id`) and never the next fire, so an arm an index or a run made while the fire was held stands rather than
+the fire the tick read.
 A change that sets an event cadence clears the next fire it held. A schedule cannot fire after its own workflow.
 
 **The on-index cadence** waits for its quiet period, 1800 seconds unless the cadence names one

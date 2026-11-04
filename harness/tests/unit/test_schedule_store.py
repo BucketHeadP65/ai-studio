@@ -291,6 +291,14 @@ class FakeSchedules:
         return True
 
 
+    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
+        current = self.rows.get(schedule_id)
+        if current is None:
+            return False
+        self.rows[schedule_id] = current.model_copy(update={"last_run_at": last_run_at, "last_outcome": last_outcome, "session_id": session_id})
+        return True
+
+
 def _schedule(**overrides: object) -> Schedule:
     defaults: dict[str, object] = {"workflow_id": "wf.report", "cadence": "every 30m"}
     defaults.update(overrides)
@@ -393,6 +401,23 @@ async def test_stamp_of_an_unknown_id_is_false() -> None:
         )
         is False
     )
+
+
+async def test_stamp_held_records_the_tick_and_keeps_the_next_fire_and_the_pending_pages() -> None:
+    store = FakeSchedules()
+    armed_at = datetime(2026, 8, 24, 12, 10, tzinfo=UTC)
+    schedule = _schedule(next_run_at=armed_at, pending_page_ids=("a", "b"))
+    await store.insert(schedule)
+    held_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+
+    stamped = await store.stamp_held(schedule.id, last_run_at=held_at, last_outcome="held, capacity pool-a is full", session_id="sess-1")
+
+    assert stamped is True
+    after = await store.get(schedule.id)
+    assert after is not None
+    assert (after.last_run_at, after.last_outcome, after.session_id) == (held_at, "held, capacity pool-a is full", "sess-1")
+    assert (after.next_run_at, after.pending_page_ids) == (armed_at, ("a", "b"))
+    assert await store.stamp_held(uuid4(), last_run_at=held_at, last_outcome="missed", session_id="") is False
 
 
 # --- paused_at ------------------------------------------------------------------------------

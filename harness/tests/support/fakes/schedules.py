@@ -21,7 +21,7 @@ class FakeSchedules:
 
     rows: dict[UUID, Schedule] = field(default_factory=dict)
     stamp_error: Exception | None = None
-    """Raised by every `stamp` when set: a store that fails while a fire records its outcome."""
+    """Raised by every `stamp` and `stamp_held` when set: a store that fails while a fire records its outcome."""
     received: set[UUID] = field(default_factory=set)
     """Every event id `arm` recorded, standing in for `coordination.event_deliveries`."""
     received_index: set[UUID] = field(default_factory=set)
@@ -99,6 +99,15 @@ class FakeSchedules:
                 "pending_page_ids": pending,
             }
         )
+        return True
+
+    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
+        if self.stamp_error is not None:
+            raise self.stamp_error
+        current = self.rows.get(schedule_id)
+        if current is None:
+            return False
+        self.rows[schedule_id] = current.model_copy(update={"last_run_at": last_run_at, "last_outcome": last_outcome, "session_id": session_id})
         return True
 
     async def arm(self, schedule_ids: Sequence[UUID], *, at: datetime, event_id: UUID | None = None) -> Armed:

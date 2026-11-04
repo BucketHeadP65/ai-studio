@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -22,8 +23,11 @@ from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _
 
 if TYPE_CHECKING:
     from pathlib import Path
+    from uuid import UUID
 
     from core.ai.workflows.contracts import StepRegistry
+
+    from harness.features.scheduling.domain import Schedule
 
 T0 = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -310,3 +314,48 @@ async def test_a_blackout_keeps_the_arm_without_catch_up(cadence: str, registry:
     assert held is not None
     assert held.last_outcome == "blacked out until 13:00"
     assert held.next_run_at == T0
+
+
+@dataclass
+class _IndexedDuringTheFire(FakeSchedules):
+    """A store an index arms while a fire reads the schedules sharing its capacity, between the fire's read and its stamp."""
+
+    arming: tuple[UUID, datetime] | None = None
+    """The schedule the next `list_all` arms, and the fire the index gives it. Cleared once used."""
+
+    async def list_all(self) -> list[Schedule]:
+        if self.arming is not None:
+            schedule_id, at = self.arming
+            self.arming = None
+            await self.arm_with_pages({schedule_id: at}, event_id=uuid4(), page_ids=["note.late"])
+        return await super().list_all()
+
+
+async def test_a_held_fire_keeps_the_fire_an_index_set_while_it_was_held(registry: StepRegistry, tmp_path: Path) -> None:
+    hold = asyncio.Event()
+    store = FakeWorkflowStore(specs={"wf-hold": _register_slow_step(registry, hold), "wf-sales": _one_node_spec()})
+    pool = SessionPool(_runtime(registry, store))
+    schedules = _IndexedDuringTheFire()
+    busy = _schedule(workflow_id="wf-hold", arguments={}, cadence="every 1h", capacity_key="pool-a", capacity_limit=1, next_run_at=T0 - timedelta(minutes=1))
+    waiting = _schedule(cadence="on index notes quiet 10m", capacity_key="pool-a", capacity_limit=1, next_run_at=T0, pending_page_ids=("note.a",))
+    await schedules.insert(busy)
+    await schedules.insert(waiting)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+    await scheduler.tick(pool, run=run, now=T0 - timedelta(minutes=1))
+    later = T0 + timedelta(minutes=10)
+    schedules.arming = (waiting.id, later)
+
+    await scheduler.tick(pool, run=run, now=T0)
+
+    held = await schedules.get(waiting.id)
+    assert held is not None
+    assert held.last_outcome == "held, capacity pool-a is full"
+    assert held.next_run_at == later, "the hold keeps the quiet period the index started, not the fire it read"
+    assert held.pending_page_ids == ("note.a", "note.late")
+    hold.set()
+    launched = await schedules.get(busy.id)
+    assert launched is not None
+    task = (await pool.get(launched.session_id)).active.task
+    assert task is not None
+    await task

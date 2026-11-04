@@ -650,19 +650,26 @@ class Scheduler:
         changed_pages = tuple(sorted(schedule.pending_page_ids)) if isinstance(cadence, OnIndexCadence) else None
         cleared_page_ids: tuple[str, ...] = ()
 
+        # A hold that keeps its fire writes no next fire at all, so an arm made while the fire was held stands.
+        keeps_next_fire = False
+        next_run_at: datetime | None = None
         if running.run_phase(session) is not None:
             outcome = MISSED_OUTCOME
-            next_run_at = schedule.next_run_at if keeps_held_fire else next_after(cadence, moment)
+            keeps_next_fire = keeps_held_fire
+            if not keeps_held_fire:
+                next_run_at = next_after(cadence, moment)
         elif (
             schedule.capacity_key is not None
             and schedule.capacity_limit is not None
             and await self._capacity_live_count(pool, schedule.capacity_key) >= schedule.capacity_limit
         ):
             outcome = f"held, capacity {schedule.capacity_key} is full"
-            next_run_at = schedule.next_run_at
+            keeps_next_fire = True
         elif windows and (window_end := blacked_out_until(windows, moment)) is not None:
             outcome = f"blacked out until {window_end.strftime('%H:%M')}"
-            next_run_at = schedule.next_run_at if keeps_held_fire else _next_outside_blackout(cadence, windows, moment)
+            keeps_next_fire = keeps_held_fire
+            if not keeps_held_fire:
+                next_run_at = _next_outside_blackout(cadence, windows, moment)
         else:
             launched = await _launch(session, schedule, run, changed_pages)
             outcome = CAUGHT_UP_OUTCOME if schedule.catch_up and launched == "launched" and _held_before(schedule.last_outcome) else launched
@@ -670,14 +677,17 @@ class Scheduler:
             if launched == "launched" and changed_pages is not None:
                 cleared_page_ids = changed_pages
 
-        await self._schedules.stamp(
-            schedule.id,
-            last_run_at=moment,
-            last_outcome=outcome,
-            next_run_at=next_run_at,
-            session_id=session.session_id or "",
-            cleared_page_ids=cleared_page_ids,
-        )
+        if keeps_next_fire:
+            await self._schedules.stamp_held(schedule.id, last_run_at=moment, last_outcome=outcome, session_id=session.session_id or "")
+        else:
+            await self._schedules.stamp(
+                schedule.id,
+                last_run_at=moment,
+                last_outcome=outcome,
+                next_run_at=next_run_at,
+                session_id=session.session_id or "",
+                cleared_page_ids=cleared_page_ids,
+            )
         self._topics.publish("schedules")
         return outcome
 

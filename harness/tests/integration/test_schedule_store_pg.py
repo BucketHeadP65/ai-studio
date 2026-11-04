@@ -148,6 +148,22 @@ async def test_stamp_of_an_unknown_id_is_false(store: PostgresSchedules) -> None
     assert stamped is False
 
 
+async def test_stamp_held_records_the_tick_and_keeps_the_next_fire_and_the_pending_pages(store: PostgresSchedules) -> None:
+    armed_at = datetime(2026, 8, 24, 12, 10, tzinfo=UTC)
+    schedule = _schedule(next_run_at=armed_at, pending_page_ids=("a", "b"))
+    await store.insert(schedule)
+    held_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+
+    stamped = await store.stamp_held(schedule.id, last_run_at=held_at, last_outcome="held, capacity pool-a is full", session_id="sess-1")
+
+    assert stamped is True
+    fetched = await store.get(schedule.id)
+    assert fetched is not None
+    assert (fetched.last_run_at, fetched.last_outcome, fetched.session_id) == (held_at, "held, capacity pool-a is full", "sess-1")
+    assert (fetched.next_run_at, set(fetched.pending_page_ids)) == (armed_at, {"a", "b"})
+    assert await store.stamp_held(uuid4(), last_run_at=held_at, last_outcome="missed", session_id="") is False
+
+
 async def test_update_flipping_enabled_true_to_false_stamps_paused_at(store: PostgresSchedules) -> None:
     schedule = _schedule()
     await store.insert(schedule)

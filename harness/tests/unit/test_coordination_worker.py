@@ -121,6 +121,10 @@ class _Store:
         del schedule_id, last_run_at, last_outcome, next_run_at, session_id, cleared_page_ids
         return False
 
+    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
+        del schedule_id, last_run_at, last_outcome, session_id
+        return False
+
     async def arm(self, schedule_ids: Sequence[UUID], *, at: datetime, event_id: UUID | None = None) -> Armed:
         del schedule_ids, at, event_id
         return Armed()
