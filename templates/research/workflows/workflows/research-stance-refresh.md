@@ -12,7 +12,7 @@ uses:
   - st.back_proposal.v3
   - st.judge_proposals.v1
   - st.write_stances.v6
-  - st.write_stance_flags.v2
+  - st.write_stance_flags.v3
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -26,7 +26,8 @@ presentation:
     at least two of the base's digests (its paper, talk, article and post pages, none at status skipped) support or
     contest it. An implementation choice is skipped with a reason that says so. The run card lists the stances
     written, the ones refused with the check each failed, where every changed page was placed, every stance as it was
-    before the run, and every stance the run could not read. Each stance proposal a judge approved is shown among what
+    before the run, every stance the run could not read, and every placement under a stance the base does not list,
+    such as a misspelt id, which changes no stance. Each stance proposal a judge approved is shown among what
     the run left behind and written as a pending flag of kind stance, `flag.stance-` and the proposed id without
     `stance.`, with its records pages and the reason placement gave for each, and each finding as a claim link with
     its side and one sentence on how. A proposal whose findings all contest it is marked as one the literature argues
@@ -58,11 +59,12 @@ presentation:
     - {label: "Stances written and refused (recorded)", path: values.write_stances}
     - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
-    - {label: "Stance flags written, left as the owner decided them, and refused (recorded)", path: values.write_stance_flags}
+    - {label: "Placements under a stance the base does not list, left out of every rewrite (recorded)", path: values.list_unplaced}
+    - {label: "Stance flags written, left as the owner decided them, and refused, with the placements under no listed stance (recorded)", path: values.write_stance_flags}
 workflow:
   name: research-stance-refresh
-  version: 16
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, list every approved proposal with its pages and findings as placement made it, and write each as a pending stance flag, drafting no stance and never writing a flag the owner decided.
+  version: 17
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, list every approved proposal with its pages and findings as placement made it, and write each as a pending stance flag, drafting no stance and never writing a flag the owner decided.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -201,6 +203,30 @@ workflow:
                         heading: {type: string}
                         level: {type: integer}
                         body: {type: string}
+    - name: list_unplaced
+      source: |
+        unplaced = []
+        for answer in placements:
+            for placed in answer["placements"]:
+                if placed["placement"] == "stance" and placed["stance_id"] not in changes["stance_ids"]:
+                    unplaced.append({"page_id": placed["page_id"], "stance_id": placed["stance_id"], "title": placed["title"], "reason": placed["reason"]})
+        unplaced
+      inputs:
+        changes: {like: list_stance_changes}
+        placements: {like: place_stance_pages, many: true}
+      output:
+        json_schema:
+          type: array
+          items:
+            type: object
+            title: UnplacedPlacement
+            description: A placement under an existing stance whose id no stance page of the base carries, which changes no stance.
+            required: [page_id, stance_id, title, reason]
+            properties:
+              page_id: {type: string}
+              stance_id: {type: string}
+              title: {type: string}
+              reason: {type: string}
     - name: merge_proposals
       source: |
         admitted = {}
@@ -470,6 +496,12 @@ workflow:
       on_error: skip
       abort_after_repeats: 3
     - kind: run
+      id: list_unplaced
+      work: list_unplaced
+      inputs:
+        changes: {node: list_changes}
+        placements: {node: place_pages}
+    - kind: run
       id: merge_work
       work: merge_work
       inputs:
@@ -544,6 +576,7 @@ workflow:
       work: write_stance_flags
       inputs:
         proposals: {node: list_proposals}
+        unplaced: {node: list_unplaced}
         collection: {parameter: collection}
   output: {node: write_stance_flags}
 ---
@@ -564,7 +597,9 @@ takes a position on a question research literature addresses, one papers could s
 literature. An implementation choice with no research question behind it is a skip. `merge_work` makes one item per
 stance the run read with every page that bears on it, its record among them. An id a listed stance carries makes no
 proposal: a page placed under it joins that stance's item when the run read the stance, and is left alone when it
-could not.
+could not. `list_unplaced` names every placement under an existing stance whose id no stance page of the base
+carries, such as a misspelt one, with its page, the id, the title and the reason. Such a placement changes no stance
+and proposes none, and the run's output carries it.
 
 `refresh_stances` runs one worker per item, two at a time, and no worker drafts a proposal. Each answers only its
 stance's changes: the status, the summary and the sections it rewrites among TL;DR, Position, Why and Open Questions,
@@ -613,7 +648,8 @@ whose file is not at `pending`, one the owner accepted, dismissed or completed, 
 one file, with the newer findings and its `created` date. A listed flag `read_page` refuses is named in `failed` and
 not written. A flag the index does not list is written to `Wiki/Flags`, at the very path `read_notes` checked, unless
 a file already sits there, which is named in `failed` and left as it is. A write the base refuses is named in `failed` with the reason
-and never fails the run, and when the flags cannot be listed no flag is written. Its answer is the run's output.
+and never fails the run, and when the flags cannot be listed no flag is written. Its answer, with the placements
+`list_unplaced` named as `unplaced` beside the flags, is the run's output.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite
 is written, and so does one whose backing map aborts. Each rewrite is written to its file at once. A knowledge base

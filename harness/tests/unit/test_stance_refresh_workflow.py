@@ -17,7 +17,8 @@ field the workflow does not declare are both named and left alone while the run 
 `created` date write_note stamps is read and written back with it. Then the new stances placement proposes: placement
 names a proposal by its id, title and pages alone, no worker drafts one and no page is written for one, each reaches
 write_stances' `proposed` and the `proposed_stances` artifact with its pages and its findings, two groups proposing
-the same id make one proposal, and an id a listed stance carries makes no proposal. Then the findings behind a
+the same id make one proposal, an id a listed stance carries makes no proposal, and a placement under an id no stance
+carries is named on the card and the run's output. Then the findings behind a
 proposal: each keeps the claim's own text copied from its digest, a missing anchor, a skipped digest, a page that is
 no digest and one digest cited twice never count toward the two digests, a digest read_page refuses drops only its own
 findings while the run still writes its rewrites, a claim cited as a search ref or a wikilink counts as its bare
@@ -967,6 +968,42 @@ async def test_a_proposal_under_a_stance_the_run_could_not_read_is_neither_refre
     assert _value(state, "write_stances") == {"written": [], "failed": []}
 
 
+def _placing_under(stance_id: str, title: str) -> Callable[[Group], list[dict[str, object]]]:
+    """A placement worker placing every page of its group under the existing stance it names as `stance_id`."""
+
+    def place(group: Group) -> list[dict[str, object]]:
+        return [
+            {"page_id": page["page_id"], "placement": "stance", "stance_id": stance_id, "title": title, "reason": "It moves the stance."}
+            for page in group["pages"]
+        ]
+
+    return place
+
+
+async def test_a_placement_under_a_stance_the_base_does_not_list_is_named_on_the_output(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+    scripted = Scripted(place=_placing_under("stance.xx", "Stance on x"))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    named = {"page_id": "adr-1", "stance_id": "stance.xx", "title": "Stance on x", "reason": "It moves the stance."}
+    assert scripted.items == [], "no stance is rewritten from it"
+    assert _proposals(state) == [], "and it proposes nothing"
+    assert to_jsonable_python(state.values["list_unplaced"]) == [named], "the card shows it among what the run read"
+    assert _value(state, "write_stance_flags")["unplaced"] == [named], "and the run's output names it"
+
+
+async def test_a_placement_under_a_listed_stance_is_named_nowhere(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")})
+    scripted = Scripted(place=_placing_under("stance.x", "Stance on x"))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert [item["stance_id"] for item in scripted.items] == ["stance.x"]
+    assert to_jsonable_python(state.values["list_unplaced"]) == []
+    assert _value(state, "write_stance_flags")["unplaced"] == []
+
+
 async def test_a_draft_without_its_changes_fails_the_refresh_output_type(sandbox: AsyncMonty) -> None:
     registry, problems = (await _registry(sandbox, Bases())).including(_spec())
     assert problems == ()
@@ -1527,7 +1564,7 @@ async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(s
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert _flag_written(bases) == MEMORY_FLAG
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
     assert bases.notes_read == ["Wiki/Flags/stance-agent-memory.md"], "a new flag's path is checked on disk first"
     assert bases.writes == [], "no stance page is written for a proposal"
 
@@ -1545,7 +1582,7 @@ async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_an
     written = _flag_written(bases, path="Wiki/Flags/stance-agent-memory.md")
     assert written["frontmatter"] == {**MEMORY_FLAG["frontmatter"], "created": "2026-10-30"}
     assert written["sections"] == MEMORY_FLAG["sections"]
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
 
 
 @pytest.mark.parametrize("status", ["accepted", "dismissed", "completed"])
@@ -1560,7 +1597,7 @@ async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_lis
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert bases.flag_writes == []
-    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": []}
+    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": [], "unplaced": []}
 
 
 @pytest.mark.parametrize(
@@ -1611,7 +1648,7 @@ async def test_a_stance_flag_accepted_on_disk_before_the_index_caught_up_is_neve
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert bases.flag_writes == [], "the owner's decision in the file wins over the index"
-    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": []}
+    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": [], "unplaced": []}
 
 
 async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sits(sandbox: AsyncMonty) -> None:
@@ -1621,7 +1658,7 @@ async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sit
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert _flag_written(bases, path=moved)["sections"] == MEMORY_FLAG["sections"]
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
 
 
 @pytest.mark.parametrize(

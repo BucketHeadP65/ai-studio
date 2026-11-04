@@ -24,8 +24,9 @@ from this template can register its own vocabulary for any research domain.
   records page bears on, started by an `on index repo-docs` schedule with `collection=research`, `records=repo-docs`
   and `progress=adr:accepted, adr:superseded, architecture:current, spec-doc:approved, spec-doc:executed`, or by hand
   with `changed_page_ids` empty for a full pass. A topic no stance covers is proposed as a new stance only when its
-  records page takes a position on a question research literature addresses. Once every rewrite is written, one
-  worker per proposal names the claims of the base's digests (its paper, talk, article and post pages) that support
+  records page takes a position on a question research literature addresses. A placement under a stance the base does
+  not list, such as a misspelt id, changes no stance and is named on the run card and in the run's output. Once every
+  rewrite is written, one worker per proposal names the claims of the base's digests (its paper, talk, article and post pages) that support
   or contest that position. The run reads each cited digest and keeps a claim only when the digest is not at status
   skipped and holds that claim, copying the claim's text from the page. It drops a proposal left with claims from fewer than two digests, and a
   judge of its own rejects a claim that does not bear on the position or a proposal that duplicates a stance. An

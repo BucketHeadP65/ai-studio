@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
-summary: Each approved stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest.
-version: 2
+summary: Each approved stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the placements under no listed stance.
+version: 3
 step:
   name: write_stance_flags
   source: |
@@ -90,16 +90,17 @@ step:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(flag_id)
-    {"written": written, "kept_decided": kept_decided, "failed": failed}
+    {"written": written, "kept_decided": kept_decided, "failed": failed, "unplaced": unplaced}
   inputs:
     proposals: {like: list_proposals}
+    unplaced: {like: list_unplaced}
     collection:
       json_schema: {type: string}
   output:
     json_schema:
       type: object
       title: StanceFlagsWritten
-      required: [written, kept_decided, failed]
+      required: [written, kept_decided, failed, unplaced]
       properties:
         written:
           type: array
@@ -117,6 +118,18 @@ step:
             required: [flag_id, reason]
             properties:
               flag_id: {type: string}
+              reason: {type: string}
+        unplaced:
+          type: array
+          description: The placements under a stance the base does not list, as `list_unplaced` handed them.
+          items:
+            type: object
+            title: UnplacedPlacement
+            required: [page_id, stance_id, title, reason]
+            properties:
+              page_id: {type: string}
+              stance_id: {type: string}
+              title: {type: string}
               reason: {type: string}
   tools: [list_pages, read_page, read_notes, write_note]
 ---
@@ -138,3 +151,5 @@ not list is written to `Wiki/Flags`, at the very path `read_notes` checked, unle
 answered in `failed` and left as it is. A base whose flags live in another folder refuses that path, and each new flag
 is answered in `failed`. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
 other flag still lands. When `list_pages` refuses the flags, no flag is written, and each is answered in `failed`.
+It answers the placements `list_unplaced` named, each under a stance id no stance page carries, unchanged in
+`unplaced`, since its answer is the run's output.

@@ -132,8 +132,8 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `excise_source`, `check_excision` and `removal_report` type against `plan_items` and
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
-    `place_stance_pages`, `refresh_stance`, `back_proposal`, `judge_proposals` and `write_stances` type against
-    `group_pages`, `merge_work`, `merge_proposals` and `check_findings`, defined only inside
+    `place_stance_pages`, `refresh_stance`, `back_proposal`, `judge_proposals`, `write_stances` and `write_stance_flags`
+    type against `group_pages`, `merge_work`, `merge_proposals`, `check_findings` and `list_unplaced`, defined only inside
     `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
@@ -440,6 +440,9 @@ _STANCE_PROPOSAL: dict[str, object] = {
 }
 """The one approved stance proposal here, which becomes a pending stance flag."""
 
+_UNPLACED: dict[str, object] = {"page_id": "adr-0032-third", "stance_id": "stance.xx", "title": "X", "reason": "It moves the stance."}
+"""One placement under a stance id no stance page carries, which the flags step carries onto the run's output."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -514,7 +517,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
         ],
         "collection": "research",
     },
-    "write_stance_flags": {"proposals": [_STANCE_PROPOSAL], "collection": "research"},
+    "write_stance_flags": {"proposals": [_STANCE_PROPOSAL], "unplaced": [_UNPLACED], "collection": "research"},
     "write_adrs": {
         "drafts": [
             {
@@ -805,7 +808,7 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
 
 def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
     """The stance flag writer: no listed flag carries the proposal's id and no file sits at its path, so it writes one pending flag."""
-    assert to_jsonable_python(ran["write_stance_flags"]) == {"written": ["flag.stance-y"], "kept_decided": [], "failed": []}
+    assert to_jsonable_python(ran["write_stance_flags"]) == {"written": ["flag.stance-y"], "kept_decided": [], "failed": [], "unplaced": [_UNPLACED]}
     assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note"]
     assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
     assert called_by_step["write_stance_flags"][1][1] == {"knowledge_base": "research", "path": "Wiki/Flags/stance-y.md"}
