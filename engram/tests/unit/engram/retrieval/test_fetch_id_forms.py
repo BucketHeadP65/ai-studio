@@ -755,3 +755,49 @@ class TestAClaimCitedAsABlockReferenceReadsTheClaim:
 
         assert isinstance(unit, FetchResult)
         assert unit.ref == f"unit:{_HOME}/{_CLAIM}"
+
+
+_ABOUT = f"meta.about@{_HOME}"
+"""The about page an index builds from the `_meta/` documents: a page with no sections."""
+
+_ABOUT_TEXT = "# Purpose & scope\n\nWhat this knowledge base is for."
+
+
+def _gateway_with_about(collection: str = _HOME) -> FakeUnitGateway:
+    """The usual gateway, plus the about page: a page row with no sections and its own text."""
+    gateway = _gateway(collection)
+    about = f"meta.about@{collection}"
+    gateway.pages[about] = ({"row_type": "page", "id": about, "page_type": "meta", "title": "About this memory", "summary": ""},)
+    gateway.units[about] = {"id": about, "level": "page", "title": "About this memory", "body": _ABOUT_TEXT}
+    return gateway
+
+
+class TestAPageWithNoSectionsArrivesWhole:
+    """A page with no sections, such as the about page, carries its own text in `content` rather than nothing."""
+
+    @pytest.mark.parametrize("spelling", [_ABOUT, f"page:{_HOME}/{_ABOUT}"])
+    async def test_the_leveled_toolset_reads_its_text(self, spelling: str):
+        gateway = _gateway_with_about()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+        page = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(page, DisclosureEnvelope)
+        assert page.ref == f"page:{_HOME}/{_ABOUT}"
+        assert page.content == _ABOUT_TEXT
+
+    async def test_the_capability_reads_its_text(self):
+        gateway = _gateway_with_about()
+        surface = ReadSurface(
+            name=_HOME,
+            collection=_HOME,
+            handlers=_handlers(gateway),
+            envelope=EnvelopeHandler(gateway, collection=_HOME),
+            domain=f"The {_HOME} knowledge base.",
+        )
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(surface, _surface(_OTHER)))
+
+        page = await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": f"page:{_HOME}/{_ABOUT}"})
+
+        assert isinstance(page, DisclosureEnvelope)
+        assert page.content == _ABOUT_TEXT

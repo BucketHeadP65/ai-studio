@@ -3,9 +3,10 @@ r"""`EnvelopeHandler`, engram's provider of `DisclosureEnvelope`s from the index
 Given a ref, it returns that unit's envelope: its own disclosed body plus one-line summaries of its
 children, never their bodies. A ref is `collection:<name>` (the root map), `group:<collection>/<value>`
 (one group of the map when the spec groups it), `page:<page_id>` or `section:<section_id>`. Any other
-ref raises `BadRefError`.
+ref raises `BadRefError`. A page with no sections carries its own whole text in `content`.
 
-Wire the handler to the reader gateway. It reads only through the `api.envelope_*` functions.
+Wire the handler to the reader gateway. It reads only through `api` functions: the `api.envelope_*`
+listings and units, `api.collection_about` for the map's text and `api.fetch` for a sectionless page's text.
 
 A flat map that would exceed the row cap is served grouped by page type instead, with a note in
 `content`. A declared `group_by` is never overridden. Under `group_by="app"`, an app group that would
@@ -309,6 +310,8 @@ _COLLECTION_ABOUT_SQL = "SELECT * FROM api.collection_about(:collection)"
 # A page or section id is unique only within its collection, so these read within the handler's own collection.
 _PAGE_ENVELOPE_SQL = "SELECT * FROM api.envelope_page(:collection, :page_id)"
 _SECTION_ENVELOPE_SQL = "SELECT * FROM api.envelope_section(:collection, :section_id)"
+# The whole text of a page with no sections, such as the about page an index builds from `_meta/`.
+_PAGE_TEXT_SQL = "SELECT body FROM api.fetch(:collection, :unit_id) WHERE level = 'page'"
 
 _DEGRADE_NOTE = "Listing exceeds one screen. Showing {count} page_type groups instead: open one to list its pages."
 """The note appended to `content` when a flat or app-grouped listing degrades to page_type stubs."""
@@ -463,10 +466,16 @@ class EnvelopeHandler:
             kind=str(page_row["page_type"]),
             title=str(page_row["title"]),
             summary=str(page_row["summary"]),
-            content=_inlined_page(sections),
+            content=_inlined_page(sections) if sections else await self._page_text(page_id),
             children=children,
             mode=self.mode,
         )
+
+    async def _page_text(self, page_id: str) -> str | None:
+        """A page's own whole text, `None` when it has none."""
+        result = await self._gateway.rows(_PAGE_TEXT_SQL, {"collection": self._collection, "unit_id": page_id}, cap=1)
+        body = result.rows[0].get("body") if result.rows else None
+        return str(body) if body else None
 
     async def _section_envelope(self, ref: str, section_id: str) -> DisclosureEnvelope:
         """Render a section, content its body, no children."""

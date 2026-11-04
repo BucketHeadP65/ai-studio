@@ -145,7 +145,9 @@ Converging `Sources/` mirrors belongs to the [sync](sync.md) slice (`studio sync
   `kb.pages`/`kb.sections`/`kb.unit_summaries` over the reader gateway raises
   `permission denied for schema memory`). Each function is a thin `SELECT * FROM
   api.envelope_*(:param)` wrapper the handler calls, same `WHERE`/`LEFT JOIN`/`COALESCE`/`ORDER
-  BY` shape as the handler used before the fix. A `collection:<name>` ref for an unknown or
+  BY` shape as the handler used before the fix. A page with no sections, such as the about page
+  (`meta.about@<collection>`) an index builds from `_meta/`, carries its own whole text in `content`,
+  read through `api.fetch`, rather than an empty envelope. A `collection:<name>` ref for an unknown or
   empty collection is NOT an error, it returns a well-formed envelope with `children=()` (a
   fresh knowledge base or a not-yet-indexed partition is a legitimate state, not a caller mistake). A
   row-capped read that hits its cap surfaces a synthetic `truncated:<ref>` sentinel child

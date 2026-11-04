@@ -777,6 +777,32 @@ class TestPageRef:
         with pytest.raises(BadRefError):
             await handler("page:does-not-exist")
 
+    async def test_a_page_with_no_sections_arrives_whole_from_its_own_text(self):
+        # The about page an index builds from `_meta/` has no sections, only its own text.
+        page = {"row_type": "page", "id": "meta.about@workdocs", "page_type": "meta", "title": "About this memory", "summary": ""}
+        gateway = FakeSqlGateway(
+            routed={
+                "api.envelope_page(": SqlResult(rows=(page,), columns=()),
+                "api.fetch(": SqlResult(rows=({"body": "# Purpose & scope\n\nWhat this base is for."},), columns=("body",)),
+            }
+        )
+        handler = EnvelopeHandler(gateway, collection="workdocs")
+
+        envelope = await handler("page:workdocs/meta.about@workdocs")
+
+        assert envelope.content == "# Purpose & scope\n\nWhat this base is for."
+        assert envelope.children == ()
+        assert gateway.last.params == {"collection": "workdocs", "unit_id": "meta.about@workdocs"}
+        assert "level = 'page'" in gateway.last.sql
+
+    async def test_a_page_with_sections_reads_no_text_of_its_own(self):
+        gateway = FakeSqlGateway(result=SqlResult(rows=self._rows(), columns=()))
+        handler = EnvelopeHandler(gateway)
+
+        await handler("page:mu.x")
+
+        assert ["api.fetch(" in query.sql for query in gateway.rows_calls] == [False]
+
 
 class TestSectionRef:
     async def test_content_is_body_with_no_children(self):
