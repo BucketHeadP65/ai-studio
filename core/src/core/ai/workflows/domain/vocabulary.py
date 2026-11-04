@@ -85,7 +85,7 @@ class FromNode(BaseModel):
 
     @model_serializer(mode="wrap")
     def _omit_turn_when_unnamed(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
-        """Drop `turn` from the dump when it is None, which keeps a saved workflow's `spec_identity` unchanged."""
+        """Drop `turn` from the dump when it is None."""
         data = handler(self)
         if self.turn is None:
             data.pop("turn", None)

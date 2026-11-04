@@ -126,10 +126,12 @@ def spec_identity(workflow: Workflow) -> str:
     """This workflow's content address: the SHA-256 of its canonical JSON.
 
     It stays the same when the workflow moves between libraries or gets a new id, and it changes when
-    any field changes, `version` included. Two workflows share an identity exactly when they are equal
-    as values, including the order of `nodes`, and then they share their evidence. The JSON is dumped
-    with `mode="json"`, defaults included and keys sorted, so a workflow read back from any store hashes
-    the same. A value that is not JSON raises rather than being hashed as text.
+    any field moves off its default, `version` included. Two workflows share an identity exactly when they
+    are equal as values, including the order of `nodes`, and then they share their evidence. The JSON is
+    dumped with `mode="json"`, keys sorted and every field at its default left out at every depth, so a field
+    written at its default, a field left out and a field added to the format later with a default all hash
+    the same. Each node keeps its `kind`. A changed default value moves no identity. A value that is not JSON
+    raises rather than being hashed as text.
 
     Args:
         workflow: The workflow to address.
@@ -137,7 +139,9 @@ def spec_identity(workflow: Workflow) -> str:
     Returns:
         The digest as lowercase hex.
     """
-    return hashlib.sha256(json.dumps(workflow.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    document = workflow.model_dump(mode="json", exclude_defaults=True)
+    document["nodes"] = [{**dumped, "kind": node.kind} for dumped, node in zip(document["nodes"], workflow.nodes, strict=True)]
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def _agent_hash(name: str, registry: StepRegistry) -> str | None:
