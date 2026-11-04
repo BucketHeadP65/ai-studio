@@ -54,7 +54,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 11
+  version: 12
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, and list every approved proposal with its pages and findings as placement made it, drafting none.
   parameters:
     collection:
@@ -349,9 +349,13 @@ workflow:
         listed = []
         for held in approved:
             made = merged.get(held["stance_id"])
-            if made is None or made["title"] != held["title"] or made["pages"] != held["pages"]:
+            if made is None or made["title"] != held["title"]:
                 continue
-            listed.append(held)
+            if {page["page_id"]: True for page in made["pages"]} != {page["page_id"]: True for page in held["pages"]}:
+                continue
+            entry = dict(held)
+            entry["pages"] = made["pages"]
+            listed.append(entry)
         listed
       inputs:
         approved: {like: check_findings}
@@ -509,8 +513,9 @@ digests, and marks one whose findings all contest its position with `contests_on
 proposals' judge. It rejects a finding whose claim text does not bear on the position as its title states it, and a
 proposal that duplicates an existing stance. A rejection backs every proposal again with its feedback and never
 reruns the rewrites. An empty list is approved without a read, and still costs that judge one call.
-`list_proposals` keeps an approved proposal only when its stance_id, title and pages are the ones `merge_proposals`
-made, so a worker that rewords its copy puts nothing on the card. Its list is the run's output and its
+`list_proposals` keeps an approved proposal only when its stance_id and title are the ones `merge_proposals` made and
+it names the same records pages, in any order, and lists those pages as `merge_proposals` made them. A worker that
+rewords its copy, or adds or leaves out a page, puts nothing on the card. Its list is the run's output and its
 `proposed_stances` artifact, and it writes no page.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite

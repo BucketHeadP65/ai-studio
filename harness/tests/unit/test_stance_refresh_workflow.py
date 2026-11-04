@@ -1228,3 +1228,32 @@ async def test_a_rewrite_judge_rejection_redrafts_once_and_the_proposals_still_w
         "refresh_stances": [feedback]
     }
     assert _proposals(state) == [MEMORY]
+
+
+@pytest.mark.parametrize(
+    ("copied", "kept"),
+    [
+        pytest.param([_listed("adr-2"), _listed("adr-1")], True, id="reordered-pages"),
+        pytest.param([_listed("adr-1"), _listed("adr-2"), _listed("adr-9")], False, id="an-added-page"),
+        pytest.param([_listed("adr-1")], False, id="a-missing-page"),
+    ],
+)
+async def test_a_proposal_whose_worker_reordered_its_pages_is_kept_and_one_with_a_page_added_or_missing_is_dropped(
+    sandbox: AsyncMonty, copied: list[Page], *, kept: bool
+) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        digests=DIGESTS,
+    )
+
+    def copy(proposal: Proposal) -> Mapping[str, object]:
+        return {**proposal, "pages": copied}
+
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), copy=copy)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2")
+
+    made = [_listed("adr-1"), _listed("adr-2")]
+    assert [proposal["pages"] for proposal in scripted.backed] == [made]
+    assert _proposals(state) == ([{**MEMORY, "pages": made}] if kept else []), "the card lists the pages as placement made them"
