@@ -16,10 +16,11 @@ from functools import partial
 from typing import TYPE_CHECKING, Literal, assert_never
 
 from pydantic import TypeAdapter
-from pydantic_ai.exceptions import ModelConnectionError, UsageLimitExceeded
+from pydantic_ai.exceptions import ContentFilterError, ModelConnectionError, UnexpectedModelBehavior, UsageLimitExceeded
 from pydantic_graph import Graph, GraphBuilder, Join, Step, StepContext
 from pydantic_graph.id_types import NodeID
 
+from core.ai.content_filter import content_filter_message
 from core.ai.workflows.domain.identity import (
     ReviewedArtifacts,
     StepIdentity,
@@ -295,6 +296,15 @@ async def _attempted[R](
             )
             await sleep(wait)
     return await attempt()
+
+
+def _failure_text(exc: Exception) -> str:
+    """What a failed item records of `exc`: a model error's message without its body, and a filter's categories by name."""
+    if isinstance(exc, ContentFilterError):
+        return content_filter_message(exc)
+    if isinstance(exc, UnexpectedModelBehavior):
+        return exc.message
+    return str(exc)
 
 
 async def _observed[R](node_id: str, watching: RunObserver, work: Awaitable[R]) -> R:
@@ -642,7 +652,8 @@ def _build_map_steps(
                     _settle(ctx.state, node.id, generation, item_key, "failed", f"{failure} repeated {count} times")
                     raise RepeatedFailureError(node.id, failure, count) from exc
             reason = str(exc)
-            first_line = reason.splitlines()[0] if reason else type(exc).__name__
+            said = _failure_text(exc)
+            first_line = said.splitlines()[0] if said else type(exc).__name__
             if node.on_error != "skip":
                 _settle(ctx.state, node.id, generation, item_key, "failed", f"{failure}: {first_line}")
                 raise

@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING, Literal, get_args
 import pytest
 
 from pydantic import BaseModel, ValidationError
+from pydantic_ai.exceptions import ContentFilterError, UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 
 from core.ai.workflows.contracts import (
     CURRENT_STEP,
@@ -740,6 +742,42 @@ async def test_skip_leaves_a_failing_item_out_and_the_run_carries_on() -> None:
     assert result == ["A", "C"]
     assert ("fail", "each") in watcher.events
     assert state.skipped == {"each": ["b always breaks"]}
+
+
+def _filtered_registry() -> StepRegistry:
+    """One step whose item "b" ends the way a model turn ends when Azure's content filter cut the answer whole."""
+
+    async def flaky(item: str) -> str:
+        if item == "b":
+            response = ModelResponse(
+                parts=[],
+                finish_reason="content_filter",
+                provider_details={"finish_reason": "content_filter", "content_filter_result": {"self_harm": {"filtered": True, "severity": "medium"}}},
+            )
+            msg = "Content filter triggered. Finish reason: 'content_filter'"
+            raise ContentFilterError(msg, body=ModelMessagesTypeAdapter.dump_json([response]).decode())
+        if item == "c":
+            msg = "Exceeded maximum output retries (4)"
+            raise UnexpectedModelBehavior(msg, body='{"detail": "the last answer"}')
+        return item.upper()
+
+    registry = StepRegistry()
+    registry.register(flaky)
+    return registry
+
+
+async def test_a_skipped_model_failure_records_its_message_without_the_body_and_a_filter_names_its_category() -> None:
+    state = WorkflowState(params={"items": ["a", "b", "c"]})
+
+    result = await build_graph(_flaky_spec(on_error="skip"), _filtered_registry(), approval=ApproveAll()).run(state=state)
+
+    assert result == ["A"]
+    details = {fact.item_key: fact.detail for fact in state.work_facts.values() if fact.disposition == "skipped"}
+    keys = state.batches["each"].items
+    assert details == {
+        keys[1]: "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium.",
+        keys[2]: "Exceeded maximum output retries (4)",
+    }
 
 
 async def test_on_error_left_at_fail_still_fails_the_run() -> None:

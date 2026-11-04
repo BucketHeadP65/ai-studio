@@ -39,7 +39,7 @@ every consumer (`core/CLAUDE.md`'s ripple rule). The acceptance gate for any cha
 | `core.ai.tool_output_limits` | `ToolOutputLimits`: pydantic-ai-harness's capability, except a reduced return keeps the `tools` the original revealed | `ai/tool_output_limits.py` |
 | `core.ai.tool_call_limit` | `ToolCallLimitWarning`: warns the model before a request once the run's tool calls reach 70 percent of the run's own tool-call limit (URGENT), and again once the calls left are at most the larger of 3 and a tenth of the limit (CRITICAL), as a request-scoped system prompt. The count is whatever the run's usage records as a tool call. With `counts_program_calls`, for an agent under `CodeMode`, the warning says a program's calls count and names how many more calls a program may make, one fewer than remain | `ai/tool_call_limit.py` |
 | `core.ai.sandbox` | `SandboxDiscipline`: mounted beside pydantic-ai-harness's `CodeMode`, never around it. It states the sandbox's dialect as instructions: a program calls only the functions listed as available inside the sandbox and every other tool is its own tool call, a program is one top-level script already inside the host's event loop, `json.dumps` takes no `default=`, and there is no file system and no introspection. It appends a way out to a `run_code` refusal of an unknown name, in the runtime's voice or the type checker's: call a direct tool as its own tool call. A mount says what the agent has. With `loads_capabilities`, the dialect and the way out also send the model to `load_capability`, and without it the way out says the tool list and the sandbox's functions are all it can call. With `answers_a_person`, a spent `run_code` retry budget comes back as a result the model answers from, and without it the run fails on `UnexpectedModelBehavior` as it would with no discipline. No text names a person or `load_capability` for an agent that has neither. It adds no tools | `ai/sandbox.py` |
-| `core.ai.content_filter` | `ContentFilterGuard`, the wrapper around every generation model the repo builds, `create_azure_model` and `create_gateway_model` included, which raises `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps Azure's content filter results in a response's provider details. See below | `ai/content_filter.py` |
+| `core.ai.content_filter` | `ContentFilterGuard`, the wrapper around every generation model the repo builds, `create_azure_model` and `create_gateway_model` included, which ends a turn with `ContentFilterError` for a response that finishes on `content_filter` and for a prompt Azure refuses with HTTP 400, `content_filter_message`, the sentence naming the categories the filter flagged, and `FilterReportingResponsesModel`, which keeps Azure's content filter results in a response's provider details. See below | `ai/content_filter.py` |
 | `core.ai.history` | The conversation record behind the step-store port, plus `StepUsage` and `StepUsageTap` (one model response's cost as its `data-step` chunk carries it) and `recording_capabilities` (the step recorder and the request parameters recorder for one agent) | `ai/history/{contracts,internal_contracts,domain,exceptions,read_models,conversation_record,message_key,request_parameters_recorder,recording,step_usage}.py`, `ai/history/infrastructure/{checkpoints,database,postgres_step_store,queries,reads,rows,schema,writes}.py` |
 | `core.ai.registry` | The generic capability/model registry | `ai/registry.py` |
 | `core.ai.capabilities` | Capability descriptors (`AbstractCapability` seam, `SupportsInstructionBlocks`) | `ai/capabilities.py` |
@@ -638,18 +638,27 @@ output, and with a structured output type every output retry is spent on a reque
 
 Every model `create_azure_model` and `create_gateway_model` build, `TestModel` aside, is a `ContentFilterGuard` around
 the model itself, and so is every model a host builds on its own (the harness's OpenRouter models, the connectors' xAI
-model). The guard raises `ContentFilterError` for any response that finishes on `content_filter`, whatever text it
-carries, when a request returns or when a streamed request's body exits. The response never reaches output validation
-and no output retry is sent for it. Both engines perform the turn once. The in-process engine performs a turn again
-only when it lost its model connection, and `ContentFilterError` is not a `ModelConnectionError`. The Temporal engine's
-default retry policy lists `ContentFilterError` among the errors it never retries.
+model). Any response that finishes on `content_filter`, whatever text it carries, ends the turn with
+`ContentFilterError`. A streamed request raises it when its body exits. A request hands the response back with its
+parts removed, so the agent records its usage like any other response's and raises `ContentFilterError` itself. A
+caller of `request` outside an agent run gets that empty response. The response never reaches output validation and no
+output retry is sent for it. Both engines perform the turn once. The in-process engine performs a turn again only when it
+lost its model connection, and `ContentFilterError` is not a `ModelConnectionError`. The Temporal engine's default retry
+policy lists `ContentFilterError` among the errors it never retries.
 
-- The error's first line opens as pydantic-ai's own (`Content filter triggered. Finish reason: 'content_filter'.`) and
-  ends by naming each filter category that filtered or detected, with its source and severity, for example
+- `content_filter_message(error)` answers one sentence read from the response in the error's body. It opens as
+  pydantic-ai's own (`Content filter triggered. Finish reason: 'content_filter'.`) and ends by naming each filter
+  category that filtered or detected, with its source and severity, for example
   `Filter results: completion violence filtered at severity medium.` When the response holds no filter result, it says
-  so. A map item that fails this way records that first line as its failure reason.
-- The error's body is the whole response as JSON, text and provider details included.
-- A streamed response stays in the run's history marked `interrupted`. A whole response is only in the error's body.
+  so. A map item that fails this way records that sentence as its failure reason, and the chat shows it whole. A map item
+  that fails with any other `UnexpectedModelBehavior` records the error's message without its body.
+- The error's body is the whole response as JSON, provider details included, and its text too when it was streamed.
+- The response stays in the run's history with its usage: a streamed one marked `interrupted` with its text, a whole one
+  with no parts.
+- A prompt Azure's content filter refuses answers HTTP 400 with the error code `content_filter`. pydantic-ai turns that
+  into a filtered response only for an `AzureProvider` (UB-19), so the guard raises `ContentFilterError` for the
+  `ModelHTTPError` at once, with the provider details pydantic-ai would have built, and the sentence names the categories
+  the refusal lists.
 - The Responses models are `FilterReportingResponsesModel`. Azure sends its filter results as a top-level
   `content_filters` list the OpenAI SDK has no field for, and this model keeps that list, as sent, in the response's
   provider details under `content_filters`, streamed or not. pydantic-ai keeps the result of a filter that refused the
