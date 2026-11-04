@@ -299,6 +299,28 @@ describe("Trace", () => {
     });
   });
 
+  it("asks once on Return, and Shift+Return keeps the newline without asking", async () => {
+    const posted: unknown[] = [];
+    server.use(
+      http.post(`${BASE}/api/inspection/questions/7/ask`, async ({ request }) => {
+        posted.push(await request.json());
+        return HttpResponse.json({ answer: "Because.", conversation_id: QUESTION.conversation_id, model: "claude-test" });
+      }),
+    );
+    render(<Trace finding={FINDING} draft="why?" onDraft={vi.fn()} focusRequest={0} />);
+    const textbox = await screen.findByRole("textbox", { name: "Ask the inspector about this finding" });
+    await waitFor(() => expect(textbox).not.toBeDisabled());
+
+    fireEvent.keyDown(textbox, { key: "Enter", code: "Enter", shiftKey: true });
+    fireEvent.keyUp(textbox, { key: "Enter", code: "Enter", shiftKey: true });
+    expect(posted).toEqual([]);
+
+    fireEvent.keyDown(textbox, { key: "Enter", code: "Enter" });
+    fireEvent.keyUp(textbox, { key: "Enter", code: "Enter" });
+
+    await waitFor(() => expect(posted).toEqual([{ text: "why?" }]));
+  });
+
   it("posts the draft to ask, and the question and its answer appear once each as chat turns", async () => {
     const recorded: unknown[] = [];
     let posted: unknown = null;
