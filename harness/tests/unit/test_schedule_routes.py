@@ -119,6 +119,17 @@ async def test_the_listing_names_the_newest_live_version_a_schedule_will_fire(re
         assert [row["workflow_id"] for row in listed] == ["wf.sales.v2"]
 
 
+async def test_the_listing_shows_the_changed_pages_an_on_index_schedule_collected(registry: StepRegistry, tmp_path: Path) -> None:
+    store = FakeWorkflowStore(specs={"wf-sales": _one_node_spec()})
+    schedules = FakeSchedules()
+    collecting = _schedule(cadence="on index notes", next_run_at=None, pending_page_ids=("note.b", "note.a"))
+    await schedules.insert(collecting)
+    async with _studio(store, schedules, tmp_path, registry=registry) as (client, _):
+        (row,) = (await client.get("/api/schedules")).json()["schedules"]
+
+    assert row["pending_page_ids"] == ["note.b", "note.a"]
+
+
 async def test_a_create_naming_only_workflow_arguments_and_cadence_defaults_every_other_setting(registry: StepRegistry, tmp_path: Path) -> None:
     """A create naming only the workflow, its arguments and its cadence gets every other setting's default."""
     async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), FakeSchedules(), tmp_path, registry=registry) as (client, _):

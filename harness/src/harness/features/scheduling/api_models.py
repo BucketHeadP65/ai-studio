@@ -92,6 +92,8 @@ class ScheduleOut(BaseModel):
     last_outcome: str
     next_run_at: datetime | None
     paused_at: datetime | None
+    pending_page_ids: list[str]
+    """The changed pages an on-index schedule has collected since its last fire, to be passed on by its next. Empty for every other cadence."""
     live: str | None
     spend_today_usd: Decimal
     spend_week_usd: Decimal

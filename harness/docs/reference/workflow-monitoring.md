@@ -1258,7 +1258,8 @@ its quiet period. The event id is recorded under `schedules.on_index` in the sam
 the same index answers `"repeat": true` and changes nothing. The event id is recorded even when no schedule matches.
 
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
-`gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`) plus
+`gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`, and `pending_page_ids`, the changed
+pages an on-index schedule has collected for its next fire) plus
 `live`: where its runner session's run stands right now (`"running" | "paused" | "waiting"`, or `null` when nothing is
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
