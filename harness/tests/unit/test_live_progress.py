@@ -40,6 +40,32 @@ def test_a_step_too_fast_to_be_sampled_is_still_reported() -> None:
     assert progress.done == ["report"]
 
 
+def test_a_map_node_stays_running_until_its_last_item_finishes() -> None:
+    """A map reports once per item under its node id, so the first item to finish must not end the node."""
+    progress = LiveProgress()
+    for _ in range(4):
+        progress.started("place_pages")
+    for _ in range(3):
+        progress.finished("place_pages")
+
+    assert progress.running == {"place_pages"}
+    assert progress.done == []
+
+    progress.finished("place_pages")
+    assert progress.running == set()
+    assert progress.done == ["place_pages"]
+
+
+def test_a_failed_item_is_shown_failed_while_its_siblings_still_run() -> None:
+    progress = LiveProgress()
+    progress.started("place_pages")
+    progress.started("place_pages")
+    progress.finished("place_pages", failed=True)
+
+    assert progress.failed == {"place_pages"}
+    assert progress.running == {"place_pages"}
+
+
 def test_a_cursor_never_replays_and_never_skips() -> None:
     """Sequential reads partition the history: every transition returned exactly once."""
     progress = LiveProgress()

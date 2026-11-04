@@ -21,6 +21,7 @@ from core.ai.workflows.domain.identity import (
     performing_step,
     reviewed_value_digest,
 )
+from core.ai.workflows.domain.in_flight import NodesInFlight
 from core.ai.workflows.domain.intent import WorkflowIntent, intent_issues
 from core.ai.workflows.domain.lineage import (
     Lineage,
@@ -167,6 +168,7 @@ __all__ = [
     "MapBatch",
     "MapNode",
     "Node",
+    "NodesInFlight",
     "OrchestratorDecider",
     "OrchestratorGate",
     "Outcome",

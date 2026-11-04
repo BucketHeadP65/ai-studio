@@ -54,6 +54,7 @@ with workflow.unsafe.imports_passed_through():
         canonical_reviewed_value,
         performing_step,
     )
+    from core.ai.workflows.domain.in_flight import NodesInFlight
     from core.ai.workflows.domain.parameter_values import WorkflowArguments
     from core.ai.workflows.domain.run_events import GateDecisionFact, RetryFeedback
     from core.ai.workflows.domain.vocabulary import PersonGate, Tier, Workflow
@@ -610,7 +611,7 @@ class DurableWorkflowRun:
         self._verdicts: dict[str, GateDecision] = {}
         self._refused: dict[str, int] = {}
         self._waiting: WaitingGate | None = None
-        self._running: list[str] = []
+        self._running = NodesInFlight()
         self._done: list[str] = []
         self._failed: list[str] = []
         self._transitions: list[StepTransition] = []
@@ -701,7 +702,7 @@ class DurableWorkflowRun:
             The running, finished and failed nodes, every transition, and the gate it waits at.
         """
         return RunProgress(
-            running=list(self._running),
+            running=self._running.running,
             done=list(self._done),
             failed=list(self._failed),
             transitions=list(self._transitions),
@@ -745,8 +746,7 @@ class DurableWorkflowRun:
         Args:
             node_id: The node that began.
         """
-        if node_id not in self._running:
-            self._running.append(node_id)
+        self._running.start(node_id)
         self._record(node_id, finished=False, failed=False)
 
     def finished(self, node_id: str, *, failed: bool = False) -> None:
@@ -756,13 +756,13 @@ class DurableWorkflowRun:
             node_id: The node that ended.
             failed: Whether it failed.
         """
-        if node_id in self._running:
-            self._running.remove(node_id)
+        settled = self._running.finish(node_id)
         if failed and node_id not in self._failed:
             self._failed.append(node_id)
-        if node_id in self._done:
-            self._done.remove(node_id)  # a rejected gate runs its upstream again, so keep the last say
-        self._done.append(node_id)
+        if settled:
+            if node_id in self._done:
+                self._done.remove(node_id)  # a rejected gate runs its upstream again, so keep the last say
+            self._done.append(node_id)
         self._record(node_id, finished=True, failed=failed)
 
     def _record(self, node_id: str, *, finished: bool, failed: bool) -> None:

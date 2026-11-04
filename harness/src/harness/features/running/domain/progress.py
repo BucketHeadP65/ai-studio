@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from time import monotonic
 from typing import TYPE_CHECKING, TypedDict
 
+from core.ai.workflows.contracts import NodesInFlight
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -34,10 +36,11 @@ class LiveProgress:
     """Which steps are running right now, and which have finished.
 
     A `RunObserver` the browser can read. Two nodes appear in `running` at once when the graph
-    forks, which is the one place its parallelism becomes visible to a person.
+    forks, which is the one place its parallelism becomes visible to a person. A map node stays in
+    `running` until its last item finishes, and only then moves to `done`.
     """
 
-    running: set[str] = field(default_factory=set)
+    in_flight: NodesInFlight = field(default_factory=NodesInFlight)
     done: list[str] = field(default_factory=list)
     failed: set[str] = field(default_factory=set)
     events: list[StepEvent] = field(default_factory=list)
@@ -49,9 +52,14 @@ class LiveProgress:
     started_at: float | None = None
     """Monotonic base for this run, so event times are seconds since it began."""
 
+    @property
+    def running(self) -> set[str]:
+        """The nodes with work in flight right now."""
+        return set(self.in_flight.running)
+
     def reset(self) -> None:
         """Back to a blank run: a new launch must not inherit the last run's transitions."""
-        self.running.clear()
+        self.in_flight.clear()
         self.done.clear()
         self.failed.clear()
         self.events.clear()
@@ -63,23 +71,24 @@ class LiveProgress:
         Args:
             node_id: The node that began.
         """
-        self.running.add(node_id)
+        self.in_flight.start(node_id)
         self._record(node_id, finished=False)
 
     def finished(self, node_id: str, *, failed: bool = False) -> None:
-        """A step ended, well or badly: move it to done, and log the transition.
+        """A step ended, well or badly: log the transition, and move the node to done once nothing of it is in flight.
 
         Args:
             node_id: The node that ended.
             failed: Whether it ended badly.
         """
-        self.running.discard(node_id)
+        settled = self.in_flight.finish(node_id)
         if failed:
             self.failed.add(node_id)
         # A rejected gate reruns its upstream, so a node can finish twice. Keep the last say.
-        if node_id in self.done:
-            self.done.remove(node_id)
-        self.done.append(node_id)
+        if settled:
+            if node_id in self.done:
+                self.done.remove(node_id)
+            self.done.append(node_id)
         self._record(node_id, finished=True, failed=failed)
 
     def _record(self, node_id: str, *, finished: bool, failed: bool = False) -> None:

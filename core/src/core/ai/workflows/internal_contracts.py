@@ -459,7 +459,9 @@ class RunObserver(Protocol):
 
     Nodes in flight together all report `started` before any of them reports `finished`, so a
     caller can show parallel branches as they run. Each report names its node exactly, including
-    the node a failure belongs to. Implementations must not raise and should not block, because
+    the node a failure belongs to. A map reports once per item under its own node id, so one node
+    can have several reports in flight, and it is running until each has finished (`NodesInFlight`
+    counts them). Implementations must not raise and should not block, because
     every call is on the execution path.
     """
 
