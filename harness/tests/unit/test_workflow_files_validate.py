@@ -255,6 +255,7 @@ async def test_every_step_file_loads_and_asks_only_for_tools_this_app_offers() -
         "back_proposal",
         "judge_proposals",
         "write_stances",
+        "write_stance_flags",
     }
     offered = set(await app_grants())
     for step in steps.values():
@@ -426,6 +427,19 @@ _STANCE_POSITION: dict[str, object] = {
 }
 """The one section the stance draft here changes."""
 
+_STANCE_PROPOSAL: dict[str, object] = {
+    "stance_id": "stance.y",
+    "title": "Y",
+    "pages": [{"page_id": "adr-0031-other", "page_type": "adr", "status": "accepted", "title": "Other"}],
+    "reasons": [{"page_id": "adr-0031-other", "reason": "It takes a position papers argue."}],
+    "findings": [
+        {"claim": "paper.a#^c1", "claim_text": "A finding of paper a.", "side": "supports", "how": "It measures the stance."},
+        {"claim": "art.b#^c2", "claim_text": "A finding of article b.", "side": "contests", "how": "It finds the opposite."},
+    ],
+    "contests_only": False,
+}
+"""The one approved stance proposal here, which becomes a pending stance flag."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -500,6 +514,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
         ],
         "collection": "research",
     },
+    "write_stance_flags": {"proposals": [_STANCE_PROPOSAL], "collection": "research"},
     "write_adrs": {
         "drafts": [
             {
@@ -788,6 +803,25 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
     ]
 
 
+def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
+    """The stance flag writer: it lists the base's flags, and since none carries the proposal's id it writes one pending flag."""
+    assert to_jsonable_python(ran["write_stance_flags"]) == {"written": ["flag.stance-y"], "kept_decided": [], "failed": []}
+    assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "write_note"]
+    assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
+    written = to_jsonable_python(called_by_step["write_stance_flags"][1][1])
+    assert written["knowledge_base"] == "research"
+    assert written["payload"]["frontmatter"] == {
+        "id": "flag.stance-y",
+        "type": "flag",
+        "title": "Y",
+        "summary": "A proposed stance with 1 findings that support it and 1 that contest it.",
+        "status": "pending",
+        "flag_kind": "stance",
+        "about": ["[[paper.a]]", "[[art.b]]"],
+    }
+    assert [section["heading"] for section in written["payload"]["sections"]] == ["Why", "Proposal", "Evidence"]
+
+
 def _assert_source_remove_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
     """The one source-removal program among the library files: pure arithmetic, no tool calls of its own.
 
@@ -897,6 +931,7 @@ async def test_every_shipped_program_runs_in_the_real_sandbox_and_calls_the_tool
         "count_digests",
         "list_stance_changes",
         "write_stances",
+        "write_stance_flags",
     }
     _assert_research_pass_programs(ran, called_by_step)
     _assert_benchmark_pass_programs(ran, called_by_step)
@@ -904,6 +939,7 @@ async def test_every_shipped_program_runs_in_the_real_sandbox_and_calls_the_tool
     _assert_source_remove_programs(ran, called_by_step)
     _assert_decision_brief_renderer(ran, called_by_step)
     _assert_stance_refresh_programs(ran, called_by_step)
+    _assert_stance_flag_program(ran, called_by_step)
 
 
 async def test_find_undigested_with_picked_sources_answers_exactly_those_off_the_undigested_list(sandbox: AsyncMonty) -> None:

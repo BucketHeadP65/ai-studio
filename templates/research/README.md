@@ -32,7 +32,10 @@ from this template can register its own vocabulary for any research domain.
   implementation choice with no research question behind it is skipped. The run card shows every approved proposal
   with the records pages behind it and each finding (the claim's reference and text, whether it supports or contests
   the position, and one sentence on how) among what the run left behind (the `proposed_stances` artifact), marking
-  one the literature only argues against, so you draft the ones you pick by hand. A proposal whose worker changed its
+  one the literature only argues against, so you draft the ones you pick by hand. Each approved stance proposal is also
+  written as a pending stance flag, `flag.stance-` and the proposed id without `stance.`, in `Wiki/Flags`, with its
+  records pages, the reason placement gave for each and its findings as claim links. You accept, dismiss or complete
+  it there, and the run never writes a flag you decided again. A proposal whose worker changed its
   id or title, or added or left out a page, is left off. A run whose proposals fail keeps its rewrites: each is
   written to its file at once, a knowledge base indexed once per run indexes them when the run ends, and under a
   `wait` gate policy a proposals judge that cannot decide holds that index until you answer. Under the opt-in Temporal

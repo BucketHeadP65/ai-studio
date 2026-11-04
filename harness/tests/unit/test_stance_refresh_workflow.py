@@ -1,7 +1,7 @@
 """The shipped stance-refresh workflow, run end to end off its own files.
 
 The graph and the steps come from the real documents under `templates/research/workflows`, never from a copy typed
-out here. The five model steps are scripted and no model is reached. The six programs run for real in the
+out here. The five model steps are scripted and no model is reached. The seven programs run for real in the
 sandbox, and every tool they call answers from a scripted records base and a scripted research base, so nothing
 reaches a real knowledge base.
 
@@ -28,7 +28,10 @@ write, and a proposals judge that spends its last attempt, one nobody answers an
 the run with the rewrite written. A proposal whose backing worker altered its copy is dropped after the judge, one that
 only reordered its pages is kept, and a backing that took another proposal's id leaves the honest proposal on the card,
 since the map collects its answers as they finish. A claim two matching backings give opposite sides is dropped
-whichever finishes first. Last, the budgets of the backing worker and the rewrite judge.
+whichever finishes first. Then the stance flags: an approved proposal is written as a pending flag of kind stance that
+the research schema takes, a pending one is written again and keeps its created date, one the owner decided is left
+alone and listed, and a refused write or a refused listing is named while the run succeeds. Last, the budgets of the
+backing worker and the rewrite judge.
 """
 
 from __future__ import annotations
@@ -37,7 +40,7 @@ import asyncio
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, NotRequired, TypedDict
 
 import pytest
 import yaml
@@ -58,6 +61,7 @@ from core.ai.workflows.contracts import (
     step_page_id,
 )
 from core.ai.workflows.exceptions import RepeatedFailureError
+from engram.kb.contracts import AuthoringPayload, KnowledgeBaseSchema, parse, render
 from pydantic import ValidationError
 from pydantic_ai.exceptions import ModelRetry, UsageLimitExceeded
 from pydantic_core import to_jsonable_python
@@ -142,10 +146,16 @@ class Item(TypedDict):
     current: Payload
 
 
+class Reason(TypedDict):
+    page_id: str
+    reason: str
+
+
 class Proposal(TypedDict):
     stance_id: str
     title: str
     pages: list[Page]
+    reasons: list[Reason]
 
 
 class Finding(TypedDict):
@@ -174,6 +184,22 @@ class WriteCall(TypedDict):
     knowledge_base: str
     payload: Payload
     path: str
+
+
+class FlagSection(TypedDict):
+    heading: str
+    body: str
+
+
+class FlagPayload(TypedDict):
+    frontmatter: dict[str, object]
+    sections: list[FlagSection]
+
+
+class FlagWriteCall(TypedDict):
+    knowledge_base: str
+    payload: FlagPayload
+    path: NotRequired[str]
 
 
 def _spec() -> Workflow:
@@ -227,8 +253,10 @@ class Bases:
     read_page refuses. A research id held by none of them is one read_page cannot find. A records page missing from `records` is one read_page cannot find and list_pages does not list. `outside_root`
     names records pages whose file lies in an app's own docs folder, beyond the records base's root, which list_pages
     lists and read_page refuses the way the real tool does. `unreadable` names stance ids list_pages lists and
-    read_page refuses. `refusing` names the stance ids write_note refuses. `writes`, `listed` and `reads` record every
-    write_note, list_pages and read_page call, in order.
+    read_page refuses. `refusing` names the page ids write_note refuses. `flags` holds each flag's status by id, which
+    list_pages lists and read_page answers with the date `flag_created` names, and `refuses_flag_listing` makes
+    list_pages refuse the flags. `writes` and `flag_writes` record every write_note of a stance and of a flag, and
+    `listed` and `reads` every list_pages and read_page call, in order.
     """
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -238,7 +266,11 @@ class Bases:
     outside_root: frozenset[str] = frozenset()
     unreadable: frozenset[str] = frozenset()
     refusing: frozenset[str] = frozenset()
+    flags: dict[str, str] = field(default_factory=dict)
+    flag_created: dict[str, str] = field(default_factory=dict)
+    refuses_flag_listing: bool = False
     writes: list[WriteCall] = field(default_factory=list)
+    flag_writes: list[FlagWriteCall] = field(default_factory=list)
     listed: list[dict[str, object]] = field(default_factory=list)
     reads: list[tuple[str, str]] = field(default_factory=list)
 
@@ -250,13 +282,16 @@ class Bases:
             self.listed.append(dict(args))
             return self._list(str(args["knowledge_base"]), str(args["page_type"]), str(args.get("status", "")))
         if name == "write_note":
-            write: WriteCall = to_jsonable_python(args)
-            self.writes.append(write)
-            page_id = str(write["payload"]["frontmatter"]["id"])
+            payload: FlagPayload = to_jsonable_python(args["payload"])
+            page_id = str(payload["frontmatter"]["id"])
+            if page_id.startswith("flag."):
+                self.flag_writes.append(to_jsonable_python(args))
+            else:
+                self.writes.append(to_jsonable_python(args))
             if page_id in self.refusing:
                 msg = "the page was refused by research's grammar:\nstatus 'settled' is not one of considering, trying, adopted, rejected"
                 raise ModelRetry(msg)
-            return f"{page_id} written to {write['path']}, indexed clean"
+            return f"{page_id} written, indexed clean"
         msg = f"no program in this workflow calls {name!r}"
         raise AssertionError(msg)
 
@@ -281,6 +316,15 @@ class Bases:
         if knowledge_base == "research" and page_id in self.refused_digests:
             msg = f"{page_id} at Wiki/{page_id}.md cannot be read as a payload: claim ^c1 does not read back"
             raise ModelRetry(msg)
+        if knowledge_base == "research" and page_id in self.flags:
+            frontmatter = {
+                "id": page_id,
+                "type": "flag",
+                "title": page_id,
+                "status": self.flags[page_id],
+                "created": self.flag_created.get(page_id),
+            }
+            return {"page_id": page_id, "path": f"Wiki/Flags/{page_id.removeprefix('flag.')}.md", "payload": {"frontmatter": frontmatter}}
         if knowledge_base == "research" and page_id in self.digests:
             digest = self.digests[page_id]
             frontmatter = {"id": page_id, "type": digest.page_type, "title": f"Title of {page_id}", "status": digest.status}
@@ -296,6 +340,11 @@ class Bases:
                 {"page_id": stance_id, "page_type": "stance", "title": stance_id, "status": "considering"}
                 for stance_id in [*self.stances, *sorted(self.unreadable)]
             ]
+        if knowledge_base == "research" and page_type == "flag":
+            if self.refuses_flag_listing:
+                msg = "no page_type 'flag' in knowledge base 'research', the page_types are paper, stance"
+                raise ModelRetry(msg)
+            return [{"page_id": flag_id, "page_type": "flag", "title": flag_id, "status": status} for flag_id, status in self.flags.items()]
         assert knowledge_base == "repo-docs", f"no program in this workflow lists the {page_type!r} pages of {knowledge_base!r}"
         return [
             {"page_id": page_id, "page_type": front["type"], "title": front["title"], "status": front["status"]}
@@ -327,8 +376,8 @@ def _backed_by_two(_: Proposal) -> list[Finding]:
 
 
 def _as_handed(proposal: Proposal) -> Mapping[str, object]:
-    """The proposal a backing worker copies into its answer, exactly as it was handed."""
-    return proposal
+    """The stance_id, title and pages a backing worker copies into its answer, exactly as it was handed."""
+    return {"stance_id": proposal["stance_id"], "title": proposal["title"], "pages": proposal["pages"]}
 
 
 def _shown(claim: str, side: str = "supports") -> dict[str, str]:
@@ -348,6 +397,9 @@ def _kept(stance_id: str, title: str, pages: list[Page], claims: list[str], *, c
         "contests_only": contests_only,
     }
 
+
+PLACED_ADR_1 = Reason(page_id="adr-1", reason="Papers argue for it.")
+"""The reason a proposing placement gives for adr-1."""
 
 MEMORY = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c1", "art.memory-survey#^c3"])
 """The proposal stance.agent-memory as the run keeps it, proposed for adr-1 alone and backed by BACKED."""
@@ -472,9 +524,9 @@ def _value(state: WorkflowState, node_id: str) -> dict[str, object]:
 
 
 def _proposals(state: WorkflowState) -> list[dict[str, object]]:
-    """The proposals the run lists on its card, the value of list_proposals, as plain data."""
+    """The proposals the run lists on its card, the value of list_proposals, as plain data without each one's reasons."""
     listed: list[dict[str, object]] = to_jsonable_python(state.values["list_proposals"])
-    return listed
+    return [{key: value for key, value in proposal.items() if key != "reasons"} for proposal in listed]
 
 
 def _checked(state: WorkflowState) -> Outcome:
@@ -799,7 +851,9 @@ async def test_a_proposed_new_stance_makes_no_rewrite_and_reaches_the_output_wit
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
     assert scripted.items == [], "no worker drafts a proposed stance"
-    assert scripted.backed == [Proposal(stance_id="stance.agent-memory", title="Agent memory", pages=[_listed("adr-1")])]
+    assert scripted.backed == [
+        Proposal(stance_id="stance.agent-memory", title="Agent memory", pages=[_listed("adr-1")], reasons=[PLACED_ADR_1])
+    ], "the backing worker is handed the reason placement gave for each page"
     assert bases.writes == []
     assert _value(state, "write_stances") == {"written": [], "failed": []}
     assert _proposals(state) == [MEMORY]
@@ -815,8 +869,10 @@ async def test_a_proposal_only_run_carries_its_judged_proposals_as_an_artifact_a
     assert to_jsonable_python(state.values["judge_proposals"]) == [MEMORY]
     outcome = _checked(state)
     assert outcome.status == "noop", "no stance was rewritten"
+    listed = [{**MEMORY, "reasons": [PLACED_ADR_1]}]
+    assert to_jsonable_python(state.values["list_proposals"]) == listed
     assert [(ref.id, ref.node_id, ref.media_type, ref.value_digest) for ref in outcome.artifacts] == [
-        ("proposed_stances", "list_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value([MEMORY])))
+        ("proposed_stances", "list_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value(listed)))
     ], "the card shows each approved proposal with its title, its pages and every finding's claim, text, side and sentence"
 
 
@@ -1190,7 +1246,7 @@ async def test_a_proposal_its_worker_copied_back_altered_is_dropped_after_the_ju
     )
 
     def copy(proposal: Proposal) -> Mapping[str, object]:
-        return {**proposal, **altered} if proposal["stance_id"] == "stance.reranking" else proposal
+        return {**_as_handed(proposal), **altered} if proposal["stance_id"] == "stance.reranking" else _as_handed(proposal)
 
     def back(proposal: Proposal) -> list[Finding]:
         return (
@@ -1255,7 +1311,7 @@ async def test_a_proposal_whose_worker_reordered_its_pages_is_kept_and_one_with_
     )
 
     def copy(proposal: Proposal) -> Mapping[str, object]:
-        return {**proposal, "pages": copied}
+        return {**_as_handed(proposal), "pages": copied}
 
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), copy=copy)
 
@@ -1286,7 +1342,7 @@ async def test_a_backing_that_takes_another_proposals_id_is_dropped_and_the_hone
     other = [_finding("paper.dense-retrieval#^c1"), _finding("talk.agent-loops#^c4")]
 
     def copy(proposal: Proposal) -> Mapping[str, object]:
-        return {**proposal, **taken} if proposal["stance_id"] == "stance.reranking" else proposal
+        return {**_as_handed(proposal), **taken} if proposal["stance_id"] == "stance.reranking" else _as_handed(proposal)
 
     def back(proposal: Proposal) -> list[Finding]:
         return BACKED if proposal["stance_id"] == "stance.agent-memory" else other
@@ -1338,7 +1394,7 @@ async def test_a_claim_two_matching_backings_give_opposite_sides_is_dropped_whic
 
     def copy(proposal: Proposal) -> Mapping[str, object]:
         taken = {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}
-        return {**proposal, **taken} if proposal["stance_id"] == "stance.reranking" else proposal
+        return {**_as_handed(proposal), **taken} if proposal["stance_id"] == "stance.reranking" else _as_handed(proposal)
 
     def back(proposal: Proposal) -> list[Finding]:
         return honest if proposal["stance_id"] == "stance.agent-memory" else copied
@@ -1367,3 +1423,122 @@ def _findings_of(proposal: dict[str, object]) -> list[dict[str, str]]:
     """One listed proposal's findings, typed."""
     findings: list[dict[str, str]] = to_jsonable_python(proposal["findings"])
     return findings
+
+
+MEMORY_FLAG = FlagPayload(
+    frontmatter={
+        "id": "flag.stance-agent-memory",
+        "type": "flag",
+        "title": "Agent memory",
+        "summary": "A proposed stance with 2 findings that support it and 0 that contest it.",
+        "status": "pending",
+        "flag_kind": "stance",
+        "about": ["[[paper.dense-retrieval]]", "[[art.memory-survey]]"],
+    },
+    sections=[
+        FlagSection(
+            heading="Why",
+            body=(
+                "The stance refresh proposed this stance from these records pages. They live in another knowledge base, so each "
+                "is named by its id.\n\n- `adr-1` (adr, accepted): Papers argue for it."
+            ),
+        ),
+        FlagSection(
+            heading="Proposal",
+            body="Accepting this flag asks for a new stance page that holds this stance: Agent memory. It is drafted by hand from the evidence below.",
+        ),
+        FlagSection(
+            heading="Evidence", body=f"- [[paper.dense-retrieval#^c1]] supports: {HOW}\n- [[art.memory-survey#^c3]] supports: {HOW}"
+        ),
+    ],
+)
+"""The flag page stance.agent-memory is written as, when adr-1 proposes it and BACKED backs it."""
+
+
+def _flag_written(bases: Bases) -> FlagPayload:
+    """The payload of the one flag write_note was handed, which lands in the flag type's own folder."""
+    [write] = bases.flag_writes
+    assert "path" not in write, "a flag lands in its page type's own folder"
+    return write["payload"]
+
+
+async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, digests=DIGESTS)
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    assert _flag_written(bases) == MEMORY_FLAG
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+    assert bases.writes == [], "no stance page is written for a proposal"
+
+
+async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_and_keeps_its_created_date(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-1": _record("adr-1")},
+        stances={"stance.x": _stance("x", record="adr-other")},
+        digests=DIGESTS,
+        flags={"flag.stance-agent-memory": "pending"},
+        flag_created={"flag.stance-agent-memory": "2026-10-30"},
+    )
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    written = _flag_written(bases)
+    assert written["frontmatter"] == {**MEMORY_FLAG["frontmatter"], "created": "2026-10-30"}
+    assert written["sections"] == MEMORY_FLAG["sections"]
+    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": []}
+
+
+@pytest.mark.parametrize("status", ["accepted", "dismissed", "completed"])
+async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_listed(sandbox: AsyncMonty, status: str) -> None:
+    bases = Bases(
+        records={"adr-1": _record("adr-1")},
+        stances={"stance.x": _stance("x", record="adr-other")},
+        digests=DIGESTS,
+        flags={"flag.stance-agent-memory": status},
+    )
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+
+    assert bases.flag_writes == []
+    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": []}
+
+
+@pytest.mark.parametrize(
+    ("refusing", "refuses_listing", "reason"),
+    [
+        pytest.param(frozenset({"flag.stance-agent-memory"}), False, "write_note refused the page: ", id="a-refused-write"),
+        pytest.param(frozenset(), True, "list_pages refused the flags, so no flag was written: ", id="a-refused-listing"),
+    ],
+)
+async def test_a_refused_stance_flag_is_named_and_the_run_still_succeeds(
+    sandbox: AsyncMonty, refusing: frozenset[str], reason: str, *, refuses_listing: bool
+) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        digests=DIGESTS,
+        refusing=refusing,
+        refuses_flag_listing=refuses_listing,
+    )
+
+    state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-x,adr-1")
+
+    result = _value(state, "write_stance_flags")
+    assert (result["written"], result["kept_decided"]) == ([], [])
+    failed: list[dict[str, str]] = to_jsonable_python(result["failed"])
+    assert [entry["flag_id"] for entry in failed] == ["flag.stance-agent-memory"]
+    assert failed[0]["reason"].startswith(reason), "the refusal's own words reach the run card"
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite still lands"
+    assert _outcome(state) == "succeeded"
+
+
+async def test_the_research_schema_takes_a_stance_flag_as_the_run_writes_it(sandbox: AsyncMonty) -> None:
+    bases = Bases(records={"adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-other")}, digests=DIGESTS)
+    await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
+    schema = KnowledgeBaseSchema.from_path(RESEARCH.parent / "knowledge-base-schema.json")
+
+    payload = AuthoringPayload.model_validate({**_flag_written(bases), "knowledge_base_schema": schema})
+    note = parse(render(payload, spec=schema), source_path="Wiki/Flags/stance-agent-memory.md", spec=schema)
+
+    assert (note.frontmatter.id, note.frontmatter.type, note.frontmatter.status) == ("flag.stance-agent-memory", "flag", "pending")

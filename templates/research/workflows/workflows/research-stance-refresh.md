@@ -2,16 +2,17 @@
 title: Refresh stances from the docs
 description: >-
   Reads the records pages that changed, places each against the base's stance pages, rewrites and writes the stances
-  they change under a judge, keeping their Evidence and Alternatives, then lists each new stance they propose with the
-  findings on it, under a second judge.
+  they change under a judge, keeping their Evidence and Alternatives, then writes each new stance they propose, with
+  the findings on it, as a pending flag.
 uses:
   - st.list_stance_changes.v2
   - st.place_stance_pages.v6
   - st.refresh_stance.v4
   - st.check_stances.v4
-  - st.back_proposal.v2
+  - st.back_proposal.v3
   - st.judge_proposals.v1
   - st.write_stances.v6
+  - st.write_stance_flags.v1
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -23,17 +24,18 @@ presentation:
     it. Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance,
     and never drafted, only when its page takes a position on a question research literature addresses and claims of
     at least two of the base's digests (its paper, talk, article and post pages, none at status skipped) support or
-    contest that position. An implementation choice with no research question behind it is skipped with a reason that
-    says so. The run card lists the stances written, the ones refused with the check each failed, where every changed
-    page was placed, every stance as it was before the run, and every stance the run could not read with the reason.
-    Among what the run left behind it shows every proposed new stance a judge approved, with the records pages behind
-    it and each finding: the claim's reference, the claim's own text, whether it supports or contests the position,
-    and one sentence on how. A proposal whose findings all contest its position is marked as one the literature argues
-    against. The proposals are backed and judged only after every rewrite is written, so a run whose proposals then
-    fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed once per run indexes
-    them when the run ends, and under a `wait` gate policy a judge that cannot decide holds that index until you
-    answer. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes
-    after each write.
+    contest it. An implementation choice is skipped with a reason that says so. The run card lists the stances
+    written, the ones refused with the check each failed, where every changed page was placed, every stance as it was
+    before the run, and every stance the run could not read. Each stance proposal a judge approved is shown among what
+    the run left behind and written as a pending flag of kind stance, `flag.stance-` and the proposed id without
+    `stance.`, with its records pages and the reason placement gave for each, and each finding as a claim link with
+    its side and one sentence on how. A proposal whose findings all contest it is marked as one the literature argues
+    against. A pending flag is written again with newer findings, and a flag you accepted, dismissed or completed is
+    left as it is and listed. The proposals are backed and judged only after every rewrite is written, so a run whose
+    proposals fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed once per
+    run indexes them when the run ends, and under a `wait` gate policy a judge that cannot decide holds that index
+    until you answer. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge
+    base indexes after each write.
   owner_participation: >-
     Nothing during a run, unless a judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -41,7 +43,8 @@ presentation:
     proposal's finding whose claim does not bear on its position, and a proposal that duplicates a stance. A judge
     that cannot decide asks you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
     wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
-    they were before it. A proposed new stance is yours to draft by hand.
+    they were before it. A proposed new stance is yours to draft by hand: accept, dismiss or complete its stance flag
+    in the research knowledge base, and the run never writes a flag you decided again.
   not_for: >-
     Not for adding literature to a stance, which comes from the digests and the flag pass. Not for editing a
     stance's Evidence or Alternatives, which this run never changes. Not for more than twenty-five changed pages at
@@ -55,10 +58,11 @@ presentation:
     - {label: "Stances written and refused (recorded)", path: values.write_stances}
     - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
+    - {label: "Stance flags written, left as the owner decided them, and refused (recorded)", path: values.write_stance_flags}
 workflow:
   name: research-stance-refresh
-  version: 14
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, and list every approved proposal with its pages and findings as placement made it, drafting none.
+  version: 15
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, list every approved proposal with its pages and findings as placement made it, and write each as a pending stance flag, drafting no stance and never writing a flag the owner decided.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -210,9 +214,10 @@ workflow:
                 if page is None or placed["placement"] != "new" or not stance_id or stance_id in changes["stance_ids"]:
                     continue
                 if stance_id not in proposals:
-                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": []}
+                    proposals[stance_id] = {"stance_id": stance_id, "title": placed["title"], "pages": [], "reasons": []}
                 if placed["page_id"] not in [held["page_id"] for held in proposals[stance_id]["pages"]]:
                     proposals[stance_id]["pages"].append(page)
+                    proposals[stance_id]["reasons"].append({"page_id": placed["page_id"], "reason": placed["reason"]})
         list(proposals.values())
       inputs:
         changes: {like: list_stance_changes}
@@ -224,7 +229,7 @@ workflow:
           items:
             type: object
             title: Proposal
-            required: [stance_id, title, pages]
+            required: [stance_id, title, pages, reasons]
             properties:
               stance_id: {type: string}
               title: {type: string}
@@ -239,6 +244,16 @@ workflow:
                     page_type: {type: string}
                     status: {type: string}
                     title: {type: string}
+              reasons:
+                type: array
+                description: The reason placement gave for each page, by its page id.
+                items:
+                  type: object
+                  title: PlacementReason
+                  required: [page_id, reason]
+                  properties:
+                    page_id: {type: string}
+                    reason: {type: string}
     - name: check_findings
       source: |
         digest_types = ["paper", "talk", "article", "post"]
@@ -368,14 +383,57 @@ workflow:
             for finding in findings:
                 if finding["side"] != "contests":
                     contests_only = False
-            listed.append({"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "findings": findings, "contests_only": contests_only})
+            listed.append({"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "reasons": made["reasons"], "findings": findings, "contests_only": contests_only})
         listed
       inputs:
         approved: {like: check_findings}
         proposals: {like: merge_proposals}
-      output: {like: check_findings}
+      output:
+        json_schema:
+          type: array
+          items:
+            type: object
+            title: ListedStanceProposal
+            required: [stance_id, title, pages, reasons, findings, contests_only]
+            properties:
+              stance_id: {type: string}
+              title: {type: string}
+              pages:
+                type: array
+                items:
+                  type: object
+                  title: BearingPage
+                  required: [page_id, page_type, status, title]
+                  properties:
+                    page_id: {type: string}
+                    page_type: {type: string}
+                    status: {type: string}
+                    title: {type: string}
+              reasons:
+                type: array
+                items:
+                  type: object
+                  title: PlacementReason
+                  required: [page_id, reason]
+                  properties:
+                    page_id: {type: string}
+                    reason: {type: string}
+              findings:
+                type: array
+                items:
+                  type: object
+                  title: CheckedFinding
+                  required: [claim, claim_text, side, how]
+                  properties:
+                    claim: {type: string}
+                    claim_text: {type: string}
+                    side:
+                      enum: [supports, contests]
+                      type: string
+                    how: {type: string}
+              contests_only: {type: boolean}
   result:
-    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the findings from the literature that take a side on it.
+    summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the findings from the literature that take a side on it, and written as a pending stance flag.
     primary_work: refresh_stances
     empty_primary: noop
     required_gates:
@@ -481,7 +539,13 @@ workflow:
       inputs:
         approved: {node: judge_proposals}
         proposals: {node: merge_proposals}
-  output: {node: list_proposals}
+    - kind: run
+      id: write_stance_flags
+      work: write_stance_flags
+      inputs:
+        proposals: {node: list_proposals}
+        collection: {parameter: collection}
+  output: {node: write_stance_flags}
 ---
 
 Use on an `on index` schedule over the records knowledge base, with `collection` set to the research knowledge base,
@@ -533,7 +597,18 @@ only the findings that remain, and a proposal left with findings from fewer than
 collects its answers as they finish, so nothing is paired by position. A backing
 that matches no proposal, such as one whose worker reworded its copy, added or left out a page, or took another
 proposal's id, puts nothing on the card, and the honest backing of that proposal still does. Its list is the run's
-output and its `proposed_stances` artifact, and it writes no page.
+`proposed_stances` artifact, and it writes no page.
+
+`write_stance_flags` writes each listed proposal to the research knowledge base as a flag page, `flag.stance-` and the
+proposed id without `stance.`, at status `pending` and of kind `stance`, in the flag type's own folder. Its title is
+the proposed stance and `about` links each digest a finding cites. Why names each records page by its id in plain text
+with the reason placement gave, because a link into the records knowledge base would not resolve here. Proposal says
+that accepting the flag asks for a new stance page. Evidence lists each finding as a claim link, such as
+`[[paper.ace-2025#^c8]]`, with its side and its sentence. A flag whose findings all contest the stance says so in its
+summary. It lists the base's flags first. A flag at `pending` is written again with the newer findings and keeps its
+`created` date. One the owner accepted, dismissed or completed is never written and is answered in `kept_decided`. A
+write the base refuses is named in `failed` with the reason and never fails the run, and when the flags cannot be
+listed no flag is written. Its answer is the run's output.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite
 is written, and so does one whose backing map aborts. Each rewrite is written to its file at once. A knowledge base
