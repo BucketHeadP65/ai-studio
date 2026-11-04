@@ -231,6 +231,10 @@ Before committing doc changes run both (stdlib-only):
 Architecture masters are split-doc'd: edit the master, regenerate `sections/` + `index.md`,
 commit together.
 
+Before calling a piece of work done (an initiative, a fix round, a review loop), sort what it taught with the
+`placing-knowledge` skill: a principle into the skill that owns it, written with `writing-skills` and `agent-ux`, a
+defect into the upstream ledgers or tech debt, a decision into an ADR, and a correction from the owner into memory.
+
 ## Commit Messages
 
 Conventional commit format.

@@ -119,6 +119,11 @@ uv run harness import ../templates/research/workflows   # load a folder of workf
 uv run python -m harness.acp                           # the agent served over ACP (Zed et al.)
 ```
 
+A schedule names one exact workflow version (`wf.<name>.v<n>`). Importing a new version does not move it, so
+point it at the new one with `PATCH /api/schedules/<id>` and the new `workflow_id`. To import one workflow, copy its
+workflow file and the step files it uses into a folder of their own and import that folder, because other sessions
+own the other workflows in a template.
+
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes
 installed) and `core[workflows-temporal]` (path sources), and `pydantic-ai-harness` from PyPI (`>=0.63.0`, versioned with pydantic-ai, 0.63 with 2.63). Every agent that holds

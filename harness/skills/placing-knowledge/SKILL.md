@@ -1,6 +1,6 @@
 ---
 name: placing-knowledge
-description: Use when you are about to write down something you learned, decided, or were told (a rule, a preference, a lesson, a bug, a workaround, a mistake you made, a procedure) and must pick where it goes, a skill, an agent definition, a tool description, AGENTS.md / CLAUDE.md or a rule, memory, a log, an ADR, a tech debt entry, or a pull request. Decides the surface by who reads it and what they would do differently, then routes to the skill that writes that surface.
+description: Use when you are about to write down something you learned, decided, or were told (a rule, a preference, a lesson, a bug, a workaround, a mistake you made, a procedure) and must pick where it goes, a skill, an agent definition, a tool description, AGENTS.md / CLAUDE.md or a rule, memory, a log, an ADR, a tech debt entry, or a pull request. Also use when closing a piece of work (an initiative, a fix round, a review loop, a debugging session) to sort what it taught before calling it done. Decides the surface by who reads it and what they would do differently, then routes to the skill that writes that surface.
 ---
 
 # Placing knowledge

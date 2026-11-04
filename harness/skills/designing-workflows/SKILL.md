@@ -1,6 +1,6 @@
 ---
 name: designing-workflows
-description: Use when designing, reviewing, or changing a workflow graph, a step file, or how a run fans out. Covers who does the work, what a worker carries between steps, what breaks the prompt cache, where validation sits, how nodes and wires are named, and what a step does when a run is failing.
+description: Use when designing, reviewing, or changing a workflow graph, a step file, or how a run fans out. Covers who does the work, what a worker carries between steps, what breaks the prompt cache, where validation and judges sit, how an optional branch is ordered against work that must land, where a result a person decides lands, how nodes and wires are named, and what a step does when a run is failing.
 ---
 
 # Designing workflows, the shape of a run
@@ -127,6 +127,14 @@ says why.
   `completed` over a majority of skips still teaches the owner to trust a run that failed.
 - **A per-worker request limit is a backstop, not a budget.** A limit of 24 model calls for one document is a
   design that expects a loop. Ask why a worker needs 24 turns before raising it.
+- **A step that runs programs spends a tool call for every call its programs make.** Size its tool-call budget
+  for the reads its programs do, not for its own turns. A judge that checks twenty drafts against their sources
+  spends its calls inside a few requests.
+- **Work that must land never waits on work that may fail.** A step that writes the run's essential result must
+  not take its input from an optional branch, and must not run beside one that can abort the run. Order the
+  graph so the essential write lands first and the optional branch starts after it. When a branch's output needs
+  a reader, make that branch wait on the essential step, never the reverse. The post goes out before anyone
+  drafts the newsletter, so a stalled newsletter never holds back the letters.
 
 ## 6. Validation sits where the fix is
 
@@ -142,9 +150,23 @@ Give the drafter the destination's own check as a tool and make its brief end on
 only work that passes. The step that made the mistake is the one step that can fix it in place, the check that finds
 nothing costs no model call, and the judge then spends its whole budget on judgment.
 
+**One judge per concern.** A judge's rejection sends everything it reviewed back for another round. Put each
+independent concern behind its own judge, wired to send back only the step that concern is about, so a weak item of
+one kind never costs a full round of another.
+
+**The model cites, code copies.** When an answer must carry text that already exists (a quoted finding, a clause, a
+section kept as it was), the model names it by its handle (an id, an anchor) and a program copies the words from the
+source after checking the handle exists. The model never retypes it. Retyped text drifts, a handle the source does
+not hold is caught before it lands, and a long reproduction is where a model refuses or wanders.
+
 A deterministic landing step writes what was already validated, and still catches each item's refusal instead of dying
 on the first: land every writable item, then fail the run naming each refusal. Nothing is silently dropped, and work
 refused at landing shows up again on the next pass's pending list.
+
+**A result a person decides lands as a page.** Anything that waits for a person's decision (a proposal, a flag, a
+choice between options) is written into the destination as a page with a status the person changes and a stable id,
+never only as a value on the run's record. A person reads pages and an agent searches them. The stable id lets the
+next run update its own pending page and leave a decided one alone.
 
 ## 7. Cost is a property of the graph, and you can read it
 
@@ -177,3 +199,8 @@ turn. Then check it against the spend rows after the first real run.
 - [ ] Do the node ids read as jobs, and does no input name repeat a node id?
 - [ ] Does each check run at its own step: shape at the output schema, grammar at the drafter's checking tool,
       judgment at the judge, and does the landing step catch refusals per item?
+- [ ] Does the essential write land before any optional branch starts, and never wait on one?
+- [ ] Does each judge review one concern, so a rejection reruns only that concern's work?
+- [ ] Is text that must be reproduced copied by a program from its source, the model naming it only by its handle?
+- [ ] Does a result that waits for a person land as a page with a status and a stable id?
+- [ ] Is each code-running step's tool-call budget sized for the calls its programs make?
