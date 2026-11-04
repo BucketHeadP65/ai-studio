@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     from core.ai.inspection.domain.leads import Lead
     from core.ai.inspection.domain.taxonomy import Symptom
-    from core.ai.transcripts.contracts import Call, RunSummary, Step, Transcript
+    from core.ai.transcripts.contracts import Call, RunSummary, Transcript
 
 PART_CHARS: Final = 2_000
 """How much rendered evidence one read carries before its continuation."""
@@ -431,9 +431,8 @@ def read(
         msg = f"no step {step} in {transcript.source}: it has {len(transcript.steps)} steps. Choose a step from outline()"
         raise ValueError(msg)
     _check_offset(offset)
-    selected = transcript.steps[step]
-    stop = len(selected.messages) if end is None else end
-    body = _read_content(step, selected, start, stop, resource)
+    stop = len(transcript.steps[step].messages) if end is None else end
+    body = _read_content(transcript, step, start, stop, resource)
     arguments = _read_arguments(step, start, stop, resource)
     return _page(body, offset, PART_CHARS, _read_call(arguments, offset + PART_CHARS, transcript.source))
 
@@ -461,8 +460,9 @@ def _read_call(arguments: str, offset: int, source: str) -> str:
     return f"read({arguments}, offset={offset}, run={source!r})"
 
 
-def _read_content(index: int, step: Step, start: int, end: int, resource: ReadResource) -> str:
-    """The complete selected content, before paging, with stable coordinates."""
+def _read_content(transcript: Transcript, index: int, start: int, end: int, resource: ReadResource) -> str:
+    """The complete selected content, before paging, with stable coordinates and the first span of every part an earlier step recorded."""
+    step = transcript.steps[index]
     if resource == "tools":
         if step.parameters is None:
             return f"step {index}: tool definitions not recorded. Their absence cannot establish what tools the model had"
@@ -479,8 +479,10 @@ def _read_content(index: int, step: Step, start: int, end: int, resource: ReadRe
                 elif isinstance(part, InstructionDeltaPart):
                     lines.append(f"{index}.{message_index}.{part_index} [instruction-delta {part.id}] {text_of(part)}")
         else:
+            first = transcript.first_recorded(Span(step=index, message=message_index, part=0))
             lines.extend(
-                f"{index}.{message_index}.{part_index} [{kind_of(part)}] {text_of(part)}" for part_index, part in enumerate(message.parts)
+                f"{index}.{message_index}.{part_index} [{kind_of(part)}{_first_recorded_mark(first, index, part_index)}] {text_of(part)}"
+                for part_index, part in enumerate(message.parts)
             )
     empty = (
         f"step {index} holds no message in [{start}, {end})"
@@ -488,6 +490,11 @@ def _read_content(index: int, step: Step, start: int, end: int, resource: ReadRe
         else f"step {index}: instructions not recorded in [{start}, {end}); do not infer what the agent was told"
     )
     return "\n".join(lines) or empty
+
+
+def _first_recorded_mark(first: Span, step: int, part: int) -> str:
+    """Where an earlier step first recorded a part read at `step`, as its kind's suffix, or nothing when `step` recorded it first."""
+    return "" if first.step == step else f", first recorded at {first.step}.{first.message}.{part}"
 
 
 def _tool_sections(parameters: ModelRequestParameters) -> Iterator[tuple[str, str]]:

@@ -121,6 +121,22 @@ class TestRecorded:
         assert isinstance(recorded[3][1].parts[0], TextPart)
 
 
+class TestFirstRecorded:
+    def test_answers_the_same_part_in_the_first_step_that_held_its_message(self) -> None:
+        first = step(question(), call(), result())
+        second = step(call(), result(CLEARED), answer(), ordinals=(1, 2, 3))
+        transcript = Transcript(source="test:run", steps=(first, second))
+
+        assert transcript.first_recorded(Span(step=1, message=1, part=0)) == Span(step=0, message=2, part=0)
+        assert transcript.first_recorded(Span(step=1, message=2, part=0)) == Span(step=1, message=2, part=0)
+
+    def test_refuses_a_message_outside_the_transcript(self) -> None:
+        transcript = Transcript(source="test:run", steps=two_steps())
+
+        with pytest.raises(IndexError):
+            transcript.first_recorded(Span(step=0, message=9, part=0))
+
+
 class TestCalls:
     def test_pairs_each_call_with_its_first_recorded_answer_and_its_duration(self) -> None:
         transcript = Transcript(source="test:run", steps=two_steps(), durations_ms={"call_1": 250})
