@@ -611,8 +611,8 @@ under the same id, such as an idea flag whose title makes the same id, is left a
 whose file is not at `pending`, one the owner accepted, dismissed or completed, is never written and is answered in
 `kept_decided`. A pending stance flag is written again at the path it was read from, so a flag the owner moved stays
 one file, with the newer findings and its `created` date. A listed flag `read_page` refuses is named in `failed` and
-not written. A flag the index does not list is written to `Wiki/Flags`, unless `read_notes` finds a file already at
-that path, which is named in `failed` and left as it is. A write the base refuses is named in `failed` with the reason
+not written. A flag the index does not list is written to `Wiki/Flags`, at the very path `read_notes` checked, unless
+a file already sits there, which is named in `failed` and left as it is. A write the base refuses is named in `failed` with the reason
 and never fails the run, and when the flags cannot be listed no flag is written. Its answer is the run's output.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite

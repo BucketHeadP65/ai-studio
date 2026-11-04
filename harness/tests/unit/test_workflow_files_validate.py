@@ -810,7 +810,7 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
     assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
     assert called_by_step["write_stance_flags"][1][1] == {"knowledge_base": "research", "path": "Wiki/Flags/stance-y.md"}
     written = to_jsonable_python(called_by_step["write_stance_flags"][2][1])
-    assert written["knowledge_base"] == "research"
+    assert (written["knowledge_base"], written["path"]) == ("research", "Wiki/Flags/stance-y.md")
     assert written["payload"]["frontmatter"] == {
         "id": "flag.stance-y",
         "type": "flag",

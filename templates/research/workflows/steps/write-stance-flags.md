@@ -24,7 +24,6 @@ step:
         if not listed:
             failed.append({"flag_id": flag_id, "reason": refusal})
             continue
-        path = ""
         created = ""
         if flag_id in indexed:
             try:
@@ -51,6 +50,7 @@ step:
             if found["exists"]:
                 failed.append({"flag_id": flag_id, "reason": "a file the index does not list sits at " + target + ", so it was left as it is. Index the knowledge base and run again."})
                 continue
+            path = target
         reasons = {}
         for entry in proposal["reasons"]:
             reasons[entry["page_id"]] = entry["reason"]
@@ -85,10 +85,7 @@ step:
         ]
         payload = {"frontmatter": frontmatter, "sections": sections}
         try:
-            if path:
-                await write_note(knowledge_base=collection, payload=payload, path=path)
-            else:
-                await write_note(knowledge_base=collection, payload=payload)
+            await write_note(knowledge_base=collection, payload=payload, path=path)
         except Exception as error:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
@@ -137,6 +134,7 @@ index. A flag of another kind under the same id is left as it is and answered in
 `pending`, one the owner accepted, dismissed or completed, is never written and is answered in `kept_decided`. A
 pending stance flag is written again at the path it was read from, with the run's newer findings and its `created`
 date. A flag the index lists that `read_page` refuses is answered in `failed` and not written. A flag the index does
-not list is written to `Wiki/Flags`, unless `read_notes` finds a file already at that path, which is answered in
-`failed` and left as it is. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
+not list is written to `Wiki/Flags`, at the very path `read_notes` checked, unless a file already sits there, which is
+answered in `failed` and left as it is. A base whose flags live in another folder refuses that path, and each new flag
+is answered in `failed`. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
 other flag still lands. When `list_pages` refuses the flags, no flag is written, and each is answered in `failed`.

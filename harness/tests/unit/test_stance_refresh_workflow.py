@@ -1495,10 +1495,10 @@ MEMORY_FLAG = FlagPayload(
 """The flag page stance.agent-memory is written as, when adr-1 proposes it and BACKED backs it."""
 
 
-def _flag_written(bases: Bases, *, path: str = "") -> FlagPayload:
-    """The payload of the one flag write_note was handed, checked to land at `path`, or in the flag type's own folder."""
+def _flag_written(bases: Bases, *, path: str = _flag_path("flag.stance-agent-memory")) -> FlagPayload:
+    """The payload of the one flag write_note was handed, checked to land at `path`, the new agent-memory flag's own path by default."""
     [write] = bases.flag_writes
-    assert write.get("path", "") == path, "a flag is written where its file sits, or in the flag type's own folder when new"
+    assert write.get("path", "") == path, "a flag is written where its file sits, or at the path read_notes checked when new"
     return write["payload"]
 
 
