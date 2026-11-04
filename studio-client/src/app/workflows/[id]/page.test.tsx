@@ -306,7 +306,19 @@ function mountApi() {
       run_title: "",
       gates_orchestrated: [],
       spend: null,
-      result: { status: "unknown", summary: "", attempted: 0, succeeded: 0, skipped: 0, failed: 0, retry_attempts: 0, primary_input: null, generation: null, checks: [], artifacts: [] },
+      result: {
+        status: "unknown",
+        summary: "",
+        attempted: 0,
+        succeeded: 0,
+        skipped: 0,
+        failed: 0,
+        retry_attempts: 0,
+        primary_input: null,
+        generation: null,
+        checks: [],
+        artifacts: [],
+      },
       run_id: "sess-1",
       workflow_id: DETAIL.id,
       outcome: "live",
@@ -729,6 +741,44 @@ describe("WorkflowPage", () => {
     );
   });
 
+  it("reads each recorded result field off the run's values by its template-shaped path", async () => {
+    mountApi();
+    server.use(
+      http.get(`${BASE}/api/workflow/${DETAIL.id}`, () =>
+        HttpResponse.json({
+          ...DETAIL,
+          presentation: {
+            result_fields: [
+              { label: "Stances written", path: "values.write_stances.written" },
+              { label: "Archived step", path: "values.archived-step" },
+              { label: "Flags written", path: "values.write_stance_flags" },
+            ],
+          },
+        }),
+      ),
+      http.get(`${BASE}/api/runs/history/run-42`, () =>
+        HttpResponse.json({
+          ...PAST_RECORD,
+          values: {
+            ...PAST_RECORD.values,
+            write_stances: '{"written": ["stance.x"], "failed": []}',
+          },
+        }),
+      ),
+    );
+    render(<WorkflowPage />);
+
+    await userEvent.click(await screen.findByText("Completed"));
+
+    expect((await screen.findByText("Stances written")).nextElementSibling).toHaveTextContent(
+      '[ "stance.x" ]',
+    );
+    expect(screen.getByText("Archived step").nextElementSibling).toHaveTextContent(
+      "archived output",
+    );
+    expect(screen.getByText("Flags written").nextElementSibling).toHaveTextContent("not recorded");
+  });
+
   it("reads a completed run nobody reviewed as acceptance unknown, apart from what it did", async () => {
     mountApi();
     const { container } = render(<WorkflowPage />);
@@ -759,9 +809,7 @@ describe("WorkflowPage", () => {
       http.get(`${BASE}/api/runs/history/run-2`, () =>
         HttpResponse.json({ ...PAST_RECORD, run_id: "run-2", run_title: "the run being read" }),
       ),
-      http.post(`${BASE}/api/sessions`, () =>
-        HttpResponse.json({ session: DRAFT_SESSION }),
-      ),
+      http.post(`${BASE}/api/sessions`, () => HttpResponse.json({ session: DRAFT_SESSION })),
       http.post(`${BASE}/api/sessions/sess-draft/adapt`, async ({ request }) => {
         adapted = await request.json();
         return HttpResponse.json({ ok: true });

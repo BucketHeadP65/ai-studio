@@ -36,6 +36,7 @@ import {
   ResultSummary,
 } from "@/components/workflows/outcome-strip";
 import { OwnerReviewForm } from "@/components/workflows/owner-review-form";
+import { recordedValue } from "@/components/workflows/recorded-value";
 import { RunChatDrawer } from "@/components/workflows/run-chat-drawer";
 import { RunControls } from "@/components/workflows/run-controls";
 import { RunEvidencePanel } from "@/components/workflows/run-evidence-panel";
@@ -68,7 +69,10 @@ function isAgenticByStructure(node: GraphNode): boolean {
 
 // Whether a `conversations` dict (the archive's own, unparsed -- key existence does not need
 // the parse) holds a line for this node id. The archive keys every line `"{nodeId}[{item}]"`.
-function hasArchivedConversation(conversations: Record<string, unknown[]>, nodeId: string): boolean {
+function hasArchivedConversation(
+  conversations: Record<string, unknown[]>,
+  nodeId: string,
+): boolean {
   const marker = `${nodeId}[`;
   return Object.keys(conversations).some((key) => key.startsWith(marker));
 }
@@ -116,12 +120,7 @@ interface RunItCardProps {
 // gates, Run, Schedule it, and the paused or running status line, all of it `RunControls`'
 // own render. Sitting at the top of the side column keeps it reachable however far the reader
 // scrolls the main column, and keeps the header above free to hold nothing but identity.
-function RunItCard({
-  detail,
-  sessionId,
-  viewedRunId,
-  onSchedule,
-}: RunItCardProps): ReactElement {
+function RunItCard({ detail, sessionId, viewedRunId, onSchedule }: RunItCardProps): ReactElement {
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
       <div className="border-line border-b px-4 py-3">
@@ -481,7 +480,8 @@ export function WorkflowView({ id }: WorkflowViewProps): ReactElement {
     inspected !== null &&
     (isHistory
       ? hasArchivedConversation(record.data?.conversations ?? {}, inspected.id)
-      : isAgenticByStructure(inspected) || (stepLines.data ?? []).some((line) => line.node === inspected.id));
+      : isAgenticByStructure(inspected) ||
+        (stepLines.data ?? []).some((line) => line.node === inspected.id));
 
   const openNode = (nodeId: string) => {
     const node = graph.nodes.find((candidate) => candidate.id === nodeId);
@@ -497,7 +497,7 @@ export function WorkflowView({ id }: WorkflowViewProps): ReactElement {
   const recorded: RecordedOutput[] = (detail.data?.presentation?.result_fields ?? []).map(
     (field) => ({
       label: field.label,
-      value: activeValues?.[field.path] ?? "not recorded",
+      value: recordedValue(activeValues, field.path),
     }),
   );
   const artifacts = statEnvelope?.result.artifacts ?? [];
@@ -557,7 +557,9 @@ export function WorkflowView({ id }: WorkflowViewProps): ReactElement {
                     // other shape says so at the press rather than inside the form.
                     const proposed = NoteDraftSchema.safeParse(request.document.value);
                     if (!proposed.success) {
-                      throw new Error("This value is not a proposed note, so there is nothing to keep.");
+                      throw new Error(
+                        "This value is not a proposed note, so there is nothing to keep.",
+                      );
                     }
                     setKeeping({
                       actionId: request.actionId,
