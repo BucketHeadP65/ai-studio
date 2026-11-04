@@ -32,6 +32,7 @@ DOCUMENTED: tuple[str, ...] = (
     "core.ai.content_filter",
     "core.ai.filesystem",
     "core.ai.tool_output_limits",
+    "core.ai.tool_call_limit",
     "core.ai.artifacts",
     "core.ai.dedup",
     "core.ai.spend_store",
