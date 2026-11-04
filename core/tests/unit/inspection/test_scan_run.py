@@ -333,8 +333,8 @@ async def test_a_scan_records_its_question_with_no_lead_and_its_findings_point_a
     assert [row.question_id for row in store.findings] == [asked.question_id]
 
 
-def _carried_call() -> Transcript:
-    """Step 0 holds a call and its return. Step 1 carries both and adds the model's answer."""
+def _call_in_two_steps() -> Transcript:
+    """Step 0 holds a call and its return. Step 1 holds both again and adds the model's answer."""
     history = (question(), call("c1"), result("c1", "ok"))
     return Transcript(
         source="record:run-1",
@@ -342,17 +342,32 @@ def _carried_call() -> Transcript:
     )
 
 
-def test_a_scan_refuses_two_spans_that_are_one_part_carried_into_a_later_step() -> None:
+def test_a_scan_refuses_two_spans_that_are_one_part_shown_in_two_steps() -> None:
     repeated = Seen.model_validate(saw("call_for_known_fact", ["0.1.0", "1.1.0"], "agent_reasoning", "model_tier"))
 
-    with pytest.raises(ValueError, match=r"0\.1\.0 and 1\.1\.0 are one part, first recorded at 0\.1\.0"):
-        resolve_scan(repeated, _carried_call())
+    with pytest.raises(ValueError, match="are one part") as refused:
+        resolve_scan(repeated, _call_in_two_steps())
+
+    assert str(refused.value) == (
+        "0.1.0 and 1.1.0 are one part, first recorded at 0.1.0. A step's history shows every message before it again, so the "
+        "part at 1.1.0 is not a new call or answer. Cite it once, at 0.1.0. If the symptom rests on the part happening twice, "
+        "drop it."
+    )
 
 
-def test_a_scan_accepts_one_span_of_a_part_a_later_step_carries() -> None:
+def test_a_scan_refuses_one_span_cited_twice_without_calling_it_a_later_step_s_copy() -> None:
+    doubled = Seen.model_validate(saw("call_for_known_fact", ["0.1.0", "0.1.0"], "agent_reasoning", "model_tier"))
+
+    with pytest.raises(ValueError, match="cited twice") as refused:
+        resolve_scan(doubled, _call_in_two_steps())
+
+    assert str(refused.value) == "0.1.0 is cited twice. Cite each span once. If the symptom rests on the part happening twice, drop it."
+
+
+def test_a_scan_accepts_one_span_of_a_part_a_later_step_shows_again() -> None:
     once = Seen.model_validate(saw("call_for_known_fact", ["0.1.0"], "agent_reasoning", "model_tier"))
 
-    resolved = resolve_scan(once, _carried_call())
+    resolved = resolve_scan(once, _call_in_two_steps())
 
     assert not isinstance(resolved, ScanUndecided)
     assert [span for lead, _ in resolved for span in lead.spans] == [Span(step=0, message=1, part=0)]

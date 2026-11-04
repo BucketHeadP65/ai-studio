@@ -452,9 +452,9 @@ def test_both_sets_of_instructions_hold_the_sentence_that_keeps_a_blame_off_the_
     assert sentence in SCAN_INSTRUCTIONS
 
 
-def test_both_sets_of_instructions_say_what_a_carried_mark_means() -> None:
+def test_both_sets_of_instructions_say_what_a_first_recorded_mark_means() -> None:
     sentence = (
-        "A part marked `carried from` a span is that earlier part repeated in a later step's history, "
+        "A part marked `first recorded at` a span is the part at that span, shown again in a later step's history, "
         "never a new call or answer, so cite the span it names."
     )
 

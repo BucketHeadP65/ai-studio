@@ -85,7 +85,7 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 
 Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
-Each step's history repeats every message before it. A `messages` read marks a part whose message an earlier step first held with the span it first had, as `[tool-call, carried from 2.5.1]`, so a carried copy never reads as a new call. Both sets of inspector instructions say what that mark means.
+Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. Both sets of inspector instructions say what that mark means.
 
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 
@@ -93,7 +93,7 @@ Part citations use `step.message.part`. Tool schemas and instruction resources a
 
 Each attribution or scan gets a question row linked to its own recorded conversation. The composition attaches `StepPersistence` and `RequestParametersRecorder`. Each tier has its own question, and retries stay in that question's conversation. A follow-up continues that conversation on the tier's current model.
 
-Output validation happens inside the agent run. Unknown taxonomy names, incompatible causes, invalid spans and schema-invalid answers become recorded retries. A scan that cites one part twice, such as a call and a later step's carried copy of it, is refused with the span the part was first recorded at. Exhausted invalid output remains `invalid`. Provider/network failures remain job failures that can retry. A skipped output tool or an output without the framework's processing confirmation is not presented as an accepted diagnosis.
+Output validation happens inside the agent run. Unknown taxonomy names, incompatible causes, invalid spans and schema-invalid answers become recorded retries. A scan that cites one span twice, or two spans of one part shown at two steps, is refused with the span the part was first recorded at, and told to drop a symptom that rests on the part happening twice. Exhausted invalid output remains `invalid`. Provider/network failures remain job failures that can retry. A skipped output tool or an output without the framework's processing confirmation is not presented as an accepted diagnosis.
 
 Lead outcomes are explicit:
 

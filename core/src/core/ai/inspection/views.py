@@ -461,7 +461,7 @@ def _read_call(arguments: str, offset: int, source: str) -> str:
 
 
 def _read_content(transcript: Transcript, index: int, start: int, end: int, resource: ReadResource) -> str:
-    """The complete selected content, before paging, with stable coordinates and every carried message marked."""
+    """The complete selected content, before paging, with stable coordinates and the first span of every part an earlier step recorded."""
     step = transcript.steps[index]
     if resource == "tools":
         if step.parameters is None:
@@ -481,7 +481,7 @@ def _read_content(transcript: Transcript, index: int, start: int, end: int, reso
         else:
             first = transcript.first_recorded(Span(step=index, message=message_index, part=0))
             lines.extend(
-                f"{index}.{message_index}.{part_index} [{kind_of(part)}{_carried(first, index, part_index)}] {text_of(part)}"
+                f"{index}.{message_index}.{part_index} [{kind_of(part)}{_first_recorded_mark(first, index, part_index)}] {text_of(part)}"
                 for part_index, part in enumerate(message.parts)
             )
     empty = (
@@ -492,9 +492,9 @@ def _read_content(transcript: Transcript, index: int, start: int, end: int, reso
     return "\n".join(lines) or empty
 
 
-def _carried(first: Span, step: int, part: int) -> str:
-    """The mark a part read at `step` carries when an earlier step first recorded its message, or nothing."""
-    return "" if first.step == step else f", carried from {first.step}.{first.message}.{part}"
+def _first_recorded_mark(first: Span, step: int, part: int) -> str:
+    """Where an earlier step first recorded a part read at `step`, as its kind's suffix, or nothing when `step` recorded it first."""
+    return "" if first.step == step else f", first recorded at {first.step}.{first.message}.{part}"
 
 
 def _tool_sections(parameters: ModelRequestParameters) -> Iterator[tuple[str, str]]:

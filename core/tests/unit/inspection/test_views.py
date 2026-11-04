@@ -683,13 +683,13 @@ def test_step_at_refuses_a_step_the_run_does_not_have() -> None:
         step_at(_two_steps(), 2)
 
 
-def test_read_marks_each_message_a_step_carries_from_an_earlier_step_with_the_span_it_first_had() -> None:
+def test_read_marks_each_part_an_earlier_step_first_recorded_with_the_span_it_was_first_recorded_at() -> None:
     given = _two_steps()
 
     assert read(given, 1).splitlines() == [
-        "1.0.0 [user-prompt, carried from 0.0.0] What is the weather in Paris?",
-        "1.1.0 [tool-call, carried from 0.1.0] {'name': 'Paris'}",
-        "1.2.0 [tool-return, carried from 0.2.0] sunny and mild",
+        "1.0.0 [user-prompt, first recorded at 0.0.0] What is the weather in Paris?",
+        "1.1.0 [tool-call, first recorded at 0.1.0] {'name': 'Paris'}",
+        "1.2.0 [tool-return, first recorded at 0.2.0] sunny and mild",
         "1.3.0 [text] done",
     ]
-    assert "carried" not in read(given, 0), "a message read at the step that first held it is not carried"
+    assert "first recorded at" not in read(given, 0), "a part read at the step that first recorded it carries no mark"
