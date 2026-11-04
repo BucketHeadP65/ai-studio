@@ -339,7 +339,8 @@ validator.
 compares the steps the spec names against this run's registry and answers three ways:
 
 - `FITS THIS RUN` / `fits_here: True`, every named step is registered here, or the
- workflow brings its own steps and this run can perform a briefing.
+ workflow brings its own steps and this run can perform a briefing. A stale workflow that fits
+ keeps `fits_here: True` without the words `FITS THIS RUN` (see below).
 - `DOES NOT FIT THIS RUN` / `fits_here: False`, a named step is missing, or the workflow
  brings steps and `registry.performs_briefings` is false. The prose names the missing
  steps and adds *"do not keep re-reading it"*.
