@@ -156,6 +156,20 @@ async def test_two_ids_that_differ_only_by_case_get_their_own_files(tmp_path: Pa
     assert "Lower text." in by_id["doc"].pdf_path.read_text(encoding="utf-8")
 
 
+async def test_a_document_whose_text_holds_unicode_line_separators_is_one_item(tmp_path: Path) -> None:
+    """A JSON line may hold U+2028, U+2029 or U+0085 unescaped inside a string, so only a newline ends a document."""
+    path = tmp_path / "separated.zip"
+    with zipfile.ZipFile(path, "w") as bundle:
+        corpus = [{"_id": "d1", "title": "One", "text": "one\u2028two\u2029three\x85four"}, {"_id": "d2", "title": "Two", "text": "Plain."}]
+        bundle.writestr("tiny/corpus.jsonl", "".join(json.dumps(line, ensure_ascii=False) + "\n" for line in corpus))
+        bundle.writestr("tiny/queries.jsonl", "")
+        bundle.writestr("tiny/qrels/test.tsv", "query-id\tcorpus-id\tscore\n")
+
+    items = await _connector(tmp_path, _CountingFetcher(path.read_bytes())).list_items_with_pdf()
+
+    assert sorted(item.provider_key for item in items) == ["d1", "d2"]
+
+
 async def test_the_preview_lists_the_same_items_with_nothing_awaiting_resolution(tmp_path: Path) -> None:
     connector = _connector(tmp_path, _CountingFetcher(_tiny_zip(tmp_path)))
 

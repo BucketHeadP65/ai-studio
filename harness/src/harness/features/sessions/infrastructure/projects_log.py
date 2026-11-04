@@ -71,4 +71,5 @@ class ProjectsLog:
             text = self._path.read_text(encoding="utf-8")
         except OSError:
             return ()
-        return tuple(record.event for line in text.splitlines() if (record := _decode(line)) is not None)
+        # Only a newline ends a record: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+        return tuple(record.event for line in text.split("\n") if (record := _decode(line)) is not None)

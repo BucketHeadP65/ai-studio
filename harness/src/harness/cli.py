@@ -220,7 +220,8 @@ def search_sessions(term: str, limit: int = typer.Option(20, "--limit", help="St
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
+        # Only a newline ends a line here: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+        for lineno, line in enumerate(text.split("\n"), start=1):
             if needle in line.lower():
                 where = path.name if path == home.session_log else str(path.relative_to(home.home))
                 snippet = line.strip()[:160]

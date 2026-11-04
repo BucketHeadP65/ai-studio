@@ -13,9 +13,13 @@ must hash equally however they travelled, and any single field moving must move 
 
 from __future__ import annotations
 
+import hashlib
 import json
 
+from pydantic import create_model
+
 from core.ai.workflows.contracts import (
+    AgentStep,
     Briefing,
     FromNode,
     FromParameter,
@@ -24,6 +28,7 @@ from core.ai.workflows.contracts import (
     OrchestratorGate,
     ParameterSpec,
     PersonGate,
+    Program,
     ResultArtifactSpec,
     RunNode,
     Shape,
@@ -31,9 +36,11 @@ from core.ai.workflows.contracts import (
     WorkflowResultSpec,
     spec_identity,
 )
+from core.ai.workflows.domain.fingerprint import _canonical_document
+from core.ai.workflows.domain.vocabulary import SameAs
 
-_PINNED = "6a3008b2af08df683c6ef1d2ea83b9155b4c0d8f64876112c36bfc2a8a367d68"
-"""The digest of the fixed spec below, under this pydantic and this grammar. See the test."""
+_PINNED = "5ce08f4154bd3698f092bd4b7a69afbfb6f5e7b6f3d907fde9dac1cb3d475162"
+"""The digest of the fixed spec below, under this pydantic and this grammar, with defaults left out. See the test."""
 
 
 def test_a_spec_that_crossed_a_store_keeps_its_identity(quarterly_report: Workflow) -> None:
@@ -81,10 +88,10 @@ def test_a_spec_whose_mapping_keys_came_back_reordered_keeps_its_identity() -> N
 
 
 def test_a_field_omitted_and_a_field_set_to_its_default_are_one_identity(quarterly_report: Workflow) -> None:
-    """A store that writes `tasks: []` back for a spec that never mentioned tasks must not re-key it.
+    """A store that writes `inline: []` back for a spec that never mentioned it must not re-key it.
 
-    The dump includes defaults for exactly this reason: "unset" is a property of how the object
-    was built, not of what the artifact is, and it does not survive a store.
+    "Unset" is a property of how the object was built, not of what the artifact is, and it does not
+    survive a store. The identity leaves every default out, so written and unwritten hash the same.
     """
     written = quarterly_report.model_dump(mode="json")
     assert written["inline"] == [], "the empty container is written, so it must also be hashed"
@@ -172,10 +179,11 @@ def test_a_reordered_graph_is_a_different_identity(quarterly_report: Workflow) -
 def test_the_identity_of_a_fixed_spec_is_pinned_to_a_literal() -> None:
     """What actually pins canonicalisation. Nothing else in this file would notice it moving.
 
-    A pydantic release that serialises differently, or a field added to the grammar, shifts every
-    hash and orphans every evidence record written before it -- the same class of bug, one layer out.
-    This fails loudly when that happens, and the fix is a decision (migrate the evidence log, or accept
-    the re-key), never a silent re-baseline of this constant.
+    A pydantic release that serialises differently, or a field added to the grammar without a default,
+    shifts every hash and orphans every evidence record written before it. It is the same class of bug, one
+    layer out. This fails loudly when that happens, and the fix is a decision (migrate the evidence log,
+    or accept the re-key), never a silent re-baseline of this constant. The last such decision moved the
+    identity to leave defaults out, with the evidence log migrated forward in the same change.
 
     The spec is built here rather than taken from a fixture: a shared fixture is a second thing
     that can move the digest, and then the pin no longer says which of the two did.
@@ -244,7 +252,7 @@ def test_a_wire_naming_a_turn_is_a_different_identity_than_the_same_wire_without
     assert spec_identity(turned) != spec_identity(unturned)
 
 
-_PINNED_GATED = "0e3a87d01ae7df1640714f24b7e8850d3c87c47219b977fd1e9e136e9ff43c87"
+_PINNED_GATED = "757992718162c4cc3c4164bbea5a0cfd6af9d5144ea2f37a1cb834db0901164c"
 """The digest of the gated spec below. Every gate carries a ceiling and none of them says so."""
 
 
@@ -273,7 +281,7 @@ def test_a_gate_at_the_default_ceiling_keeps_the_identity_every_saved_workflow_a
     """A gate that names no ceiling dumps exactly as it always did, so its evidence stays its own.
 
     The digest is pinned rather than compared against a rebuild: a rebuild moves with the code,
-    and what must not move is the key every gated run already filed its evidence under.
+    and what must not move is the key every gated run filed its evidence under.
     """
     pinned = _gated_pin()
 
@@ -299,3 +307,187 @@ def test_a_ceiling_written_out_at_its_default_is_the_workflow_that_never_named_o
         node["max_attempts"] = 3
 
     assert spec_identity(Workflow.model_validate(document)) == _PINNED_GATED
+
+
+def test_a_field_added_to_the_format_with_a_default_keeps_every_identity(quarterly_report: Workflow) -> None:
+    """A code change that adds a defaulted field leaves every saved workflow's identity, and so its trust, where it was."""
+    with_a_new_field = create_model("WorkflowWithANewField", __base__=Workflow, review_note=(str, "none yet"))
+    revived = with_a_new_field.model_validate(quarterly_report.model_dump(mode="json"))
+
+    assert revived.model_dump(mode="json")["review_note"] == "none yet"
+    assert spec_identity(revived) == spec_identity(quarterly_report)
+
+
+def test_a_field_added_with_a_default_still_moves_the_identity_once_somebody_sets_it(quarterly_report: Workflow) -> None:
+    with_a_new_field = create_model("WorkflowWithANewField", __base__=Workflow, review_note=(str, "none yet"))
+    revived = with_a_new_field.model_validate({**quarterly_report.model_dump(mode="json"), "review_note": "checked by the owner"})
+
+    assert spec_identity(revived) != spec_identity(quarterly_report)
+
+
+def test_a_changed_default_moves_the_identity_of_a_stored_document_that_wrote_the_old_default(quarterly_report: Workflow) -> None:
+    """A library keeps the full dump, so once the default changes the stored old default reads as a value somebody chose."""
+    before = create_model("WorkflowBefore", __base__=Workflow, review_note=(str, "none yet"))
+    after = create_model("WorkflowAfter", __base__=Workflow, review_note=(str, "pending"))
+    stored = before.model_validate(quarterly_report.model_dump(mode="json")).model_dump(mode="json")
+
+    assert stored["review_note"] == "none yet"
+    assert spec_identity(before.model_validate(stored)) == spec_identity(quarterly_report)
+    assert spec_identity(after.model_validate(stored)) != spec_identity(quarterly_report)
+
+
+def test_a_changed_default_keeps_the_identity_of_a_document_that_left_the_field_out(quarterly_report: Workflow) -> None:
+    """The identity stays, and the workflow runs under the new default."""
+    after = create_model("WorkflowAfter", __base__=Workflow, review_note=(str, "pending"))
+    revived = after.model_validate(quarterly_report.model_dump(mode="json"))
+
+    assert revived.model_dump(mode="json")["review_note"] == "pending"
+    assert spec_identity(revived) == spec_identity(quarterly_report)
+
+
+def test_the_stored_dump_writes_every_default_in_but_four() -> None:
+    """What a library keeps: every defaulted field written in, except the four the serializers leave out at their defaults."""
+    workflow = Workflow(
+        name="stored-defaults",
+        version=1,
+        description="A map, a step and a gate, every default left to the format.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        nodes=(
+            MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),
+            RunNode(id="report", work="report", inputs={"digests": FromNode(node="each")}),
+            PersonGate(id="approve", reviews=FromNode(node="report"), rejected_to="report"),
+        ),
+        output=FromNode(node="approve"),
+    )
+
+    stored = workflow.model_dump(mode="json")
+
+    assert stored["inline"] == []
+    assert stored["parameters"]["items"]["required"] is True
+    assert {key: stored["nodes"][0][key] for key in ("inputs", "max_parallel", "on_error", "abort_after_repeats", "tier")} == {
+        "inputs": {}, "max_parallel": None, "on_error": "fail", "abort_after_repeats": 3, "tier": None,
+    }
+    assert "turn" not in stored["nodes"][1]["inputs"]["digests"]
+    assert "max_attempts" not in stored["nodes"][2]
+    assert "result" not in stored
+
+
+def _sha256(document: object) -> str:
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def test_an_identity_hashes_only_what_differs_from_a_default_at_every_depth() -> None:
+    """Nested models and lists drop their defaults too, and every node keeps its `kind`, which is what it is."""
+    workflow = Workflow(
+        name="defaults-everywhere",
+        version=1,
+        description="A map over a parameter, a step with no inputs, and a declared result.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        nodes=(
+            MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),
+            RunNode(id="report", work="report"),
+            PersonGate(id="approve", reviews=FromNode(node="report"), rejected_to="report"),
+        ),
+        output=FromNode(node="approve"),
+        result=WorkflowResultSpec(summary="The report.", primary_work="report"),
+    )
+    written = {
+        "name": "defaults-everywhere",
+        "version": 1,
+        "description": "A map over a parameter, a step with no inputs, and a declared result.",
+        "parameters": {"items": {"description": "items", "json_schema": {"type": "array"}}},
+        "nodes": [
+            {"kind": "map", "id": "each", "turns": ["digest"], "over": {"parameter": "items"}, "each": "item"},
+            {"kind": "run", "id": "report", "work": "report"},
+            {"kind": "gate", "id": "approve", "reviews": {"node": "report"}, "rejected_to": "report"},
+        ],
+        "output": {"node": "approve"},
+        "result": {"summary": "The report.", "primary_work": "report"},
+    }
+
+    assert _canonical_document(workflow) == written
+    assert spec_identity(workflow) == _sha256(written)
+
+
+def test_the_canonical_document_reads_back_as_the_same_workflow() -> None:
+    """Every union is still picked from what the document holds, so leaving defaults out never merges two workflows."""
+    workflow = Workflow(
+        name="every-kind",
+        version=2,
+        description="Every node kind and every inline step kind, each with what it may leave out left out.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        inline=(
+            Briefing(
+                name="digest",
+                instructions="Digest one item into one line that names its claim and its source, nothing else.",
+                output=Shape(json_schema={"type": "string"}),
+            ),
+            Program(name="count", source="len(lines)", inputs={"lines": Shape(json_schema={"type": "array"})}, output=Shape(json_schema={"type": "integer"})),
+            AgentStep(name="weigh", agent={"model": "test", "instructions": "Weigh the count."}, inputs={"total": SameAs(like="count")}, output=SameAs(like="digest")),
+            AgentStep(name="scout", agent="scout", output=Shape(json_schema={"type": "string"})),
+        ),
+        nodes=(
+            MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),
+            RunNode(id="counted", work="count", inputs={"lines": FromNode(node="each")}),
+            JudgeGate(id="judged", work="weigh", reviews=FromNode(node="counted"), rejected_to="counted"),
+            PersonGate(id="approved", reviews=FromNode(node="judged"), rejected_to="counted", max_attempts=2),
+            OrchestratorGate(
+                id="orchestrated",
+                charge="Check the count against the items the run was given, and say which item went missing.",
+                reviews=FromNode(node="approved"),
+                rejected_to="counted",
+            ),
+            RunNode(id="scouted", work="scout"),
+        ),
+        output=FromNode(node="orchestrated"),
+        result=WorkflowResultSpec(summary="The checked count.", primary_work="counted"),
+    )
+
+    assert Workflow.model_validate(_canonical_document(workflow)) == workflow
+
+
+def test_a_nested_field_written_at_its_default_is_the_workflow_that_left_it_out() -> None:
+    left_out = Workflow(
+        name="nested-defaults",
+        version=1,
+        description="One map.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        nodes=(MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),),
+        output=FromNode(node="each"),
+    )
+    written_out = left_out.model_copy(
+        update={
+            "parameters": {"items": ParameterSpec(description="items", json_schema={"type": "array"}, required=True)},
+            "inline": (),
+            "nodes": (
+                MapNode(
+                    id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item",
+                    inputs={}, max_parallel=None, on_error="fail", abort_after_repeats=3, tier=None,
+                ),
+            ),
+        }
+    )
+
+    assert spec_identity(written_out) == spec_identity(left_out)
+
+
+def test_a_nested_value_moved_off_its_default_moves_the_identity() -> None:
+    base = Workflow(
+        name="nested-values",
+        version=1,
+        description="One map.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        nodes=(MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),),
+        output=FromNode(node="each"),
+    )
+    node = base.nodes[0]
+    variants = {
+        "baseline": base,
+        "no ceiling": base.model_copy(update={"nodes": (node.model_copy(update={"abort_after_repeats": None}),)}),
+        "skip": base.model_copy(update={"nodes": (node.model_copy(update={"on_error": "skip"}),)}),
+        "optional": base.model_copy(
+            update={"parameters": {"items": ParameterSpec(description="items", json_schema={"type": "array"}, required=False)}}
+        ),
+    }
+    hashes = {name: spec_identity(spec) for name, spec in variants.items()}
+    assert len(set(hashes.values())) == len(hashes), f"two variants share an identity: {hashes}"

@@ -145,3 +145,16 @@ async def test_sidechain_and_bookkeeping_records_are_dropped(tmp_path: Path) -> 
 async def test_a_missing_session_is_refused(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         await ClaudeCodeSessionLoader(tmp_path)("no-such-session")
+
+
+async def test_a_record_whose_text_holds_unicode_line_separators_is_read_whole(tmp_path: Path) -> None:
+    """JSON writes U+2028, U+2029 and U+0085 unescaped inside a string, so only a newline ends a record."""
+    lines = [
+        record("user", "u1", {"role": "user", "content": "Read\u2028the\u2029file\x85now"}),
+        record("assistant", "a1", assistant("msg_1", [{"type": "text", "text": "Done."}], {"input_tokens": 1, "output_tokens": 1})),
+    ]
+    (tmp_path / f"{SESSION}.jsonl").write_text("\n".join(json.dumps(line, ensure_ascii=False) for line in lines) + "\n", encoding="utf-8")
+
+    transcript = await ClaudeCodeSessionLoader(tmp_path)(SESSION)
+
+    assert len(transcript.messages) == 2

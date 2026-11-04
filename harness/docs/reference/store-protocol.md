@@ -100,9 +100,10 @@ deliberately not stamped, they ride inside the workflow, so the environment cann
 from under them.
 
 The same module owns a second hash answering a different question. `spec_identity(spec)` is
-a sha256 over the spec's canonical JSON, sorted keys, `mode="json"`, defaults included, and
-it is the workflow's **content address**: the same string in every library, unchanged by any
-move. It is what trust events are keyed on. See 1.5 and I2.
+a sha256 over the spec's canonical JSON, `mode="json"`, sorted keys, every field at its default
+left out at every depth and each node's `kind` kept, and it is the workflow's **content address**:
+the same string in every library, unchanged by any move. It is what trust events are keyed on.
+See 1.5 and I2.
 
 ### 1.5 Trust events
 
@@ -149,8 +150,16 @@ without one is skipped like a damaged line.
 **Two properties of content addressing a reader must not be sold short.**
 
 *Canonicalisation is the whole risk.* Sorted keys are what save a workflow whose mapping keys
-came back reordered from a jsonb column. `mode="json"` and included defaults are what stop "how
-the object was built" from leaking into the key. A future pydantic that serialises differently
+came back reordered from a jsonb column. `mode="json"` and leaving defaults out are what stop "how
+the object was built" from leaking into the key: a field written at its default and a field left out
+hash the same. Leaving defaults out also keeps a field added to the format with a default from
+re-keying every saved workflow. Changing an existing field's default is not free: both libraries
+keep the full dump with defaults written in, so every stored page that wrote the field at its old
+default, or at the value that becomes the new default, changes identity. A page that wrote any other
+value keeps its identity, and a document that left the field out keeps it too and then runs under
+the new default with its trust carried over. The dump leaves out `FromNode.turn`, a gate's
+`max_attempts`, an artifact's `field` and the workflow's `result` at their defaults. Core
+[ADR 0004](../../../core/docs/adr/0004-a-workflows-identity-leaves-default-values-out.md) records the rule. A future pydantic that serialises differently
 would still shift every hash and orphan all the evidence written before it, the same class of
 bug, one layer out. What pins it is a test holding one literal digest of one fixed spec
 (`tests/unit/test_spec_identity.py::test_the_identity_of_a_fixed_spec_is_pinned_to_a_literal`),
@@ -380,7 +389,9 @@ for it to drift open.
 `uses` follows the same rule. `WorkflowContract._copy_in` (the save) and the harness's
 `check_draft` both copy reusable steps into `inline` through `copy_reusable_steps`
 (`core.ai.workflows.reusable_steps`), so both refuse an id named twice, an id that yields no
-valid step and a step already under `inline`, in the same words.
+valid step and a step already under `inline`, in the same words. `fetch_step` reads one step through
+the same `fetch_reusable_step`, so an id no step has, or a page that is no step, comes back to the
+model as a retry in those words too, naming `search_steps` as the way to find the step it wanted.
 
 The spec goes in as structured data rather than text, so a malformed graph is caught by
 the tool call's own schema. A refusal is delivered with the validator's findings so the
@@ -1150,7 +1161,9 @@ decide it for them.
 how a model serialises to JSON shifts every content address, and all the evidence written before
 it becomes unmatchable, the orphaning bug, relocated. `tests/unit/test_spec_identity.py::test_the_identity_of_a_fixed_spec_is_pinned_to_a_literal`
 holds one digest of one fixed spec so the shift fails loudly, and adding a field to `Workflow`
-trips the same test for the same reason. Neither is prevented. Both are made visible.
+without a default trips the same test for the same reason. Neither is prevented. Both are made
+visible. A field added with a default trips nothing and re-keys nothing, because the identity leaves
+defaults out.
 
 **Two reads in the workflow view are still keyed on an address.** `features/browsing/controller.py`
 answers trust by content address on both the workflow page and `/api/library`, but

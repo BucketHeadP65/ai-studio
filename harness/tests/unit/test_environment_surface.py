@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.ai.workflows.contract_port import ADAPT_TOOL, FETCH_STEP_TOOL, FETCH_TOOL, SAVE_TOOL, SEARCH_STEPS_TOOL, SEARCH_TOOL
+from core.ai.workflows.contract_port import ADAPT_TOOL, FETCH_STEP_TOOL, FETCH_TOOL, SAVE_TOOL, SEARCH_TOOL
 from core.ai.workflows.contracts import (
     AgentStep,
     FromNode,
@@ -35,6 +35,7 @@ from core.ai.workflows.contracts import (
     validate,
 )
 from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION
+from core.ai.workflows.reusable_steps import SEARCH_STEPS_TOOL
 from pydantic import BaseModel
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.test import TestModel

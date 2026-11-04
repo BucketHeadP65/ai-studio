@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
@@ -395,3 +396,19 @@ def test_a_reviewed_outcome_with_no_reviews_and_unknown_acceptance_is_accepted()
 def test_task_outcome_refuses_an_unrecognized_field() -> None:
     with pytest.raises(ValidationError, match="Extra inputs"):
         TaskOutcome.model_validate({**_outcome().model_dump(), "cost_usd": 1})
+
+
+async def test_a_review_whose_reason_holds_unicode_line_separators_is_read_whole(tmp_path: Path) -> None:
+    """A JSON line may carry U+2028, U+2029 and U+0085 unescaped inside a string, so only a newline ends a review."""
+    path = tmp_path / "reviews.jsonl"
+    store = FileOwnerReviewStore(path)
+    t1 = datetime(2026, 9, 13, 10, tzinfo=UTC)
+    await store.append_or_return(RUN, "app:harness", _request(review_id="first", reason="Matches\u2028the\u2029criterion\x85."), clock=lambda: t1)
+    await store.append_or_return(RUN, "app:harness", _request(review_id="second"), clock=lambda: t1)
+    unescaped = "".join(json.dumps(json.loads(line), ensure_ascii=False) + "\n" for line in path.read_text(encoding="utf-8").split("\n") if line)
+    path.write_text(unescaped, encoding="utf-8")
+    assert "\u2028" in path.read_text(encoding="utf-8")
+
+    kept = await store.for_run(RUN)
+
+    assert [(review.review_id, review.reason) for review in kept] == [("first", "Matches\u2028the\u2029criterion\x85."), ("second", "Matches the success criterion.")]

@@ -852,7 +852,7 @@ _UNDECLARED_WORKFLOW_JSON = (
 """A workflow that declares no `result` and leaves its gate's `max_attempts` unset: neither key appears
 anywhere in this text."""
 
-_UNDECLARED_WORKFLOW_HASH = "9ee0acd066126b4153869c77763a8604afc29ae7902f171d9510cc3572701908"
+_UNDECLARED_WORKFLOW_HASH = "8492eff8c04d2e12e3b0fa05b201b6ad3889ffcd23514dd0dcd3f75dfda025f1"
 """`spec_identity` of `_UNDECLARED_WORKFLOW_JSON`, computed once and pinned so a hashing change fails
 loudly here rather than silently re-keying every evidence record filed under this identity."""
 

@@ -57,6 +57,7 @@ from core.ai.workflows.contracts import (
 )
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION
+from core.ai.workflows.reusable_steps import SEARCH_STEPS_TOOL
 from tests.unit.workflows.conftest import CallLog, register_quarterly_steps
 
 if TYPE_CHECKING:
@@ -1320,6 +1321,30 @@ async def test_fetch_step_on_an_unknown_id_is_a_retry_not_a_crash(tmp_path: Path
     port = _port(host, tmp_path)
     with pytest.raises(ModelRetry, match="did not yield a valid reusable step"):
         await port._fetch_step(_ctx(), "st.missing.v1")
+
+
+async def test_fetch_step_on_an_id_the_host_has_no_page_for_is_a_retry_naming_the_next_move(tmp_path: Path) -> None:
+    """A host's `LibraryError` for an unknown id tells the model what to do, rather than ending its turn."""
+    host = _PagelessHost()
+    port = _port(host, tmp_path)
+
+    with pytest.raises(ModelRetry) as refused:
+        await port._fetch_step(_ctx(), "st.missing.v1")
+
+    assert str(refused.value).startswith("'st.missing.v1' did not yield a valid reusable step (no page has the id 'st.missing.v1').")
+    assert SEARCH_STEPS_TOOL in str(refused.value)
+
+
+async def test_fetch_step_and_save_refuse_an_unknown_id_in_the_same_words(tmp_path: Path) -> None:
+    """The two doors that read a reusable step by id say the same thing about one they cannot read."""
+    host = _PagelessHost()
+    port = _port(host, tmp_path)
+
+    with pytest.raises(ModelRetry) as refused:
+        await port._fetch_step(_ctx(), "st.missing.v1")
+    said = await port._save(_ctx(), _yaml(_spec_carrying(_digest_step())), applicability="Use once. Do not use twice.", uses=["st.missing.v1"])
+
+    assert said == f"REFUSED. Nothing was written. {refused.value}"
 
 
 async def test_fetch_step_on_a_malformed_payload_is_a_retry_not_a_crash(tmp_path: Path) -> None:

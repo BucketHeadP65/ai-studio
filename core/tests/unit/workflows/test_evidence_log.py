@@ -6,7 +6,7 @@ import logging
 
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import Approval, FileEvidenceLog
+from core.ai.workflows.contracts import Approval, FileEvidenceLog, Outcome, RunEvidence
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,4 +55,27 @@ async def test_a_readable_log_logs_nothing(tmp_path: Path, caplog: pytest.LogCap
     with caplog.at_level(logging.WARNING):
         await ledger.events_for("wf.report")
 
+    assert not [record for record in caplog.records if record.levelno >= logging.WARNING]
+
+
+async def test_a_record_whose_values_hold_unicode_line_separators_is_read_whole(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    """JSON writes U+2028, U+2029 and U+0085 unescaped inside a string, so only a newline ends a record."""
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    run = RunEvidence(
+        workflow_id="wf.report",
+        spec_hash="abc",
+        outcome="completed",
+        result=Outcome(status="unknown", summary="not checked"),
+        gates_auto=(),
+        gates_orchestrated=(),
+        params={"topic": "one\u2028two\u2029three\x85four"},
+    )
+    await ledger.append(run)
+    await ledger.append(Approval(workflow_id="wf.report", spec_hash="abc", by="human:alex"))
+
+    with caplog.at_level(logging.WARNING):
+        events = await ledger.history_for(spec_hash="abc")
+
+    assert events[0] == run
+    assert [type(event).__name__ for event in events] == ["RunEvidence", "Approval"]
     assert not [record for record in caplog.records if record.levelno >= logging.WARNING]

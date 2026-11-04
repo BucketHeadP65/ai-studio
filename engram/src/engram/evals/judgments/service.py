@@ -34,7 +34,8 @@ def import_judgments(source: Path, out: Path, *, per_type: int | None = None, sa
         ValueError: When `per_type` is below 1.
     """
     try:
-        lines = source.read_text(encoding="utf-8").splitlines()
+        # Only a newline ends a query: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+        lines = source.read_text(encoding="utf-8").split("\n")
     except OSError as error:
         msg = f"the judgments file {source} cannot be read: {error}"
         raise JudgmentsFileError(msg) from error

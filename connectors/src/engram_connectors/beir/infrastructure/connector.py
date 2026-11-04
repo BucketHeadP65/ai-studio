@@ -204,7 +204,8 @@ class BeirConnector:
 def _lines(path: Path) -> list[str]:
     """The lines of one dataset file, refused by name when it is missing."""
     try:
-        return path.read_text(encoding="utf-8").splitlines()
+        # Only a newline ends a line: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+        return path.read_text(encoding="utf-8").split("\n")
     except OSError as error:
         msg = f"the dataset has no {path.name}: {error}"
         raise BeirDatasetError(msg) from error

@@ -138,7 +138,8 @@ def _messages(path: Path) -> Iterator[ModelMessage]:
 
 def _records(path: Path) -> Iterator[_Record]:
     """The user and assistant records of the main conversation, in file order."""
-    for line in path.read_text(encoding="utf-8").splitlines():
+    # Only a newline ends a record: Claude Code writes U+2028, U+2029 and U+0085 unescaped inside a string.
+    for line in path.read_text(encoding="utf-8").split("\n"):
         if not line.strip():
             continue
         record = _Record.model_validate_json(line)

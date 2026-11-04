@@ -76,7 +76,8 @@ class FileEvidenceLog:
     def _surviving(self) -> Iterator[RunEvidence | Approval | Grade]:
         """Every line that still parses, in the order it was written. A missing file holds nothing."""
         try:
-            lines = self._path.read_text(encoding="utf-8").splitlines()
+            # Only a newline ends a record: JSON writes U+2028, U+2029 and U+0085 unescaped inside a string.
+            lines = self._path.read_text(encoding="utf-8").split("\n")
         except FileNotFoundError:
             return
         for number, line in enumerate(lines, start=1):

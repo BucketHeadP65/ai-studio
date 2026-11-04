@@ -48,6 +48,16 @@ class TestReadFeedback:
         assert len(entries) == 2
         assert unreadable == (2,)
 
+    def test_a_message_holding_unicode_line_separators_is_one_entry(self, tmp_path: Path):
+        """A JSON line may hold U+2028, U+2029 or U+0085 unescaped inside a string, so only a newline ends an entry."""
+        message = "one\u2028two\u2029three\x85four"
+        root = _knowledge_base(tmp_path, [json.dumps({"created_at": "2026-08-20T10:00:00+00:00", "category": "bug", "message": message, "tool": None}, ensure_ascii=False)])
+
+        entries, unreadable = read_feedback(root / "_meta" / "mcp-feedback.jsonl")
+
+        assert [entry.message for entry in entries] == [message]
+        assert unreadable == ()
+
     def test_a_missing_file_is_no_feedback(self, tmp_path: Path):
         assert read_feedback(tmp_path / "absent.jsonl") == ((), ())
 

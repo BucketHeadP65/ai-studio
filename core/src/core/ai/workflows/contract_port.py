@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import KW_ONLY, dataclass, field, replace
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -38,7 +38,7 @@ from core.ai.workflows.domain.vocabulary import Workflow
 from core.ai.workflows.exceptions import AdaptationRefusedError, LibraryError, ReusableStepsRefusedError, SaveRefusedError
 from core.ai.workflows.internal_contracts import SaveGuard
 from core.ai.workflows.read_models import SavedWorkflow
-from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
+from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, SEARCH_STEPS_TOOL, copy_reusable_steps, fetch_reusable_step
 from core.ai.workflows.service import verify_savable
 
 if TYPE_CHECKING:
@@ -52,7 +52,6 @@ SEARCH_TOOL = "search_workflows"
 FETCH_TOOL = "fetch_workflow"
 SAVE_TOOL = "save_workflow"
 ADAPT_TOOL = "adapt_workflow"
-SEARCH_STEPS_TOOL = "search_steps"
 FETCH_STEP_TOOL = "fetch_step"
 
 
@@ -568,29 +567,34 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
 
     async def _fetch_step(self, ctx: RunContext[AgentDepsT], step_id: str) -> str:
         """Show one reusable step whole: its name, inputs, output and tools, so a node can be wired to it."""
-        vocabulary = self.vocabulary
-        if vocabulary.fetch_step_tool is None or vocabulary.to_step is None or vocabulary.step_args is None:
+        read_step = self._step_reader(ctx)
+        if read_step is None:
             msg = "this library keeps no reusable steps"
             raise ModelRetry(msg)
-        raw = await self._call_host(ctx, vocabulary.fetch_step_tool, vocabulary.step_args(step_id))
         try:
-            step = vocabulary.to_step(raw)
-        except (ValueError, KeyError, TypeError, ValidationError) as exc:
-            msg = f"{step_id!r} did not yield a valid reusable step ({exc}). Either the id is wrong or that page is not a step."
-            raise ModelRetry(msg) from exc
+            step = await fetch_reusable_step(step_id, read_step)
+        except ReusableStepsRefusedError as exc:
+            raise ModelRetry(str(exc)) from exc
         return f"{step_id} is step {step.name!r}. Wire `work: {step.name}` and name it in `uses`:\n" + json.dumps(step.model_dump(mode="json"), indent=2)
+
+    def _step_reader(self, ctx: RunContext[AgentDepsT]) -> Callable[[str], Awaitable[InlineStep]] | None:
+        """The host's read of one reusable step by its id, or None when this library keeps no reusable steps."""
+        fetch_step_tool, to_step, step_args = self.vocabulary.fetch_step_tool, self.vocabulary.to_step, self.vocabulary.step_args
+        if fetch_step_tool is None or to_step is None or step_args is None:
+            return None
+
+        async def read_step(step_id: str) -> InlineStep:
+            return to_step(await self._call_host(ctx, fetch_step_tool, step_args(step_id)))
+
+        return read_step
 
     async def _copy_in(self, ctx: RunContext[AgentDepsT], workflow: Workflow, uses: Sequence[str]) -> Workflow:
         """`workflow` with every step in `uses` fetched from the library and appended to its `inline`."""
-        fetch_step_tool, to_step, step_args = self.vocabulary.fetch_step_tool, self.vocabulary.to_step, self.vocabulary.step_args
-        if fetch_step_tool is None or to_step is None or step_args is None:
+        read_step = self._step_reader(ctx)
+        if read_step is None:
             raise ModelRetry(NO_REUSABLE_STEPS)
-
-        async def fetch_step(step_id: str) -> InlineStep:
-            return to_step(await self._call_host(ctx, fetch_step_tool, step_args(step_id)))
-
         try:
-            return await copy_reusable_steps(workflow, uses, fetch_step)
+            return await copy_reusable_steps(workflow, uses, read_step)
         except ReusableStepsRefusedError as exc:
             raise ModelRetry(str(exc)) from exc
 

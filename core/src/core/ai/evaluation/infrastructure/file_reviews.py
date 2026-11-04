@@ -88,7 +88,8 @@ class FileOwnerReviewStore:
             content = self.path.read_text(encoding="utf-8")
         except FileNotFoundError:
             return ()
-        return tuple(self._parse(line) for line in content.splitlines() if line.strip())
+        # Only a newline ends a review: a JSON string may carry U+2028, U+2029 and U+0085 unescaped.
+        return tuple(self._parse(line) for line in content.split("\n") if line.strip())
 
     def _get(self, review_id: str) -> OwnerReview | None:
         return next((review for _, review in self._rows() if review.review_id == review_id), None)
