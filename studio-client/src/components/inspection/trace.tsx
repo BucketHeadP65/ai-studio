@@ -90,6 +90,9 @@ function TraceConversation({
   // composer is still disabled waits here until the question loads, rather than being lost or
   // re-fired by an unrelated later disable/enable (the ask mutation's own pending state).
   const honoredFocusRequest = useRef(0);
+  // A link to `#trace` arrives before this section exists, so the browser finds nothing to scroll
+  // to. The section brings itself into view once, when its conversation first loads.
+  const landedOnHash = useRef(false);
 
   const page = useQuery({
     queryKey: inspectionKeys.question(questionId),
@@ -113,6 +116,12 @@ function TraceConversation({
     composerRef.current?.scrollIntoView?.({ behavior: "auto" });
     composerRef.current?.focus();
   }, [focusRequest, composerDisabled]);
+
+  useEffect(() => {
+    if (!data || landedOnHash.current || window.location.hash !== "#trace") return;
+    landedOnHash.current = true;
+    document.getElementById("trace")?.scrollIntoView?.({ behavior: "auto", block: "start" });
+  }, [data]);
 
   let composerNote: ReactNode;
   let composerNoteIsError = false;

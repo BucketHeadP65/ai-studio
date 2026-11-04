@@ -149,6 +149,27 @@ describe("Trace", () => {
     expect(screen.getByText(FOLLOW_UP_ANSWER)).toBeInTheDocument();
   });
 
+  it("brings the section into view once the conversation loads, only when the page was opened at #trace", async () => {
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    scroll.mockClear();
+    const { unmount } = render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} />);
+    await screen.findByText(TOLD_TEXT);
+    expect(scroll).not.toHaveBeenCalled();
+    unmount();
+
+    window.location.hash = "#trace";
+    try {
+      render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} />);
+      await screen.findByText(TOLD_TEXT);
+
+      await waitFor(() => {
+        expect(scroll.mock.contexts).toEqual([document.getElementById("trace")]);
+      });
+    } finally {
+      window.location.hash = "";
+    }
+  });
+
   it("draws the inspector's calls as the chat's tool cards, the answer last with what its return said", async () => {
     render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} />);
 
