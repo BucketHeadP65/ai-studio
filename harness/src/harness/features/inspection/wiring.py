@@ -348,18 +348,19 @@ def dispatch(settings: InspectionSettings, events: RecordEvents, store: Inspecti
 
 
 @injectable
-def sweep(settings: InspectionSettings, events: RecordEvents, lanes: JobLanes) -> Sweep:
+def sweep(settings: InspectionSettings, events: RecordEvents, store: InspectionStore, lanes: JobLanes) -> Sweep:
     """The sweep watches over their windows.
 
     Args:
         settings: The inspection's settings section, which names the watches.
         events: The record's events.
+        store: The inspection's tables, which hold the leads it asks about again.
         lanes: The lanes the sweep issues commands on.
 
     Returns:
         The sweep.
     """
-    return Sweep(watches=settings.watches, events=events, lanes=lanes)
+    return Sweep(watches=settings.watches, events=events, lanes=lanes, leads=store)
 
 
 REGISTRATIONS: list[object] = [

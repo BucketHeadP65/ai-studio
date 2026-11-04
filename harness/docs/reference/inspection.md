@@ -39,7 +39,7 @@ Five independent background loops serve scheduling and dispatch, reconciliation,
 
 `InspectRun` and `ScanRun` carry an optional positive `terminal_event` identifying the completed transcript they must process. Existing persisted payloads without this field still load. A successful earlier inspection is not proof that the final transcript was inspected. A final scan coalesced behind an earlier scan remains retryable.
 
-A chat session records one run per turn, and each later run holds every earlier turn again in its first step. Each event is filed once, by the run that added it. The record's loader names the messages an earlier run of the conversation recorded first (the record keeps the run that first recorded each message). A lead whose spans all point at such messages is that earlier run's event, so neither lane stores it and it does not count as a lead that asks for a scan. A lead that cites at least one part the run added is stored, even when its other spans point at earlier turns. The handler's one-line report ends with how many leads came from earlier runs. A run whose earlier turn was never inspected (it predates the watch, or its jobs were abandoned) does not file that turn's events either. The result-overflow rule cites the oversized return and then the compaction part, or the first message of the step that shrank, so a turn that compacts an earlier turn's return files that lead.
+A chat session records one run per turn, and each later run holds every earlier turn again in its first step. Each event is filed once, by the run that added it. The record's loader names the messages an earlier run of the conversation recorded first (the record keeps the run that first recorded each message). A lead whose spans all point at such messages is that earlier run's event, so neither lane stores it and it does not count as a lead that asks for a scan. A lead that cites at least one part the run added is stored, even when its other spans point at earlier turns. The handler's one-line report ends with how many leads came from earlier runs. Two failures in an earlier turn are therefore not repaired by a later turn. An abandoned `inspect_run` (or a turn that predates the watch) means that turn's events were never filed, and no later turn files them. An abandoned `attribute_lead` means the lead exists without a finding: the sweep asks about it once more (below). The result-overflow rule cites the oversized return and then the compaction part, or the first message of the step that shrank, so a turn that compacts an earlier turn's return files that lead.
 
 `every_run` scans text-only runs too. `when_a_rule_led` scans runs with leads and a deterministic sample of runs without leads. The selection hashes the watch and source, so retries do not resample. `never` runs only the declared rules. A failed job retries under its policy and becomes visibly abandoned after its attempts run out.
 
@@ -50,6 +50,8 @@ Dispatch advances `inspection.dispatch` through the record's events: `model_requ
 Event positions are assigned before commit. Reconciliation therefore covers live watches as well as explicit sweep watches. Each pass freezes an upper event position and pages through terminal events within the watch's time window. The next pass starts its window scan again, so a late commit behind an earlier cursor is still eligible. Keyset pagination prevents a 1,000-row read limit from starving later runs.
 
 A run is current only when its successful final rules command matches its terminal marker and any matching final scan is complete. Pending, failed or abandoned final scans are not mistaken for completed inspection. An explicitly undecided scan is a completed attempt with an unresolved verdict, not a clean run, and is not resubmitted forever.
+
+In a run already current, the sweep looks at each lead still `open` (no finding, no dismissal, no recorded attempt) under the watch. When the lead's newest `attribute_lead` job is abandoned and it is the lead's only abandoned one, the sweep issues `AttributeLead` once more. A lead whose retry is abandoned too is left open and logged as a warning on each pass while its run stays in the window, so a stuck lead never loops. A lead whose attempt ended `undecided` or `invalid` is not asked again.
 
 The separate reconciliation loop uses `sweep_seconds`. Live watches use `reconcile_hours`. Explicit sweep watches retain `sweep_hours`. These windows bound automatic recovery. The CLI can request a larger historical window.
 
@@ -146,7 +148,7 @@ The SPA draws a findings list at `/inspection`, one finding with evidence and th
 `uv run harness inspect --run <id>` issues `InspectRun` under every watch that selects that run, whatever its `when`,
 and prints one line per watch: `queued  inspect_run <job id>  watch <name>` or `already live  inspect_run <job id>
 watch <name>`. `uv run harness inspect --since <hours>` runs the sweep's window for every watch over the last `<hours>` and
-prints, per watch, `watch <name>: <considered> run(s) in the last <hours>h, <enqueued> queued`. Both commands only
+prints, per watch, `watch <name>: <considered> run(s) in the last <hours>h, <enqueued> queued, <retried> abandoned attribution(s) asked again`. Both commands only
 enqueue. The running harness's worker serves the jobs.
 
 SQL against the sessions database:

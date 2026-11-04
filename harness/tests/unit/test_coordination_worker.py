@@ -159,7 +159,7 @@ def _inert_inspecting() -> Inspecting:
         ),
         scan_run=_RecordingScanRun(answer="scanned"),
         dispatch=Dispatch(watches=(), events=events, cursors=store, lanes=lanes),
-        sweep=Sweep(watches=(), events=events, lanes=lanes),
+        sweep=Sweep(watches=(), events=events, lanes=lanes, leads=store),
         settings=settings,
     )
 
@@ -234,7 +234,7 @@ def an_inspecting(jobs: MemoryJobs, events: FakeRecordEvents, store: FakeInspect
         ),
         scan_run=_RecordingScanRun(answer="scanned"),
         dispatch=Dispatch(watches=settings.watches, events=events, cursors=store, lanes=lanes),
-        sweep=Sweep(watches=settings.watches, events=events, lanes=lanes),
+        sweep=Sweep(watches=settings.watches, events=events, lanes=lanes, leads=store),
         settings=settings,
     )
 
@@ -298,7 +298,7 @@ async def test_the_loop_serves_an_attribute_lead() -> None:
         attribute_lead=handler,
         scan_run=_RecordingScanRun(answer="scanned"),
         dispatch=Dispatch(watches=(), events=events, cursors=store, lanes=lanes),
-        sweep=Sweep(watches=(), events=events, lanes=lanes),
+        sweep=Sweep(watches=(), events=events, lanes=lanes, leads=store),
         settings=settings,
     )
     _, worker, _ = main.inspection_workers(inspecting, Driving(wake=ImmediateWake(), name="t", clock=_Clock()))
@@ -341,7 +341,7 @@ async def test_the_loop_serves_a_scan_run() -> None:
         ),
         scan_run=handler,
         dispatch=Dispatch(watches=(), events=events, cursors=store, lanes=lanes),
-        sweep=Sweep(watches=(), events=events, lanes=lanes),
+        sweep=Sweep(watches=(), events=events, lanes=lanes, leads=store),
         settings=settings,
     )
     _, _, worker = main.inspection_workers(inspecting, Driving(wake=ImmediateWake(), name="t", clock=_Clock()))
@@ -423,7 +423,7 @@ async def test_the_inspection_sweep_runs_on_its_own_cadence() -> None:
         ),
         scan_run=_RecordingScanRun(answer="scanned"),
         dispatch=Dispatch(watches=(watch,), events=events, cursors=store, lanes=lanes),
-        sweep=Sweep(watches=(watch,), events=events, lanes=lanes, clock=lambda: clock.now),
+        sweep=Sweep(watches=(watch,), events=events, lanes=lanes, leads=store, clock=lambda: clock.now),
         settings=settings,
     )
     worker = main.reconciliation_worker(inspecting, Driving(wake=ImmediateWake(), name="t", clock=clock))

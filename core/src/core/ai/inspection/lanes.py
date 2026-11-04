@@ -8,7 +8,7 @@ has its own policy, so a slow or refused model never holds the rules lane.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -33,6 +33,12 @@ ATTRIBUTE_LEAD_POLICY: Final = JobPolicy(max_attempts=2, lease_seconds=600, back
 """A model call: two tries, then the lead stays a lead."""
 SCAN_RUN_POLICY: Final = JobPolicy(max_attempts=2, lease_seconds=600, backoff_base_seconds=60.0, backoff_cap_seconds=600.0)
 """A model reading a whole run: two tries, then the run stays unscanned."""
+ATTRIBUTION_RETRIES: Final = 1
+"""How many times a lead's attribution is issued again after its job was abandoned."""
+
+type AttributionRetry = Literal["issued", "left", "not_abandoned"]
+"""What a retry of a lead's attribution did: issued a new job, left a lead whose retries were abandoned too, or found
+its newest job not abandoned."""
 
 
 class AttributeLead(BaseModel):
@@ -138,6 +144,25 @@ class JobLanes:
         """
         for lead_id in lead_ids:
             await self.jobs.enqueue(ATTRIBUTE_LEAD_KIND, str(lead_id), AttributeLead(lead_id=lead_id), policy=ATTRIBUTE_LEAD_POLICY)
+
+    async def retry_abandoned_attribution(self, lead_id: int) -> AttributionRetry:
+        """Issue `AttributeLead` again when the lead's newest attribution job was abandoned, at most once per lead.
+
+        A lead whose attribution was abandoned again after its retry is left as it is.
+
+        Args:
+            lead_id: The lead id.
+
+        Returns:
+            `issued` when a new job was issued, `left` when the retries are spent, `not_abandoned` otherwise.
+        """
+        history = await self.jobs.recent_jobs(ATTRIBUTE_LEAD_KIND, str(lead_id))
+        if not history or history[0].state != "abandoned":
+            return "not_abandoned"
+        if sum(job.state == "abandoned" for job in history) > ATTRIBUTION_RETRIES:
+            return "left"
+        answer = await self.jobs.enqueue(ATTRIBUTE_LEAD_KIND, str(lead_id), AttributeLead(lead_id=lead_id), policy=ATTRIBUTE_LEAD_POLICY)
+        return "issued" if answer.created else "not_abandoned"
 
     async def inspected(self, watch: str, source: str, *, terminal_event: int | None = None) -> bool:
         """Whether the rules command for `terminal_event`, and any scan it issued, completed. A pending or abandoned scan does not count.

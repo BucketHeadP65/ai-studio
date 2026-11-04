@@ -4,18 +4,24 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+import pytest
+
+from core.ai.inspection.domain.leads import Lead
+from core.ai.inspection.domain.taxonomy import TAXONOMY, Blame, Finding, Surface, SurfaceKind
 from core.ai.inspection.domain.watches import Watch
-from core.ai.inspection.lanes import INSPECTOR_AGENT_NAME, JobLanes
+from core.ai.inspection.lanes import ATTRIBUTE_LEAD_KIND, INSPECTOR_AGENT_NAME, JobLanes
 from core.ai.inspection.sweep import Sweep
+from core.ai.transcripts.contracts import Span
 from core.cqrs.contracts import MemoryJobs
-from tests.support.fakes.inspection import FakeRecordEvents
+from tests.support.fakes.inspection import FakeLeadsAndFindings, FakeRecordEvents
 from tests.support.fakes.inspection_events import GrowingTerminalEvents
 from tests.unit.inspection.test_dispatch import event
 
 if TYPE_CHECKING:
     from core.ai.history.contracts import EventAtPositionRow
+    from core.ai.inspection.read_models import StoredLead
 
 NOW = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 NIGHTLY = Watch(name="nightly", rules=("duplicate_call",), when="sweep", sweep_hours=24)
@@ -37,7 +43,7 @@ async def test_a_window_issues_one_command_per_ended_run_it_selects_and_skips_wh
     store = MemoryJobs()
     lanes = JobLanes(store)
     await lanes.inspect_run("record:r2", "nightly")
-    sweep = Sweep(watches=(NIGHTLY,), events=events, lanes=lanes, clock=lambda: NOW)
+    sweep = Sweep(watches=(NIGHTLY,), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     passed = await sweep.window(NIGHTLY, 24)
 
@@ -50,7 +56,7 @@ async def test_once_reconciles_live_watches_as_well_as_sweep_watches() -> None:
     store = MemoryJobs()
     lanes = JobLanes(store)
 
-    passed = await Sweep(watches=(LIVE, NIGHTLY), events=events, lanes=lanes, clock=lambda: NOW).tick()
+    passed = await Sweep(watches=(LIVE, NIGHTLY), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: NOW).tick()
 
     assert (passed.considered, passed.enqueued) == (2, 2)
     assert sorted(job.key for job in store.jobs.values()) == ["every-run:record:r1", "nightly:record:r1"]
@@ -59,7 +65,7 @@ async def test_once_reconciles_live_watches_as_well_as_sweep_watches() -> None:
 async def test_reconciliation_reaches_runs_beyond_the_first_thousand() -> None:
     events = FakeRecordEvents([at(1, event_id=i, kind="run_completed", run_id=f"r{i}") for i in range(1, 1003)])
     jobs = MemoryJobs()
-    sweep = Sweep(watches=(LIVE,), events=events, lanes=JobLanes(jobs), clock=lambda: NOW)
+    sweep = Sweep(watches=(LIVE,), events=events, lanes=JobLanes(jobs), leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     passed = await sweep.tick()
 
@@ -70,7 +76,7 @@ async def test_reconciliation_reaches_runs_beyond_the_first_thousand() -> None:
 async def test_all_watches_stop_at_the_same_upper_position_despite_new_arrivals() -> None:
     events = GrowingTerminalEvents([at(1, event_id=index, kind="run_completed", run_id=f"r{index}") for index in range(1, 4)])
     jobs = MemoryJobs()
-    sweep = Sweep(watches=(LIVE, NIGHTLY), events=events, lanes=JobLanes(jobs), clock=lambda: NOW, limit=1)
+    sweep = Sweep(watches=(LIVE, NIGHTLY), events=events, lanes=JobLanes(jobs), leads=FakeLeadsAndFindings(), clock=lambda: NOW, limit=1)
 
     first = await sweep.tick()
 
@@ -89,7 +95,7 @@ async def test_an_abandoned_final_scan_is_requeued_after_completed_rules() -> No
     scan = await lanes.scan_run("record:r1", LIVE.name, terminal_event=7)
     await jobs.complete(rules.job_id, result="read the final transcript and queued scan")
     await jobs.fail(scan.job_id, error="provider temporarily unavailable", retry_at=None)
-    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, clock=lambda: NOW)
+    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     assert not await lanes.inspected(LIVE.name, "record:r1", terminal_event=7)
     assert (await sweep.tick()).enqueued == 1
@@ -110,7 +116,7 @@ async def test_a_completed_early_inspection_does_not_suppress_the_terminal_trans
     lanes = JobLanes(jobs)
     earlier = await lanes.inspect_run("record:r1", "every-run")
     await jobs.complete(earlier.job_id, result="read the first step")
-    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, clock=lambda: NOW)
+    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     passed = await sweep.tick()
 
@@ -127,7 +133,7 @@ async def test_a_terminal_event_coalesced_behind_running_work_is_reconciled_afte
     lanes = JobLanes(jobs)
     earlier = await lanes.inspect_run("record:r1", "every-run")
     await jobs.claim(["inspect_run"], worker="early")
-    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, clock=lambda: NOW)
+    sweep = Sweep(watches=(LIVE,), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     assert (await sweep.tick()).enqueued == 0
     await jobs.complete(earlier.job_id, result="read the first step")
@@ -139,7 +145,7 @@ async def test_a_terminal_event_coalesced_behind_running_work_is_reconciled_afte
 async def test_an_abandoned_final_inspection_is_reconciled_again() -> None:
     events = FakeRecordEvents([at(1, event_id=2, kind="run_completed", run_id="r1")])
     jobs = MemoryJobs()
-    sweep = Sweep(watches=(LIVE,), events=events, lanes=JobLanes(jobs), clock=lambda: NOW)
+    sweep = Sweep(watches=(LIVE,), events=events, lanes=JobLanes(jobs), leads=FakeLeadsAndFindings(), clock=lambda: NOW)
     await sweep.tick()
     first = next(iter(jobs.jobs.values()))
     await jobs.fail(first.id, error="record temporarily unreachable", retry_at=None)
@@ -155,9 +161,94 @@ async def test_a_window_never_issues_a_command_for_the_inspectors_own_runs() -> 
         ]
     )
     store = MemoryJobs()
-    sweep = Sweep(watches=(NIGHTLY,), events=events, lanes=JobLanes(store), clock=lambda: NOW)
+    sweep = Sweep(watches=(NIGHTLY,), events=events, lanes=JobLanes(store), leads=FakeLeadsAndFindings(), clock=lambda: NOW)
 
     passed = await sweep.window(NIGHTLY, 24)
 
     assert (passed.considered, passed.enqueued) == (1, 1)
     assert [job.key for job in store.jobs.values()] == ["nightly:record:r1"]
+
+
+def _the_run_ended() -> FakeRecordEvents:
+    return FakeRecordEvents([at(1, event_id=7, kind="run_completed", run_id="r1")])
+
+
+async def _an_inspected_run_with_one_lead(store: FakeLeadsAndFindings, jobs: MemoryJobs) -> tuple[JobLanes, int]:
+    """A run whose final rules command succeeded and left one lead, handed to the inspector once."""
+    lanes = JobLanes(jobs)
+    rules = await lanes.inspect_run("record:r1", LIVE.name, terminal_event=7)
+    await jobs.complete(rules.job_id, result="1 leads, 0 findings, 1 queued, 0 settled, no scan")
+    lead = Lead(source="record:r1", symptom="duplicate_call", spans=(Span(step=0, message=1, part=0),), found_by="duplicate_call")
+    (lead_id,) = await store.add_leads(LIVE.name, [lead])
+    await lanes.enqueue([lead_id])
+    return lanes, lead_id
+
+
+def _attributions(jobs: MemoryJobs, lead_id: int) -> list[str]:
+    ordered = sorted(jobs.jobs.values(), key=lambda job: job.id)
+    return [job.state for job in ordered if job.kind == ATTRIBUTE_LEAD_KIND and job.key == str(lead_id)]
+
+
+async def test_an_open_lead_whose_attribution_was_abandoned_is_asked_about_once_more() -> None:
+    store = FakeLeadsAndFindings()
+    jobs = MemoryJobs()
+    lanes, lead_id = await _an_inspected_run_with_one_lead(store, jobs)
+    (abandoned,) = [job.id for job in jobs.jobs.values() if job.kind == ATTRIBUTE_LEAD_KIND]
+    await jobs.fail(abandoned, error="lease expired after the last attempt", retry_at=None)
+    sweep = Sweep(watches=(LIVE,), events=_the_run_ended(), lanes=lanes, leads=store, clock=lambda: NOW)
+
+    passed = await sweep.tick()
+
+    assert (passed.enqueued, passed.retried) == (0, 1)
+    assert _attributions(jobs, lead_id) == ["abandoned", "queued"]
+    assert (await sweep.tick()).retried == 0, "a live retry is not issued twice"
+
+
+async def test_a_lead_abandoned_again_after_its_retry_is_left_as_it_is_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+    store = FakeLeadsAndFindings()
+    jobs = MemoryJobs()
+    lanes, lead_id = await _an_inspected_run_with_one_lead(store, jobs)
+    sweep = Sweep(watches=(LIVE,), events=_the_run_ended(), lanes=lanes, leads=store, clock=lambda: NOW)
+    for _ in range(2):
+        live = max(job.id for job in jobs.jobs.values() if job.kind == ATTRIBUTE_LEAD_KIND)
+        await jobs.fail(live, error="lease expired after the last attempt", retry_at=None)
+        await sweep.tick()
+
+    assert _attributions(jobs, lead_id) == ["abandoned", "abandoned"]
+    assert (await sweep.tick()).retried == 0
+    assert f"lead {lead_id} of record:r1: its attribution was abandoned again after a retry, left open" in caplog.text
+
+
+def _a_finding_for(lead: StoredLead) -> Finding:
+    agent_reasoning = TAXONOMY.root_cause("agent_reasoning")
+    blame = Blame(what=agent_reasoning, where=Surface(kind=SurfaceKind.MODEL_TIER, name=""), why="it already knew")
+    return Finding(symptom=TAXONOMY.symptom(lead.symptom), evidence=tuple(lead.spans), blames=(blame,), found_by="inspector")
+
+
+@pytest.mark.parametrize("settled_by", ["finding", "dismissed", "undecided"])
+async def test_a_lead_with_an_outcome_is_not_asked_about_again(settled_by: Literal["finding", "dismissed", "undecided"]) -> None:
+    store = FakeLeadsAndFindings()
+    jobs = MemoryJobs()
+    lanes, lead_id = await _an_inspected_run_with_one_lead(store, jobs)
+    (abandoned,) = [job.id for job in jobs.jobs.values() if job.kind == ATTRIBUTE_LEAD_KIND]
+    await jobs.fail(abandoned, error="lease expired after the last attempt", retry_at=None)
+    if settled_by == "finding":
+        await store.add_finding(_a_finding_for(store.leads[0]), source="record:r1", lead_id=lead_id, found_by="inspector", model="m")
+    else:
+        await store.resolve_lead(lead_id, settled_by, "the evidence says so")
+    sweep = Sweep(watches=(LIVE,), events=_the_run_ended(), lanes=lanes, leads=store, clock=lambda: NOW)
+
+    assert (await sweep.tick()).retried == 0
+    assert _attributions(jobs, lead_id) == ["abandoned"]
+
+
+async def test_a_lead_whose_attribution_finished_is_not_asked_about_again() -> None:
+    store = FakeLeadsAndFindings()
+    jobs = MemoryJobs()
+    lanes, lead_id = await _an_inspected_run_with_one_lead(store, jobs)
+    (done,) = [job.id for job in jobs.jobs.values() if job.kind == ATTRIBUTE_LEAD_KIND]
+    await jobs.complete(done, result="lead 1: gone")
+    sweep = Sweep(watches=(LIVE,), events=_the_run_ended(), lanes=lanes, leads=store, clock=lambda: NOW)
+
+    assert (await sweep.tick()).retried == 0
+    assert _attributions(jobs, lead_id) == ["done"]

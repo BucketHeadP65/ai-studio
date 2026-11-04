@@ -773,7 +773,10 @@ async def _inspect(run: str | None, since: int | None) -> None:
         if since is None:
             fail("give exactly one of --run and --since")
         for name, passed in await issue_since(since, sweep=await container.get(Sweep)):
-            typer.echo(f"watch {name}: {passed.considered} run(s) in the last {since}h, {passed.enqueued} queued")
+            typer.echo(
+                f"watch {name}: {passed.considered} run(s) in the last {since}h, {passed.enqueued} queued, "
+                f"{passed.retried} abandoned attribution(s) asked again"
+            )
 
 
 if __name__ == "__main__":
