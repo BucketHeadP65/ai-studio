@@ -1,7 +1,8 @@
 """The conversation record as a transcript source: `record:<run id>` opens one run.
 
 One `Step` per step the record holds, each message under the ordinal the conversation knows it by, the tool definitions
-the request-parameters recorder kept for that step, and the wall time of every tool call from the run's events.
+the request-parameters recorder kept for that step, the wall time of every tool call from the run's events, and which of
+its messages an earlier run of the conversation recorded first.
 """
 
 from __future__ import annotations
@@ -64,7 +65,8 @@ class RecordTranscriptLoader:
             locator: The run id.
 
         Returns:
-            The run as a transcript, with the wall time of every tool call its events recorded.
+            The run as a transcript, with the wall time of every tool call its events recorded and the messages an earlier
+            run of its conversation recorded first.
 
         Raises:
             LookupError: when the record holds no such run.
@@ -81,8 +83,13 @@ class RecordTranscriptLoader:
                 raise RunEmptyError(msg)
             events = await reads.events(connection, locator)
             parameters = await reads.step_parameters(connection, locator)
+            held = sorted({ordinal for step in steps for ordinal in step.ordinals})
+            from_earlier_runs = await reads.ordinals_from_earlier_runs(connection, found, held)
         return Transcript(
-            source=record_source(locator), steps=tuple(_step(step, parameters) for step in steps), durations_ms=_durations(events)
+            source=record_source(locator),
+            steps=tuple(_step(step, parameters) for step in steps),
+            durations_ms=_durations(events),
+            from_earlier_runs=from_earlier_runs,
         )
 
 

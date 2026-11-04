@@ -2,8 +2,9 @@
 
 The handler is what a worker serves under the `inspect_run` kind. It re-reads the run from the record as it stands, never
 from the event that caused the command, so running it twice or late does no harm: leads are stored once, and a finding a
-rule can decide alone is written the same way every time. When the watch says so it also asks the inspector to read the
-whole run, in the scan lane.
+rule can decide alone is written the same way every time. A lead that cites only parts an earlier run of the conversation
+recorded first is left to that run's inspection. When the watch says so it also asks the inspector to read the whole run,
+in the scan lane.
 """
 
 from __future__ import annotations
@@ -94,7 +95,9 @@ class InspectRunHandler:
     async def __call__(self, payload: InspectRun, context: JobContext) -> str:
         """One line on what happened: leads stored, findings written, leads queued, leads already settled, whether a scan was issued.
 
-        A lead that already has a finding is never decided again and never queued.
+        A lead that already has a finding is never decided again and never queued. A lead that cites only parts an earlier
+        run of the conversation recorded first is that run's event: it is not stored, it does not count toward a scan, and
+        the line ends with how many there were.
 
         `every_run` scans text-only runs as well as tool-using runs. `when_a_rule_led` scans runs with fresh leads and a
         stable sample of rule-free runs. A terminal command also scans a run whose earlier leads were already settled.
@@ -140,9 +143,10 @@ class InspectRunHandler:
         inspected = outcome.inspected.get(payload.source)
         if inspected is None:
             raise _no_result(payload.source, outcome)
-        ids = await self.store.add_leads(watch.name, outcome.leads)
+        new = [lead for lead in outcome.leads if lead.is_new_in(transcript)]
+        ids = await self.store.add_leads(watch.name, new)
         once: dict[int, Lead] = {}
-        for lead, lead_id in zip(outcome.leads, ids, strict=True):
+        for lead, lead_id in zip(new, ids, strict=True):
             once.setdefault(lead_id, lead)
         settled = await self.store.settled(list(once))
         decided = 0
@@ -162,7 +166,12 @@ class InspectRunHandler:
         led = bool(once) if payload.terminal_event is not None else decided > 0 or bool(undecided)
         sampled = not once and watch.samples(payload.source)
         queued, scanned = await self._feed_inspector(payload, watch, undecided, selected=led or sampled)
-        return f"{payload.source}: {len(once)} leads, {decided} findings, {queued} queued, {len(settled)} settled, {'scan' if scanned else 'no scan'}"
+        earlier = len(outcome.leads) - len(new)
+        suffix = f", {earlier} from earlier runs" if earlier else ""
+        return (
+            f"{payload.source}: {len(once)} leads, {decided} findings, {queued} queued, {len(settled)} settled, "
+            f"{'scan' if scanned else 'no scan'}{suffix}"
+        )
 
     async def _feed_inspector(self, payload: InspectRun, watch: Watch, undecided: list[int], *, selected: bool) -> tuple[int, bool]:
         """Queue the undecided leads and scan the run when the watch reaches that far, answering the count and whether it scanned."""

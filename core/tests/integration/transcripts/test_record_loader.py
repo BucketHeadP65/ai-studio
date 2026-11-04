@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from pydantic_ai.messages import ModelMessage, ModelRequest, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import ModelRequestParameters
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai_harness.step_persistence import RunRecord, StepEvent
@@ -109,3 +109,25 @@ async def test_a_run_that_recorded_no_step_is_an_empty_run(database, store):
 
     with pytest.raises(RunEmptyError, match=run):
         await RecordTranscriptLoader(database)(run)
+
+
+async def test_a_later_turn_names_the_messages_the_earlier_turn_recorded_first(database, store):
+    conversation_id = str(uuid4())
+    first_turn, second_turn = "run-t1-" + conversation_id, "run-t2-" + conversation_id
+    earlier = turn_messages()
+    follow_up = ModelRequest(parts=[UserPromptPart(content="And tomorrow?", timestamp=AT + timedelta(minutes=5))])
+    reply = ModelResponse(parts=[TextPart(content="Rain tomorrow.")], timestamp=AT + timedelta(minutes=5))
+    await store.register_run(RunRecord(run_id=first_turn, conversation_id=conversation_id, started_at=AT))
+    await store.save_snapshot(snapshot(first_turn, 1, earlier, conversation_id=conversation_id))
+    await store.register_run(RunRecord(run_id=second_turn, conversation_id=conversation_id, started_at=AT + timedelta(minutes=5)))
+    await store.save_snapshot(snapshot(second_turn, 1, [*earlier, follow_up], conversation_id=conversation_id))
+    await store.save_snapshot(snapshot(second_turn, 2, [*earlier, follow_up, reply], conversation_id=conversation_id))
+
+    first = await RecordTranscriptLoader(database)(first_turn)
+    second = await RecordTranscriptLoader(database)(second_turn)
+
+    assert first.from_earlier_runs == frozenset()
+    assert second.from_earlier_runs == frozenset({0, 1, 2, 3})
+    assert second.is_from_earlier_run(Span(step=1, message=2, part=0))
+    assert not second.is_from_earlier_run(Span(step=1, message=4, part=0))
+    assert not second.is_from_earlier_run(Span(step=1, message=5, part=0))

@@ -14,7 +14,7 @@ from core.ai.inspection.domain.watches import Reach, Watch
 from core.ai.inspection.inspect_run import InspectRun, InspectRunHandler
 from core.ai.inspection.read_models import StoredBlame
 from core.ai.inspection.rules import RULES
-from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Transcript, TranscriptLoaders
+from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Step, Transcript, TranscriptLoaders
 from core.cqrs.contracts import JobContext
 from tests.support.fakes.inspection import (
     FakeLeadQueue,
@@ -27,6 +27,7 @@ from tests.support.fakes.inspection import (
     result,
     retried,
     transcript,
+    two_turns,
 )
 
 CONTEXT = JobContext(job_id=1, kind="inspect_run", key="author:test:run", attempt=1)
@@ -371,3 +372,40 @@ async def test_never_leaves_every_lead_to_the_rules() -> None:
     assert queue.queued == []
     assert queue.scans == []
     assert answer == "test:run: 4 leads, 1 findings, 0 queued, 0 settled, no scan"
+
+
+async def test_an_event_an_earlier_turn_recorded_is_filed_once_and_the_new_turn_s_event_once() -> None:
+    first, second = two_turns()
+    store = FakeLeadsAndFindings()
+    loaders = TranscriptLoaders(by_key={"record": Opens(**{"turn-1": first, "turn-2": second})})
+    watches = {"chat": Watch(name="chat", rules=("tool_refused_call",), inspector="never")}
+    handler = InspectRunHandler(watches=watches, facts=ToolFacts(), loaders=loaders, store=store, queue=FakeLeadQueue())
+
+    await handler(InspectRun(source="record:turn-1", watch="chat"), CONTEXT)
+    line = await handler(InspectRun(source="record:turn-2", watch="chat"), CONTEXT)
+
+    assert [(row.source, row.spans) for row in store.leads] == [
+        ("record:turn-1", [Span(step=0, message=2, part=0)]),
+        ("record:turn-2", [Span(step=0, message=6, part=0)]),
+    ]
+    assert line == "record:turn-2: 1 leads, 0 findings, 0 queued, 0 settled, no scan, 1 from earlier runs"
+
+
+async def test_a_turn_that_only_repeats_an_earlier_turn_s_event_leads_nothing_and_asks_for_no_scan() -> None:
+    _first, second = two_turns()
+    held_again = Transcript(
+        source="record:turn-3",
+        steps=(Step(messages=second.steps[0].messages, ordinals=second.steps[0].ordinals),),
+        from_earlier_runs=frozenset(second.steps[0].ordinals),
+    )
+    store = FakeLeadsAndFindings()
+    queue = FakeLeadQueue()
+    loaders = TranscriptLoaders(by_key={"record": Opens(**{"turn-3": held_again})})
+    watches = {"chat": Watch(name="chat", rules=("tool_refused_call",), inspector="when_a_rule_led", clean_run_sample_rate=0.0)}
+    handler = InspectRunHandler(watches=watches, facts=ToolFacts(), loaders=loaders, store=store, queue=queue)
+
+    line = await handler(InspectRun(source="record:turn-3", watch="chat"), CONTEXT)
+
+    assert store.leads == []
+    assert queue.scans == []
+    assert line == "record:turn-3: 0 leads, 0 findings, 0 queued, 0 settled, no scan, 2 from earlier runs"

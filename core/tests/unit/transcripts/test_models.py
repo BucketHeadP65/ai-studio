@@ -221,3 +221,21 @@ class TestViews:
     def test_a_source_names_the_scheme_of_its_loader(self) -> None:
         with pytest.raises(ValidationError):
             Transcript(source="run-1", steps=two_steps())
+
+
+class TestEarlierRuns:
+    def test_a_part_in_a_message_an_earlier_run_recorded_first_is_from_an_earlier_run(self) -> None:
+        first, second = two_steps()
+        transcript = Transcript(source="test:run", steps=(first, second), from_earlier_runs=frozenset({0, 1, 2}))
+
+        assert transcript.is_from_earlier_run(Span(step=1, message=1, part=0))
+        assert not transcript.is_from_earlier_run(Span(step=1, message=3, part=0))
+
+    def test_a_transcript_that_names_no_earlier_run_holds_only_its_own_parts(self) -> None:
+        transcript = Transcript(source="test:run", steps=two_steps())
+
+        assert not transcript.is_from_earlier_run(Span(step=0, message=0, part=0))
+
+    def test_refuses_an_earlier_run_ordinal_no_step_holds(self) -> None:
+        with pytest.raises(ValidationError, match="ordinal 9"):
+            Transcript(source="test:run", steps=two_steps(), from_earlier_runs=frozenset({9}))

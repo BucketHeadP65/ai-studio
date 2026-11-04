@@ -39,6 +39,8 @@ Five independent background loops serve scheduling and dispatch, reconciliation,
 
 `InspectRun` and `ScanRun` carry an optional positive `terminal_event` identifying the completed transcript they must process. Existing persisted payloads without this field still load. A successful earlier inspection is not proof that the final transcript was inspected. A final scan coalesced behind an earlier scan remains retryable.
 
+A chat session records one run per turn, and each later run holds every earlier turn again in its first step. Each event is filed once, by the run that added it. The record's loader names the messages an earlier run of the conversation recorded first (the record keeps the run that first recorded each message). A lead whose spans all point at such messages is that earlier run's event, so neither lane stores it and it does not count as a lead that asks for a scan. A lead that cites at least one part the run added is stored, even when its other spans point at earlier turns. The handler's one-line report ends with how many leads came from earlier runs. A run whose earlier turn was never inspected (it predates the watch, or its jobs were abandoned) does not file that turn's events either.
+
 `every_run` scans text-only runs too. `when_a_rule_led` scans runs with leads and a deterministic sample of runs without leads. The selection hashes the watch and source, so retries do not resample. `never` runs only the declared rules. A failed job retries under its policy and becomes visibly abandoned after its attempts run out.
 
 ## The dispatch and the sweep
@@ -85,7 +87,7 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 
 Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
-Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. Both sets of inspector instructions say what that mark means.
+Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. A part an earlier run of the conversation recorded first is marked `[tool-call, from an earlier run]`, and the outline of such a run opens with how many of its messages came from earlier runs. Both sets of inspector instructions say what each mark means, and the scan names only symptoms that cite at least one part its run added.
 
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 

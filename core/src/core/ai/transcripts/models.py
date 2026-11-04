@@ -10,6 +10,10 @@ Two views come out of that. `messages` is what the model sees now, the last step
 message once, in the form of the first step that held it, so a tool's error text is read before a later step blanked it.
 A `Span` names a step, a message in that step and a part in that message, and `seen_at(span)` is what the model had in
 front of it at that point.
+
+A conversation recorded as one run per turn gives each later run every earlier turn again in its first step. The source
+names the ordinals an earlier run recorded first, and `is_from_earlier_run(span)` tells those parts from the ones this run
+added.
 """
 
 from __future__ import annotations
@@ -128,6 +132,28 @@ class Transcript(BaseModel):
         default_factory=dict,
         description="Wall time per tool call id, when the source's event stream recorded it. No message format carries it.",
     )
+    from_earlier_runs: frozenset[int] = Field(
+        default=frozenset(),
+        description="The ordinals of the messages an earlier run of the same conversation recorded first. Empty when the "
+        "source holds no earlier run or does not say.",
+    )
+
+    @model_validator(mode="after")
+    def every_earlier_run_ordinal_is_held(self) -> Self:
+        """Check that every ordinal named as from an earlier run is one a step holds.
+
+        Returns:
+            The transcript, unchanged.
+
+        Raises:
+            ValueError: when an ordinal named as from an earlier run is in no step.
+        """
+        held = {ordinal for step in self.steps for ordinal in step.ordinals}
+        missing = sorted(self.from_earlier_runs - held)
+        if missing:
+            msg = f"ordinal {missing[0]} is named as from an earlier run, but no step holds it"
+            raise ValueError(msg)
+        return self
 
     @property
     def messages(self) -> tuple[ModelMessage, ...]:
@@ -174,6 +200,20 @@ class Transcript(BaseModel):
         ordinal = self.steps[span.step].ordinals[span.message]
         step_index, step = next((index, step) for index, step in enumerate(self.steps) if ordinal in step.ordinals)
         return Span(step=step_index, message=step.ordinals.index(ordinal), part=span.part)
+
+    def is_from_earlier_run(self, span: Span) -> bool:
+        """Whether the part at `span` is in a message an earlier run of the same conversation recorded first.
+
+        Args:
+            span: The step, the message in it and the part in that message.
+
+        Returns:
+            True when an earlier run recorded the message first, False when this run added it.
+
+        Raises:
+            IndexError: when the span's step or message is outside the transcript.
+        """
+        return self.steps[span.step].ordinals[span.message] in self.from_earlier_runs
 
     def recorded(self) -> Iterator[tuple[Span, ModelMessage]]:
         """Every message once, in the form of the first step that held it.

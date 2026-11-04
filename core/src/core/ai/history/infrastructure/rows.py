@@ -121,6 +121,13 @@ class StepParametersRow:
 
 
 @dataclass(frozen=True)
+class OrdinalRow:
+    """The ordinal of one message of a conversation."""
+
+    ordinal: int
+
+
+@dataclass(frozen=True)
 class InstructionRow:
     """One instructions text under its content address."""
 

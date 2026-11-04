@@ -18,7 +18,17 @@ from core.ai.inspection.lanes import ScanRun
 from core.ai.inspection.scan_run import ScanRunHandler, ScanUndecided, Seen, resolve_scan, scan, scan_agent
 from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Step, Transcript, TranscriptLoaders
 from core.cqrs.contracts import JobContext
-from tests.support.fakes.inspection import FakeLeadsAndFindings, FakeRunsOfConversation, Opens, answer, call, question, result, transcript
+from tests.support.fakes.inspection import (
+    FakeLeadsAndFindings,
+    FakeRunsOfConversation,
+    Opens,
+    answer,
+    call,
+    question,
+    result,
+    transcript,
+    two_turns,
+)
 from tests.unit.inspection.test_inspect_run import A_TAXONOMY, Unparseable
 
 CONTEXT = JobContext(job_id=1, kind="scan_run", key="scan:every-run:record:run-1", attempt=1)
@@ -371,3 +381,31 @@ def test_a_scan_accepts_one_span_of_a_part_a_later_step_shows_again() -> None:
 
     assert not isinstance(resolved, ScanUndecided)
     assert [span for lead, _ in resolved for span in lead.spans] == [Span(step=0, message=1, part=0)]
+
+
+async def test_a_scan_files_an_earlier_turn_s_event_once_and_the_new_turn_s_event_once() -> None:
+    first, second = two_turns()
+    store = FakeLeadsAndFindings()
+    loaders = TranscriptLoaders(by_key={"record": Opens(**{"turn-1": first, "turn-2": second})})
+    the_first_call = saw("call_for_known_fact", ["0.1.0"], "agent_reasoning", "model_tier")
+    both_calls: dict[str, object] = {
+        "items": [
+            {
+                "symptom": "call_for_known_fact",
+                "spans": [span],
+                "blames": [{"root_cause": "agent_reasoning", "surface_kind": "model_tier", "surface_name": "", "why": "it already knew"}],
+                "explanation": "The agent already had the fact. It called the tool again anyway. Reuse what it saw.",
+            }
+            for span in ("0.1.0", "0.5.0")
+        ]
+    }
+
+    await a_handler(store, Answers("Seen", the_first_call), loaders=loaders)(ScanRun(source="record:turn-1", watch="every-run"), CONTEXT)
+    line = await a_handler(store, Answers("Seen", both_calls), loaders=loaders)(ScanRun(source="record:turn-2", watch="every-run"), CONTEXT)
+
+    assert [(row.source, row.spans) for row in store.findings] == [
+        ("record:turn-1", [Span(step=0, message=1, part=0)]),
+        ("record:turn-2", [Span(step=0, message=5, part=0)]),
+    ]
+    assert [row.source for row in store.leads] == ["record:turn-1", "record:turn-2"]
+    assert line == "record:turn-2: scanned, 2 seen, 1 findings, 1 from earlier runs"

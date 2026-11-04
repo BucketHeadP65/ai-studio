@@ -460,3 +460,23 @@ def test_both_sets_of_instructions_say_what_a_first_recorded_mark_means() -> Non
 
     assert sentence in INSPECTOR_INSTRUCTIONS
     assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_both_sets_of_instructions_say_what_an_earlier_run_mark_means() -> None:
+    sentence = (
+        "A part marked `from an earlier run` is a message an earlier run of this conversation recorded, shown again "
+        "because each turn's run holds the turns before it."
+    )
+
+    assert sentence in INSPECTOR_INSTRUCTIONS
+    assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_a_scan_names_only_symptoms_that_cite_a_part_its_run_added() -> None:
+    sentence = (
+        "Name only symptoms that cite at least one part this run added, because a symptom of an earlier run belongs to that "
+        "run's own inspection."
+    )
+
+    assert sentence in SCAN_INSTRUCTIONS
+

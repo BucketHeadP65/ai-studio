@@ -106,6 +106,24 @@ def transcript(*messages: ModelMessage, source: str = "test:run", durations_ms: 
     )
 
 
+def two_turns() -> tuple[Transcript, Transcript]:
+    """Two runs of one conversation, each with a refused call: the second holds the first turn again, then its own turn."""
+    first_turn = (question(), call("c1"), retried("c1", cause="model_retry"), answer("I could not look it up."))
+    second_turn = (
+        question("And tomorrow?"),
+        call("c2", args={"name": "Paris", "day": "tomorrow"}),
+        retried("c2", cause="model_retry"),
+        answer("I could not look that up either."),
+    )
+    held = (*first_turn, *second_turn)
+    second = Transcript(
+        source="record:turn-2",
+        steps=(Step(messages=held, ordinals=tuple(range(len(held)))),),
+        from_earlier_runs=frozenset(range(len(first_turn))),
+    )
+    return transcript(*first_turn, source="record:turn-1"), second
+
+
 class Opens:
     """A loader that answers with the transcripts it was given, by locator."""
 
