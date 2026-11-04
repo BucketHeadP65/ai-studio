@@ -19,6 +19,7 @@ import json
 from pydantic import create_model
 
 from core.ai.workflows.contracts import (
+    AgentStep,
     Briefing,
     FromNode,
     FromParameter,
@@ -27,6 +28,7 @@ from core.ai.workflows.contracts import (
     OrchestratorGate,
     ParameterSpec,
     PersonGate,
+    Program,
     ResultArtifactSpec,
     RunNode,
     Shape,
@@ -34,6 +36,8 @@ from core.ai.workflows.contracts import (
     WorkflowResultSpec,
     spec_identity,
 )
+from core.ai.workflows.domain.fingerprint import _canonical_document
+from core.ai.workflows.domain.vocabulary import SameAs
 
 _PINNED = "5ce08f4154bd3698f092bd4b7a69afbfb6f5e7b6f3d907fde9dac1cb3d475162"
 """The digest of the fixed spec below, under this pydantic and this grammar, with defaults left out. See the test."""
@@ -176,7 +180,7 @@ def test_the_identity_of_a_fixed_spec_is_pinned_to_a_literal() -> None:
     """What actually pins canonicalisation. Nothing else in this file would notice it moving.
 
     A pydantic release that serialises differently, or a field added to the grammar without a default,
-    shifts every hash and orphans every evidence record written before it -- the same class of bug, one
+    shifts every hash and orphans every evidence record written before it. It is the same class of bug, one
     layer out. This fails loudly when that happens, and the fix is a decision (migrate the evidence log,
     or accept the re-key), never a silent re-baseline of this constant. The last such decision moved the
     identity to leave defaults out, with the evidence log migrated forward in the same change.
@@ -354,7 +358,45 @@ def test_an_identity_hashes_only_what_differs_from_a_default_at_every_depth() ->
         "result": {"summary": "The report.", "primary_work": "report"},
     }
 
+    assert _canonical_document(workflow) == written
     assert spec_identity(workflow) == _sha256(written)
+
+
+def test_the_canonical_document_reads_back_as_the_same_workflow() -> None:
+    """Every union is still picked from what the document holds, so leaving defaults out never merges two workflows."""
+    workflow = Workflow(
+        name="every-kind",
+        version=2,
+        description="Every node kind and every inline step kind, each with what it may leave out left out.",
+        parameters={"items": ParameterSpec(description="items", json_schema={"type": "array"})},
+        inline=(
+            Briefing(
+                name="digest",
+                instructions="Digest one item into one line that names its claim and its source, nothing else.",
+                output=Shape(json_schema={"type": "string"}),
+            ),
+            Program(name="count", source="len(lines)", inputs={"lines": Shape(json_schema={"type": "array"})}, output=Shape(json_schema={"type": "integer"})),
+            AgentStep(name="weigh", agent={"model": "test", "instructions": "Weigh the count."}, inputs={"total": SameAs(like="count")}, output=SameAs(like="digest")),
+            AgentStep(name="scout", agent="scout", output=Shape(json_schema={"type": "string"})),
+        ),
+        nodes=(
+            MapNode(id="each", turns=("digest",), over=FromParameter(parameter="items"), each="item"),
+            RunNode(id="counted", work="count", inputs={"lines": FromNode(node="each")}),
+            JudgeGate(id="judged", work="weigh", reviews=FromNode(node="counted"), rejected_to="counted"),
+            PersonGate(id="approved", reviews=FromNode(node="judged"), rejected_to="counted", max_attempts=2),
+            OrchestratorGate(
+                id="orchestrated",
+                charge="Check the count against the items the run was given, and say which item went missing.",
+                reviews=FromNode(node="approved"),
+                rejected_to="counted",
+            ),
+            RunNode(id="scouted", work="scout"),
+        ),
+        output=FromNode(node="orchestrated"),
+        result=WorkflowResultSpec(summary="The checked count.", primary_work="counted"),
+    )
+
+    assert Workflow.model_validate(_canonical_document(workflow)) == workflow
 
 
 def test_a_nested_field_written_at_its_default_is_the_workflow_that_left_it_out() -> None:

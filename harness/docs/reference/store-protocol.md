@@ -154,7 +154,8 @@ came back reordered from a jsonb column. `mode="json"` and leaving defaults out 
 the object was built" from leaking into the key: a field written at its default and a field left out
 hash the same. Leaving defaults out also keeps a field added to the format with a default from
 re-keying every saved workflow. The cost is that changing an existing field's default moves no
-identity, so trust carries over that change. A future pydantic that serialises differently
+identity, so trust carries over that change. Core
+[ADR 0004](../../../core/docs/adr/0004-a-workflows-identity-leaves-default-values-out.md) records the rule. A future pydantic that serialises differently
 would still shift every hash and orphan all the evidence written before it, the same class of
 bug, one layer out. What pins it is a test holding one literal digest of one fixed spec
 (`tests/unit/test_spec_identity.py::test_the_identity_of_a_fixed_spec_is_pinned_to_a_literal`),

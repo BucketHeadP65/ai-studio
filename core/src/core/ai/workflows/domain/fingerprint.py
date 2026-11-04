@@ -24,6 +24,8 @@ from core.ai.workflows.domain.vocabulary import AgentStep, referenced_steps
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from pydantic import JsonValue
+
     from core.ai.workflows.domain.vocabulary import Workflow
     from core.ai.workflows.registry import StepImplementation, StepRegistry
 
@@ -126,9 +128,9 @@ def spec_identity(workflow: Workflow) -> str:
     """This workflow's content address: the SHA-256 of its canonical JSON.
 
     It stays the same when the workflow moves between libraries or gets a new id, and it changes when
-    any field moves off its default, `version` included. Two workflows share an identity exactly when they
-    are equal as values, including the order of `nodes`, and then they share their evidence. The JSON is
-    dumped with `mode="json"`, keys sorted and every field at its default left out at every depth, so a field
+    any value changes, `version` included. Two workflows share an identity exactly when they are equal
+    as values, including the order of `nodes`, and then they share their evidence. The JSON is dumped
+    with `mode="json"`, keys sorted and every field at its default left out at every depth, so a field
     written at its default, a field left out and a field added to the format later with a default all hash
     the same. Each node keeps its `kind`. A changed default value moves no identity. A value that is not JSON
     raises rather than being hashed as text.
@@ -139,9 +141,14 @@ def spec_identity(workflow: Workflow) -> str:
     Returns:
         The digest as lowercase hex.
     """
-    document = workflow.model_dump(mode="json", exclude_defaults=True)
-    document["nodes"] = [{**dumped, "kind": node.kind} for dumped, node in zip(document["nodes"], workflow.nodes, strict=True)]
-    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(json.dumps(_canonical_document(workflow), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _canonical_document(workflow: Workflow) -> dict[str, JsonValue]:
+    """The workflow as JSON data with every default left out at every depth and each node's `kind` kept."""
+    document: dict[str, JsonValue] = workflow.model_dump(mode="json", exclude_defaults=True)
+    document["nodes"] = [{**node.model_dump(mode="json", exclude_defaults=True), "kind": node.kind} for node in workflow.nodes]
+    return document
 
 
 def _agent_hash(name: str, registry: StepRegistry) -> str | None:
