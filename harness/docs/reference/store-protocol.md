@@ -380,7 +380,9 @@ for it to drift open.
 `uses` follows the same rule. `WorkflowContract._copy_in` (the save) and the harness's
 `check_draft` both copy reusable steps into `inline` through `copy_reusable_steps`
 (`core.ai.workflows.reusable_steps`), so both refuse an id named twice, an id that yields no
-valid step and a step already under `inline`, in the same words.
+valid step and a step already under `inline`, in the same words. `fetch_step` reads one step through
+the same `fetch_reusable_step`, so an id no step has, or a page that is no step, comes back to the
+model as a retry in those words too, naming `search_steps` as the way to find the step it wanted.
 
 The spec goes in as structured data rather than text, so a malformed graph is caught by
 the tool call's own schema. A refusal is delivered with the validator's findings so the

@@ -74,10 +74,13 @@ async def test_an_id_named_twice_is_refused_before_it_is_fetched_again() -> None
     assert shelf.fetched == ["st.digest.v1"]
 
 
-async def test_an_id_no_step_has_is_refused_as_a_step_that_cannot_be_copied() -> None:
+async def test_an_id_no_step_has_is_refused_with_how_to_find_a_step() -> None:
     shelf = FakeShelf({})
 
-    with pytest.raises(ReusableStepsRefusedError, match=r"^'st.missing.v1' did not yield a valid reusable step \(.*\). It cannot be copied into this spec.$"):
+    with pytest.raises(
+        ReusableStepsRefusedError,
+        match=r"^'st.missing.v1' did not yield a valid reusable step \(.*\). Call search_steps with what the step should do, and use an id it returns.$",
+    ):
         await copy_reusable_steps(_workflow(), ["st.missing.v1"], shelf.fetch_step)
 
 
