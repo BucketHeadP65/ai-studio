@@ -58,6 +58,10 @@ rejected or failed, for an administrator or crash shutdown, for a database not y
 database already holding as many connections as it allows.
 """
 
+LOST_CONNECTION_ERRORS: tuple[type[Exception], ...] = (OSError, *DATABASE_CONNECTION_ERRORS)
+"""The errors of a listening connection that was refused, reset, closed or never opened, or of a database shutting down or
+starting up: `OSError` and `DATABASE_CONNECTION_ERRORS`. A loop that waits on a `Listener` waits again after one of these."""
+
 
 def async_dsn(dsn: str) -> str:
     """A Postgres DSN respelled for the async engine, whatever spelling arrived.

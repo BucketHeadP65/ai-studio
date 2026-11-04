@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Self
 
 import pytest
 
+from asyncpg.exceptions import CannotConnectNowError, TooManyConnectionsError
 from pydantic import BaseModel
 
 from core.cqrs.contracts import (
@@ -146,21 +147,21 @@ class _RaisingWake:
 
 
 class _OnceFailingWake:
-    """A wake-up whose first call raises `OSError`, then blocks forever.
+    """A wake-up whose first call raises `error`, `OSError` by default, then blocks forever.
 
     Blocking after the first failure keeps a retry test bounded: a wake that kept raising would
     have `run_forever` retry it indefinitely.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, error: Exception | None = None) -> None:
         self.calls = 0
+        self.error = error if error is not None else OSError("connection refused")
 
     async def wait(self, seconds: float) -> None:
         del seconds
         self.calls += 1
         if self.calls == 1:
-            msg = "connection refused"
-            raise OSError(msg)
+            raise self.error
         await asyncio.Event().wait()
 
 
@@ -460,8 +461,15 @@ class TestRunForever:
             await asyncio.wait_for(worker.run_forever(stop=stop), timeout=2)
         assert asyncio.all_tasks() - before == set()
 
-    async def test_an_oserror_from_the_wake_is_logged_and_the_loop_goes_on(self, clock: _Clock, caplog: pytest.LogCaptureFixture):
-        wake = _OnceFailingWake()
+    @pytest.mark.parametrize(
+        "error",
+        [OSError("connection refused"), CannotConnectNowError("the database system is starting up"), TooManyConnectionsError("too many clients")],
+        ids=["refused", "starting-up", "full"],
+    )
+    async def test_a_lost_database_connection_in_the_wake_is_logged_and_the_loop_goes_on(
+        self, error: Exception, clock: _Clock, caplog: pytest.LogCaptureFixture
+    ):
+        wake = _OnceFailingWake(error)
         worker = Worker(jobs=MemoryJobs(clock=clock), outbox=MemoryOutbox(), bus=MessageBus({}, {}), wake=wake, name="w1", clock=clock, poll_seconds=0.01)
         stop = asyncio.Event()
         passes = 0

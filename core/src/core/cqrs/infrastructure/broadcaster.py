@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Protocol
 from sqlalchemy import text
 
 from core.cqrs.events import ChangeNotification
-from core.db import DATABASE_CONNECTION_ERRORS, Listener, Notifier
+from core.db import LOST_CONNECTION_ERRORS, Listener, Notifier
 from core.observability import get_logger
 
 if TYPE_CHECKING:
@@ -31,9 +31,6 @@ TOPICS_CHANNEL = "coordination_topics"
 SUBSCRIBER_QUEUE_LIMIT = 256
 """How many unread change notifications one in-process reader may hold. Past it the oldest is dropped, because the
 newest hint to refetch is the one that matters."""
-
-# A listening connection that was refused, reset, closed or never opened, or a database shutting down or starting up.
-_LOST_CONNECTION_ERRORS: tuple[type[Exception], ...] = (OSError, *DATABASE_CONNECTION_ERRORS)
 
 
 class Executes(Protocol):
@@ -280,7 +277,7 @@ class Broadcaster:
                     _logger.info("listener connection restored after {failures} failed attempts", failures=failures)
                     delay, failures = self._coalesce_seconds, 0
                 self.deliver(await self._listener.get())
-            except _LOST_CONNECTION_ERRORS as exc:
+            except LOST_CONNECTION_ERRORS as exc:
                 if not failures:
                     _logger.warning("listener connection lost, reconnecting with backoff", error=exc)
                 failures += 1

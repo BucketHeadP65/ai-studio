@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
 from core.cqrs.domain import JobContext, JobPolicy, utcnow
 from core.cqrs.internal_contracts import TransactionalSubscriber
+from core.db import LOST_CONNECTION_ERRORS
 from core.observability import get_logger
 
 if TYPE_CHECKING:
@@ -175,6 +176,9 @@ class Worker:
     async def run_forever(self, *, stop: asyncio.Event) -> None:
         """Loop until `stop` is set: a tick, then wait for a wake-up or the next due periodic.
 
+        A wait that fails with one of `LOST_CONNECTION_ERRORS`, such as a database still starting up, is logged and
+        followed by a sleep of `poll_seconds`, and the loop goes on. Any other error the wait raises ends the loop.
+
         Args:
             stop: Set to end the loop after the current tick or wait.
         """
@@ -194,7 +198,7 @@ class Worker:
                 if task is waiting:
                     try:
                         task.result()
-                    except OSError as exc:
+                    except LOST_CONNECTION_ERRORS as exc:
                         _logger.warning("wake wait failed, skipping this wait: {reason}", reason=str(exc))
                         await asyncio.sleep(self._poll_seconds)
                 else:
