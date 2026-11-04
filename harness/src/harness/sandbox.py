@@ -1,7 +1,7 @@
 """The sandbox rules the agent needs beside `CodeMode`, and the way out of a sandbox refusal.
 
-`CodeMode`'s own instructions never state the dialect rule: a program reaches only the sandbox's own functions, it is one
-top-level script, and it starts no event loop of its own.
+`CodeMode`'s own instructions never state the dialect rule: the only tools a program can call are the sandbox's own
+functions, it is one top-level script, and it starts no event loop of its own.
 `SandboxDiscipline` is mounted beside `CodeMode`, never wrapped around it.
 """
 
@@ -31,10 +31,10 @@ _UNKNOWN_FUNCTION = re.compile(r"NameError: Unknown function: (\w+)|error\[unres
 _DIRECT_TOOL_HINT = (
     "`{name}` is not a function inside the sandbox. If `{name}` is a tool in your tool list, call it as its own "
     "tool call, with every argument written out as JSON in that call: a program cannot hand a variable to a "
-    "direct tool, so a value you built in a program has to be written into the call itself. If you cannot see "
-    "`{name}` anywhere, it may belong to a capability you have not loaded yet: load the capability that covers it "
-    "with `load_capability`, then call `{name}` where it appears, in the sandbox's function list or as its own "
-    "tool call. If no capability covers it, it does not exist here."
+    "direct tool, so a value you built in a program has to be written into the call itself. If `{name}` is in "
+    "neither your tool list nor the sandbox's function list, look for it in the capabilities `load_capability` "
+    "lists, load the one whose description names it, then call `{name}` where it appears, in the sandbox's "
+    "function list or as its own tool call. If no capability covers it, it does not exist here."
 )
 
 _RETRIES_SPENT = (
@@ -45,9 +45,10 @@ _RETRIES_SPENT = (
 
 _DIALECT = (
     "## The sandbox's dialect\n"
-    "Inside a program, only the functions listed as available inside the sandbox exist. Every other "
-    "tool in your tool list is called as its own tool call, never from a program. A tool of a "
-    "capability you have not loaded appears only after `load_capability`, in one of those two places.\n"
+    "Inside a program, the only tools you can call are the functions listed as available inside the "
+    "sandbox. Every other tool in your tool list is called as its own tool call, never from a program. "
+    "A tool of a capability you have not loaded appears only after `load_capability`, in one of those "
+    "two places.\n"
     "A program is ONE top-level script, already running inside the host's event loop. Tool names "
     "resolve at top level only: a tool called inside a `def`/`async def` you wrote is refused as "
     "undefined, so do not wrap the work in a `main()`. Never call `asyncio.run()`, because there is "

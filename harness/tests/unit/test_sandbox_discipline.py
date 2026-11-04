@@ -16,9 +16,15 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
+
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelRetry, ToolRetryError, UnexpectedModelBehavior
-from pydantic_ai.messages import RetryInfo, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, RetryInfo, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai_harness import CodeMode
 
 from harness.domain.ports import SANDBOX
 from harness.sandbox import SandboxDiscipline
@@ -76,7 +82,8 @@ async def test_a_name_the_agent_cannot_see_is_sent_to_load_capability_not_given_
     assert isinstance(raised, ToolRetryError)
     content = raised.tool_retry.content
     assert isinstance(content, str)
-    assert "load_capability" in content
+    assert "If `list_skills` is in neither your tool list nor the sandbox's function list" in content
+    assert "load the one whose description names it" in content
     assert "it does not exist here" not in content.split("load_capability")[0], "the way out comes before any verdict that it is gone"
 
 
@@ -85,11 +92,11 @@ def _dialect() -> str:
     return SandboxDiscipline[Any]().get_instructions()(cast("Any", None))
 
 
-def test_the_dialect_says_up_front_that_a_program_reaches_only_the_sandboxs_functions() -> None:
+def test_the_dialect_says_up_front_that_a_program_calls_only_the_sandboxs_functions() -> None:
     """Live, models called `fetch`, `save_workflow` and `list_skills` inside a program and learned the rule only from a refusal."""
     dialect = _dialect()
 
-    rule = dialect.index("available inside the sandbox")
+    rule = dialect.index("the only tools you can call are the functions listed as available inside the sandbox")
     assert rule < dialect.index("top-level script"), "the rule comes before the rest of the dialect"
     assert "its own tool call" in dialect
     assert "load_capability" in dialect
@@ -101,6 +108,45 @@ def test_the_dialect_says_json_dumps_takes_no_default() -> None:
 
     assert "`json.dumps` takes no `default=`" in dialect
     assert "already a JSON value" in dialect
+
+
+_CATALOG_HEADING = "available inside the sandbox"
+"""The words of `CodeMode`'s heading over the sandbox's functions, by which the dialect names that list."""
+
+_CATALOG_BLOCK = '<context id="toolset:code_mode:catalog">'
+
+
+async def _what_the_model_reads(*, dynamic_catalog: bool) -> tuple[str, str]:
+    """`run_code`'s description and the catalog instruction block, as a model under a one-tool `CodeMode` receives them."""
+    seen: dict[str, str] = {}
+
+    async def ping() -> str:
+        """Answer pong."""
+        return "pong"
+
+    def answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen["description"] = next(tool.description or "" for tool in info.function_tools if tool.name == SANDBOX)
+        last = messages[-1]
+        seen["instructions"] = (last.instructions or "") if isinstance(last, ModelRequest) else ""
+        return ModelResponse(parts=[TextPart("ok")])
+
+    agent = Agent(FunctionModel(answer), toolsets=[FunctionToolset([ping])], capabilities=[CodeMode(dynamic_catalog=dynamic_catalog)])
+    await agent.run("hi")
+    instructions = seen["instructions"]
+    catalog = instructions.split(_CATALOG_BLOCK, 1)[1].split("</context>", 1)[0] if _CATALOG_BLOCK in instructions else ""
+    return seen["description"], catalog
+
+
+@pytest.mark.parametrize("dynamic_catalog", [False, True])
+async def test_codemode_heads_the_sandboxs_functions_with_the_words_the_dialect_names_them_by(dynamic_catalog: bool) -> None:
+    """The dialect names the function list by `CodeMode`'s heading, so an upstream rewording of it must fail here first."""
+    description, catalog = await _what_the_model_reads(dynamic_catalog=dynamic_catalog)
+
+    assert _CATALOG_HEADING in _dialect()
+    if dynamic_catalog:
+        assert _CATALOG_HEADING in catalog, "the chat agent's mount carries the list in the catalog instruction"
+    else:
+        assert _CATALOG_HEADING in description, "a briefing's mount carries the list in `run_code`'s description"
 
 
 async def test_the_type_checkers_refusal_of_the_same_name_gets_the_same_hint() -> None:
