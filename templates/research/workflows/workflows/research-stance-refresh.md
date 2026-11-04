@@ -30,7 +30,9 @@ presentation:
     it and each finding: the claim's reference, the claim's own text, whether it supports or contests the position,
     and one sentence on how. A proposal whose findings all contest its position is marked as one the literature argues
     against. The proposals are backed and judged only after every rewrite is written, so a run whose proposals then
-    fail still keeps its rewrites written and indexed.
+    fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed once per run indexes
+    them when the run ends, and under a `wait` gate policy a judge that cannot decide holds that index until you
+    answer.
   owner_participation: >-
     Nothing during a run, unless a judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -54,7 +56,7 @@ presentation:
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
 workflow:
   name: research-stance-refresh
-  version: 12
+  version: 13
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge the proposals apart from the rewrites, and list every approved proposal with its pages and findings as placement made it, drafting none.
   parameters:
     collection:
@@ -240,12 +242,8 @@ workflow:
       source: |
         digest_types = ["paper", "talk", "article", "post"]
         read = {}
-        named = []
         kept = []
         for backing in backings:
-            if backing["stance_id"] in named:
-                continue
-            named.append(backing["stance_id"])
             findings = []
             digests = []
             for finding in backing["findings"]:
@@ -343,19 +341,24 @@ workflow:
       tools: [read_page]
     - name: list_proposals
       source: |
-        merged = {}
-        for proposal in proposals:
-            merged[proposal["stance_id"]] = proposal
         listed = []
-        for held in approved:
-            made = merged.get(held["stance_id"])
-            if made is None or made["title"] != held["title"]:
-                continue
-            if {page["page_id"]: True for page in made["pages"]} != {page["page_id"]: True for page in held["pages"]}:
-                continue
-            entry = dict(held)
-            entry["pages"] = made["pages"]
-            listed.append(entry)
+        for made in proposals:
+            wanted = {page["page_id"]: True for page in made["pages"]}
+            entry = None
+            for held in approved:
+                if held["stance_id"] != made["stance_id"] or held["title"] != made["title"]:
+                    continue
+                if {page["page_id"]: True for page in held["pages"]} != wanted:
+                    continue
+                if entry is None:
+                    entry = {"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "findings": [], "contests_only": True}
+                for finding in held["findings"]:
+                    if finding["claim"] not in [shown["claim"] for shown in entry["findings"]]:
+                        entry["findings"].append(finding)
+                        if finding["side"] != "contests":
+                            entry["contests_only"] = False
+            if entry is not None:
+                listed.append(entry)
         listed
       inputs:
         approved: {like: check_findings}
@@ -513,11 +516,15 @@ digests, and marks one whose findings all contest its position with `contests_on
 proposals' judge. It rejects a finding whose claim text does not bear on the position as its title states it, and a
 proposal that duplicates an existing stance. A rejection backs every proposal again with its feedback and never
 reruns the rewrites. An empty list is approved without a read, and still costs that judge one call.
-`list_proposals` keeps an approved proposal only when its stance_id and title are the ones `merge_proposals` made and
-it names the same records pages, in any order, and lists those pages as `merge_proposals` made them. A worker that
-rewords its copy, or adds or leaves out a page, puts nothing on the card. Its list is the run's output and its
-`proposed_stances` artifact, and it writes no page.
+`list_proposals` lists each proposal `merge_proposals` made that has an approved backing with its stance_id and title
+and the same records pages in any order, with its pages as `merge_proposals` made them and the findings of every such
+backing, each claim once. The map collects its answers as they finish, so nothing is paired by position. A backing
+that matches no proposal, such as one whose worker reworded its copy, added or left out a page, or took another
+proposal's id, puts nothing on the card, and the honest backing of that proposal still does. Its list is the run's
+output and its `proposed_stances` artifact, and it writes no page.
 
 A run whose proposals judge spends its last attempt, or cannot decide and is not answered, fails after every rewrite
-is written and indexed, and so does one whose backing map aborts. Three consecutive identical failures in any map
+is written, and so does one whose backing map aborts. Each rewrite is written to its file at once. A knowledge base
+indexed on each write indexes it then. One indexed once per run indexes the run's writes when the run ends, fails or
+pauses, so under a `wait` gate policy a proposals judge that cannot decide holds that index until the person answers. Three consecutive identical failures in any map
 abort the run as failed.

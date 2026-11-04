@@ -25,11 +25,14 @@ reference, a proposal whose findings all contest it is kept and marked, a reject
 proposals again and never reruns the rewrites, and a run with no proposal backs nothing and reads no digest. Then the
 order: the proposals start only once every rewrite is written, so a rewrite judge's rejection redrafts before the
 write, and a proposals judge that spends its last attempt, one nobody answers and a backing map that aborts each fail
-the run with the rewrite written. A proposal whose backing worker altered its copy is dropped after the judge. Last,
-the budgets of the backing worker and the rewrite judge.
+the run with the rewrite written. A proposal whose backing worker altered its copy is dropped after the judge, one that
+only reordered its pages is kept, and a backing that took another proposal's id leaves the honest proposal on the card,
+since the map collects its answers as they finish. Last, the budgets of the backing worker and the rewrite judge.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -370,7 +373,8 @@ class Scripted:
     """The five model steps of the workflow, scripted. The programs run for real.
 
     `place` answers each group's placements, `rewrite` each item's draft and `back` each proposal's findings, beside
-    the stance_id, title and pages `copy` answers for it. The rewrite judge answers `rewrite_verdicts` in order and the
+    the stance_id, title and pages `copy` answers for it, after waiting the seconds `delays` names for its stance_id.
+    The rewrite judge answers `rewrite_verdicts` in order and the
     proposals judge `proposal_verdicts`, each approving once its list runs out. `calls` records every node performed,
     in order, and `groups`, `items`, `reviewed`, `backed` and `judged` what each placement worker, refresh worker,
     rewrite judge call, backing worker and proposals judge call was handed.
@@ -380,6 +384,7 @@ class Scripted:
     rewrite: Callable[[Item], dict[str, object]] = _rewritten
     back: Callable[[Proposal], list[Finding]] = _backed_by_two
     copy: Callable[[Proposal], Mapping[str, object]] = _as_handed
+    delays: Mapping[str, float] = field(default_factory=dict)
     rewrite_verdicts: list[dict[str, str]] = field(default_factory=list)
     proposal_verdicts: list[dict[str, str]] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
@@ -406,6 +411,7 @@ class Scripted:
         if node_id == "back_proposals":
             proposal: Proposal = to_jsonable_python(kwargs["proposal"])
             self.backed.append(proposal)
+            await asyncio.sleep(self.delays.get(proposal["stance_id"], 0))
             return _typed(implementation, {**self.copy(proposal), "findings": self.back(proposal)})
         if node_id == "judge_proposals":
             self.judged.append(to_jsonable_python(kwargs["proposals"]))
@@ -1257,3 +1263,53 @@ async def test_a_proposal_whose_worker_reordered_its_pages_is_kept_and_one_with_
     made = [_listed("adr-1"), _listed("adr-2")]
     assert [proposal["pages"] for proposal in scripted.backed] == [made]
     assert _proposals(state) == ([{**MEMORY, "pages": made}] if kept else []), "the card lists the pages as placement made them"
+
+
+@pytest.mark.parametrize(
+    "taken",
+    [
+        pytest.param({"stance_id": "stance.agent-memory"}, id="its-id-alone"),
+        pytest.param(
+            {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}, id="its-id-title-and-pages"
+        ),
+    ],
+)
+async def test_a_backing_that_takes_another_proposals_id_is_dropped_and_the_honest_proposal_still_reaches_the_card(
+    sandbox: AsyncMonty, taken: dict[str, object]
+) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1"), "adr-2": _record("adr-2")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        digests=DIGESTS,
+    )
+    other = [_finding("paper.dense-retrieval#^c1"), _finding("talk.agent-loops#^c4")]
+
+    def copy(proposal: Proposal) -> Mapping[str, object]:
+        return {**proposal, **taken} if proposal["stance_id"] == "stance.reranking" else proposal
+
+    def back(proposal: Proposal) -> list[Finding]:
+        return BACKED if proposal["stance_id"] == "stance.agent-memory" else other
+
+    scripted = Scripted(place=_two_proposals, back=back, copy=copy, delays={"stance.agent-memory": 0.2})
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2")
+
+    answered: list[dict[str, object]] = to_jsonable_python(state.values["back_proposals"])
+    assert [answer["findings"] for answer in answered] == [other, BACKED], "the map collects answers as they finish, not in item order"
+    if "title" not in taken:
+        assert _proposals(state) == [MEMORY], "the backing under the wrong title matches no proposal, and the honest one stands"
+    else:
+        shown = _proposals(state)
+        assert [(proposal["stance_id"], proposal["title"], proposal["pages"]) for proposal in shown] == [
+            ("stance.agent-memory", "Agent memory", [_listed("adr-1")])
+        ]
+        claims = sorted(finding["claim"] for finding in _findings_of(shown[0]))
+        assert claims == ["art.memory-survey#^c3", "paper.dense-retrieval#^c1", "talk.agent-loops#^c4"], (
+            "the proposal carries the honest backing's findings beside the copy's, each claim once"
+        )
+
+
+def _findings_of(proposal: dict[str, object]) -> list[dict[str, str]]:
+    """One listed proposal's findings, typed."""
+    findings: list[dict[str, str]] = to_jsonable_python(proposal["findings"])
+    return findings

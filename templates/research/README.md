@@ -33,7 +33,9 @@ from this template can register its own vocabulary for any research domain.
   with the records pages behind it and each finding (the claim's reference and text, whether it supports or contests
   the position, and one sentence on how) among what the run left behind (the `proposed_stances` artifact), marking
   one the literature only argues against, so you draft the ones you pick by hand. A proposal whose worker changed its
-  id, title or pages is left off, and a run whose proposals fail still keeps its rewrites.
+  id or title, or added or left out a page, is left off. A run whose proposals fail keeps its rewrites: each is
+  written to its file at once, a knowledge base indexed once per run indexes them when the run ends, and under a
+  `wait` gate policy a proposals judge that cannot decide holds that index until you answer.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.
