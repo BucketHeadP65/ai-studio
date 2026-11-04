@@ -371,7 +371,6 @@ async def test_the_ledger_puts_earned_trust_on_the_search_and_fetch_surface(
     assert "earned: machine-confirmed, 1 runs with evidence" in returns["fetch_workflow"], "the fetch carries the hash-keyed record"
 
 
-
 def _confirmed_run(workflow_id: str, spec: Workflow) -> RunEvidence:
     return RunEvidence(
         workflow_id=workflow_id,
@@ -397,7 +396,9 @@ async def _trust_lines(port: WorkflowContract[None], workflow_id: str) -> dict[s
         ]
     )
     result = await _agent(script, port).run("find and read one", usage_limits=LIMITS)
-    returns = {part.tool_name: str(part.content) for message in result.all_messages() for part in message.parts if isinstance(part, ToolReturnPart)}
+    returns = {
+        part.tool_name: str(part.content) for message in result.all_messages() for part in message.parts if isinstance(part, ToolReturnPart)
+    }
     return {tool: match.group() for tool, text in returns.items() if (match := EARNED.search(text)) is not None}
 
 
@@ -441,6 +442,7 @@ async def test_a_card_whose_workflow_cannot_be_read_claims_no_trust(registry: St
 
     assert "wf-broken" in result.output
     assert "earned:" not in result.output
+
 
 async def test_without_a_ledger_no_trust_is_invented(quarterly_report: Workflow, registry: StepRegistry) -> None:
     """A store with no ledger beside it says nothing about trust -- absence, not a made-up tier."""

@@ -15,7 +15,19 @@ from pydantic_ai.tools import RunContext
 from pydantic_ai.usage import RunUsage
 
 from core.ai.workflows.contract_port import FETCH_TOOL
-from core.ai.workflows.contracts import StepRegistry, Workflow, WorkflowContract, save
+from core.ai.workflows.contracts import (
+    Briefing,
+    FromNode,
+    FromParameter,
+    ParameterSpec,
+    RunNode,
+    Shape,
+    StepRegistry,
+    Workflow,
+    WorkflowContract,
+    save,
+)
+from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.folder import FOLDER, FolderLibrary, folder_toolset
 from tests.unit.workflows.conftest import CallLog, register_quarterly_steps
 
@@ -116,7 +128,9 @@ async def test_a_stale_workflow_that_fits_never_reads_as_runnable_as_it_stands(
     assert fetched["fit"].endswith(f"Every step it names is still registered here, but what moved may change what it does. {STALE_ACTION}")
 
 
-async def test_a_fresh_workflow_that_fits_still_runs_as_it_stands(tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry) -> None:
+async def test_a_fresh_workflow_that_fits_still_runs_as_it_stands(
+    tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry
+) -> None:
     root = tmp_path / "workflows"
     workflow_id = await _saved(root, quarterly_report, registry)
     fetched = await _call(_port(root, registry), FETCH_TOOL, workflow_id=workflow_id)
@@ -124,20 +138,48 @@ async def test_a_fresh_workflow_that_fits_still_runs_as_it_stands(tmp_path: Path
     assert fetched["fit"] == "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands."
 
 
-def test_a_stale_workflow_that_brings_its_own_steps_asks_the_person_first(tmp_path: Path) -> None:
-    async def perform(task: object, output_type: type, /, **inputs: object) -> object:
-        del task, inputs
-        return output_type()
+def _judged_ledger() -> Workflow:
+    """The quarterly ledger, then a judge step the workflow brings with it."""
+    return Workflow(
+        name="judged-ledger",
+        version=1,
+        description="reconcile the quarter, then judge the ledger with a step it brings",
+        parameters={"quarter": ParameterSpec(description="which quarter", json_schema={"type": "string"})},
+        inline=(
+            Briefing(
+                name="judge",
+                instructions="Read the ledger and say, in one line, whether the quarter looks healthy and why it looks that way.",
+                inputs={"ledger": SameAs(like="reconcile")},
+                output=Shape(json_schema={"type": "object", "title": "Verdict", "properties": {"healthy": {"type": "boolean"}}}),
+            ),
+        ),
+        nodes=(
+            RunNode(id="sales", work="fetch_sales", inputs={"quarter": FromParameter(parameter="quarter")}),
+            RunNode(id="costs", work="fetch_costs", inputs={"quarter": FromParameter(parameter="quarter")}),
+            RunNode(id="ledger", work="reconcile", inputs={"sales": FromNode(node="sales"), "costs": FromNode(node="costs")}),
+            RunNode(id="judge", work="judge", inputs={"ledger": FromNode(node="ledger")}),
+        ),
+        output=FromNode(node="judge"),
+    )
+
+
+async def test_a_stale_workflow_that_brings_its_own_steps_asks_the_person_first(tmp_path: Path, call_log: CallLog) -> None:
+    async def perform(task: Briefing, output_type: type, /, **inputs: object) -> object:
+        del task, output_type, inputs
+        msg = "a fetch never performs a briefing"
+        raise AssertionError(msg)
 
     briefed = StepRegistry(perform=perform)
-    port = _port(tmp_path, briefed)
+    register_quarterly_steps(briefed, call_log)
+    root = tmp_path / "workflows"
+    workflow_id = await _saved(root, _judged_ledger(), briefed, environment={"model": "gpt-5.2"})
 
-    stale, stale_fits = port._fit(("judge",), brought=("judge",), stale=True)
-    fresh, fresh_fits = port._fit(("judge",), brought=("judge",))
+    stale = await _call(_port(root, briefed, environment={"model": "gpt-6"}), FETCH_TOOL, workflow_id=workflow_id)
+    fresh = await _call(_port(root, briefed, environment={"model": "gpt-5.2"}), FETCH_TOOL, workflow_id=workflow_id)
 
-    assert (stale_fits, fresh_fits) == (True, True)
-    assert stale == (
+    assert (stale["fits_here"], fresh["fits_here"]) == (True, True)
+    assert stale["fit"].endswith(
         "The steps it names are still registered here, and the 1 step(s) it brings with it (judge) can be built from their "
         f"briefings, but what moved may change what it does. {STALE_ACTION}"
     )
-    assert fresh.endswith("can be built from their briefings, so it runs as it stands.")
+    assert fresh["fit"].endswith("can be built from their briefings, so it runs as it stands.")
