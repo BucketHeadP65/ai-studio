@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
+from pydantic_ai.messages import CompactionPart, ModelResponse
 from pydantic_evals.evaluators import Evaluator
 
 from core.ai.inspection.detectors import Inspected, InspectionContext, Rules, record_lead
@@ -17,6 +18,7 @@ from core.ai.inspection.rules import RULES
 from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Step, Transcript, TranscriptLoaders
 from core.cqrs.contracts import JobContext
 from tests.support.fakes.inspection import (
+    AT,
     FakeLeadQueue,
     FakeLeadsAndFindings,
     Opens,
@@ -409,3 +411,48 @@ async def test_a_turn_that_only_repeats_an_earlier_turn_s_event_leads_nothing_an
     assert store.leads == []
     assert queue.scans == []
     assert line == "record:turn-3: 0 leads, 0 findings, 0 queued, 0 settled, no scan, 2 from earlier runs"
+
+
+async def test_a_lead_that_cites_an_earlier_turn_s_part_and_a_new_one_is_filed_by_the_new_turn() -> None:
+    first_turn = (question(), call("c1"), result("c1"), answer())
+    held = (*first_turn, question("And now?"), call("c2"), result("c2"), answer())
+    second = Transcript(
+        source="record:turn-2",
+        steps=(Step(messages=held, ordinals=tuple(range(len(held)))),),
+        from_earlier_runs=frozenset(range(len(first_turn))),
+    )
+    store = FakeLeadsAndFindings()
+    loaders = TranscriptLoaders(by_key={"record": Opens(**{"turn-2": second})})
+    watches = {"chat": Watch(name="chat", rules=("duplicate_call",), inspector="never")}
+    handler = InspectRunHandler(watches=watches, facts=ToolFacts(), loaders=loaders, store=store, queue=FakeLeadQueue())
+
+    line = await handler(InspectRun(source="record:turn-2", watch="chat"), CONTEXT)
+
+    assert [(row.symptom, row.spans) for row in store.leads] == [
+        ("duplicate_call", [Span(step=0, message=1, part=0), Span(step=0, message=5, part=0)])
+    ]
+    assert line == "record:turn-2: 1 leads, 0 findings, 0 queued, 0 settled, no scan"
+
+
+async def test_an_oversized_return_an_earlier_turn_recorded_is_filed_by_the_turn_that_compacted_it() -> None:
+    first_turn = (question(), call("c1"), result("c1", "x" * 500), answer())
+    compacted = ModelResponse(parts=[CompactionPart(content="summary")], timestamp=AT)
+    held = (*first_turn, question("And now?"), compacted, answer("Here is the short version."))
+    second = Transcript(
+        source="record:turn-2",
+        steps=(Step(messages=held, ordinals=tuple(range(len(held)))),),
+        from_earlier_runs=frozenset(range(len(first_turn))),
+    )
+    store = FakeLeadsAndFindings()
+    loaders = TranscriptLoaders(by_key={"record": Opens(**{"turn-1": transcript(*first_turn, source="record:turn-1"), "turn-2": second})})
+    watches = {"chat": Watch(name="chat", rules=("result_overflowed_context",), inspector="never")}
+    handler = InspectRunHandler(
+        watches=watches, facts=ToolFacts(result_cap_chars=100), loaders=loaders, store=store, queue=FakeLeadQueue()
+    )
+
+    await handler(InspectRun(source="record:turn-1", watch="chat"), CONTEXT)
+    await handler(InspectRun(source="record:turn-2", watch="chat"), CONTEXT)
+
+    assert [(row.source, row.spans) for row in store.leads] == [
+        ("record:turn-2", [Span(step=0, message=2, part=0), Span(step=0, message=5, part=0)])
+    ]

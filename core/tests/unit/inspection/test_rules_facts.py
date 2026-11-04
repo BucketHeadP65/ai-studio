@@ -15,7 +15,8 @@ async def test_result_overflowed_context_needs_the_cap_and_a_compaction_after() 
 
     found = await leads_of(ResultOverflowedContext(cap_chars=100), given)
 
-    assert [lead.spans for lead in found] == [(Span(step=0, message=2, part=0),)]
+    assert [lead.spans for lead in found] == [(Span(step=0, message=2, part=0), Span(step=0, message=3, part=0))]
+    assert isinstance(given.part_at(found[0].spans[1]), CompactionPart)
     assert await leads_of(ResultOverflowedContext(cap_chars=None), given) == []
     assert await leads_of(ResultOverflowedContext(cap_chars=100), transcript(question(), call("c1"), result("c1", huge), answer())) == []
 
@@ -28,7 +29,9 @@ async def test_result_overflowed_context_sees_a_step_that_shrank() -> None:
 
     found = await leads_of(ResultOverflowedContext(cap_chars=100), given)
 
-    assert [lead.spans for lead in found] == [(Span(step=0, message=2, part=0),)]
+    assert [lead.spans for lead in found] == [(Span(step=0, message=2, part=0), Span(step=1, message=1, part=0))], (
+        "the second span is the first message the shrunk step added"
+    )
 
 
 async def test_result_overflowed_context_ignores_a_step_that_shrank_before_the_return() -> None:
@@ -43,7 +46,7 @@ async def test_result_overflowed_context_ignores_a_step_that_shrank_before_the_r
 
     assert await leads_of(ResultOverflowedContext(cap_chars=100), before_only) == []
     found = await leads_of(ResultOverflowedContext(cap_chars=100), then_a_shrink)
-    assert [lead.spans for lead in found] == [(Span(step=2, message=3, part=0),)]
+    assert [lead.spans for lead in found] == [(Span(step=2, message=3, part=0), Span(step=3, message=1, part=0))]
 
 
 async def test_budget_exhausted_unfinished_reads_the_last_response() -> None:

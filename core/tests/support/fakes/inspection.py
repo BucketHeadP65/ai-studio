@@ -141,7 +141,11 @@ class Opens:
 
 
 async def leads_of(rule: Evaluator[str, Inspected, None], given: Transcript) -> list[Lead]:
-    """Run one rule over one transcript the way an inspection does, holding every lead to its symptom's part kind."""
+    """Run one rule over one transcript the way an inspection does, holding each lead's first span to its symptom's part kind.
+
+    A lead's first span is the part the symptom shows in. A later span may point at what made it one, such as the compaction
+    after an oversized return.
+    """
 
     async def load(source: str) -> Inspected:
         return Inspected(transcript=given)
@@ -153,9 +157,9 @@ async def leads_of(rule: Evaluator[str, Inspected, None], given: Transcript) -> 
     assert case.output is not None
     for found in case.output.leads:
         shows_in = TAXONOMY.symptom(found.symptom).shows_in
-        for span in found.spans:
-            kind = given.part_at(span).part_kind
-            assert kind == shows_in, f"{found.found_by} led at {span} on a {kind} part, but {found.symptom} shows in a {shows_in}"
+        span = found.spans[0]
+        kind = given.part_at(span).part_kind
+        assert kind == shows_in, f"{found.found_by} led at {span} on a {kind} part, but {found.symptom} shows in a {shows_in}"
     return case.output.leads
 
 
