@@ -8,6 +8,7 @@ import { stepKeys } from "@/api/query-keys";
 import type { MessagePayload } from "@/api/sessions-types";
 import {
   StepNotSteerableError,
+  refusalOf,
   stepChatApi,
   stepConversationToUiMessages,
   useStepStream,
@@ -16,6 +17,7 @@ import type { GraphNode } from "@/api/studio-types";
 import { AssistantTurn } from "@/components/chat/assistant-turn";
 import { Composer, useComposerDraft } from "@/components/chat/composer";
 import { ReasoningNote } from "@/components/chat/reasoning-note";
+import { RefusalNote } from "@/components/chat/refusal-note";
 import { ThinkingMark } from "@/components/chat/thinking-mark";
 import { Drawer } from "@/shared/ui/drawer";
 
@@ -29,7 +31,8 @@ import type { UIMessage } from "ai";
 // A node that ran more than once (a map's per-item lines) shows a picker first; picking a line
 // lands on that line's own conversation. `AssistantTurn`'s own fold drops reasoning parts (it
 // was built for the orchestrator's turns, which never carry any), so this drawer renders a
-// step's thinking itself, ahead of the reused turn bubble, rather than losing it.
+// step's thinking itself, ahead of the reused turn bubble, rather than losing it. A refused
+// answer's refusal draws as a note of its own between two turns, never as the step speaking.
 
 export interface StepChatDrawerProps {
   sessionId: string | null;
@@ -109,16 +112,21 @@ function StepConversation({
 }): ReactElement {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-      {messages.map((message, index) =>
-        message.role === "user" ? (
-          <UserBubble key={message.id} text={textOf(message)} />
-        ) : (
+      {messages.map((message, index) => {
+        if (message.role === "user") {
+          return <UserBubble key={message.id} text={textOf(message)} />;
+        }
+        const refusal = refusalOf(message);
+        if (refusal !== null) {
+          return <RefusalNote key={message.id} text={refusal} />;
+        }
+        return (
           <div key={message.id} className="flex max-w-[92%] flex-col items-start gap-2 self-start">
             <ReasoningNote message={message} />
             <AssistantTurn message={message} speaker={speaker} live={streaming && index === messages.length - 1} />
           </div>
-        ),
-      )}
+        );
+      })}
       {streaming && messages.length === 0 ? (
         <div className="flex items-start gap-2.5 self-start">
           <ThinkingMark startedAt={null} tokensOut={null} />

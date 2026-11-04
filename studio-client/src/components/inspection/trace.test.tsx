@@ -194,11 +194,43 @@ describe("Trace", () => {
     expect(await screen.findByText(REFUSAL)).toBeInTheDocument();
   });
 
-  it("draws a thinking part with text as the chat draws it, and an empty one nowhere", async () => {
+  it("draws a refused text answer's refusal at its place, labelled as a refusal and never as a turn", async () => {
+    const answered = "So the attributor run: steps 0-4.";
+    const refusal = "Invalid JSON: expected value at line 1 column 1";
+    mountQuestion([
+      toldMessage(TOLD_TEXT),
+      row(1, "response", [{ part_kind: "text", content: answered }], answered),
+      row(2, "request", [
+        {
+          part_kind: "retry-feedback",
+          content: [{ type: "json_invalid", loc: [], msg: refusal, input: answered }],
+          retry: { cause: "validation_error", attempt: null, max_retries: null },
+        },
+      ]),
+      row(3, "response", [toolCall("final_result_Seen", "c-final", { items: [] })]),
+      row(4, "request", [toolReturn("final_result_Seen", "c-final", "Final result processed.")]),
+    ]);
+    render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} />);
+
+    const refusalText = await screen.findByText(refusal);
+    const note = refusalText.parentElement as HTMLElement;
+    expect(within(note).getByText("Refused")).toBeInTheDocument();
+    expect(within(note).queryByText("claude-test")).not.toBeInTheDocument();
+    expect(screen.getAllByText("You")).toHaveLength(1);
+    expect(speakerLabels()).toHaveLength(2);
+    const answer = screen.getByText(answered);
+    const retry = screen.getByRole("button", { name: /final_result_Seen\s*Final result processed\./ });
+    expect(answer.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(note.compareDocumentPosition(retry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("draws a thinking part with text as the chat draws it, its note holding no block for the hidden ones", async () => {
     render(<Trace finding={FINDING} draft="" onDraft={vi.fn()} focusRequest={0} />);
 
     expect(await screen.findByText(THOUGHT)).toBeInTheDocument();
-    expect(screen.getAllByText("Thinking")).toHaveLength(1);
+    const label = screen.getByText("Thinking");
+    // The note is its label and one block per reasoning part it draws: here the one with text.
+    expect((label.parentElement as HTMLElement).children).toHaveLength(2);
   });
 
   it("draws nothing for a conversation whose thinking is all hidden", async () => {

@@ -493,6 +493,32 @@ function userPromptText(payload: MessagePayload): string {
     .join("");
 }
 
+// The words of each retry feedback part a request row holds: the refusal of an answer that named
+// no tool, such as plain text where a structured answer was due.
+function retryFeedbackTexts(payload: MessagePayload): string[] {
+  return payload.parts.filter((part) => part.part_kind === "retry-feedback").map((part) => refusalText(part.content));
+}
+
+const RefusalDataSchema = z.object({ text: z.string() });
+
+// The words a refusal message carries, `null` for every other message. The step conversation
+// draws a refused answer's retry feedback as a `system` message holding one `data-refusal` part,
+// so neither the person nor the model is ever named as its speaker.
+export function refusalOf(message: UIMessage): string | null {
+  if (message.role !== "system") {
+    return null;
+  }
+  for (const part of message.parts) {
+    if (part.type === "data-refusal") {
+      const parsed = RefusalDataSchema.safeParse(part.data);
+      if (parsed.success) {
+        return parsed.data.text;
+      }
+    }
+  }
+  return null;
+}
+
 // Each call's own return part, keyed by the call it answers.
 function toolReturnsByCallId(messages: MessagePayload[]): Map<string, MessagePart> {
   const returns = new Map<string, MessagePart>();
@@ -598,7 +624,7 @@ function stepDataPart(payload: MessagePayload, toolReturnTimestamps: Map<string,
 // One response row's own parts, in the order the model produced them: its thinking (kept, unlike
 // the session transcript's own rebuild, when it has text), its text, and EVERY tool call it made
 // (not filtered to companion tools, since a step's tool calls are its content), each carrying its
-// own return. A call whose return asked for it again reads as an error carrying the refusal.
+// own return. A call whose return asked for it again, or failed, reads as an error carrying its words.
 function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, MessagePart>): Part[] {
   const parts: Part[] = [];
   for (const part of payload.parts) {
@@ -609,7 +635,7 @@ function stepResponseParts(payload: MessagePayload, toolReturns: Map<string, Mes
     } else if (part.part_kind === "tool-call" && part.tool_name !== undefined && part.tool_call_id !== undefined) {
       const returned = toolReturns.get(part.tool_call_id);
       const type = `tool-${part.tool_name}` as const;
-      if (returned?.outcome === "retried") {
+      if (returned?.outcome === "retried" || returned?.outcome === "failed") {
         parts.push({
           type,
           toolCallId: part.tool_call_id,
@@ -641,7 +667,8 @@ export interface StepConversationOptions {
 // A step's stored conversation -> one user bubble per prompt (the briefing that opened it, and
 // any later one a steer or a further turn added) and one assistant bubble per run of response
 // rows between them, each response opening with its own `step-start` (and `data-step` when the
-// row carries usage) the same way the session transcript's own bubbles do.
+// row carries usage) the same way the session transcript's own bubbles do. A retry feedback part
+// closes the bubble before it and reads as a refusal message of its own (see `refusalOf`).
 export function stepConversationToUiMessages(messages: MessagePayload[], options: StepConversationOptions = {}): UIMessage[] {
   const returnsFrom = options.toolReturnsFrom ?? messages;
   const toolReturns = toolReturnsByCallId(returnsFrom);
@@ -659,9 +686,19 @@ export function stepConversationToUiMessages(messages: MessagePayload[], options
 
   messages.forEach((payload, index) => {
     if (payload.kind === "request") {
+      const refusals = retryFeedbackTexts(payload);
       const text = userPromptText(payload);
-      if (text !== "") {
+      if (refusals.length > 0 || text !== "") {
         flushAssistant();
+      }
+      refusals.forEach((refusal, refusalIndex) => {
+        result.push({
+          id: `step-refusal-${index}-${refusalIndex}`,
+          role: "system",
+          parts: [{ type: "data-refusal", data: { text: refusal } }],
+        });
+      });
+      if (text !== "") {
         result.push({ id: `step-user-${index}`, role: "user", parts: [{ type: "text", text }] });
       }
       return;
