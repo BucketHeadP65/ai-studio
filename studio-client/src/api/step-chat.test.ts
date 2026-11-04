@@ -47,6 +47,38 @@ describe("stepChatApi.lines", () => {
   });
 });
 
+describe("stepChatApi.messages", () => {
+  it("reads one line's recorded messages with the item as a query param, dropping a message it cannot read", async () => {
+    let hitPath = "";
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps/review/messages`, ({ request }) => {
+        hitPath = new URL(request.url).pathname + new URL(request.url).search;
+        return HttpResponse.json({
+          messages: [
+            { kind: "request", parts: [{ part_kind: "user-prompt", content: "go" }] },
+            { parts: "not a message" },
+            { kind: "response", parts: [{ part_kind: "text", content: "Done." }] },
+          ],
+        });
+      }),
+    );
+
+    const messages = await stepChatApi.messages("s-1", "review", "item-0");
+
+    expect(hitPath).toBe("/api/sessions/s-1/run/steps/review/messages?item=item-0");
+    expect(messages.map((message) => message.kind)).toEqual(["request", "response"]);
+    expect(messages[1]?.parts[0]?.content).toBe("Done.");
+  });
+
+  it("throws on a response without its messages list", async () => {
+    server.use(
+      http.get(`${BASE}/api/sessions/s-1/run/steps/draft/messages`, () => HttpResponse.json({ steps: [] })),
+    );
+
+    await expect(stepChatApi.messages("s-1", "draft", "")).rejects.toThrow();
+  });
+});
+
 describe("stepChatApi.steer", () => {
   it("posts the message to the node's steer route with the item as a query param", async () => {
     let hitPath = "";

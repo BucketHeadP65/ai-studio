@@ -212,7 +212,7 @@ The archive keeps what the run was given as the JSON it was given: `RunArchiveRe
 ## Step chat, a running step's own conversation, streamed and steered
 
 Every agentic step a run performs (a briefing, an inline agent step, a judge's step, never an inline program or a
-gate) opens a conversation line the moment it starts executing, keyed by its node and, for a map, its item. The three
+gate) opens a conversation line the moment it starts executing, keyed by its node and, for a map, its item. The four
 routes below read and write that line while the run is held in the session pool. They are session-scoped only, because
 the inspector always holds the run's session. Once the run ends, the same conversations are in the full archive record's `conversations` map
 (keyed `"node[item]"`, the item empty for a step that is not a map item, so `"node[]"`), so an ended run needs no route of
@@ -221,9 +221,16 @@ placed where that attempt began, although the attempt after it started from the 
 
 ```
 GET    /api/sessions/{id}/run/steps                                 -> {"steps": [{"node", "item", "executing", "settled"}, ...]}
+GET    /api/sessions/{id}/run/steps/{node}/messages?item=           -> {"messages": [...]} | 404 | 500
 GET    /api/sessions/{id}/run/steps/{node}/stream?item=&since=0     -> text/event-stream (below) | 404
 POST   /api/sessions/{id}/run/steps/{node}/steer?item=  {"message"} -> {"ok": true} | 409 | 404
 ```
+
+The messages route answers a line's recorded messages before the run ends, each in the shape the archive's
+`conversations` map holds it, dropped attempts included. A line executing again answers what it recorded up to its last
+settled turn, and any attempt of the current turn that lost its connection. A message holding a value with no JSON form answers 500, where the archive leaves that line out. The step
+chat reads it once a line has settled, because the stream carries no event for a refused answer that called no tool
+(UB-18 in `docs/explanation/upstream-bugs.md`), while the recorded messages hold that refusal.
 
 The listing is one entry per open line in the order the run opened them. `executing` is true for the whole of the
 step's run (every model request and tool round trip of it), `settled` once its messages are written, and no live run

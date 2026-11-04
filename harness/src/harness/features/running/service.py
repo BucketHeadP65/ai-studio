@@ -889,12 +889,27 @@ def archive_run(  # noqa: PLR0913 (mirrors the evidence both ending paths alread
     archive.put(record)
 
 
+def jsonable_messages(messages: list[ModelMessage]) -> list[dict[str, object]]:
+    """One step conversation's messages as plain JSON, each in the shape the run archive files it.
+
+    Args:
+        messages: The messages, in order.
+
+    Returns:
+        Each message as a JSON object, in the same order.
+
+    Raises:
+        ValueError: when a message holds a value that has no JSON form.
+    """
+    return ModelMessagesTypeAdapter.dump_python(messages, mode="json")
+
+
 def _jsonable_conversations(conversations: dict[tuple[str, str], list[ModelMessage]]) -> dict[str, list[dict[str, object]]]:
     """Each worker's messages as plain JSON under its `node[item]` key, skipping one that cannot convert."""
     jsonable: dict[str, list[dict[str, object]]] = {}
     for (node, item), messages in conversations.items():
         try:
-            jsonable[f"{node}[{item}]"] = ModelMessagesTypeAdapter.dump_python(messages, mode="json")
+            jsonable[f"{node}[{item}]"] = jsonable_messages(messages)
         except ValueError:
             continue
     return jsonable

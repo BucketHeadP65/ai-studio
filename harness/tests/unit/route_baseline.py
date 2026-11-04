@@ -56,6 +56,7 @@ ROUTE_BASELINE: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/api/sessions/{session_id}/conversation"),
         ("GET", "/api/sessions/{session_id}/run/state"),
         ("GET", "/api/sessions/{session_id}/run/steps"),
+        ("GET", "/api/sessions/{session_id}/run/steps/{node}/messages"),
         ("GET", "/api/sessions/{session_id}/run/steps/{node}/stream"),
         ("GET", "/api/sessions/{session_id}/run/values"),
         ("GET", "/api/sessions/{session_id}/transcript"),

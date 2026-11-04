@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,9 +19,20 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 
 from core.ai.workflows.contracts import Briefing, Shape
+from pydantic_ai.messages import (
+    ModelMessagesTypeAdapter,
+    ModelRequest,
+    ModelResponse,
+    RetryFeedbackPart,
+    RetryInfo,
+    TextPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 
 from harness.features.running import controller as running_controller
-from harness.features.running.conversations import STEP_STREAM_BUFFER_BYTES, StepConversations
+from harness.features.running import service as running_service
+from harness.features.running.conversations import STEP_STREAM_BUFFER_BYTES, DroppedAttempt, StepConversations
 from tests.support.controllers import a_client_of
 from tests.support.running import a_pool, a_running_controller
 
@@ -28,6 +40,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     import httpx
+
+    from pydantic_ai.messages import ModelMessage
 
     from harness.features.running.conversations import StepConversation
     from harness.session import SessionPool
@@ -292,6 +306,87 @@ async def test_steer_422s_on_an_empty_or_whitespace_message() -> None:
 
         assert empty.status_code == 422
         assert blank.status_code == 422
+
+
+def _refused_then_answered(prompt: str) -> list[ModelMessage]:
+    """A line's messages: its prompt, a plain-text answer, the refusal that answers no call, and the answer it retried."""
+    return [
+        ModelRequest(parts=[UserPromptPart(content=prompt)]),
+        ModelResponse(parts=[TextPart(content="It looks healthy.")]),
+        ModelRequest(
+            parts=[RetryFeedbackPart(content="Invalid JSON: expected value at line 1 column 1", retry=RetryInfo(cause="validation_error"))]
+        ),
+        ModelResponse(parts=[TextPart(content='{"healthy": true}')]),
+    ]
+
+
+async def test_messages_answers_a_settled_lines_messages_as_the_archive_files_them() -> None:
+    async with _studio() as (client, pool):
+        runtime = await pool.create(None)
+        conversations = runtime.active.conversations
+        _open(conversations, ("draft", ""))
+        messages = _refused_then_answered("Say whether the quarter looks healthy.")
+        conversations.settle(("draft", ""), messages=messages)
+
+        read = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/draft/messages")
+
+        assert read.status_code == 200
+        assert read.json() == {"messages": running_service._jsonable_conversations(conversations.archived())["draft[]"]}
+        assert read.json()["messages"][2]["parts"][0]["part_kind"] == "retry-feedback"
+
+
+async def test_messages_reads_one_map_items_line_with_its_dropped_attempts() -> None:
+    async with _studio() as (client, pool):
+        runtime = await pool.create(None)
+        conversations = runtime.active.conversations
+        line = _open(conversations, ("summarize", "row-1"))
+        _open(conversations, ("summarize", "row-2"))
+        prompt = "Summarize row 1."
+        line.dropped_attempts = [
+            DroppedAttempt(messages=(ModelRequest(parts=[UserPromptPart(content=prompt)]), ModelResponse(parts=[TextPart(content="Row 1 is")])))
+        ]
+        conversations.settle(("summarize", "row-1"), messages=_refused_then_answered(prompt))
+
+        read = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/summarize/messages", params={"item": "row-1"})
+
+        assert read.status_code == 200
+        assert read.json() == {"messages": ModelMessagesTypeAdapter.dump_python(line.exchanged, mode="json")}
+        assert len(read.json()["messages"]) == 6
+
+
+async def test_messages_404s_on_an_unknown_line_or_session() -> None:
+    async with _studio() as (client, pool):
+        runtime = await pool.create(None)
+        _open(runtime.active.conversations, ("draft", ""))
+
+        unknown_node = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/nope/messages")
+        unknown_item = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/draft/messages", params={"item": "row-9"})
+        unknown_session = await client.get(f"/api/sessions/{UNKNOWN}/run/steps/draft/messages")
+
+        assert unknown_node.status_code == 404
+        assert unknown_node.json() == {"ok": False, "message": running_controller._UNKNOWN_STEP_CONVERSATION}
+        assert unknown_item.status_code == 404
+        assert unknown_session.status_code == 404
+
+
+async def test_messages_refuses_a_line_whose_messages_have_no_json_form_and_logs_why(caplog: pytest.LogCaptureFixture) -> None:
+    async with _studio() as (client, pool):
+        runtime = await pool.create(None)
+        conversations = runtime.active.conversations
+        _open(conversations, ("summarize", "row-1"))
+        unwritable = ModelRequest(parts=[ToolReturnPart(tool_name="fetch", content=object(), tool_call_id="call-1")])
+        conversations.settle(("summarize", "row-1"), messages=[unwritable])
+
+        with caplog.at_level(logging.ERROR):
+            read = await client.get(f"/api/sessions/{runtime.session_id}/run/steps/summarize/messages", params={"item": "row-1"})
+
+        assert read.status_code == 500
+        assert read.json() == {"ok": False, "message": running_controller._UNWRITABLE_STEP_MESSAGES}
+        (logged,) = [record for record in caplog.records if record.levelno == logging.ERROR]
+        assert "summarize" in logged.getMessage()
+        assert "row-1" in logged.getMessage()
+        assert logged.exc_info is not None
+        assert "Unable to serialize unknown type" in str(logged.exc_info[1])
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -83,6 +83,8 @@ _LIVE_RESULT = Outcome(status="unknown", summary="This run has not ended, so the
 
 _UNKNOWN_STEP_CONVERSATION = "no live step with that node and item here"
 
+_UNWRITABLE_STEP_MESSAGES = "this step's messages hold a value that cannot be sent as JSON"
+
 _ONE_AT_A_TIME = "this session is busy, so nothing was started in it"
 """The refusal for a start in a session that is busy with a chat turn or a run."""
 
@@ -660,6 +662,26 @@ class RunningController:
             for (node, item), conversation in session.active.conversations.conversations.items()
         ]
         return JSONResponse({"steps": steps})
+
+    @router.get("/sessions/{session_id}/run/steps/{node}/messages")
+    async def session_run_step_messages(self, session_id: str, node: str, item: str = "") -> JSONResponse:
+        """One step's recorded messages, each in the shape the run archive files it, its refused answers and dropped attempts included.
+
+        A step that is executing again answers what it recorded up to its last settled turn, and any attempt of the
+        current turn that lost its connection.
+        """
+        session = await self._session_for(session_id)
+        if session is None:
+            return _no_such_session()
+        conversation = session.active.conversations.conversations.get((node, item))
+        if conversation is None:
+            return JSONResponse({"ok": False, "message": _UNKNOWN_STEP_CONVERSATION}, status_code=404)
+        try:
+            messages = service.jsonable_messages(conversation.exchanged)
+        except ValueError:
+            _logger.exception("step {node} item {item}: its messages could not be sent as JSON", node=node, item=item)
+            return JSONResponse({"ok": False, "message": _UNWRITABLE_STEP_MESSAGES}, status_code=500)
+        return JSONResponse({"messages": messages})
 
     @router.get("/sessions/{session_id}/run/steps/{node}/stream", response_model=None)
     async def session_run_step_stream(
