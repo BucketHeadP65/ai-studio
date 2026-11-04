@@ -110,7 +110,10 @@ export function AssistantTurn(props: {
   onInspect?: (message: UIMessage) => void;
   /** Who this bubble speaks as. Defaults to the chat station's own orchestrator label. */
   speaker?: string;
-  /** The turn is still streaming: every step stays in view in order, and the thinking mark shows. */
+  /**
+   * The turn is still streaming: every step stays in view in order, the thinking mark shows, and
+   * the body closes half-arrived markdown. Settled, the body renders its text as written.
+   */
   live?: boolean;
   /** When the live turn started, ISO; absent or `null`, the thinking mark shows the verb alone. */
   turnStartedAt?: string | null;
@@ -190,7 +193,7 @@ export function AssistantTurn(props: {
             ) : null}
           </div>
         ) : null}
-        <AgentMarkdown text={last?.text ?? ""} />
+        <AgentMarkdown text={last?.text ?? ""} live={live} />
         {(last?.acts ?? []).map((part) => (
           <ActLine key={part.toolCallId} part={part} />
         ))}

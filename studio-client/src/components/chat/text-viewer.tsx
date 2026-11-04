@@ -77,7 +77,7 @@ export function TextViewer({
                 <p className="text-label-3 text-micro font-semibold uppercase tracking-caps">
                   {bubble.role}
                 </p>
-                <AgentMarkdown text={bubble.text} />
+                <AgentMarkdown text={bubble.text} live={false} />
               </div>
             ))}
           </div>
@@ -86,7 +86,7 @@ export function TextViewer({
             {text}
           </pre>
         ) : (
-          <AgentMarkdown text={text} />
+          <AgentMarkdown text={text} live={false} />
         )}
       </div>
     </Drawer>

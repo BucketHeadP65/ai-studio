@@ -169,6 +169,7 @@ function SessionChatEngine({
         <TurnInspector
           sessionId={sessionId}
           message={inspected}
+          live={busy && chat.messages.at(-1)?.id === inspected.id}
           onClose={() => setInspectedId(null)}
         />
       ) : null}

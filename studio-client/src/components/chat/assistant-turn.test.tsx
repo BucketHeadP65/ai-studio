@@ -115,6 +115,18 @@ describe("AssistantTurn", () => {
     expect(screen.queryByRole("status", { name: "Thinking" })).not.toBeInTheDocument();
   });
 
+  it("closes an unmatched bracket only while live, and shows it as written once settled", () => {
+    const message = assistant([{ type: "step-start" }, { type: "text", text: "Checked [the plan" }]);
+    const { container, rerender } = render(<AssistantTurn live message={message} />);
+
+    expect(container.innerHTML).toContain("streamdown:incomplete-link");
+
+    rerender(<AssistantTurn message={message} />);
+
+    expect(container.innerHTML).not.toContain("incomplete-link");
+    expect(container.textContent).toContain("Checked [the plan");
+  });
+
   it("keeps every step's cards in view while the turn is live", () => {
     render(
       <AssistantTurn

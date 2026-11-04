@@ -34,7 +34,8 @@ literal markers. There was no toast outlet.
   containment is therefore forbidden anywhere a portaled layer can open. The primitives record the opener themselves on
   open and hand focus back to it on close, since every open is controlled and radix never sees a trigger.
 - **Streaming prose: streamdown.** `AgentMarkdown` (every conversation surface) renders through `Streamdown` — streaming
-  block parsing, incomplete-markdown repair, shiki fences through the `@streamdown/code` plugin, link safety off so a
+  block parsing, incomplete-markdown repair for text still streaming in (finished text renders as written, so an
+  unmatched `[` never ends in a placeholder link), shiki fences through the `@streamdown/code` plugin, link safety off so a
   link is a real anchor. streamdown owns its code-block and table chrome (header, copy control, capped height with an
   inner scrollbar); the wrapper keeps only width and overflow guards and the accent on links. The projects station's
   `MarkdownView` deliberately stays on react-markdown: its remark-level machinery (source-position stamps for note

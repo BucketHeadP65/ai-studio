@@ -43,7 +43,7 @@ function Turn({ message, speaker }: { message: UIMessage; speaker: string | unde
   }
   return (
     <div className="flex flex-col gap-2">
-      <ReasoningNote message={message} />
+      <ReasoningNote message={message} live={false} />
       <AssistantTurn message={message} speaker={speaker} foldSettled={false} />
     </div>
   );

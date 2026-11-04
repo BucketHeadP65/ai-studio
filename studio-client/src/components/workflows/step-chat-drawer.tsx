@@ -120,10 +120,11 @@ function StepConversation({
         if (refusal !== null) {
           return <RefusalNote key={message.id} text={refusal} />;
         }
+        const live = streaming && index === messages.length - 1;
         return (
           <div key={message.id} className="flex max-w-[92%] flex-col items-start gap-2 self-start">
-            <ReasoningNote message={message} />
-            <AssistantTurn message={message} speaker={speaker} live={streaming && index === messages.length - 1} />
+            <ReasoningNote message={message} live={live} />
+            <AssistantTurn message={message} speaker={speaker} live={live} />
           </div>
         );
       })}
