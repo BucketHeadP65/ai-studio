@@ -12,7 +12,7 @@ from core.ai.workflows.contracts import StepRegistry
 from engram.agent_memory.contracts import EngramMemoryStore
 from engram.testing.fakes.agent_memory import FakeCards, FakeIngest, FakeSearchHits
 from pydantic_ai import Agent, ModelRetry
-from pydantic_ai.capabilities import AbstractCapability, CombinedCapability
+from pydantic_ai.capabilities import AbstractCapability, CombinedCapability, DynamicCapability
 from pydantic_ai.messages import ModelMessage, ModelRequest, ModelResponse, TextContent, TextPart, UserPromptPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -513,37 +513,37 @@ def _build(tmp_path: Path, *, memory: tuple[AbstractCapability[Runtime], ...] = 
     )
 
 
-def _memory_switched(tmp_path: Path) -> plugins.Switched[Runtime]:
-    """One `Switched` around all three mounts, mirroring `composition.py`'s own wiring.
-
-    Three separate `Switched(mount, plugin="memory", state=a_state(tmp_path))` instances would each mint the identical
-    `plugin:memory` capability id, which `Agent.__init__` refuses as a duplicate --
-    `CombinedCapability` is what bundles the three mounts into the one capability `Switched` wraps.
-    """
-    mounts = memory_module.memory_mounts(InMemoryStore(), project_namespace="project-abc", global_memory_enabled=lambda: True)
-    return plugins.Switched(CombinedCapability[Runtime](capabilities=list(mounts)), plugin="memory", state=a_state(tmp_path))
+def _memory_plugin(tmp_path: Path) -> tuple[AbstractCapability[Runtime], ...]:
+    """The memory plugin's mounts as `composition.py` builds them, with global memory on."""
+    return memory_module.memory_plugin_mounts(
+        InMemoryStore(), project_namespace="project-abc", global_memory_enabled=lambda: True, state=a_state(tmp_path)
+    )
 
 
 class TestBuildAgentMemoryDoor:
-    def test_build_agent_mounts_all_three_memory_capabilities_behind_the_memory_door(self, tmp_path: Path) -> None:
-        agent = _build(tmp_path, memory=(_memory_switched(tmp_path),))
+    def test_build_agent_mounts_the_global_mount_beside_the_door_around_the_other_two(self, tmp_path: Path) -> None:
+        agent = _build(tmp_path, memory=_memory_plugin(tmp_path))
 
         switched: list[plugins.Switched[Runtime]] = []
         agent._root_capability.apply(
             lambda cap: switched.append(cap) if isinstance(cap, plugins.Switched) and cap.plugin == "memory" else None
         )
+        global_mounts: list[AbstractCapability[Runtime]] = []
+        agent._root_capability.apply(lambda cap: global_mounts.append(cap) if cap.id == "memory-global" else None)
 
         assert len(switched) == 1
         combined = switched[0].wrapped
         assert isinstance(combined, CombinedCapability)
-        assert len(combined.capabilities) == 3
+        assert [mount.id for mount in combined.capabilities] == ["memory-project", "memory-scratchpad"]
+        assert len(global_mounts) == 1
+        assert isinstance(global_mounts[0], DynamicCapability)
 
     def test_the_door_closed_mounts_none_of_the_three(self, tmp_path: Path) -> None:
-        agent = _build(tmp_path, memory=(_memory_switched(tmp_path),))
-        switched: list[plugins.Switched[Runtime]] = []
-        agent._root_capability.apply(
-            lambda cap: switched.append(cap) if isinstance(cap, plugins.Switched) and cap.plugin == "memory" else None
-        )
+        global_mount, door = _memory_plugin(tmp_path)
+        assert isinstance(global_mount, DynamicCapability)
+        assert isinstance(door, plugins.Switched)
+
         plugins.set_plugin(a_state(tmp_path), "memory", enabled=False)
 
-        assert switched[0].capability_func(_ctx()) is None
+        assert door.capability_func(_ctx()) is None
+        assert global_mount.capability_func(_ctx()) is None

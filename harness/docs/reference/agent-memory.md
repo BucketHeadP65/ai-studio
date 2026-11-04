@@ -10,11 +10,14 @@ title: "agent-memory, the plugin, the three mounts, and the engram knowledge bas
 
 # agent-memory, the plugin, the three mounts, and the engram knowledge base underneath
 
-The `memory` plugin (`harness/src/harness/plugins.py`, on by default) mounts three standing-memory scopes as one
-`CombinedCapability` behind a single `Switched(..., plugin="memory")` (`composition.py`). `Switched.id` is
-`f"plugin-{plugin}"`, so
-three separate wrappers on the same plugin name would mint the same capability id three times and `Agent.__init__` refuses
-that as a duplicate. Each scope is a `NoteMemory` capability (`harness/src/harness/features/projects/memory.py`), an
+The `memory` plugin (`harness/src/harness/plugins.py`, on by default) mounts three standing-memory scopes, placed by
+`memory_plugin_mounts` (`harness/src/harness/features/projects/memory.py`, called from `composition.py`). The project and
+scratchpad mounts sit in one `CombinedCapability` behind a single `Switched(..., plugin="memory")`. `Switched.id` is
+`f"plugin-{plugin}"`, so two wrappers on the same plugin name would mint the same capability id and `Agent.__init__`
+refuses that as a duplicate. The global mount sits beside that switch, at the top of the agent's capabilities, and reads
+the plugin's state itself. It is a `DynamicCapability`, and a dynamic capability inside another one, which `Switched` is,
+contributes no tools ([UB-16](../../../docs/explanation/upstream-bugs.md)).
+Each scope is a `NoteMemory` capability (`harness/src/harness/features/projects/memory.py`), an
 adaptation of pydantic-ai-harness's `pydantic_ai_harness.memory.Memory` whose stock `MemoryToolset` cannot address this store's paths.
 It normalizes every filename through a flat, dot-only pattern that rejects slashes and defaults an omitted filename to
 `MEMORY.md`, the derived index this store refuses to accept as a write target. This page is the contract.
@@ -31,8 +34,9 @@ Global and project share one backing `EngramMemoryStore`. The scratchpad gets it
 Every mount registers the same four tools under its own prefix (`global_write_memory`, `project_read_memory`,
 `scratchpad_search_memory`, and so on), so three mounts on one agent never collide on a bare tool name, and every guidance
 line or `ModelRetry` message names the exact tool the model can call. The global mount is the only one gated per turn: a
-`DynamicCapability` resolves to nothing on a turn where `global_memory_enabled()` reads false, so a project can opt out of
-world-wide facts without touching the plugin.
+`DynamicCapability` resolves to nothing on a turn where the plugin is off or `global_memory_enabled()` reads false, so a
+project can opt out of world-wide facts without touching the plugin. The memory guidance reads the same gate, so it names
+the `global_` functions exactly when `run_code`'s catalog holds them.
 
 ## The path and category grammar
 

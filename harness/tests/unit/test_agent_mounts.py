@@ -48,7 +48,7 @@ from harness.features.authoring.agent import (
 )
 from harness.features.authoring.process import WorkflowProcess
 from harness.features.authoring.workers import DELEGATE_TOOL, EXTERNAL_AGENT_TOOL, SCRIPT_TOOL
-from harness.features.projects.memory import memory_mounts
+from harness.features.projects.memory import memory_plugin_mounts
 from harness.features.running.spend_report import SpendReporter
 from harness.features.scheduling.contracts import Scheduler
 from harness.features.sessions.project_config import CompactionConfig, ProjectConfig
@@ -94,6 +94,7 @@ def _build(
     save_capability_id: str | None = None,
     skill_hint: AbstractCapability[Runtime] | None = None,
     deployment_spend: bool = False,
+    memory: Sequence[AbstractCapability[Runtime]] = (),
 ) -> Agent[Runtime, str | DeferredToolRequests]:
     port = WorkflowContract[Runtime](
         source=folder_toolset(tmp_path / "workflows"),
@@ -117,6 +118,7 @@ def _build(
         tiers=ModelTiers(state=a_state(tmp_path), models=ModelList(listing=None), build=_fake_build) if delegation else None,
         skill_hint=skill_hint,
         spend=None if deployment_spend else free_spend(),
+        memory=memory,
     )
 
 
@@ -681,17 +683,63 @@ class TestCodeModeCatalog:
         assert "list_custom_capabilities" in _offered_tool_names(seen[1], infos[1]), "the load appends its functions to the catalog"
 
 
+_MEMORY_FUNCTIONS = ("write_memory", "read_memory", "delete_memory", "search_memory")
+
+
+class TestMemoryReachesTheSandbox:
+    """The memory plugin as composition mounts it: every function the guidance names is in `run_code`'s catalog."""
+
+    async def _offered(self, tmp_path: Path, *, global_memory: bool) -> tuple[set[str], str]:
+        """The functions one request offers, and its instruction text, with the memory plugin mounted."""
+        captured: dict[str, object] = {}
+
+        def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
+            captured["messages"] = list(messages)
+            captured["info"] = info
+            return ModelResponse(parts=[TextPart("done")])
+
+        memory = memory_plugin_mounts(
+            InMemoryStore(), project_namespace="project-abc", global_memory_enabled=lambda: global_memory, state=a_state(tmp_path)
+        )
+        await _run(_build(ProjectConfig(), tmp_path, model=_captured_params(function), memory=memory))
+        messages = cast("Sequence[ModelMessage]", captured["messages"])
+        info = cast("AgentInfo", captured["info"])
+        instructions = "".join(part.content for part in info.model_request_parameters.instruction_parts or [])
+        return _offered_tool_names(messages, info), instructions
+
+    async def test_global_memory_on_offers_every_global_function_the_guidance_names(self, tmp_path: Path) -> None:
+        offered, instructions = await self._offered(tmp_path, global_memory=True)
+
+        assert "`global_write_memory`" in instructions
+        for prefix in ("global", "project", "scratchpad"):
+            assert {f"{prefix}_{name}" for name in _MEMORY_FUNCTIONS} <= offered
+
+    async def test_global_memory_off_drops_its_functions_and_its_guidance_together(self, tmp_path: Path) -> None:
+        offered, instructions = await self._offered(tmp_path, global_memory=False)
+
+        assert "global_write_memory" not in instructions
+        assert not {name for name in offered if name.startswith("global_")}
+        assert {f"project_{name}" for name in _MEMORY_FUNCTIONS} <= offered
+
+    async def test_the_plugin_off_offers_no_memory_function_at_all(self, tmp_path: Path) -> None:
+        plugins.set_plugin(a_state(tmp_path), "memory", enabled=False)
+
+        offered, instructions = await self._offered(tmp_path, global_memory=True)
+
+        assert not {name for name in offered if name.endswith("_memory")}
+        assert "_write_memory" not in instructions
+
+
 class TestRunCodeCatalogSize:
     """The size of `run_code`'s description and the catalog block together, with everything that folds into the sandbox mounted.
 
-    A regression guard, not the full picture. With the full catalog the two measure about
-    16.3 KB, and the ceiling leaves about 20% headroom over that, so a real regression shows without
-    chasing the exact byte count turn to turn.
+    A regression guard, not the full picture. With the full catalog, the global memory functions
+    included, the two measure about 18.3 KB, and the ceiling leaves about 20% headroom over that, so a
+    real regression shows without chasing the exact byte count turn to turn.
     """
 
     async def test_the_folded_catalog_stays_within_a_reasonable_ceiling(self, tmp_path: Path) -> None:
-        mounts = memory_mounts(InMemoryStore(), project_namespace="ceiling-test", global_memory_enabled=lambda: True)
-        mem = (plugins.Switched(CombinedCapability(capabilities=list(mounts)), plugin="memory", state=a_state(tmp_path)),)
+        mem = memory_plugin_mounts(InMemoryStore(), project_namespace="ceiling-test", global_memory_enabled=lambda: True, state=a_state(tmp_path))
         captured: dict[str, AgentInfo] = {}
 
         def function(messages: Sequence[ModelMessage], info: AgentInfo) -> ModelResponse:
@@ -731,7 +779,7 @@ class TestRunCodeCatalogSize:
         await _run(agent)
 
         prompt_text = (_sandbox(captured["info"]).description or "") + _catalog_text([], captured["info"])
-        assert len(prompt_text.encode()) < 20_000
+        assert len(prompt_text.encode()) < 22_000
 
 
 class TestSkillHintMount:

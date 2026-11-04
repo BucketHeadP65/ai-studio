@@ -48,7 +48,7 @@ from engram.skills.contracts import SKILLS as ENGRAM_SKILLS
 from fastapi import HTTPException
 from pydantic import TypeAdapter, ValidationError
 from pydantic_ai import Agent, AgentSpec, ModelRetry, capture_run_messages
-from pydantic_ai.capabilities import CombinedCapability, Toolset
+from pydantic_ai.capabilities import Toolset
 from pydantic_ai.exceptions import ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, repair_messages
 from pydantic_ai.toolsets import FunctionToolset
@@ -119,7 +119,7 @@ from harness.features.authoring.infrastructure.studio import StudioKnowledgeBase
 from harness.features.browsing import contracts as browsing
 from harness.features.browsing.contracts import CardRefusedError, WorkflowCardPatch
 from harness.features.followme.contracts import FollowMe, act_toolset, verb_toolset
-from harness.features.projects.contracts import memory_mounts, sanitize_segment
+from harness.features.projects.contracts import memory_plugin_mounts, sanitize_segment
 from harness.features.running import contracts as running
 from harness.features.running.contracts import (
     DroppedAttempt,
@@ -1156,25 +1156,11 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
     # read fresh per call, as `disabled_plugins()` is, so a change to `.aifactory/config.json`
     # reaches the next turn with no restart.
     project_namespace = f"project-{sanitize_segment(project_id_of(CHECKOUT))}"
-    # One `Switched` around all three mounts, not one each: `Switched.id` is `f"plugin-{plugin}"`, so
-    # three separate wrappers on the same plugin name would mint the same capability id three times,
-    # which `Agent.__init__` refuses as a duplicate. `CombinedCapability` groups the three as one
-    # capability tree, and each mount's own `for_run` (the global one's per-turn gate included) still
-    # resolves on its own underneath it.
-    memory = (
-        Switched(
-            CombinedCapability[Runtime](
-                capabilities=list(
-                    memory_mounts(
-                        agent_memory_store,
-                        project_namespace=project_namespace,
-                        global_memory_enabled=lambda: project_config(CHECKOUT).memory.global_memory,
-                    )
-                )
-            ),
-            plugin="memory",
-            state=state,
-        ),
+    memory = memory_plugin_mounts(
+        agent_memory_store,
+        project_namespace=project_namespace,
+        global_memory_enabled=lambda: project_config(CHECKOUT).memory.global_memory,
+        state=state,
     )
     # The companion's hands: the verbs are declared here, and the acts answer through the route handlers, so a companion
     # act and a station click are the same act. `build_agent` mounts them behind the `follow-me` plugin, in the master

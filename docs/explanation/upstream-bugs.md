@@ -327,6 +327,35 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `retries={'output': 4}`, raises `UnexpectedModelBehavior: Exceeded maximum output retries (4)` after 5 model calls.
   With `capabilities=[RaiseContentFilterError()]` it raises `ContentFilterError` after 1.
 
+## UB-16. A dynamic capability inside another dynamic capability contributes no tools
+
+- **Library:** pydantic-ai 2.63.0, unchanged in 2.66.0 (`pydantic_ai/toolsets/_dynamic.py`, `DynamicToolset.for_run`.
+  `pydantic_ai/capabilities/_dynamic.py`, `DynamicCapability._resolve_toolset`).
+- **Symptom:** a `DynamicCapability` whose factory returns a capability tree holding another `DynamicCapability` offers
+  none of the inner one's tools. The inner one's instructions and hooks still reach the run. In the harness the memory
+  guidance told the agent to call `global_search_memory` and the other `global_*_memory` functions inside `run_code`, and
+  `run_code`'s catalog did not hold them, so every such call failed.
+- **Cause:** every `DynamicCapability` contributes a `DynamicToolset` with `per_run_step=False`, whose factory runs only in
+  `DynamicToolset.for_run`. The outer `DynamicToolset.for_run` runs its own factory and keeps the toolset it returns, but
+  never calls that toolset's `for_run`. The inner `DynamicToolset` is part of that toolset, so its factory never runs, it
+  holds no toolset, and its `get_tools` answers `{}`. At the top of an agent, the agent itself calls `for_run` on every
+  toolset, through a `CombinedToolset` too, which is why the same capability offers its tools there.
+- **Grade:** the model is told to call functions it does not have.
+- **Found:** 2026-11-04, reviewing the harness inspector's findings 16, 19, 22 and 24 (one event filed four times). The
+  global memory mount was a `DynamicCapability` inside the `CombinedCapability` that the memory plugin's `Switched` wraps,
+  and `Switched` is a `DynamicCapability`.
+- **What we did:** `memory_plugin_mounts` (`harness/src/harness/features/projects/memory.py`) places the global mount at
+  the top of the agent's capabilities, beside the plugin's switch, and the mount reads the plugin's state itself.
+  `harness/tests/unit/test_agent_mounts.py` (`TestMemoryReachesTheSandbox`) holds every memory function to `run_code`'s
+  catalog.
+- **Upstream state:** present in 2.63.0 and 2.66.0. The ask is that `DynamicToolset.for_run` call `for_run` on the
+  toolset its factory returns, as the agent does for a toolset at the top.
+- **Issue:** not filed.
+- **Repro:** `Agent(FunctionModel(answer), capabilities=[DynamicCapability(lambda _ctx: DynamicCapability(lambda _ctx:
+  Toolset(FunctionToolset([ping])), id="inner"), id="outer")])` offers the model no tools, while the inner
+  `DynamicCapability` alone offers `ping`. Patching `DynamicToolset.for_run` to call `for_run` on the toolset its factory
+  returned brings `ping` back.
+
 ## Upstream changes that required adaptation (not bugs)
 
 - **`ConversationSearch` defaults to `scope='conversation'`** (pydantic-ai-harness v0.25.0, upstream #621. It was `'all'`). Our
