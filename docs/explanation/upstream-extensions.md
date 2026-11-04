@@ -347,8 +347,11 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   and an orchestrator gate's decision. A failure at the `pool` or `connect` phase gets one attempt, because the HTTP
   client has already retried it. Only the last failure reaches a map's `on_error` and `abort_after_repeats`. Any other
   failure gets one attempt. The harness keeps each attempt that lost its connection apart from the history the next
-  attempt starts from: the run archive files it where it began, its responses reach the spend rows, and a steer it had
-  taken in goes back on the line's inbox.
+  attempt starts from: the run archive files it where it began, ahead of the attempt whose prompt sits after as many user
+  prompts as the broken one's history held, so two turns asking the same words are told apart, its responses reach the
+  spend rows, and a steer it had taken in goes back on the line's inbox. A broken attempt's tool calls are not undone,
+  which is safe because every write an agent turn in the repo's step files can make replaces a page by id or finds what
+  an earlier call made, and a program step is never performed again.
 - **Where:** `core/src/core/ai/workflows/graph_builder.py` (`_attempted`, the `sleep` of `build_graph` and
   `run_workflow`), `harness/src/harness/composition.py` (`_keeping_a_stopped_turn`),
   `harness/src/harness/features/running/conversations.py` (`DroppedAttempt`, `StepConversation.exchanged`), tests in

@@ -343,7 +343,9 @@ async def test_messages_reads_one_map_items_line_with_its_dropped_attempts() -> 
         _open(conversations, ("summarize", "row-2"))
         prompt = "Summarize row 1."
         line.dropped_attempts = [
-            DroppedAttempt(messages=(ModelRequest(parts=[UserPromptPart(content=prompt)]), ModelResponse(parts=[TextPart(content="Row 1 is")])))
+            DroppedAttempt(
+                messages=(ModelRequest(parts=[UserPromptPart(content=prompt)]), ModelResponse(parts=[TextPart(content="Row 1 is")])), prompts_before=0
+            )
         ]
         conversations.settle(("summarize", "row-1"), messages=_refused_then_answered(prompt))
 

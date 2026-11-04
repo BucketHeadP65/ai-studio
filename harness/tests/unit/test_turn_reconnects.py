@@ -258,7 +258,7 @@ def test_a_dropped_attempt_is_placed_ahead_of_the_settled_attempt_that_asked_the
     broken, half = _asked("turn two"), _said(HALF_SAID)
     line = StepConversation(step=DIGEST, output_type=dict)
     line.messages = [first, one, second, two]
-    line.dropped_attempts = [DroppedAttempt(messages=(broken, half))]
+    line.dropped_attempts = [DroppedAttempt(messages=(broken, half), prompts_before=1)]
 
     assert line.exchanged == [first, one, broken, half, second, two]
 
@@ -266,7 +266,7 @@ def test_a_dropped_attempt_is_placed_ahead_of_the_settled_attempt_that_asked_the
 def test_a_dropped_attempt_no_settled_attempt_asked_again_comes_after_everything_before_it() -> None:
     """A rerun whose every attempt broke follows the run before it, which asked something else."""
     earlier, answered = _asked("the first run"), _said("first")
-    attempts = [DroppedAttempt(messages=(_asked("the rerun"), _said(HALF_SAID))) for _ in range(2)]
+    attempts = [DroppedAttempt(messages=(_asked("the rerun"), _said(HALF_SAID)), prompts_before=0) for _ in range(2)]
     line = StepConversation(step=DIGEST, output_type=dict)
     line.messages = [earlier, answered]
     line.dropped_attempts = attempts

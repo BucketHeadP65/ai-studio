@@ -217,7 +217,10 @@ routes below read and write that line while the run is held in the session pool.
 the inspector always holds the run's session. Once the run ends, the same conversations are in the full archive record's `conversations` map
 (keyed `"node[item]"`, the item empty for a step that is not a map item, so `"node[]"`), so an ended run needs no route of
 its own. A line's archived conversation also holds every attempt at one of its turns that lost its model connection,
-placed where that attempt began, although the attempt after it started from the history the turn began with.
+placed where that attempt began, although the attempt after it started from the history the turn began with. It sits
+ahead of the attempt that settled its turn, the one whose prompt follows as many user prompts as the broken attempt's
+history held and asks the same words. A broken attempt's tool calls stay done, and every write an agent turn in the
+repo's step files can make lands the same when the next attempt makes it again.
 
 ```
 GET    /api/sessions/{id}/run/steps                                 -> {"steps": [{"node", "item", "executing", "settled"}, ...]}

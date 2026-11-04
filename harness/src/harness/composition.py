@@ -136,6 +136,7 @@ from harness.features.running.contracts import (
     decide_session_gate,
     orchestrator_decider,
     pause_session_run,
+    prompt_count,
     resume_session_run,
     rows_for,
     run_relayed,
@@ -285,7 +286,7 @@ def _keeping_a_stopped_turn(
             yield
         except ModelConnectionError:
             added = tuple(messages[_given_length(history) :])
-            line.dropped_attempts.append(DroppedAttempt(messages=added))
+            line.dropped_attempts.append(DroppedAttempt(messages=added, prompts_before=prompt_count(history)))
             line.steer_inbox[:0] = steering.delivered
             billed(added)
             raise

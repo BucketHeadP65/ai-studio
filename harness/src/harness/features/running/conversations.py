@@ -130,6 +130,8 @@ class DroppedAttempt:
 
     messages: tuple[ModelMessage, ...]
     """The messages the attempt added to the history it was given before its connection broke, its own prompt first."""
+    prompts_before: int
+    """How many user prompts the history the attempt was given holds. The attempt that settles its turn asks the next one."""
 
     @property
     def prompt(self) -> str | None:
@@ -162,19 +164,20 @@ class StepConversation:
 
     @property
     def exchanged(self) -> list[ModelMessage]:
-        """Every message this line exchanged, in order: `messages`, each dropped attempt ahead of the attempt that asked the same.
+        """Every message this line exchanged, in order: `messages`, each dropped attempt ahead of the attempt that settled its turn.
 
-        A dropped attempt that no settled attempt asked the same as, such as the last attempt of a turn that never settled,
-        comes after every message before it.
+        The attempt that settled a dropped attempt's turn is the one whose prompt sits where the dropped one's would, after
+        as many user prompts as its history held, and asks the same, so two turns asking the same words are told apart. A
+        dropped attempt that no settled attempt answers so, such as the last attempt of a turn that never settled, comes
+        after every message before it.
         """
         exchanged: list[ModelMessage] = []
         taken = 0
         for attempt in self.dropped_attempts:
             began = len(self.messages)
-            for index in range(len(self.messages) - 1, taken - 1, -1):
-                if attempt.prompt is not None and attempt.prompt in _prompts(self.messages[index : index + 1]):
-                    began = index
-                    break
+            settled = _nth_prompt(self.messages, attempt.prompts_before)
+            if settled is not None and attempt.prompt is not None and settled[1] == attempt.prompt:
+                began = max(settled[0], taken)
             exchanged.extend(self.messages[taken:began])
             exchanged.extend(attempt.messages)
             taken = began
@@ -256,6 +259,33 @@ class StepConversations:
         """Close every held step conversation's stream. Called when the run ends."""
         for conversation in self.conversations.values():
             conversation.stream.close()
+
+
+def prompt_count(messages: Sequence[ModelMessage]) -> int:
+    """How many user prompt parts `messages` carry, whatever their content.
+
+    Args:
+        messages: The messages to count in.
+
+    Returns:
+        The count.
+    """
+    return sum(1 for message in messages if isinstance(message, ModelRequest) for part in message.parts if isinstance(part, UserPromptPart))
+
+
+def _nth_prompt(messages: Sequence[ModelMessage], ordinal: int) -> tuple[int, str | None] | None:
+    """The index of the message holding user prompt number `ordinal`, counted from zero, and its text, or `None` past the last."""
+    seen = 0
+    for index, message in enumerate(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if not isinstance(part, UserPromptPart):
+                continue
+            if seen == ordinal:
+                return index, part.content if isinstance(part.content, str) else None
+            seen += 1
+    return None
 
 
 def _prompts(messages: Sequence[ModelMessage]) -> Iterator[str]:

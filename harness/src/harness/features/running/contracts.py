@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from core.lazy_imports import lazy_module_attributes
 
 from harness.features.running.api_models import AutomodeRequest, Decision, ResumeRequest
-from harness.features.running.conversations import DroppedAttempt, StepConversation, StepConversations, conversation_key
+from harness.features.running.conversations import DroppedAttempt, StepConversation, StepConversations, conversation_key, prompt_count
 from harness.features.running.domain.progress import GateVerdict, LiveProgress, PendingReview
 from harness.features.running.exceptions import (
     AutomodeUnavailableError,
@@ -78,6 +78,7 @@ __all__ = [
     "message_worker",
     "orchestrator_decider",
     "pause_session_run",
+    "prompt_count",
     "recent_runs",
     "resume_session_run",
     "rows_for",

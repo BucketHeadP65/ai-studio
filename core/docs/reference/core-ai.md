@@ -621,9 +621,17 @@ warning level with the node id, the item key when there is one, the attempt numb
 - Cancelling the run during a wait ends it there, with no further attempt.
 - A host that keeps a step conversation starts every attempt from the history the turn began with. The harness keeps
   each attempt that lost its connection on the line apart from that history (`StepConversation.dropped_attempts`): the
-  run archive files it where it began, its model responses reach the run's spend rows, and a steer it had taken in goes
-  back on the line's inbox for the next attempt.
-- An attempt's effects are not undone. A tool the broken attempt ran has run, and the next attempt may run it again.
+  run archive files it where it began, ahead of the attempt that settled its turn, found by how many user prompts the
+  history held rather than by the prompt's words, its model responses reach the run's spend rows, and a steer it had
+  taken in goes back on the line's inbox for the next attempt.
+- An attempt's effects are not undone. A tool the broken attempt ran has run, and the next attempt may run it again. That
+  is safe as long as every write a turn can make lands the same when made twice. Every step file under
+  `harness/workflows/` and `templates/*/workflows/steps/` keeps to it: the write tools an agent turn holds replace a page
+  by its id (`write_note`, `decide_page`, `skip_digest`, and `digest_skeleton`'s id for a source digested again) or
+  find what an earlier call made (`resolve_entities` by name, `request_source` by URL). A program step's tool error ends
+  inside its sandbox as a `RuntimeError`, never as a `ModelConnectionError`, so a program is never performed again, and
+  a tool that appends, such as `resolve_note` with a reply, is safe in one. A new step that grants an agent turn a write
+  that appends or counts breaks this.
 - `WorkItemFact.retry_attempts` does not count these attempts. It counts how many times an identity settled again after a
   rewind, and every attempt at a turn belongs to one settle.
 - A step a durable run schedules as an activity has Temporal's own attempts, and its failure reaches the engine as

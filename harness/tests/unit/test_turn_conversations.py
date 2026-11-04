@@ -692,6 +692,46 @@ async def test_a_third_turn_whose_connection_broke_is_archived_with_its_own_prom
     assert POLISH_INSTRUCTIONS in _prompt_of(exchanged[prompts[3]]), "the attempt that settled turn three asks the same"
 
 
+async def test_a_broken_attempt_is_archived_at_its_own_turn_when_a_later_turn_asks_the_same_words(tmp_path: Path) -> None:
+    """Two turns ask the very same prompt. Turn one's first attempt breaks, and it is filed before turn one, not turn two."""
+    triage, _draft, _polish = _sequence_tasks()
+    again = triage.model_copy(update={"name": "triage_again"})
+    spec = Workflow(
+        name="triage-twice",
+        version=1,
+        description="One worker triages an item twice in one conversation, with the same words both times.",
+        parameters={"items": ParameterSpec(description="items to triage", json_schema={"type": "array", "items": ITEM_SCHEMA})},
+        inline=(triage, again),
+        nodes=(MapNode(id="digest_each", turns=("triage", "triage_again"), over=FromParameter(parameter="items"), each="item"),),
+        output=FromNode(node="digest_each"),
+    )
+    calls: list[list[ModelMessage]] = []
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == 1:
+            yield HALF_SAID
+            model_name = "test-model"
+            raise ModelConnectionError(model_name, "Connection error.", phase="read", in_stream=True)
+        tool = info.output_tools[_turn_index(messages)]
+        yield {0: DeltaToolCall(name=tool.name, json_args=json.dumps(_PAYLOADS[0]))}
+
+    async def no_wait(seconds: float) -> None:
+        del seconds
+
+    active = ActiveRun()
+    environment = await build_environment(FunctionModel(stream_function=stream), engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records_under(tmp_path), web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
+    await run_workflow(spec, environment, params={"items": [{"title": "quantum computing"}]}, approval=ApproveAll(), sleep=no_wait)
+
+    assert len(calls) == 3, "turn one's broken attempt, turn one again, turn two"
+    assert _last_user_prompt(calls[1]) == _last_user_prompt(calls[2]), "both turns ask the same words"
+    exchanged = _the_items_line(active).exchanged
+    prompts = [index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, UserPromptPart)]
+    broken_at = next(index for index, message in enumerate(exchanged) for part in message.parts if isinstance(part, TextPart) and HALF_SAID in part.content)
+    assert len(prompts) == 3, "the broken attempt's prompt beside the two settled ones"
+    assert prompts[0] < broken_at < prompts[1], "the broken attempt sits before the attempt that settled turn one"
+
+
 def _prompt_of(message: ModelMessage) -> str:
     return next(str(part.content) for part in message.parts if isinstance(part, UserPromptPart))
 
