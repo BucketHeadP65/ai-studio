@@ -450,3 +450,13 @@ def test_both_sets_of_instructions_hold_the_sentence_that_keeps_a_blame_off_the_
 
     assert sentence in INSPECTOR_INSTRUCTIONS
     assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_both_sets_of_instructions_say_what_a_carried_mark_means() -> None:
+    sentence = (
+        "A part marked `carried from` a span is that earlier part repeated in a later step's history, "
+        "never a new call or answer, so cite the span it names."
+    )
+
+    assert sentence in INSPECTOR_INSTRUCTIONS
+    assert sentence in SCAN_INSTRUCTIONS

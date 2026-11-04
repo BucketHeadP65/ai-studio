@@ -681,3 +681,15 @@ def test_step_at_answers_the_messages_the_step_added_and_where_they_start() -> N
 def test_step_at_refuses_a_step_the_run_does_not_have() -> None:
     with pytest.raises(ValueError, match="no step 2 in test:run: it has 2 steps"):
         step_at(_two_steps(), 2)
+
+
+def test_read_marks_each_message_a_step_carries_from_an_earlier_step_with_the_span_it_first_had() -> None:
+    given = _two_steps()
+
+    assert read(given, 1).splitlines() == [
+        "1.0.0 [user-prompt, carried from 0.0.0] What is the weather in Paris?",
+        "1.1.0 [tool-call, carried from 0.1.0] {'name': 'Paris'}",
+        "1.2.0 [tool-return, carried from 0.2.0] sunny and mild",
+        "1.3.0 [text] done",
+    ]
+    assert "carried" not in read(given, 0), "a message read at the step that first held it is not carried"

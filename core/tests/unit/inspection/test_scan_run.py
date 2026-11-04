@@ -15,8 +15,8 @@ from core.ai.inspection.domain.leads import Lead
 from core.ai.inspection.domain.watches import Watch
 from core.ai.inspection.inspector import InspectorDeps, TierAgent
 from core.ai.inspection.lanes import ScanRun
-from core.ai.inspection.scan_run import ScanRunHandler, ScanUndecided, scan, scan_agent
-from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Transcript, TranscriptLoaders
+from core.ai.inspection.scan_run import ScanRunHandler, ScanUndecided, Seen, resolve_scan, scan, scan_agent
+from core.ai.transcripts.contracts import RunEmptyError, SchemeUnknownError, Span, Step, Transcript, TranscriptLoaders
 from core.cqrs.contracts import JobContext
 from tests.support.fakes.inspection import FakeLeadsAndFindings, FakeRunsOfConversation, Opens, answer, call, question, result, transcript
 from tests.unit.inspection.test_inspect_run import A_TAXONOMY, Unparseable
@@ -331,3 +331,28 @@ async def test_a_scan_records_its_question_with_no_lead_and_its_findings_point_a
     assert (asked.kind, asked.tier, asked.model, asked.lead_id, asked.watch) == ("scan", "helper", "scanner", None, "every-run")
     assert asked.answer == line
     assert [row.question_id for row in store.findings] == [asked.question_id]
+
+
+def _carried_call() -> Transcript:
+    """Step 0 holds a call and its return. Step 1 carries both and adds the model's answer."""
+    history = (question(), call("c1"), result("c1", "ok"))
+    return Transcript(
+        source="record:run-1",
+        steps=(Step(messages=history, ordinals=(0, 1, 2)), Step(messages=(*history, answer("done")), ordinals=(0, 1, 2, 3))),
+    )
+
+
+def test_a_scan_refuses_two_spans_that_are_one_part_carried_into_a_later_step() -> None:
+    repeated = Seen.model_validate(saw("call_for_known_fact", ["0.1.0", "1.1.0"], "agent_reasoning", "model_tier"))
+
+    with pytest.raises(ValueError, match=r"0\.1\.0 and 1\.1\.0 are one part, first recorded at 0\.1\.0"):
+        resolve_scan(repeated, _carried_call())
+
+
+def test_a_scan_accepts_one_span_of_a_part_a_later_step_carries() -> None:
+    once = Seen.model_validate(saw("call_for_known_fact", ["0.1.0"], "agent_reasoning", "model_tier"))
+
+    resolved = resolve_scan(once, _carried_call())
+
+    assert not isinstance(resolved, ScanUndecided)
+    assert [span for lead, _ in resolved for span in lead.spans] == [Span(step=0, message=1, part=0)]
