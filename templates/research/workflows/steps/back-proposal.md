@@ -1,7 +1,7 @@
 ---
 title: Back one proposed stance with findings
 summary: The claims of the research knowledge base that support or contest one proposed new stance, each named by its reference with one sentence on how it bears, and no claim text typed.
-version: 1
+version: 2
 step:
   name: back_proposal
   instructions: |-
@@ -19,7 +19,7 @@ step:
 
     A reviewer may have rejected an earlier attempt. Its feedback names each proposal and finding to fix. Fix every finding it names for your proposal. When it says your proposal duplicates an existing stance, or that no finding you can find bears on it, answer findings as an empty list.
 
-    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the proposal, and findings.
+    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the proposal, and findings. The run drops a proposal whose stance_id, title or pages differ from the proposal you hold, so never reword the title to fit the claims you found.
   inputs:
     proposal: {like: merge_proposals, element: true}
     collection:
@@ -70,4 +70,5 @@ workflow's parameters. It searches the research knowledge base, reads the digest
 position and names each claim that supports or contests it by its reference, with one sentence on how. It types no
 claim text. A later program reads every cited digest, keeps only the claims the base holds on a digest that is not
 skipped, copies each claim's text from the page and drops a proposal left with findings from fewer than two
-digests. A judge then reviews what is left. It writes nothing.
+digests. A judge then reviews what is left, and the run keeps an approved proposal only when its stance_id, title and
+pages are the ones the worker was handed. It writes nothing.

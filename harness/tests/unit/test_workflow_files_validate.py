@@ -426,18 +426,6 @@ _STANCE_POSITION: dict[str, object] = {
 }
 """The one section the stance draft here changes."""
 
-_STANCE_PROPOSAL: dict[str, object] = {
-    "stance_id": "stance.y",
-    "title": "Y",
-    "pages": [{"page_id": "adr-0031-other", "page_type": "adr", "status": "accepted", "title": "Other"}],
-    "findings": [
-        {"claim": "paper.a#^c1", "claim_text": "A finding of paper a.", "side": "supports", "how": "It measures the position."},
-        {"claim": "paper.b#^c2", "claim_text": "A finding of paper b.", "side": "contests", "how": "It finds the opposite."},
-    ],
-    "contests_only": False,
-}
-"""The one new stance proposed here, with the findings behind it, which is listed and never written."""
-
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -501,24 +489,15 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
                 "findings_left": [],
             }
         ],
-        "changes": {
-            "admitted": [{"page_id": "adr-0030-something", "page_type": "adr", "status": "accepted", "title": "Something"}],
-            "stances": [
-                {
-                    "stance_id": "stance.x",
-                    "title": "X",
-                    "status": "considering",
-                    "path": "Wiki/Stances/x.md",
-                    "record": "adr-0030-something",
-                    "payload": {"frontmatter": _STANCE_FRONTMATTER, "sections": _STANCE_SECTIONS},
-                }
-            ],
-            "stance_ids": ["stance.x"],
-            "unread": [],
-            "qualified": 1,
-            "capped": False,
-        },
-        "proposals": [_STANCE_PROPOSAL],
+        "work": [
+            {
+                "stance_id": "stance.x",
+                "title": "X",
+                "path": "Wiki/Stances/x.md",
+                "pages": [{"page_id": "adr-0030-something", "page_type": "adr", "status": "accepted", "title": "Something"}],
+                "current": {"frontmatter": _STANCE_FRONTMATTER, "sections": _STANCE_SECTIONS},
+            }
+        ],
         "collection": "research",
     },
     "write_adrs": {
@@ -764,8 +743,7 @@ def _assert_docs_pass_programs(ran: dict[str, object], called_by_step: _CalledBy
 def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
     """The two stance-refresh programs: a full pass over one pair, then one draft's changes merged into its stance as read.
 
-    The merged page lands on the stance's own path, with only its status, summary and Position changed. The one
-    proposal is answered as given, and no page is written for it.
+    The merged page lands on the stance's own path, with only its status, summary and Position changed.
 
     Every `list_pages` call here answers the same two rows, so the stance listing names two ids and both read back as
     the one stance page `read_page` answers.
@@ -794,7 +772,7 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
     assert called_by_step["list_stance_changes"][1][1] == {"knowledge_base": "research", "page_type": "stance", "limit": 1000}
     assert called_by_step["list_stance_changes"][2][1] == {"knowledge_base": "research", "page_id": "adr-0030-something"}
 
-    assert to_jsonable_python(ran["write_stances"]) == {"written": ["stance.x"], "failed": [], "proposed": [_STANCE_PROPOSAL]}
+    assert to_jsonable_python(ran["write_stances"]) == {"written": ["stance.x"], "failed": []}
     assert [(name, to_jsonable_python(args)) for name, args in called_by_step["write_stances"]] == [
         (
             "write_note",

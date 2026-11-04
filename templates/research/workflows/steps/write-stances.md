@@ -1,13 +1,13 @@
 ---
 title: Write stances
-summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest, and every judged new stance proposal listed with its pages and findings and never written.
-version: 5
+summary: Each judged stance rewrite merged into its page as it was read and written, every refusal named rather than stopping the rest.
+version: 6
 step:
   name: write_stances
   source: |
     read = {}
-    for stance in changes["stances"]:
-        read[stance["stance_id"]] = stance
+    for item in work:
+        read[item["stance_id"]] = {"path": item["path"], "payload": item["current"]}
     written = []
     failed = []
     for draft in drafts:
@@ -48,18 +48,17 @@ step:
             failed.append({"stance_id": stance_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(stance_id)
-    {"written": written, "failed": failed, "proposed": proposals}
+    {"written": written, "failed": failed}
   inputs:
     drafts: {like: refresh_stance, many: true}
-    changes: {like: list_stance_changes}
-    proposals: {like: check_findings}
+    work: {like: merge_work}
     collection:
       json_schema: {type: string}
   output:
     json_schema:
       type: object
       title: StancesWritten
-      required: [written, failed, proposed]
+      required: [written, failed]
       properties:
         written:
           type: array
@@ -73,51 +72,15 @@ step:
             properties:
               stance_id: {type: string}
               reason: {type: string}
-        proposed:
-          type: array
-          items:
-            type: object
-            title: ProposedStance
-            required: [stance_id, title, pages, findings, contests_only]
-            properties:
-              stance_id: {type: string}
-              title: {type: string}
-              pages:
-                type: array
-                items:
-                  type: object
-                  title: BearingPage
-                  required: [page_id, page_type, status, title]
-                  properties:
-                    page_id: {type: string}
-                    page_type: {type: string}
-                    status: {type: string}
-                    title: {type: string}
-              findings:
-                type: array
-                items:
-                  type: object
-                  title: CheckedFinding
-                  required: [claim, claim_text, side, how]
-                  properties:
-                    claim: {type: string}
-                    claim_text: {type: string}
-                    side:
-                      enum: [supports, contests]
-                      type: string
-                    how: {type: string}
-              contests_only: {type: boolean}
   tools: [write_note]
 ---
 
-Use as the tail of a stance refresh, after a judge has reviewed the drafts, with `changes` wired from the same run's
-list_stance_changes and `proposals` from the judge of its proposals. Each stance is built from its page as
-list_stance_changes read it before the run: its status and summary are the draft's, each section the draft names
-takes the draft's body at the place and level the page gave it, and every other section and frontmatter field stays
-as read. Its id, its Evidence and its Alternatives come from the page as read, so no draft can change them. It is
-written to the path it was read from. A draft that names a section twice, or names a section the page does not
-carry, is refused, and so is a draft of a stance the run did not read. A draft that fails a check is not written,
-and a page write_note refuses is caught. Both are answered in `failed` with the reason, and every other draft still
-lands. A frontmatter field held as null is left out of the page. Every proposed new stance the proposals judge
-approved is answered in `proposed` as it was approved, with the records pages behind it and its findings, and no page
-is written for one.
+Use after the judge of a stance refresh's drafts, with `work` wired from the same run's merge_work. Each stance is
+built from its page as merge_work carries it, read before the run: its status and summary are the draft's, each
+section the draft names takes the draft's body at the place and level the page gave it, and every other section and
+frontmatter field stays as read. Its id, its Evidence and its Alternatives come from the page as read, so no draft
+can change them. It is written to the path it was read from. A draft that names a section twice, or names a section
+the page does not carry, is refused, and so is a draft of a stance merge_work holds no item for. A draft that fails a
+check is not written, and a page write_note refuses is caught. Both are answered in `failed` with the reason, and
+every other draft still lands. A frontmatter field held as null is left out of the page. It writes no page for a
+proposed new stance.
