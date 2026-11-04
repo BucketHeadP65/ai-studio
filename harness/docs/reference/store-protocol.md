@@ -346,7 +346,11 @@ a tool that does not exist, or one the model must remember to reach for, is wors
 instruction: the model spends calls hunting for it, and when it cannot find it, it guesses.
 The same ruling governs staleness, which `_staleness` computes on the same fetch and folds
 into the `fit` prose with a `STALE:` prefix when the environment moved. Both verdicts arrive
-where the decision is made, unasked.
+where the decision is made, unasked. A stale workflow whose steps all resolve keeps `fits_here: True`,
+but its prose never says `FITS THIS RUN` or "as it stands". It says what moved may change what the
+workflow does, and tells the reader to tell the person what drifted before offering or running it, and
+to run it only if they still want it. That is the one re-check every reader can make, whatever host
+tools sit beside the port.
 
 `staleness` is a tri-state and each state is a different claim: `[]` is checked and fresh,
 a non-empty list names exactly what moved, `None` means the workflow carries no readable

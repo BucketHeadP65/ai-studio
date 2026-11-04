@@ -97,3 +97,47 @@ async def test_the_stores_own_fetch_exposes_the_stamp(tmp_path: Path, quarterly_
     recorded = await FolderLibrary(root).fetch_fingerprint(workflow_id)
     assert recorded is not None
     assert set(recorded.steps) == {"fetch_sales", "fetch_costs", "reconcile", "draft_report", "publish"}
+
+
+STALE_ACTION = "Tell the person what drifted before you offer or run it, and run it only if they still want it."
+
+
+async def test_a_stale_workflow_that_fits_never_reads_as_runnable_as_it_stands(
+    tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry
+) -> None:
+    root = tmp_path / "workflows"
+    workflow_id = await _saved(root, quarterly_report, registry, environment={"model": "gpt-5.2"})
+    fetched = await _call(_port(root, registry, environment={"model": "gpt-6"}), FETCH_TOOL, workflow_id=workflow_id)
+
+    assert fetched["fits_here"] is True, "every step it names is still registered here"
+    assert fetched["fit"].startswith("STALE: the environment moved under this workflow: environment stamp 'model' changed")
+    assert "as it stands" not in fetched["fit"]
+    assert "FITS THIS RUN" not in fetched["fit"]
+    assert fetched["fit"].endswith(f"Every step it names is still registered here, but what moved may change what it does. {STALE_ACTION}")
+
+
+async def test_a_fresh_workflow_that_fits_still_runs_as_it_stands(tmp_path: Path, quarterly_report: Workflow, registry: StepRegistry) -> None:
+    root = tmp_path / "workflows"
+    workflow_id = await _saved(root, quarterly_report, registry)
+    fetched = await _call(_port(root, registry), FETCH_TOOL, workflow_id=workflow_id)
+
+    assert fetched["fit"] == "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands."
+
+
+def test_a_stale_workflow_that_brings_its_own_steps_asks_the_person_first(tmp_path: Path) -> None:
+    async def perform(task: object, output_type: type, /, **inputs: object) -> object:
+        del task, inputs
+        return output_type()
+
+    briefed = StepRegistry(perform=perform)
+    port = _port(tmp_path, briefed)
+
+    stale, stale_fits = port._fit(("judge",), brought=("judge",), stale=True)
+    fresh, fresh_fits = port._fit(("judge",), brought=("judge",))
+
+    assert (stale_fits, fresh_fits) == (True, True)
+    assert stale == (
+        "The steps it names are still registered here, and the 1 step(s) it brings with it (judge) can be built from their "
+        f"briefings, but what moved may change what it does. {STALE_ACTION}"
+    )
+    assert fresh.endswith("can be built from their briefings, so it runs as it stands.")

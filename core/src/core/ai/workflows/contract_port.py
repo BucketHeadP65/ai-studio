@@ -180,6 +180,12 @@ class FetchedWorkflow(TypedDict):
     fingerprint, which is neither fresh nor stale."""
 
 
+_STALE_FIT = (
+    "but what moved may change what it does. "
+    "Tell the person what drifted before you offer or run it, and run it only if they still want it."
+)
+"""How a fit sentence ends for a stale workflow whose steps all resolve here."""
+
 _NOTE_LIMIT = 200
 """How much of the author's own prose one card line carries. A card is scanned, not read."""
 
@@ -862,13 +868,10 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         works = tuple(dict.fromkeys(node.work for node in workflow.nodes if node.kind == "run"))
         gates = ", ".join(node.id for node in workflow.nodes if node.kind == "gate") or "none"
         brought = tuple(task.name for task in workflow.inline)
-        fit, fits_here = self._fit(works, brought=brought)
         staleness = self._staleness(raw, workflow)
+        fit, fits_here = self._fit(works, brought=brought, stale=bool(staleness))
         if staleness:
-            fit = (
-                f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. "
-                f"It may still validate, so re-check before trusting it. {fit}"
-            )
+            fit = f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. {fit}"
         earned = await self._earned_line(workflow_id, workflow)
         return FetchedWorkflow(
             summary=(
@@ -896,7 +899,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             return None
         return list(drift(recorded, fingerprint(workflow, self.registry, environment=dict(self.environment))))
 
-    def _fit(self, works: Sequence[str], *, brought: Sequence[str] = ()) -> tuple[str, bool | None]:
+    def _fit(self, works: Sequence[str], *, brought: Sequence[str] = (), stale: bool = False) -> tuple[str, bool | None]:
         """Whether this run can execute the workflow, as prose plus True, False, or None when no registry can say."""
         if self.registry is None:
             return "fit: unknown from here. This port has no registry, so nothing can say whether the steps exist.", None
@@ -913,14 +916,21 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
                 f"DOES NOT FIT THIS RUN: it brings {len(brought)} step(s) of its own ({', '.join(brought)}) and this "
                 f"run cannot perform a briefing. It can only execute workflows naming steps that already exist here."
             ), False
-        if brought:
-            # Said out loud because "it names a step you do not have" reads as not fitting: a
-            # workflow carrying its own steps does fit.
-            return (
-                f"FITS THIS RUN: the steps it names are registered here, and the {len(brought)} step(s) it brings "
-                f"with it ({', '.join(brought)}) can be built from their briefings, so it runs as it stands."
-            ), True
-        return "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands.", True
+        return _fits(brought, stale=stale), True
+
+
+def _fits(brought: Sequence[str], *, stale: bool) -> str:
+    """What a fit says of a workflow whose steps all resolve here, never runnable as it stands when it is stale."""
+    if brought:
+        # Said out loud because "it names a step you do not have" reads as not fitting: a
+        # workflow carrying its own steps does fit.
+        built = f"the {len(brought)} step(s) it brings with it ({', '.join(brought)}) can be built from their briefings"
+        if stale:
+            return f"The steps it names are still registered here, and {built}, {_STALE_FIT}"
+        return f"FITS THIS RUN: the steps it names are registered here, and {built}, so it runs as it stands."
+    if stale:
+        return f"Every step it names is still registered here, {_STALE_FIT}"
+    return "FITS THIS RUN: every step it names is registered here, so it can be executed as it stands."
 
 
 def cards_from_mapping(
