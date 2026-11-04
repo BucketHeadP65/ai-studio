@@ -188,6 +188,11 @@ finding beside its own box.
 
 `check_draft` takes the four sentences beside the card fields, merges them onto the draft
 (absent means unchanged, one field at a time), and ends its answer with what the draft still owes.
+It also takes `uses`, the ids of library steps the draft builds on, with the meaning `save_workflow`
+gives it: each step is read from the library and copied into the draft's `inline` before the check,
+and an id named twice, an id no step has, or a step whose name is already under `inline` is refused
+in the save's words. The settled draft carries the copies, so `run_workflow("draft")` and the Save
+button both work on it with nothing saved first. A library that keeps no reusable steps refuses `uses`.
 The standing instruction block says the rule. What one draft owes is the tool result's, so the
 instructions stay byte-identical while the registry holds still.
 

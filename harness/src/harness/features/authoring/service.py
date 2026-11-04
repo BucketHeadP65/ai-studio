@@ -64,10 +64,11 @@ from harness.features.authoring.exceptions import (
     DraftNotSavableError,
     PartAnsweredError,
     PlainTurnError,
+    ReusableStepsRefusedError,
     SessionUnknownError,
     TurnEmptyError,
 )
-from harness.features.authoring.internal_contracts import Turn
+from harness.features.authoring.internal_contracts import ReusableStepQueries, Turn
 from harness.features.authoring.pending_calls import answers_every_call, deferred_results, denying_unanswered, pending_calls
 from harness.features.followme.contracts import CONSOLE_ACTS, VERBS
 from harness.rendering import graph_payload
@@ -91,6 +92,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from core.ai.history.contracts import StepUsage
+    from core.ai.workflows.contracts import InlineStep
     from pydantic import JsonValue
     from pydantic_ai import AgentRunResult
     from pydantic_ai.messages import ModelMessage, UserContent
@@ -177,6 +179,47 @@ def draft_readiness(workflow: Workflow, draft: Draft, registry: StepRegistry) ->
         The readiness the save refuses on.
     """
     return card_readiness(workflow, prepare(workflow, registry), title=draft.title, summary=draft.summary, presentation=draft.presentation)
+
+
+async def with_reusable_steps(workflow: Workflow, uses: Sequence[str], *, library: WorkflowLibrary) -> Workflow:
+    """`workflow` with every reusable step `uses` names read from `library` and appended to its `inline`, in order.
+
+    The refusals are the ones a save with the same `uses` gives, in the same words.
+
+    Args:
+        workflow: The draft's parsed spec.
+        uses: Reusable step ids, as a library search answered them.
+        library: The library the steps are read from.
+
+    Returns:
+        The workflow, its `inline` followed by the copied steps.
+
+    Raises:
+        ReusableStepsRefusedError: `library` keeps no reusable steps, an id is named twice, no reusable step has an id,
+            or a copied step's name is already under `inline`.
+    """
+    if not isinstance(library, ReusableStepQueries):
+        msg = "this library keeps no reusable steps. Drop `uses` and define the steps under inline"
+        raise ReusableStepsRefusedError(msg)
+    carried = {step.name for step in workflow.inline}
+    copied: list[InlineStep] = []
+    seen: set[str] = set()
+    for step_id in uses:
+        if step_id in seen:
+            msg = f"{step_id!r} is named more than once in `uses`. Name each reusable step once."
+            raise ReusableStepsRefusedError(msg)
+        seen.add(step_id)
+        try:
+            step = await library.fetch_step(step_id)
+        except (LibraryError, ValidationError) as exc:
+            msg = f"{step_id!r} did not yield a valid reusable step ({exc}). It cannot be copied into this spec."
+            raise ReusableStepsRefusedError(msg) from exc
+        if step.name in carried:
+            msg = f"{step_id} is step {step.name!r}, which this workflow already carries under inline. Drop one of the two"
+            raise ReusableStepsRefusedError(msg)
+        carried.add(step.name)
+        copied.append(step)
+    return workflow.model_copy(update={"inline": (*workflow.inline, *copied)})
 
 
 async def adapt_saved(
