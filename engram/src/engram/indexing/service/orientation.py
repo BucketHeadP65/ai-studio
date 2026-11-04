@@ -29,6 +29,10 @@ ORIENTATION_PAGES: Mapping[str, tuple[str, str]] = {
 }
 """The unscoped id and the title of the synthetic `kb.pages` row for each audience. These rows own no source file."""
 
+META_ID_PREFIX = "meta."
+"""The prefix of every `_meta/` page's id and every orientation page's id. No `_meta/` file is indexed under its own id."""
+
+
 def orientation_page_id(base_id: str, collection: str) -> str:
     """The stored id of a synthetic orientation page, scoped by its collection.
 
@@ -52,6 +56,18 @@ def orientation_page_ids(collection: str) -> frozenset[str]:
         The scoped id of each page in `ORIENTATION_PAGES`.
     """
     return frozenset(orientation_page_id(page_id, collection) for page_id, _title in ORIENTATION_PAGES.values())
+
+
+def about_page_id(collection: str) -> str:
+    """The stored id of the orientation page for the query audience, which holds the knowledge base's purpose.
+
+    Args:
+        collection: The knowledge base's collection.
+
+    Returns:
+        `f"meta.about@{collection}"`.
+    """
+    return orientation_page_id(ORIENTATION_PAGES[QUERY_AUDIENCE][0], collection)
 
 
 def _audiences_of(text: str, name: str) -> tuple[str, ...]:

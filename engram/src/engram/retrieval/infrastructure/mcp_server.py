@@ -800,7 +800,7 @@ def _add_flat_fetch(
     tools: frozenset[str],
 ) -> None:
     """Register the flat `fetch` from one handler, reading every id form, its refusals naming only `tools`."""
-    fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground_phrase(tools), refuse=ToolError)
+    fetch = flat_fetch(handler, collection, stamp=stamp, reground=reground_phrase(tools), refuse=ToolError, can_sql=True)
     description = fetch_description(tools=tools, collection=collection)
     server.add_tool(fetch, name=FETCH, description=resolve_description(FETCH, description, descriptions))
 

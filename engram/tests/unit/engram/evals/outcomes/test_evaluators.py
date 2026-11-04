@@ -121,7 +121,10 @@ class TestBareUnitId:
         assert bare_unit_id(f"page:{_COLLECTION}/paper.x", _COLLECTION) == "paper.x"
 
     def test_a_qualified_claim_ref_keeps_its_anchor(self):
-        assert bare_unit_id(f"unit:{_COLLECTION}/paper.x#^c3", _COLLECTION) == "paper.x#^c3"
+        assert bare_unit_id(f"unit:{_COLLECTION}/paper.x#c3", _COLLECTION) == "paper.x#c3"
+
+    def test_a_claim_cited_as_a_block_reference_resolves_to_the_claims_own_id(self):
+        assert bare_unit_id(f"unit:{_COLLECTION}/paper.x#^c3", _COLLECTION) == "paper.x#c3"
 
     def test_an_unparseable_ref_falls_back_to_itself(self):
         # "group:<name>" with no "/" segment is a malformed group ref (BadRefError), and this

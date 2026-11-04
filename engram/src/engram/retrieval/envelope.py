@@ -3,9 +3,10 @@ r"""`EnvelopeHandler`, engram's provider of `DisclosureEnvelope`s from the index
 Given a ref, it returns that unit's envelope: its own disclosed body plus one-line summaries of its
 children, never their bodies. A ref is `collection:<name>` (the root map), `group:<collection>/<value>`
 (one group of the map when the spec groups it), `page:<page_id>` or `section:<section_id>`. Any other
-ref raises `BadRefError`.
+ref raises `BadRefError`. A page with no sections carries its own whole text in `content`.
 
-Wire the handler to the reader gateway. It reads only through the `api.envelope_*` functions.
+Wire the handler to the reader gateway. It reads only through `api` functions: the `api.envelope_*`
+listings and units, `api.collection_about` for the map's text and `api.fetch` for a sectionless page's text.
 
 A flat map that would exceed the row cap is served grouped by page type instead, with a note in
 `content`. A declared `group_by` is never overridden. Under `group_by="app"`, an app group that would
@@ -186,6 +187,8 @@ def normalize_ref(unit_id: str, collection: str, *, reground: str = _REGROUND_WI
 def parse_ref(ref: str, default_collection: str, *, reground: str = _REGROUND_WITH_SEARCH) -> ResolvedRef:
     """Accept a bare or collection-qualified retrieval handle and separate its identity fields.
 
+    A claim cited as a block reference, `<page>#^<anchor>`, reads as the claim's own id `<page>#<anchor>`.
+
     Args:
         ref: The handle to parse.
         default_collection: The knowledge base a ref with no collection segment of its own resolves within.
@@ -217,7 +220,7 @@ def _bare_ref(ref: str, default_collection: str, *, reground: str) -> ResolvedRe
     if ref == default_collection:
         return ResolvedRef(default_collection, "collection", "")
     kind: RefType = "section" if "#" in ref else "page"
-    return ResolvedRef(default_collection, kind, ref)
+    return ResolvedRef(default_collection, kind, _without_block_caret(ref))
 
 
 def _collection_ref(ref: str, raw: str, *, reground: str) -> ResolvedRef:
@@ -241,10 +244,16 @@ def _unit_ref(ref: str, prefix: str, raw: str, default_collection: str, *, regro
     if slash:
         if not collection or not unit_id:
             _bad_ref(ref, reground=reground)
-        return ResolvedRef(collection, _unit_type(prefix, reground=reground), unit_id)
+        return ResolvedRef(collection, _unit_type(prefix, reground=reground), _without_block_caret(unit_id))
     if not raw:
         _bad_ref(ref, reground=reground)
-    return ResolvedRef(default_collection, _unit_type(prefix, reground=reground), raw)
+    return ResolvedRef(default_collection, _unit_type(prefix, reground=reground), _without_block_caret(raw))
+
+
+def _without_block_caret(unit_id: str) -> str:
+    """`unit_id` with the caret of a block reference dropped, so `<page>#^c3` names the claim `<page>#c3`."""
+    page, hash_sign, anchor = unit_id.partition("#")
+    return f"{page}#{anchor.removeprefix('^')}" if hash_sign else unit_id
 
 
 def qualify_ref(ref: str, owning_collection: str, *, reground: str = _REGROUND_WITH_SEARCH) -> str:
@@ -301,6 +310,8 @@ _COLLECTION_ABOUT_SQL = "SELECT * FROM api.collection_about(:collection)"
 # A page or section id is unique only within its collection, so these read within the handler's own collection.
 _PAGE_ENVELOPE_SQL = "SELECT * FROM api.envelope_page(:collection, :page_id)"
 _SECTION_ENVELOPE_SQL = "SELECT * FROM api.envelope_section(:collection, :section_id)"
+# The whole text of a page with no sections, such as the about page an index builds from `_meta/`.
+_PAGE_TEXT_SQL = "SELECT body FROM api.fetch(:collection, :unit_id) WHERE level = 'page'"
 
 _DEGRADE_NOTE = "Listing exceeds one screen. Showing {count} page_type groups instead: open one to list its pages."
 """The note appended to `content` when a flat or app-grouped listing degrades to page_type stubs."""
@@ -440,7 +451,7 @@ class EnvelopeHandler:
         return DisclosureEnvelope(ref=ref, kind="group", title=title, content=degrade_note, children=children, mode=self.mode)
 
     async def _page_envelope(self, ref: str, page_id: str) -> DisclosureEnvelope:
-        """Render a page, children its sections, content its whole text when the page is small."""
+        """Render a page, children its sections, content its whole text when it is small or has no sections."""
         result = await self._gateway.rows(
             _PAGE_ENVELOPE_SQL, {"collection": self._collection, "page_id": page_id}, cap=_ROW_CAP + 1
         )
@@ -455,10 +466,16 @@ class EnvelopeHandler:
             kind=str(page_row["page_type"]),
             title=str(page_row["title"]),
             summary=str(page_row["summary"]),
-            content=_inlined_page(sections),
+            content=_inlined_page(sections) if sections else await self._page_text(page_id),
             children=children,
             mode=self.mode,
         )
+
+    async def _page_text(self, page_id: str) -> str | None:
+        """A page's own whole text, `None` when it has none."""
+        result = await self._gateway.rows(_PAGE_TEXT_SQL, {"collection": self._collection, "unit_id": page_id}, cap=1)
+        body = result.rows[0].get("body") if result.rows else None
+        return str(body) if body else None
 
     async def _section_envelope(self, ref: str, section_id: str) -> DisclosureEnvelope:
         """Render a section, content its body, no children."""

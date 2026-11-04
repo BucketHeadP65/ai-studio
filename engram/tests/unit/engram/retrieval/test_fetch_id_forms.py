@@ -96,9 +96,10 @@ def _graph_rows() -> tuple[Row, ...]:
 class FakeUnitGateway:
     """A reader gateway over one knowledge base that answers only the ids it holds.
 
-    `api.fetch` answers the unit bound as `unit_id`, the page and section envelopes answer the page or
-    section bound by id, and `api.graph_expand` answers `graph`. A read bound to another collection
-    answers nothing, as a collection-scoped function does.
+    `api.fetch` answers the unit bound as `unit_id`, unless the query leaves out `meta.*` ids as the flat
+    read's does, the page and section envelopes answer the page or section bound by id, and
+    `api.graph_expand` answers `graph`. A read bound to another collection answers nothing, as a
+    collection-scoped function does.
     """
 
     collection: str
@@ -116,6 +117,8 @@ class FakeUnitGateway:
         if "api.fetch(" in sql:
             self.fetched.append(str(bound["unit_id"]))
             unit = self.units.get(str(bound["unit_id"]))
+            if unit is not None and "NOT LIKE 'meta.%'" in sql and str(unit["id"]).startswith("meta."):
+                unit = None
             return SqlResult(rows=(unit,) if unit else (), columns=("id", "level", "title", "body"))
         if "api.envelope_page(" in sql:
             return SqlResult(rows=self.pages.get(str(bound["page_id"]), ()))
@@ -714,3 +717,259 @@ class TestRefusalsNameOnlyTheGraphToolsServed:
 
         assert "`find_paths`" in description
         assert "graph_expand" not in description
+
+
+_CITED_CLAIM_SPELLINGS = ("note.alpha#^c1", f"unit:{_HOME}/note.alpha#^c1", f"page:{_HOME}/note.alpha#^c1", f"section:{_HOME}/note.alpha#^c1")
+"""A claim cited the way a wikilink cites it, `<page>#^cN`, bare and under each qualified prefix."""
+
+
+class TestAClaimCitedAsABlockReferenceReadsTheClaim:
+    """A flag's evidence cites a claim as `[[<page>#^cN]]`, and every `fetch` reads that as the claim `<page>#cN`."""
+
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_flat_toolset_reads_the_claim(self, spelling: str):
+        gateway = _gateway()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME)
+
+        unit = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.id == _CLAIM
+        assert gateway.fetched == [_CLAIM]
+
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_leveled_toolset_reads_the_claim(self, spelling: str):
+        gateway = _gateway()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+        unit = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.ref == f"unit:{_HOME}/{_CLAIM}"
+        assert unit.body == f"Full text of {_CLAIM}."
+
+    @pytest.mark.parametrize("dial", ["leveled", "flat"])
+    @pytest.mark.parametrize("spelling", _CITED_CLAIM_SPELLINGS)
+    async def test_the_capability_reads_the_claim(self, spelling: str, dial: str):
+        dials = ReadDials(fetch="flat") if dial == "flat" else ReadDials()
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME), _surface(_OTHER)), dials_source=lambda: dials)
+
+        unit = await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": spelling})
+
+        assert isinstance(unit, FetchResult)
+        assert unit.ref == f"unit:{_HOME}/{_CLAIM}"
+
+
+_ABOUT = f"meta.about@{_HOME}"
+"""The about page an index builds from the `_meta/` documents: a page with no sections."""
+
+_ABOUT_TEXT = "# Purpose & scope\n\nWhat this knowledge base is for."
+
+
+def _gateway_with_about(collection: str = _HOME) -> FakeUnitGateway:
+    """The usual gateway, plus the about page: a page row with no sections and its own text."""
+    gateway = _gateway(collection)
+    about = f"meta.about@{collection}"
+    gateway.pages[about] = ({"row_type": "page", "id": about, "page_type": "meta", "title": "About this memory", "summary": ""},)
+    gateway.units[about] = {"id": about, "level": "page", "title": "About this memory", "body": _ABOUT_TEXT}
+    return gateway
+
+
+class TestAPageWithNoSectionsArrivesWhole:
+    """A page with no sections, such as the about page, carries its own text in `content` rather than nothing."""
+
+    @pytest.mark.parametrize("spelling", [_ABOUT, f"page:{_HOME}/{_ABOUT}"])
+    async def test_the_leveled_toolset_reads_its_text(self, spelling: str):
+        gateway = _gateway_with_about()
+        toolset = build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+        page = await _call(toolset, "fetch", {"unit_id": spelling})
+
+        assert isinstance(page, DisclosureEnvelope)
+        assert page.ref == f"page:{_HOME}/{_ABOUT}"
+        assert page.content == _ABOUT_TEXT
+
+    async def test_the_capability_reads_its_text(self):
+        gateway = _gateway_with_about()
+        surface = ReadSurface(
+            name=_HOME,
+            collection=_HOME,
+            handlers=_handlers(gateway),
+            envelope=EnvelopeHandler(gateway, collection=_HOME),
+            domain=f"The {_HOME} knowledge base.",
+        )
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(surface, _surface(_OTHER)))
+
+        page = await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": f"page:{_HOME}/{_ABOUT}"})
+
+        assert isinstance(page, DisclosureEnvelope)
+        assert page.content == _ABOUT_TEXT
+
+
+_META_SPELLINGS = ("meta.purpose", f"page:{_HOME}/meta.purpose", f"unit:{_HOME}/meta.schema", "meta")
+"""Ids of `_meta/` pages, which the index never holds under their own ids."""
+
+_FLAT_META_SPELLINGS = (*_META_SPELLINGS, _ABOUT, f"unit:{_HOME}/{_ABOUT}", f"meta.authoring@{_HOME}")
+"""Every `meta.` id, the orientation pages included, none of which the flat read serves."""
+
+_NOT_INDEXED = "The pages under `_meta/` are not indexed under their own `meta.<name>` ids."
+
+_READS_NONE = "Ids that start with `meta.` name pages under `_meta/` or the orientation pages built from them, and this `fetch` reads none of them."
+
+_NO_ORIENTATION = "This knowledge base has no orientation page with that id."
+
+
+def _about_pointer(collection: str) -> str:
+    return f"When this knowledge base declares a purpose and scope, fetch 'page:{collection}/meta.about@{collection}' reads them."
+
+
+def _sql_pointer(collection: str) -> str:
+    query = f"SELECT * FROM api.collection_about('{collection}')"  # noqa: S608 (the refusal text under test, never run)
+    return f"When this knowledge base declares a purpose and scope, run_sql reads them: {query}."
+
+
+def _leveled(gateway: FakeUnitGateway) -> FunctionToolset[object]:
+    return build_retrieval_toolset(_handlers(gateway), collection=_HOME, envelope=EnvelopeHandler(gateway, collection=_HOME))
+
+
+class TestAMetaIdIsRefusedNamingWhereThePurposeIsRead:
+    """A `meta.` id that names nothing is never sent to re-ground, and the refusal names where the purpose is read."""
+
+    @pytest.mark.parametrize("spelling", _META_SPELLINGS)
+    async def test_the_leveled_toolset_names_the_about_page_and_the_about_page_reads(self, spelling: str):
+        toolset = _leveled(_gateway_with_about())
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": spelling})
+        about = await _call(toolset, "fetch", {"unit_id": f"page:{_HOME}/{_ABOUT}"})
+
+        message = str(refused.value)
+        assert _NOT_INDEXED in message
+        assert _about_pointer(_HOME) in message
+        assert "Re-ground" not in message
+        assert isinstance(about, DisclosureEnvelope)
+        assert about.content == _ABOUT_TEXT
+
+    async def test_the_leveled_toolset_reads_a_unit_ref_of_the_about_page_as_the_page(self):
+        toolset = _leveled(_gateway_with_about())
+
+        about = await _call(toolset, "fetch", {"unit_id": f"unit:{_HOME}/{_ABOUT}"})
+
+        assert isinstance(about, DisclosureEnvelope)
+        assert about.ref == f"page:{_HOME}/{_ABOUT}"
+        assert about.content == _ABOUT_TEXT
+
+    @pytest.mark.parametrize("spelling", [_ABOUT, f"page:{_HOME}/{_ABOUT}", f"unit:{_HOME}/{_ABOUT}", f"meta.authoring@{_HOME}"])
+    async def test_the_leveled_toolset_says_a_missing_orientation_page_is_absent(self, spelling: str):
+        toolset = _leveled(_gateway())
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": spelling})
+
+        message = str(refused.value)
+        assert _NO_ORIENTATION in message
+        assert _NOT_INDEXED not in message
+        assert "Re-ground" not in message
+        assert f"fetch 'collection:{_HOME}' opens its map." in message
+
+    @pytest.mark.parametrize("spelling", _FLAT_META_SPELLINGS)
+    async def test_the_flat_toolset_says_it_reads_none_of_them(self, spelling: str):
+        toolset = build_retrieval_toolset(_handlers(_gateway_with_about()), collection=_HOME)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": spelling})
+
+        message = str(refused.value)
+        assert _READS_NONE in message
+        assert "Re-ground" not in message
+        assert "run_sql" not in message
+
+    @pytest.mark.parametrize("spelling", _FLAT_META_SPELLINGS)
+    async def test_the_flat_toolset_beside_run_sql_names_the_query_that_reads_the_purpose(self, spelling: str):
+        toolset = build_retrieval_toolset(_handlers(_gateway_with_about()), collection=_HOME, can_sql=True)
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": spelling})
+
+        message = str(refused.value)
+        assert _READS_NONE in message
+        assert _sql_pointer(_HOME) in message
+
+    async def test_the_flat_mcp_fetch_names_the_query_that_reads_the_purpose(self):
+        server = MCPServer("fetch-forms")
+        register_mcp_tools(server, _handlers(_gateway_with_about()), collection=_HOME)
+
+        async with Client(server) as client:
+            failed = await client.call_tool("fetch", {"unit_id": _ABOUT})
+
+        assert failed.is_error is True
+        assert _sql_pointer(_HOME) in _text(failed)
+
+    async def test_the_graph_only_mcp_fetch_names_the_query_that_reads_the_purpose(self):
+        gateway = _gateway_with_about()
+        server = create_mcp_server(
+            gateway,
+            DescribeSchemaHandler(FakeSqlGateway()),
+            fetch_handler=FetchHandler(gateway, _HOME),
+            graph_expand_handler=GraphExpandHandler(gateway, _HOME),
+            collection=_HOME,
+        )
+
+        async with Client(server) as client:
+            failed = await client.call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        assert failed.is_error is True
+        assert _sql_pointer(_HOME) in _text(failed)
+
+    async def test_the_capability_naming_its_knowledge_base_names_the_about_page(self):
+        gateway = _gateway_with_about()
+        surface = ReadSurface(
+            name=_HOME,
+            collection=_HOME,
+            handlers=_handlers(gateway),
+            envelope=EnvelopeHandler(gateway, collection=_HOME),
+            domain=f"The {_HOME} knowledge base.",
+        )
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(surface, _surface(_OTHER)))
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"knowledge_base": _HOME, "unit_id": "meta.purpose"})
+
+        assert _about_pointer(_HOME) in str(refused.value)
+
+    async def test_the_capability_over_one_knowledge_base_names_the_about_page(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME),))
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        assert _about_pointer(_HOME) in str(refused.value)
+
+    async def test_the_capability_over_several_knowledge_bases_names_the_about_page_form(self):
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME), _surface(_OTHER)), cross_search=True)
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        assert _about_pointer("<collection>") in str(refused.value)
+
+    async def test_the_capability_under_the_flat_dial_says_it_reads_none_of_them(self):
+        dials = ReadDials(fetch="flat")
+        knowledge_base = RetrievalKnowledgeBase[None](surfaces=(_surface(_HOME),), dials_source=lambda: dials)
+
+        with pytest.raises(ModelRetry) as refused:
+            await knowledge_base.direct_call_tool("fetch", {"unit_id": "meta.purpose"})
+
+        message = str(refused.value)
+        assert _READS_NONE in message
+        assert "meta.about" not in message
+
+    async def test_an_ordinary_missing_id_is_still_sent_to_re_ground(self):
+        toolset = _leveled(_gateway())
+
+        with pytest.raises(ModelRetry) as refused:
+            await _call(toolset, "fetch", {"unit_id": "metadata.x"})
+
+        message = str(refused.value)
+        assert "Re-ground the id with `search`" in message
+        assert "_meta/" not in message

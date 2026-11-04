@@ -882,7 +882,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 refused = refusal
             except ModelRetry:
                 unknown = True
-        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen))
+        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen), reads_orientation=False)
 
     async def _flat_in(self, surface: ReadSurface, unit_id: str) -> FetchResult:
         """One unit's full text, read from `surface` alone and stamped by it."""
@@ -934,7 +934,7 @@ class RetrievalKnowledgeBase(ToolsetCapability[AgentDepsT]):
                 refused = refusal
             except ModelRetry:
                 unknown = True
-        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen))
+        raise _fan_out_refusal(unit_id, refused, unknown=unknown, collection=_sole(chosen), reads_orientation=True)
 
     async def _map(self, surface: ReadSurface) -> FetchEnvelope | FetchUnit:
         """The knowledge base map, as `surface.envelope` renders it, under that base's own stamp."""
@@ -1104,11 +1104,11 @@ def _sole(surfaces: Sequence[ReadSurface]) -> str | None:
     return surfaces[0].collection if len(surfaces) == 1 else None
 
 
-def _fan_out_refusal(unit_id: str, refused: RefRefusal | None, *, unknown: bool, collection: str | None) -> ModelRetry:
+def _fan_out_refusal(unit_id: str, refused: RefRefusal | None, *, unknown: bool, collection: str | None, reads_orientation: bool) -> ModelRetry:
     """The refusal for a read no knowledge base answered: not-found naming the forms in `collection`, unless every base refused the ref itself."""
     if refused is not None and not unknown:
         return refused
-    return ModelRetry(no_unit_refusal(unit_id, collection))
+    return ModelRetry(no_unit_refusal(unit_id, collection, reads_orientation=reads_orientation))
 
 
 def _date_range(since: str | None, until: str | None) -> tuple[date | None, date | None]:
