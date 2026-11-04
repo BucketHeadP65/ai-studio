@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 
-from contextlib import suppress
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol
 
@@ -252,14 +251,18 @@ class Broadcaster:
             task.add_done_callback(_log_unexpected_exit)
 
     async def stop(self) -> None:
-        """Stop both tasks and close both connections. Calling it twice is harmless."""
+        """Stop both tasks and close both connections, however each task ended. Calling it twice is harmless.
+
+        A task that already ended on an error was logged when it ended, so stopping raises nothing for it.
+        """
         for task in self._tasks:
             task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+        await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks = []
-        await self._listener.close()
-        await self._notifier.close()
+        try:
+            await self._listener.close()
+        finally:
+            await self._notifier.close()
 
     async def _publish_forever(self) -> None:
         while True:

@@ -258,8 +258,20 @@ class TestReconnect:
         assert "broadcaster task exited unexpectedly" in caplog.text
         assert "ProtocolViolationError" in caplog.text
         assert listener.open_count == 2
-        with suppress(ProtocolViolationError):
-            await broadcaster.stop()
+        await broadcaster.stop()
+
+    async def test_stop_after_the_fan_out_died_closes_both_connections_and_raises_nothing(self, caplog: pytest.LogCaptureFixture):
+        broadcaster, notifier, listener = _broadcaster(coalesce_seconds=0.01)
+        await broadcaster.start()
+        listener.fail_next_open(ProtocolViolationError("unexpected message type"))
+        for _ in range(20):
+            await asyncio.sleep(0.01)
+            if "broadcaster task exited unexpectedly" in caplog.text:
+                break
+        assert "broadcaster task exited unexpectedly" in caplog.text
+        await broadcaster.stop()
+        assert listener.closed
+        assert notifier.closed
 
 
 DSN = "postgresql://u:p@h/db"
