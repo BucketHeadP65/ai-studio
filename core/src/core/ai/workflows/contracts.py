@@ -92,6 +92,7 @@ from core.ai.workflows.exceptions import (
     PresentationRefusedError,
     RegistrationError,
     RetryExhaustedError,
+    ReusableStepsRefusedError,
     SaveRefusedError,
     WorkflowUnknownError,
 )
@@ -105,6 +106,7 @@ from core.ai.workflows.internal_contracts import (
     Ingest,
     OrchestratorDecider,
     PerformStep,
+    ReusableStepQueries,
     Rows,
     RunObserver,
     SaveGuard,
@@ -112,6 +114,7 @@ from core.ai.workflows.internal_contracts import (
 )
 from core.ai.workflows.read_models import SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
+from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
 from core.ai.workflows.service import save, verify_savable
 from core.ai.workflows.voice import process_instructions
 from core.lazy_imports import lazy_module_attributes
@@ -130,6 +133,7 @@ __all__ = [
     "CURRENT_STEP",
     "DEFAULT_TASK_QUEUE",
     "KNOWLEDGE_BASE_CONTROL",
+    "NO_REUSABLE_STEPS",
     "AdaptationRefusedError",
     "AgentResolver",
     "AgentStep",
@@ -182,6 +186,8 @@ __all__ = [
     "ResultFieldPresentation",
     "RetryExhaustedError",
     "RetryFeedback",
+    "ReusableStepQueries",
+    "ReusableStepsRefusedError",
     "ReviewedArtifactRef",
     "ReviewedArtifacts",
     "Rows",
@@ -229,6 +235,7 @@ __all__ = [
     "check_birth",
     "connect",
     "contract_of",
+    "copy_reusable_steps",
     "decode_run_event",
     "drift",
     "encode_run_event",

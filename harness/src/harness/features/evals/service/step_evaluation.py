@@ -16,11 +16,9 @@ from harness.features.evals.exceptions import StepNotABriefingError, StepOutputR
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    from core.ai.workflows.contracts import PerformStep
+    from core.ai.workflows.contracts import PerformStep, ReusableStepQueries
     from pydantic_evals import Dataset
     from pydantic_evals.reporting import EvaluationReport
-
-    from harness.features.evals.internal_contracts import ReusableStepQueries
 
 
 async def resolve_step(library: ReusableStepQueries, step_id: str) -> Briefing:

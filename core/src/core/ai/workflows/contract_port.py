@@ -35,9 +35,10 @@ from core.ai.workflows.domain.presentation import WorkflowPresentation
 # A runtime import even though only annotations name it: FunctionToolset resolves `_save` and
 # `_adapt` signatures at runtime to build the tool schema, so under TYPE_CHECKING the name is gone.
 from core.ai.workflows.domain.vocabulary import Workflow
-from core.ai.workflows.exceptions import AdaptationRefusedError, LibraryError, SaveRefusedError
+from core.ai.workflows.exceptions import AdaptationRefusedError, LibraryError, ReusableStepsRefusedError, SaveRefusedError
 from core.ai.workflows.internal_contracts import SaveGuard
 from core.ai.workflows.read_models import SavedWorkflow
+from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
 from core.ai.workflows.service import verify_savable
 
 if TYPE_CHECKING:
@@ -581,30 +582,17 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
 
     async def _copy_in(self, ctx: RunContext[AgentDepsT], workflow: Workflow, uses: Sequence[str]) -> Workflow:
         """`workflow` with every step in `uses` fetched from the library and appended to its `inline`."""
-        vocabulary = self.vocabulary
-        if vocabulary.fetch_step_tool is None or vocabulary.to_step is None or vocabulary.step_args is None:
-            msg = "this library keeps no reusable steps. Drop `uses` and define the steps under inline"
-            raise ModelRetry(msg)
-        carried = {task.name for task in workflow.inline}
-        copied: list[InlineStep] = []
-        seen: set[str] = set()
-        for step_id in uses:
-            if step_id in seen:
-                msg = f"{step_id!r} is named more than once in `uses`. Name each reusable step once."
-                raise ModelRetry(msg)
-            seen.add(step_id)
-            raw = await self._call_host(ctx, vocabulary.fetch_step_tool, vocabulary.step_args(step_id))
-            try:
-                step = vocabulary.to_step(raw)
-            except (ValueError, KeyError, TypeError, ValidationError) as exc:
-                msg = f"{step_id!r} did not yield a valid reusable step ({exc}). It cannot be copied into this spec."
-                raise ModelRetry(msg) from exc
-            if step.name in carried:
-                msg = f"{step_id} is step {step.name!r}, which this workflow already carries under inline. Drop one of the two"
-                raise ModelRetry(msg)
-            carried.add(step.name)
-            copied.append(step)
-        return workflow.model_copy(update={"inline": (*workflow.inline, *copied)})
+        fetch_step_tool, to_step, step_args = self.vocabulary.fetch_step_tool, self.vocabulary.to_step, self.vocabulary.step_args
+        if fetch_step_tool is None or to_step is None or step_args is None:
+            raise ModelRetry(NO_REUSABLE_STEPS)
+
+        async def fetch_step(step_id: str) -> InlineStep:
+            return to_step(await self._call_host(ctx, fetch_step_tool, step_args(step_id)))
+
+        try:
+            return await copy_reusable_steps(workflow, uses, fetch_step)
+        except ReusableStepsRefusedError as exc:
+            raise ModelRetry(str(exc)) from exc
 
     async def _save(
         self,

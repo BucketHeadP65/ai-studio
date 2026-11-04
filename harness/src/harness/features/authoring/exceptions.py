@@ -1,4 +1,4 @@
-"""The authoring slice's errors: a draft that cannot be kept or built, and a turn that is refused or could not finish."""
+"""The authoring slice's errors: a draft that cannot be kept, and a turn that is refused or could not finish."""
 
 from __future__ import annotations
 
@@ -21,10 +21,6 @@ class DraftNotSavableError(Exception):
         """
         super().__init__(message)
         self.readiness = readiness
-
-
-class ReusableStepsRefusedError(Exception):
-    """The reusable steps a draft names in `uses` cannot be copied into it, in words the model can act on."""
 
 
 class DigestWorkflowUnreadableError(Exception):

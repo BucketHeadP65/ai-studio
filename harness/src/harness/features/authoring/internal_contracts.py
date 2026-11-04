@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 
     from core.ai.history.contracts import StepUsage
-    from core.ai.workflows.contracts import InlineStep, Workflow, WorkflowArguments
+    from core.ai.workflows.contracts import Workflow, WorkflowArguments
     from pydantic import JsonValue
     from pydantic_ai.messages import ModelMessage
     from pydantic_ai.ui import NativeEvent
@@ -17,25 +17,6 @@ if TYPE_CHECKING:
     from harness.domain.contracts import PageContext
     from harness.features.authoring.domain import SourceRun, ToolResultIn
     from harness.session import Runtime
-
-
-@runtime_checkable
-class ReusableStepQueries(Protocol):
-    """The library read a draft built on reusable steps needs: one step behind its own id."""
-
-    async def fetch_step(self, step_id: str) -> InlineStep:
-        """The reusable step `step_id` names, validated as an inline step.
-
-        Args:
-            step_id: The reusable step's id.
-
-        Returns:
-            The step as a `Briefing`, `Program` or `AgentStep`.
-
-        Raises:
-            LibraryError: No reusable step has that id.
-        """
-        ...
 
 
 class TurnEvents(Protocol):

@@ -167,6 +167,10 @@ class AdaptationRefusedError(ValueError):
     """The edit was not applied, and the message says which op and why."""
 
 
+class ReusableStepsRefusedError(ValueError):
+    """The reusable steps a workflow names in `uses` cannot be copied into it, and the message says which and why."""
+
+
 class DocumentError(ValueError):
     """The text is not a readable workflow file or step file.
 

@@ -15,9 +15,13 @@ from typing import TYPE_CHECKING
 import yaml
 
 from core.ai.workflows.contracts import (
+    NO_REUSABLE_STEPS,
+    ReusableStepQueries,
+    ReusableStepsRefusedError,
     Workflow,
     WorkflowArguments,
     WorkflowIntent,
+    copy_reusable_steps,
     intent_issues,
     prepare,
     process_instructions,
@@ -33,8 +37,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AbstractToolset, CombinedToolset, FilteredToolset
 
 from harness.domain.contracts import DraftReadiness, GateMode, WorkflowPresentationPatch
-from harness.features.authoring.exceptions import ReusableStepsRefusedError
-from harness.features.authoring.service import draft_readiness, settled_draft, with_reusable_steps
+from harness.features.authoring.service import draft_readiness, settled_draft
 from harness.features.running.contracts import (
     DEFAULT_SINCE_HOURS,
     RunCollaborators,
@@ -53,9 +56,9 @@ from harness.rendering import parallel_groups
 from harness.session import Runtime, draft_path, remember_draft
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Sequence
 
-    from core.ai.workflows.contracts import StepRegistry, WorkflowContract
+    from core.ai.workflows.contracts import StepRegistry, WorkflowContract, WorkflowLibrary
     from core.cqrs.contracts import TopicSink
     from pydantic_ai.tools import ToolDefinition
 
@@ -203,7 +206,8 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
         not_for: What to reach for something else for. Blank keeps what the draft already says.
         uses: Reusable step ids from `search_steps`, each copied into the draft's `inline` before the
             check. A step whose name is already under `inline`, or an id named twice, is refused.
-            When you save, pass the same spec and the same `uses`.
+            When you save, pass the spec you wrote and the same `uses`, never the draft's YAML, which
+            already carries the copies.
         intent: What the person asked for and what they expect a run to do, in their words. Pass it
             once you have it, and again whenever it changes. Omitted, the draft keeps the one it
             already carries. An intent that still owes answers is fine: record what was said and
@@ -216,7 +220,7 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
         return f"the draft is not a well-formed workflow yet:\n{str(exc)[:900]}"
     if uses:
         try:
-            workflow = await with_reusable_steps(workflow, uses, library=ctx.deps.library)
+            workflow = await _with_library_steps(workflow, uses, ctx.deps.library)
         except ReusableStepsRefusedError as exc:
             ctx.deps.conversation.last_issues = (str(exc),)
             return f"NOT VALID:\n{exc}"
@@ -252,6 +256,13 @@ async def check_draft(  # noqa: PLR0913, PLR0917 (the spec, the card and the fou
         return "\n".join(line for line in (answer, fit, owed, _intent_owed(draft.intent)) if line)
     refused = "NOT VALID:\n" + "\n".join(ctx.deps.conversation.last_issues)
     return f"{refused}\n{fit}" if fit else refused
+
+
+async def _with_library_steps(workflow: Workflow, uses: Sequence[str], library: WorkflowLibrary) -> Workflow:
+    """`workflow` with the library steps `uses` names copied into its `inline`, refused when the library keeps none."""
+    if not isinstance(library, ReusableStepQueries):
+        raise ReusableStepsRefusedError(NO_REUSABLE_STEPS)
+    return await copy_reusable_steps(workflow, uses, library.fetch_step)
 
 
 def _intent_owed(intent: WorkflowIntent | None) -> str:
