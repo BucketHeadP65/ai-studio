@@ -80,7 +80,8 @@ class FileActivationLog:
             The events, oldest first. Empty when the file cannot be read.
         """
         try:
-            lines = self._path.read_text(encoding="utf-8").splitlines()
+            # Only a newline ends a record: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+            lines = self._path.read_text(encoding="utf-8").split("\n")
         except OSError:
             return ()
         out: list[ActivationEvent] = []

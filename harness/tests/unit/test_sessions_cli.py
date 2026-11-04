@@ -90,6 +90,18 @@ def test_search_finds_a_term_in_the_session_log_and_the_state_home(tmp_path: Pat
     assert "harness-author-abc123" in result.output
 
 
+def test_search_numbers_lines_by_newline_only(tmp_path: Path) -> None:
+    """A JSON line may hold U+2028, U+2029 or U+0085 unescaped, and the next line still carries its own number."""
+    _seed_conversations(tmp_path)
+    kept = a_state(tmp_path).home / "evidence.jsonl"
+    kept.write_text('{"note": "one\u2028two\u2029three\x85four"}\n{"note": "the quarterly ledger"}\n', encoding="utf-8")
+
+    result = runner.invoke(app, ["sessions", "search", "quarterly"], env={"APP_STATE__HOME": str(tmp_path)})
+
+    assert result.exit_code == 0
+    assert "evidence.jsonl:2: " in result.output
+
+
 def test_search_says_when_nothing_matches(tmp_path: Path) -> None:
     _seed_conversations(tmp_path)
 

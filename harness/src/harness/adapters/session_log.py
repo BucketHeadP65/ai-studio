@@ -142,7 +142,10 @@ class SessionLog:
         except OSError:
             return ()
         entries: list[Recorded] = []
-        for number, line in enumerate(text.splitlines(), start=1):
+        # Only a newline ends a record: JSON leaves U+2028, U+2029 and U+0085 unescaped inside a string.
+        for number, line in enumerate(text.split("\n"), start=1):
+            if not line.strip():
+                continue
             record = read_line(line)
             if isinstance(record, UnreadableLine):
                 _logger.warning("line {line} of {path} was skipped: {reason}", line=number, path=str(self._path), reason=record.reason)
@@ -159,7 +162,7 @@ class SessionLog:
                 tail = handle.read().decode("utf-8", errors="replace")
         except OSError:
             return 1
-        for line in reversed(tail.splitlines()):
+        for line in reversed(tail.split("\n")):
             if (record := decode(line)) is not None:
                 return record.seq + 1
         events = self.events()
