@@ -1,4 +1,4 @@
-"""The errors the evals slice raises when a step cannot be performed or a model request cannot be metered."""
+"""The errors the evals slice raises when a step or its cases cannot be performed or a model request cannot be metered."""
 
 from core.ai.evaluation.contracts import BudgetError, EvaluationError
 
@@ -9,6 +9,10 @@ class StepNotABriefingError(ValueError):
 
 class StepOutputReusesAnotherError(ValueError):
     """A step's output slot names another step's type instead of declaring its own shape."""
+
+
+class CaseRunRefusedError(RuntimeError):
+    """A step's cases did not run: the registry cannot run that kind of step, or an `LLMJudge` in the dataset names no model."""
 
 
 class UnmeteredModelCallError(BudgetError):

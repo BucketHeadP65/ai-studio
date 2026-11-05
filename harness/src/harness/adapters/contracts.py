@@ -52,6 +52,7 @@ from harness.adapters.models import ModelFactory, billed_cost, model, price_resp
 from harness.adapters.notify import MacNotifier, NoopNotifier, Notifier
 from harness.adapters.record import RecordHistorySource
 from harness.adapters.session_log import SessionLog
+from harness.adapters.stand_ins import StandInCall, StandInCalls, stand_in_caller, stand_in_toolset
 from harness.adapters.steps import notify_owner_step
 from harness.adapters.store import (
     RECORD_NAMESPACE,
@@ -104,6 +105,8 @@ __all__ = [
     "ServerOutcome",
     "SessionLog",
     "SessionsDatabase",
+    "StandInCall",
+    "StandInCalls",
     "StudioApi",
     "StudioReadToolsOpener",
     "Telemetry",
@@ -140,6 +143,8 @@ __all__ = [
     "spill_store",
     "split_address",
     "ssl_terms",
+    "stand_in_caller",
+    "stand_in_toolset",
     "step_guards",
     "step_shell",
     "step_workspace",

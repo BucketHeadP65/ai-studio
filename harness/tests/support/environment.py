@@ -41,7 +41,9 @@ if TYPE_CHECKING:
     from pydantic_ai.toolsets import FilteredToolset
     from pydantic_monty import AsyncMonty
 
+    from harness.adapters.contracts import StandInCalls
     from harness.adapters.model_tiers import ModelBuilder
+    from harness.domain.contracts import KnowledgeBaseSurface
     from harness.domain.ports import StepModelWrapper
     from harness.session import ActiveRun
 
@@ -250,6 +252,8 @@ async def world_over(
     build: ModelBuilder | None = None,
     models: ModelList | None = None,
     wrap_model: StepModelWrapper | None = None,
+    engram: KnowledgeBaseSurface | None = None,
+    stand_ins: StandInCalls | None = None,
 ) -> StepRegistry:
     """An environment over the stand-in surface. There is no knowledge base DSN any more: nothing here connects.
 
@@ -265,6 +269,8 @@ async def world_over(
     tier setting is checked against -- `None` for either answers both tiers on `model` itself.
     `wrap_model` is what every role's model is put through before a step agent is built over it,
     `None` leaving each role on the model itself, which is what production does.
+    `engram` is the surface the grants are read off, `fake_engram()` when `None`. `stand_ins` is the list a
+    case run's write stand-ins record into, `None` mounting the real write tools as production does.
     """
     home = state if state is not None else Path(mkdtemp(prefix="harness-environment-"))
     tiers = ModelTiers(
@@ -274,7 +280,7 @@ async def world_over(
     )
     return await build_environment(
         model,
-        engram=fake_engram(),
+        engram=engram if engram is not None else fake_engram(),
         plugins=plugins,
         spend=spend,
         active=active,
@@ -286,6 +292,7 @@ async def world_over(
         custom=home / "custom",
         records=records_under(home),
         wrap_model=wrap_model,
+        stand_ins=stand_ins,
     )
 
 

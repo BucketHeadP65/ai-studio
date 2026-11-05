@@ -1,4 +1,4 @@
-"""A step's dataset, and the one dataset-level evaluator its cases name: does its verdict match the expected one."""
+"""A step's dataset, the evaluator its cases name, and how a case reads as passed or failed."""
 
 from __future__ import annotations
 
@@ -8,13 +8,22 @@ from typing import TYPE_CHECKING
 from pydantic import JsonValue
 from pydantic_evals import Dataset
 from pydantic_evals.evaluators import EvaluationReason, Evaluator
+from pydantic_evals.reporting import ReportCaseFailure
+
+from harness.domain.contracts import CaseResult
 
 if TYPE_CHECKING:
     from pydantic_evals.evaluators import EvaluatorContext
-    from pydantic_evals.reporting import EvaluationReport
+    from pydantic_evals.reporting import EvaluationReport, ReportCase
 
 StepDataset = Dataset[dict[str, JsonValue], dict[str, JsonValue], dict[str, JsonValue]]
 """A step's dataset: each case's inputs are the step's arguments, its expected output a mapping holding the expected `outcome`."""
+
+CaseDataset = Dataset[dict[str, JsonValue], object, dict[str, JsonValue]]
+"""A reusable step's own cases: each case's inputs are the step's arguments, its output whatever the step answers.
+
+The step answers its own output type, so an evaluator reads a field of it as `OutcomeMatches` does, and a case's
+expected output is read from the dataset as plain JSON."""
 
 
 @dataclass
@@ -40,9 +49,6 @@ class OutcomeMatches(Evaluator):
         return EvaluationReason(value=1.0 if got == want else 0.0, reason=reason)
 
 
-_OUTCOME_KEY = OutcomeMatches.get_serialization_name()
-
-
 def bind_collection(dataset: Dataset, collection: str) -> None:
     """Fill in `collection` on every case that does not already name one.
 
@@ -57,8 +63,54 @@ def bind_collection(dataset: Dataset, collection: str) -> None:
             case.inputs = {**case.inputs, "collection": collection}
 
 
+def case_result(case: ReportCase | ReportCaseFailure, *, run_errored: bool = False, outside: frozenset[str] = frozenset()) -> CaseResult:
+    """How one case came out: passed when at least one evaluator judged it and every one passed it.
+
+    An assertion passes when it is true and a score when it is 1.0. A failed run errored the case when `run_errored`
+    says its cause lies outside the step, and an evaluator's raise errored it when `outside` names the error's class.
+    An errored case's reason says `errored` and names the error. Any other raise is the step's own failure, and so is
+    a case no evaluator judged.
+
+    Args:
+        case: A case of an evaluation report, run or failed.
+        run_errored: Whether the case's run stopped for a cause outside the step, which only the caller that saw the
+            error can tell. `False` reads a failed run as the step's own failure.
+        outside: The class names of the errors whose cause lies outside the step, for an evaluator's raise. Empty
+            reads every evaluator's raise as a failure.
+
+    Returns:
+        The case's result, its reason naming every evaluator's verdict or the error.
+    """
+    if isinstance(case, ReportCaseFailure):
+        if run_errored:
+            return CaseResult(name=case.name, passed=False, errored=True, reason=f"errored before any evaluator judged it: {case.error_message}")
+        return CaseResult(name=case.name, passed=False, errored=False, reason=f"the step raised: {case.error_message}")
+    if case.evaluator_failures:
+        errored = any(_raised(failure.error_message) in outside for failure in case.evaluator_failures)
+        named = ". ".join(
+            f"errored while {failure.name} judged it: {failure.error_message}"
+            if _raised(failure.error_message) in outside
+            else f"{failure.name} raised: {failure.error_message}"
+            for failure in case.evaluator_failures
+        )
+        return CaseResult(name=case.name, passed=False, errored=errored, reason=named)
+    verdicts = [*case.assertions.values(), *case.scores.values()]
+    if not verdicts:
+        return CaseResult(name=case.name, passed=False, errored=False, reason="no evaluator judged this case")
+    passed = all(result.value is True for result in case.assertions.values()) and all(result.value == 1.0 for result in case.scores.values())
+    reason = ". ".join(f"{result.name}: {result.reason or result.value}" for result in verdicts)
+    return CaseResult(name=case.name, passed=passed, errored=False, reason=reason)
+
+
+def _raised(error_message: str) -> str:
+    """The class name of the error a report recorded as `<class name>: <message>`."""
+    return error_message.split(":", maxsplit=1)[0]
+
+
 def report_failed(report: EvaluationReport) -> bool:
-    """Whether any case failed: its task raised, or its `OutcomeMatches` score was not 1.0.
+    """Whether any case failed: its task raised, or an evaluator that judged it did not pass it.
+
+    Every evaluator counts, its assertions and its scores alike, as `case_result` reads them.
 
     Args:
         report: The evaluation report to read.
@@ -68,4 +120,4 @@ def report_failed(report: EvaluationReport) -> bool:
     """
     if report.failures:
         return True
-    return any(case.scores.get(_OUTCOME_KEY) is None or case.scores[_OUTCOME_KEY].value != 1.0 for case in report.cases)
+    return any(not case_result(case).passed for case in report.cases)

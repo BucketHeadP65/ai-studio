@@ -1,6 +1,6 @@
-"""The ports the evals slice reads and spends through.
+"""The ports the evals slice reads, keeps and spends through.
 
-The library, running, the budget record and the CLI fill them.
+The library, running, the budget record, the case reports and the CLI fill them.
 """
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     )
     from pydantic_ai.models import Model
 
+    from harness.domain.contracts import CaseReport
     from harness.features.evals.domain.benchmark import UsageSource
     from harness.features.evals.domain.outcomes import ArchivedRun, RunSpendView
     from harness.features.evals.domain.pilot import PilotTrial, WorkflowAutomationExecution
@@ -256,3 +257,29 @@ class ComposedBenchmark:
     """A meter moved onto each slot's trial along with `models`, or `None` when there is none."""
     reviews: BenchmarkReviews | None = None
     """Where owner reviews are read. `None` reports every run's acceptance as `unknown`."""
+
+
+class CaseReports(Protocol):
+    """Every kept case report, named by the content addresses of the step and of its cases."""
+
+    def get(self, step_hash: str, cases_hash: str) -> CaseReport | None:
+        """The report kept for this step and these cases.
+
+        Args:
+            step_hash: The step's content address.
+            cases_hash: The content address of the step's dataset.
+
+        Returns:
+            The kept report, or `None` when the cases never ran on this step.
+        """
+        ...
+
+    def put(self, report: CaseReport) -> None:
+        """Keep `report` under its step's and its cases' content addresses.
+
+        A report already kept under the same two addresses stays as it is, and this one is dropped.
+
+        Args:
+            report: The report to keep.
+        """
+        ...

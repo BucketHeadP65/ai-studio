@@ -84,6 +84,8 @@ from harness.adapters.contracts import (
     price_response,
     query_embedder,
     sandbox_pool,
+    stand_in_caller,
+    stand_in_toolset,
     step_guards,
     step_shell,
     step_workspace,
@@ -97,6 +99,7 @@ from harness.adapters.contracts import (
 )
 from harness.domain.contracts import (
     BRIEFING_ONLY_BUDGET,
+    CASE_RUN_TOOLS,
     DEFINED_STEP_BUDGET,
     JUDGE_TOOLS,
     NOT_FOR_STEPS,
@@ -194,8 +197,8 @@ if TYPE_CHECKING:
     from pydantic_ai.toolsets import AbstractToolset
     from pydantic_monty import AsyncMonty
 
-    from harness.adapters.contracts import DatabaseBinding, Notifier
-    from harness.domain.contracts import KnowledgeBaseSurface
+    from harness.adapters.contracts import DatabaseBinding, Notifier, StandInCalls
+    from harness.domain.contracts import KnowledgeBaseSurface, ToolCaller
     from harness.features.running.contracts import DurableTurns, SpendReporter
     from harness.features.scheduling.contracts import Scheduler
     from harness.features.sessions.contracts import Sessions
@@ -537,6 +540,21 @@ def _turn_output_validator(output_type: type) -> Callable[[object], object]:
     return validate
 
 
+def _stand_ins_over(
+    engram: KnowledgeBaseSurface, stand_ins: StandInCalls | None, plugins: AuthoringTools | None
+) -> tuple[FunctionToolset[object], ToolCaller]:
+    """The write tools' stand-ins a grant mounts and what a program calls through, or no stand-ins and `engram`'s own call."""
+    if stand_ins is None:
+        return FunctionToolset[object](), engram.direct_call_tool
+    grounding = grounding_toolset(plugins) if plugins is not None else None
+    return stand_in_toolset(engram, stand_ins, grounding=grounding), stand_in_caller(engram, stand_ins)
+
+
+def _within(names: Iterable[str], scope: frozenset[str] | None) -> tuple[str, ...]:
+    """`names` in order, narrowed to `scope` when there is one."""
+    return tuple(name for name in names if scope is None or name in scope)
+
+
 async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separate term the host sets, and the statements are the arms of run_defined_step)
     model: Model,
     *,
@@ -554,6 +572,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     spend: AbstractCapability[object] | None = None,
     turns: DurableTurns | None = None,
     wrap_model: StepModelWrapper | None = None,
+    stand_ins: StandInCalls | None = None,
 ) -> StepRegistry:
     """Wire the retrieval surface into the one thing this process can execute: a registry of steps.
 
@@ -598,6 +617,11 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         wrap_model: What every role's model is put through before a step agent is built over it.
             `None` builds each role on the model itself, which is what this deployment does: a
             wrapper is mounted only by a caller that is measuring what a run spends.
+        stand_ins: Where the write tools' stand-ins record the calls they answered. A list mounts each write tool's
+            stand-in under the tool's own name, in place of the real tool, for a briefing's grant and for a
+            program's calls, so a step's case run lands nothing. Such a registry grants, mounts and reaches only the
+            tools in `CASE_RUN_TOOLS`, never the shell, runs no agent step, and registers neither `notify_owner`,
+            `run_external_agent` nor any custom step. `None` mounts the real tools.
 
     Returns:
         The registry of steps a session executes, with the owner's active custom steps loaded.
@@ -605,20 +629,27 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     active = active if active is not None else ActiveRun()
     # Derived rather than typed out, so a retrieval tool added to engram becomes grantable without
     # a change here. `describe_schema` is grantable like any read.
-    reads = tuple(tool.name for tool in await engram.list_tools() if tool.name not in NOT_FOR_STEPS)
+    scope = frozenset(CASE_RUN_TOOLS) if stand_ins is not None else None
+    """The only tools a stand-in registry grants, mounts or reaches. `None` narrows nothing."""
+    reads = _within((tool.name for tool in await engram.list_tools() if tool.name not in NOT_FOR_STEPS), scope)
     grounding = GROUNDING_TOOLS if plugins is not None else ()
-    grantable = (*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding)
+    grantable = _within((*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding), scope)
     """What a declared step may ask for by name: the server's reads, the shell it acts with, web
     search, and the grounding tools and `skip_digest` when this environment has plugins."""
+
+    stood_in, program_calls = _stand_ins_over(engram, stand_ins, plugins)
+    writes = frozenset(stood_in.tools)
+    """The write tools a grant reaches through their stand-ins, none when this environment mounts the real tools."""
 
     promoted = promoted_capability_types(FileCustomCapabilities.read_only(custom / "capabilities"))
     """Every promoted custom capability's class. Every `Agent.from_spec` call here reads it as
     `custom_capability_types=`, and `capability_grants` below opens exactly this set to a worker."""
 
     def _step_toolsets(granted: frozenset[str]) -> list[AbstractToolset[None]]:
-        """The reads, web search and grounding a briefing's grant reaches, narrowed to exactly `granted`."""
-        reads_granted = tuple(name for name in reads if name in granted)
-        grounding_granted = tuple(name for name in grounding if name in granted)
+        """The reads, web search, grounding and stand-ins a briefing's grant reaches, narrowed to exactly `granted`."""
+        reads_granted = tuple(name for name in reads if name in granted and name not in writes)
+        grounding_granted = tuple(name for name in grounding if name in granted and name not in writes)
+        writes_granted = tuple(name for name in writes if name in granted)
         return [
             *([engram.filtered(lambda _ctx, tool: tool.name in reads_granted)] if reads_granted else []),
             *([web_search_toolset(web_search.tavily_api_key)] if WEB_SEARCH_TOOL in granted else []),
@@ -627,6 +658,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 if plugins is not None and grounding_granted
                 else []
             ),
+            *([stood_in.filtered(lambda _ctx, tool: tool.name in writes_granted)] if writes_granted else []),
         ]
 
     tier_models: dict[Tier, Model] = {
@@ -653,7 +685,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         budget = limits.requests if limits is not None else default_budget
         tool_calls = limits.tool_calls if limits is not None else None
         usage_limits = UsageLimits(request_limit=budget, tool_calls_limit=tool_calls)
-        granted = frozenset(turn.tools) if turn is not None else frozenset(task.tools)
+        granted = frozenset(_within(turn.tools if turn is not None else task.tools, scope))
         toolsets = _step_toolsets(granted)
         if turn is None:
             key = conversation_key(identity, task.name)
@@ -835,12 +867,19 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     registry = StepRegistry(
         perform=run_defined_step,
         grants=grantable,
-        run_code=code_runner(sandbox, reads=reads, call=engram.direct_call_tool) if sandbox is not None else None,
-        run_agent=run_agent_step,
+        run_code=code_runner(sandbox, reads=reads, call=program_calls) if sandbox is not None else None,
+        run_agent=run_agent_step if scope is None else None,
         resolve_agent=_resolve_stored_agent,
         capability_grants=capability_grants_for(promoted),
         judge_tools=frozenset(JUDGE_TOOLS) & frozenset(grantable),
     )
+    return registry if scope is not None else _session_registry(registry, notifier=notifier, external_agents=external_agents, session_log=session_log, custom=custom)
+
+
+def _session_registry(
+    registry: StepRegistry, *, notifier: Notifier | None, external_agents: ExternalAgentRegistry, session_log: SessionEvents, custom: Path
+) -> StepRegistry:
+    """`registry` with `notify_owner`, `run_external_agent` and the owner's active custom steps, as a session runs it."""
     registry.register(notify_owner_step(notifier or NoopNotifier()), name="notify_owner", replay_safe=False)
     registry.register(run_external_agent_step(external_agents, session_log=session_log), name="run_external_agent", replay_safe=False)
     session_registry = registry.copy()
