@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from pydantic import JsonValue
 
+    from core.ai.workflows.domain.consumers import StepVersion
     from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence
     from core.ai.workflows.domain.fingerprint import WorkflowFingerprint
     from core.ai.workflows.domain.intent import WorkflowIntent
@@ -277,6 +278,50 @@ class ReusableStepQueries(Protocol):
 
         Returns:
             The step as a `Briefing`, `Program` or `AgentStep`.
+
+        Raises:
+            LibraryError: No reusable step has that id.
+        """
+        ...
+
+
+@runtime_checkable
+class StepVersionQueries(Protocol):
+    """The library reads that compare reusable step versions: every saved version of a name, and a version's cases.
+
+    A library that keeps reusable steps answers it. A caller narrows a library with `isinstance`.
+    """
+
+    async def step_versions(self, name: str) -> tuple[StepVersion, ...]:
+        """Every saved version of one reusable step, live or superseded, lowest version first.
+
+        Args:
+            name: The reusable step's name.
+
+        Returns:
+            The versions, each with its id and content address. Empty when no version of `name` is saved.
+        """
+        ...
+
+    async def step_versions_of(self, names: Sequence[str]) -> Mapping[str, tuple[StepVersion, ...]]:
+        """Every saved version of each named reusable step, read in one query, each name's versions lowest first.
+
+        Args:
+            names: The reusable step names.
+
+        Returns:
+            One entry per name, an empty tuple for a name with no saved version.
+        """
+        ...
+
+    async def fetch_step_cases(self, step_id: str) -> Mapping[str, JsonValue] | None:
+        """The cases one reusable step version carries, exactly as they were saved.
+
+        Args:
+            step_id: The step version's id.
+
+        Returns:
+            The cases, or None when the version was saved without them.
 
         Raises:
             LibraryError: No reusable step has that id.

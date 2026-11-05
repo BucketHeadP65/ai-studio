@@ -737,8 +737,8 @@ async def test_a_step_lands_on_its_own_page_type_and_comes_back_identical() -> N
     assert payload["sections"] == [{"heading": "Applicability", "body": "Use per mirror."}]
 
 
-async def test_two_versions_of_a_step_are_independent_pages() -> None:
-    """Unlike a workflow, a step page carries no supersession link: each version is its own write."""
+async def test_two_versions_of_a_step_are_two_pages() -> None:
+    """Each version is its own page. The link that retires the lower one is pinned in `test_step_versions.py`."""
     ingest = FakeIngest()
     store = LibraryCollection(FakeRows(), ingest)
 
@@ -747,7 +747,6 @@ async def test_two_versions_of_a_step_are_independent_pages() -> None:
 
     assert (first, second) == ("st.digest_source.v1", "st.digest_source.v2")
     assert [payload["frontmatter"]["id"] for payload, _ in ingest.payloads] == [first, second]
-    assert len(ingest.payloads) == 2, "saving v2 writes only v2's page; v1's page is never touched"
 
 
 async def test_a_code_step_round_trips_through_put_and_fetch() -> None:

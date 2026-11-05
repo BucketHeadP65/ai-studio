@@ -3,8 +3,10 @@
 `put` writes the workflow into `kb.pages.frontmatter` (jsonb) with the applicability as a section, and
 `fetch_workflow` reads the same document back and validates it. Reads go through the read-only `kb_reader` role
 and writes through the ingest callable the library is given, so this module never touches the `kb.*` tables and
-holds no writer credential. Each version is its own page, `wf.<name>.v<n>`. Saving a version links every live
-lower version of the name forward to it, and `search`, `catalog` and `current` read only pages nothing has superseded.
+holds no writer credential. Each version is its own page, `wf.<name>.v<n>` for a workflow and `st.<name>.v<n>` for
+a reusable step. Saving a version links every live lower version of the name forward to it, and `search`, `catalog`
+and `current` read only pages nothing has superseded. A reusable step version holds one content: it is never saved
+again with different content.
 """
 
 from __future__ import annotations
@@ -21,12 +23,13 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from pydantic_ai.toolsets import FunctionToolset
 
 from core.ai.workflows.contract_port import LibraryVocabulary
-from core.ai.workflows.domain.fingerprint import WorkflowFingerprint
+from core.ai.workflows.domain.consumers import StepVersion
+from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, step_content_address
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage
 from core.ai.workflows.domain.presentation import WorkflowPresentation, verify_presentation
 from core.ai.workflows.domain.vocabulary import InlineStep, Workflow
-from core.ai.workflows.exceptions import LibraryError, WorkflowUnknownError
+from core.ai.workflows.exceptions import LibraryError, StepVersionChangedError, WorkflowUnknownError
 from core.ai.workflows.read_models import SavedWorkflow
 
 if TYPE_CHECKING:
@@ -45,6 +48,9 @@ _VERSIONED_ID = re.compile(rf"^{re.escape(ID_PREFIX)}(?P<name>[a-z0-9]+(?:-[a-z0
 
 STEP_PAGE_TYPE = "step"
 STEP_ID_PREFIX = "st."
+
+_VERSIONED_STEP_ID = re.compile(rf"^{re.escape(STEP_ID_PREFIX)}(?P<name>[a-z][a-z0-9_]*)\.v(?P<version>[1-9][0-9]*)$")
+"""Matches an id `step_page_id` mints and captures its `name` and `version`."""
 
 
 class SupersessionIncompleteWarning(UserWarning):
@@ -111,6 +117,26 @@ where c.type = 'workflow' and c.src_collection = $1 and c.id like $2
 
 The pattern is not escaped, so a caller must take each id apart with `_VERSIONED_ID` and keep only ids of the
 exact name."""
+
+STEP_PAGES_SQL = """
+select c.id, c.frontmatter -> 'step' as step
+from api.cards c
+where c.type = 'step' and c.src_collection = $1 and c.frontmatter -> 'step' ->> 'name' = any($2::text[])
+"""
+"""The id and the step document of every page in collection `$1` holding a reusable step named in the `text[]` `$2`.
+
+Superseded and archived pages are answered too. The rows come in no particular order."""
+
+LIVE_STEP_VERSIONS_SQL = """
+select c.id
+from api.cards c
+where c.type = 'step' and c.src_collection = $1 and c.id like $2
+  and not (c.frontmatter ? 'archived_at') and not c.superseded
+"""
+"""The ids of every live page in collection `$1` holding a reusable step, whose id matches the `like` pattern `$2` (`st.<name>.v%`).
+
+The pattern is not escaped, and `_` is a wildcard in it, so a caller must take each id apart with `_VERSIONED_STEP_ID`
+and keep only ids of the exact name."""
 
 ARCHIVED_SQL = """
 select c.id, c.title, c.summary, c.status, c.frontmatter,
@@ -500,11 +526,19 @@ class LibraryCollection:
         return live[-1][1] if live else workflow_id
 
     async def _live_versions(self, name: str) -> tuple[tuple[int, str], ...]:
-        """Every live `(version, id)` of `name`, lowest version first."""
-        found = await self._rows.fetch(LIVE_VERSIONS_SQL, self._collection, f"{ID_PREFIX}{name}.v%")
+        """Every live `(version, id)` of the workflow `name`, lowest version first."""
+        return await self._live_ids(LIVE_VERSIONS_SQL, f"{ID_PREFIX}{name}.v%", _VERSIONED_ID, name)
+
+    async def _live_step_versions(self, name: str) -> tuple[tuple[int, str], ...]:
+        """Every live `(version, id)` of the reusable step `name`, lowest version first."""
+        return await self._live_ids(LIVE_STEP_VERSIONS_SQL, f"{STEP_ID_PREFIX}{name}.v%", _VERSIONED_STEP_ID, name)
+
+    async def _live_ids(self, sql: str, pattern: str, versioned: re.Pattern[str], name: str) -> tuple[tuple[int, str], ...]:
+        """The `(version, id)` of each id `sql` answers for the `like` `pattern` that `versioned` parses as `name`."""
+        found = await self._rows.fetch(sql, self._collection, pattern)
         versions: list[tuple[int, str]] = []
         for row in found:
-            match = _VERSIONED_ID.match(str(row["id"]))
+            match = versioned.match(str(row["id"]))
             if match is not None and match["name"] == name:
                 versions.append((int(match["version"]), str(row["id"])))
         return tuple(sorted(versions))
@@ -724,14 +758,14 @@ class LibraryCollection:
         return workflow_id
 
     async def _supersede(self, parent_id: str, *, by: str) -> bool:
-        """Link `parent_id` forward to `by`. False when there is no such page, it holds no workflow, or the write fails (warned)."""
+        """Link `parent_id` forward to `by`. False when there is no such page, it holds no workflow or step, or the write fails (warned)."""
         found = await self._rows.fetch(PAGE_SQL, parent_id)
         if not found:
             return False
         page = found[0]
         stored = page["frontmatter"]
         long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
-        if "spec" not in long_tail:
+        if "spec" not in long_tail and "step" not in long_tail:
             return False
         try:
             await self._link_forward(page, long_tail, by=by)
@@ -766,11 +800,22 @@ class LibraryCollection:
         )
 
     async def put_step(
-        self, step: InlineStep, *, version: int, title: str, summary: str, applicability: str, provenance: Mapping[str, str]
+        self,
+        step: InlineStep,
+        *,
+        version: int,
+        title: str,
+        summary: str,
+        applicability: str,
+        provenance: Mapping[str, str],
+        cases: Mapping[str, JsonValue] | None = None,
     ) -> str:
-        """Save one reusable step as its own page, `st.<name>.v<version>`, and return its id.
+        """Save one reusable step version as its own page, `st.<name>.v<version>`, and return its id.
 
-        Saving the same version again replaces its page.
+        A version holds one content. Saving a version that already holds the same content writes nothing, and a
+        version that holds different content is refused. After a new version is written, every live lower version
+        of the name is linked forward to it with `superseded_by`, and a lower version saved after a higher one stays
+        live. A link that fails leaves the new page saved and warns with `SupersessionIncompleteWarning`.
 
         Args:
             step: The step to save. Its name and `version` choose the page.
@@ -779,14 +824,23 @@ class LibraryCollection:
             summary: The card's summary.
             applicability: When to use the step, written as the page's Applicability section.
             provenance: `saved_by` names who saved it.
+            cases: The step's cases, kept on the page exactly as given and read back with `fetch_step_cases`. None
+                saves the version without cases.
 
         Returns:
             The step's page id.
 
         Raises:
+            StepVersionChangedError: If this version already holds different content. Nothing is written.
             LibraryError: If the ingest refuses the page.
         """
         step_id = step_page_id(step.name, version)
+        saved = await self._rows.fetchval(FETCH_SQL, step_id)
+        if saved is not None:
+            document = saved if isinstance(saved, Mapping) else json.loads(saved)
+            if "step" in document and step_content_address(_STEP.validate_python(document["step"])) == step_content_address(step):
+                return step_id
+            raise StepVersionChangedError(step_id)
         frontmatter: dict[str, Any] = {
             "id": step_id,
             "type": STEP_PAGE_TYPE,
@@ -797,6 +851,9 @@ class LibraryCollection:
             "saved_by": provenance.get("saved_by", "unknown"),
             "step": step.model_dump(mode="json"),
         }
+        if cases is not None:
+            # JSON text, because the ingest drops the empty lists, empty mappings and nulls of a nested document.
+            frontmatter["cases"] = json.dumps(dict(cases))
         try:
             await self._ingest(
                 {"frontmatter": frontmatter, "sections": [{"heading": "Applicability", "body": applicability}]},
@@ -807,7 +864,78 @@ class LibraryCollection:
         except Exception as exc:
             msg = f"the collection refused {step_id!r}: {exc}"
             raise LibraryError(msg) from exc
+        for lower, lower_id in await self._live_step_versions(step.name):
+            if lower < version:
+                await self._supersede(lower_id, by=step_id)
         return step_id
+
+    async def step_versions(self, name: str) -> tuple[StepVersion, ...]:
+        """Every saved version of one reusable step, live or superseded, lowest version first.
+
+        Args:
+            name: The reusable step's name.
+
+        Returns:
+            The versions, each with its id and content address. Empty when no version of `name` is saved.
+        """
+        return (await self.step_versions_of([name]))[name]
+
+    async def step_versions_of(self, names: Sequence[str]) -> Mapping[str, tuple[StepVersion, ...]]:
+        """Every saved version of each named reusable step, read in one query, each name's versions lowest first.
+
+        The content address of each version is taken from the step its page holds.
+
+        Args:
+            names: The reusable step names.
+
+        Returns:
+            One entry per name, an empty tuple for a name with no saved version.
+        """
+        wanted = list(dict.fromkeys(names))
+        if not wanted:
+            return {}
+        found: dict[str, list[StepVersion]] = {name: [] for name in wanted}
+        for row in await self._rows.fetch(STEP_PAGES_SQL, self._collection, wanted):
+            match = _VERSIONED_STEP_ID.match(str(row["id"]))
+            if match is None or match["name"] not in found:
+                continue
+            stored = row["step"]
+            step = _STEP.validate_python(stored if isinstance(stored, Mapping) else json.loads(stored))
+            found[match["name"]].append(
+                StepVersion(
+                    name=match["name"],
+                    version=int(match["version"]),
+                    step_id=str(row["id"]),
+                    step_hash=step_content_address(step),
+                    step=step,
+                )
+            )
+        return {name: tuple(sorted(versions, key=lambda saved: saved.version)) for name, versions in found.items()}
+
+    async def fetch_step_cases(self, step_id: str) -> Mapping[str, JsonValue] | None:
+        """The cases one reusable step version carries, exactly as `put_step` was given them.
+
+        Args:
+            step_id: The step version's page id, `st.<name>.v<version>`.
+
+        Returns:
+            The cases, or None when the version was saved without them.
+
+        Raises:
+            LibraryError: If no page has that id, the page carries no step, or its cases are not a JSON object.
+        """
+        document = await self._frontmatter(step_id, kind="step")
+        if "step" not in document:
+            msg = f"{step_id!r} is a page in {self._collection!r} but not a reusable step: it carries no step document"
+            raise LibraryError(msg)
+        stored = document.get("cases")
+        if stored is None:
+            return None
+        cases = json.loads(stored) if isinstance(stored, str) else None
+        if not isinstance(cases, Mapping):
+            msg = f"the cases on {step_id!r} are not the JSON text of an object, the shape put_step writes"
+            raise LibraryError(msg)
+        return cases
 
 
 # --- the same collection, reached through the contract port ---------------------------------------

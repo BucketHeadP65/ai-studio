@@ -104,6 +104,7 @@ from core.ai.workflows.exceptions import (
     RetryExhaustedError,
     ReusableStepsRefusedError,
     SaveRefusedError,
+    StepVersionChangedError,
     WorkflowUnknownError,
 )
 from core.ai.workflows.graph_builder import GateDecision, WorkflowState, build_graph, run_workflow
@@ -120,6 +121,7 @@ from core.ai.workflows.internal_contracts import (
     Rows,
     RunObserver,
     SaveGuard,
+    StepVersionQueries,
     WorkflowLibrary,
 )
 from core.ai.workflows.read_models import SavedWorkflow
@@ -224,6 +226,8 @@ __all__ = [
     "StepIdentity",
     "StepRegistry",
     "StepVersion",
+    "StepVersionChangedError",
+    "StepVersionQueries",
     "TaskContract",
     "Tier",
     "TurnFacts",
