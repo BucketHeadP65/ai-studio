@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals and the placements under no listed stance.
-version: 4
+version: 5
 step:
   name: write_stance_flags
   source: |
@@ -68,6 +68,12 @@ step:
             if finding["side"] == "supports":
                 supports = supports + 1
         contests = len(proposal["findings"]) - supports
+        if proposal["refused"]:
+            evidence.append("")
+            evidence.append("Refused by the judge:")
+            evidence.append("")
+            for refusal in proposal["refused"]:
+                evidence.append("- [[" + refusal["claim"] + "]]: " + refusal["why"])
         if proposal["contests_only"]:
             summary = "A proposed stance the literature argues against: all " + str(contests) + " of its findings contest it."
         else:
@@ -148,12 +154,14 @@ step:
 ---
 
 Use as the tail of a stance refresh, after its proposals are judged and listed, with `listed` wired from
-`list_proposals` and `collection` set to the research knowledge base. Each proposal in its `proposals` becomes the flag `flag.stance-` followed by its stance id without `stance.`, of kind
-`stance` at status `pending`. Its title is the proposed stance. `about` links each digest a finding cites, once. Why
-names each records page by its id in backticks, with the reason placement gave, since a records page lives in another
-knowledge base and a link to it would not resolve. Proposal says that accepting the flag asks for a new stance page.
-Evidence lists each finding as a claim link, its side and its sentence. The summary counts the findings for and
-against the stance, or says that the literature argues against it when they all contest it.
+`list_proposals` and `collection` set to the research knowledge base. Each proposal in its `proposals` becomes the
+flag `flag.stance-` followed by its stance id without `stance.`, of kind `stance` at status `pending`. Its title is the
+proposed stance. `about` links each digest a finding cites, once. Why names each records page by its id in backticks,
+with the reason placement gave, since a records page lives in another knowledge base and a link to it would not
+resolve. Proposal says that accepting the flag asks for a new stance page. Evidence lists each finding as a claim
+link, its side and its sentence, then, under "Refused by the judge", each claim the judge said does not bear, as a
+claim link with the judge's reason. The summary counts the findings for and against the stance, or says that the
+literature argues against it when they all contest it.
 
 It lists the base's flags first, and decides on each listed flag from its file, read with `read_page`, never from the
 index. A flag of another kind under the same id is left as it is and answered in `failed`. A flag whose file is not at

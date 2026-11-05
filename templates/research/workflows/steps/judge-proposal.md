@@ -1,7 +1,7 @@
 ---
 title: Judge one stance proposal
-summary: Whether each finding of one backed stance proposal bears on its position, with one sentence on why, and the existing stance it repeats, if any.
-version: 1
+summary: Whether each finding of one backed stance proposal bears on its position, with one sentence on why, and the existing stance it repeats, if any, under the proposal's own id, title and pages.
+version: 2
 step:
   name: judge_proposal
   instructions: |-
@@ -13,7 +13,7 @@ step:
 
     The run keeps only the findings you judge to bear, and drops a proposal left with findings from fewer than two digests, or one you say duplicates a stance, naming your reasons. A weak finding is dropped, never sent back to be repaired.
 
-    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id copied exactly from the backing, one entry in findings for every finding of the backing, each with its claim copied exactly, bears and why, and duplicates. Never add a claim the backing does not hold.
+    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the backing, so your answer is matched to the proposal you judged, one entry in findings for every finding of the backing, each with its claim copied exactly, bears and why, and duplicates. Never add a claim the backing does not hold.
   inputs:
     backing: {like: check_findings, element: true}
     collection:
@@ -22,9 +22,21 @@ step:
     json_schema:
       type: object
       title: ProposalJudgement
-      required: [stance_id, findings]
+      required: [stance_id, title, pages, findings]
       properties:
         stance_id: {type: string}
+        title: {type: string}
+        pages:
+          type: array
+          items:
+            type: object
+            title: BearingPage
+            required: [page_id, page_type, status, title]
+            properties:
+              page_id: {type: string}
+              page_type: {type: string}
+              status: {type: string}
+              title: {type: string}
         findings:
           type: array
           items:
@@ -49,7 +61,8 @@ step:
 
 Use once per backing of a stance refresh, inside a map over check_findings, with `collection` wired from the
 workflow's parameters. It answers, for each finding, whether its claim bears on the proposal's position and why, and
-for the proposal the id of an existing stance it repeats, or null. It judges one proposal and never the list, so a
-weak proposal never costs the others their place. It writes nothing. A later program keeps the findings judged to
-bear and drops a proposal left with findings from fewer than two digests, or one judged a duplicate, with these
-reasons.
+for the proposal the id of an existing stance it repeats, or null. It copies the proposal's id, title and pages, so its
+answer is matched to the proposal it judged. It judges one proposal and never the list, so a weak proposal never costs
+the others their place. It writes nothing. A later program keeps the findings judged to bear, names each refused one
+with its reason, and drops a proposal left with findings from fewer than two digests, or one that repeats a stance
+the base lists.

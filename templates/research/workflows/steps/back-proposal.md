@@ -1,11 +1,11 @@
 ---
 title: Back one proposed stance with findings
 summary: The claims of the research knowledge base that support or contest one proposed new stance, each named by its reference with one sentence on how it bears, and no claim text typed.
-version: 3
+version: 4
 step:
   name: back_proposal
   instructions: |-
-    You hold one proposal for a new stance. The `collection` input names the research knowledge base. The proposal carries stance_id, title, pages and reasons. title states the position the proposal takes, pages lists the records pages behind it, each with its page_id, page_type, status and title, and reasons gives the reason placement gave for each of those pages. Other workers back the other proposals in parallel, so back only your own.
+    You hold one proposal for a new stance. The `collection` input names the research knowledge base. The proposal carries stance_id, title, pages, reasons and stance_ids. title states the position the proposal takes, pages lists the records pages behind it, each with its page_id, page_type, status and title, reasons gives the reason placement gave for each of those pages, and stance_ids names the stances the base already lists. Other workers back the other proposals in parallel, so back only your own.
 
     A stance rests on the research literature the collection holds as digests: the pages of type paper, talk, article and post, whose ids start with paper., talk., art. and post. Every other page of the collection, a stance page among them, is not a digest, and a digest at status skipped holds no finding for this base and backs nothing. A digest holds its claims in its Findings section. Each claim carries an anchor such as ^c8, and a claim is cited by the digest's id, a #, and its anchor, such as paper.ace-2025#^c8.
 
@@ -17,7 +17,7 @@ step:
 
     The run keeps a proposal only when its findings come from at least two different digests, each holding the claim its finding names, at a status other than skipped, and drops the rest. A proposal whose findings all contest its position is kept and shown as one the literature argues against, so a claim against the position is as much a finding as one for it. Answer findings as an empty list when the literature you found takes no side.
 
-    A reviewer may have rejected an earlier attempt. Its feedback names each proposal and finding to fix. Fix every finding it names for your proposal. When it says your proposal duplicates an existing stance, or that no finding you can find bears on it, answer findings as an empty list.
+    Each backing is judged once, alone, after you answer. A judge reads each finding's claim text and keeps only the findings that bear on the position, and drops a proposal that repeats a stance the base lists. Nothing comes back to you, so a finding that only shares the topic is simply lost: name only claims that take a side.
 
     The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the proposal, and findings. The run drops a proposal whose stance_id, title or pages differ from the proposal you hold, so never reword the title to fit the claims you found.
   inputs:
@@ -70,5 +70,6 @@ workflow's parameters. It searches the research knowledge base, reads the digest
 position and names each claim that supports or contests it by its reference, with one sentence on how. It types no
 claim text. A later program reads every cited digest, keeps only the claims the base holds on a digest that is not
 skipped, copies each claim's text from the page and drops a proposal left with findings from fewer than two
-digests. A judge then reviews what is left, and the run keeps an approved proposal only when its stance_id, title and
-pages are the ones the worker was handed. It writes nothing.
+digests. A judge then reads each backing once, alone, and only the findings it says bear are kept, with no backing
+sent back. The run keeps a proposal only when its stance_id, title and pages are the ones the worker was handed. It
+writes nothing.

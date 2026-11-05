@@ -436,9 +436,10 @@ _STANCE_PROPOSAL: dict[str, object] = {
         {"claim": "paper.a#^c1", "claim_text": "A finding of paper a.", "side": "supports", "how": "It measures the stance."},
         {"claim": "art.b#^c2", "claim_text": "A finding of article b.", "side": "contests", "how": "It finds the opposite."},
     ],
+    "refused": [{"claim": "talk.c#^c3", "why": "It only shares the topic."}],
     "contests_only": False,
 }
-"""The one approved stance proposal here, which becomes a pending stance flag."""
+"""The one listed stance proposal here, with one claim the judge refused, which becomes a pending stance flag."""
 
 _UNPLACED: dict[str, object] = {"page_id": "adr-0032-third", "stance_id": "stance.xx", "title": "X", "reason": "It moves the stance."}
 """One placement under a stance id no stance page carries, which the flags step carries onto the run's output."""
@@ -841,6 +842,10 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
         "about": ["[[paper.a]]", "[[art.b]]"],
     }
     assert [section["heading"] for section in written["payload"]["sections"]] == ["Why", "Proposal", "Evidence"]
+    assert written["payload"]["sections"][2]["body"] == (
+        "- [[paper.a#^c1]] supports: It measures the stance.\n- [[art.b#^c2]] contests: It finds the opposite.\n\n"
+        "Refused by the judge:\n\n- [[talk.c#^c3]]: It only shares the topic."
+    )
 
 
 def _assert_source_remove_programs(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
