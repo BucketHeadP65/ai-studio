@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Schedule } from "@/api/schedules";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 import { ScheduleForm } from "./schedule-form";
 
@@ -26,15 +27,7 @@ const CARD = {
   summary: "",
   provisional: false,
   score: 1,
-  trust: {
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    approved_by: [],
-    level: "machine-confirmed",
-    runs_with_evidence: 1,
-    failed_runs: 0,
-  },
+  trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 1 }),
   needs: [],
   missing: [],
   brings: [],
@@ -102,15 +95,7 @@ function workflowFixture() {
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      approved_by: [],
-      level: "machine-confirmed",
-      runs_with_evidence: 1,
-      failed_runs: 0,
-    },
+    trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 1 }),
   };
 }
 

@@ -8,6 +8,7 @@ import type { PluginsListing, TiersListing } from "@/api/harness-types";
 import type { RunView, SessionSummary } from "@/api/sessions-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 import ChatPage from "./page";
 
@@ -363,15 +364,7 @@ function mountApi(
         carried: [],
         predictions: null,
         prediction_record: null,
-        trust: {
-          level: "unverified",
-          runs_with_evidence: 0,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
+        trust: singleVersionTrust(1),
         archived_at: null,
       }),
     ),

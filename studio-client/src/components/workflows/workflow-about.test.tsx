@@ -6,6 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GraphNode, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import {
+  singleVersionTrust,
+  trust,
+  trustCounts,
+  versionTrust,
+} from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -130,15 +136,7 @@ function detailFixture(overrides: Partial<WorkflowDetail> = {}): WorkflowDetail 
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      level: "machine-confirmed",
-      runs_with_evidence: 4,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 4 }),
     archived_at: null,
     spend: { cost_usd: "0", unpriced: 0, runs: 0 },
     ...overrides,
@@ -262,11 +260,86 @@ describe("WorkflowAbout", () => {
   it("shows the shape facts, version, and runs with evidence off the graph and the trust record", () => {
     render(<WorkflowAbout detail={detailFixture()} />);
 
-    expect(screen.getByText("Steps")).toBeInTheDocument();
-    expect(screen.getByText("Person gates")).toBeInTheDocument();
-    expect(screen.getByText("Orchestrator gates")).toBeInTheDocument();
-    expect(screen.getByText("v1")).toBeInTheDocument();
-    expect(screen.getByText("Runs completed").nextElementSibling).toHaveTextContent("4");
+    // The trust by version table repeats the version and the runs, so read the facts in their card.
+    const card = screen.getByRole("button", { name: "What it does" }).closest("section");
+    expect(card).not.toBeNull();
+    if (card === null) return;
+    const facts = within(card);
+    expect(facts.getByText("Steps")).toBeInTheDocument();
+    expect(facts.getByText("Person gates")).toBeInTheDocument();
+    expect(facts.getByText("Orchestrator gates")).toBeInTheDocument();
+    expect(facts.getByText("v1")).toBeInTheDocument();
+    expect(facts.getByText("Runs completed").nextElementSibling).toHaveTextContent("4");
+  });
+
+  it("lists each saved version with its own level and counts, then the total over all of them", () => {
+    render(
+      <WorkflowAbout
+        detail={detailFixture({
+          id: "wf.research-digest.v3",
+          version: 3,
+          trust: trust({
+            total: trustCounts({
+              runs_with_evidence: 35,
+              failed_runs: 3,
+              approved_by: ["owner"],
+              structural_grades: 6,
+            }),
+            versions: [
+              versionTrust(1, "approved", {
+                runs_with_evidence: 20,
+                failed_runs: 1,
+                approved_by: ["owner"],
+                structural_grades: 2,
+              }),
+              versionTrust(2, "machine-confirmed", {
+                runs_with_evidence: 15,
+                failed_runs: 2,
+                structural_grades: 4,
+              }),
+              versionTrust(3, "unverified"),
+            ],
+          }),
+        })}
+      />,
+    );
+
+    const table = screen.getByRole("table", { name: "Trust by version" });
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual([
+      "Version",
+      "Trust",
+      "Runs completed",
+      "Failed runs",
+      "Structural grades",
+      "Approved by",
+    ]);
+    const rows = within(table)
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) =>
+        within(row)
+          .getAllByRole("cell")
+          .map((cell) => cell.textContent),
+      );
+    // The total row carries no level, because the total never sets one.
+    expect(rows).toEqual([
+      ["v1", "approved", "20", "1", "2", "owner"],
+      ["v2", "confirmed by runs", "15", "2", "4", "nobody"],
+      ["v3 (this version)", "not verified", "0", "0", "0", "nobody"],
+      ["All versions", "", "35", "3", "6", "owner"],
+    ]);
+  });
+
+  it("says no version could be counted when the trust record lists none", () => {
+    const base = detailFixture();
+    render(<WorkflowAbout detail={{ ...base, trust: { ...base.trust, versions: [] } }} />);
+
+    expect(screen.queryByRole("table", { name: "Trust by version" })).not.toBeInTheDocument();
+    expect(screen.getByText("No saved version could be counted.")).toBeInTheDocument();
   });
 
   it("shows the running spend over however many runs were priced", () => {
@@ -425,7 +498,13 @@ describe("WorkflowAbout", () => {
   it("folds every section behind its title", async () => {
     render(<WorkflowAbout detail={detailFixture()} />);
 
-    for (const title of ["What it does", "What it takes", "The steps", "What a run hands back"]) {
+    for (const title of [
+      "What it does",
+      "What it takes",
+      "The steps",
+      "What a run hands back",
+      "Trust by version",
+    ]) {
       const toggle = screen.getByRole("button", { name: title });
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       await userEvent.click(toggle);

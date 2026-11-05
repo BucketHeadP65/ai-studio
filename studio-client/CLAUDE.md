@@ -13,8 +13,10 @@ table, and the run archive), each run's inspector at `/workflows/{id}` and `/wor
 drawer, control strip (pause, stop, automode), gate decisions with feedback, and per-node outputs
 (`harness/docs/reference/workflow-monitoring.md`), and each workflow's own page at `/workflows/library/{id}` (what it does: the
 description and applicability, the parameters, every step in execution order with its briefing or program, tools, inputs, and
-output schema as a field table, and what a run hands back). The inspection station lives at `/inspection`: the
-findings list (a count line, four selects, one row per finding with its blame surfaces as chips), each finding's page at
+output schema as a field table, what a run hands back, and the trust each saved version earned, one row per version and
+a total row). The trust chip on a library card, a workflow's own page and a run's header shows the level and that
+version's counts, and beside them the runs with evidence summed over every saved version once there is more than one.
+The inspection station lives at `/inspection`: the findings list (a count line, four selects, one row per finding with its blame surfaces as chips), each finding's page at
 `/inspection/{id}` (the judgment table, the evidence as a story with a detail pane, a drawer that draws one step of the
 run as the chat does, and the inspector's conversation drawn as the chat draws one with the composer at its end), and each
 run's overview at `/inspection/runs/{run}` (the timeline, its leads, findings, questions and jobs), see
@@ -32,6 +34,15 @@ npm test             # vitest unit run
 npm run typecheck    # tsc --noEmit
 npm run lint         # biome check
 npm run test:e2e     # playwright
+```
+
+`npm run test:e2e` serves on 3031 by default and reuses a server already there, which is the always-on dev server. It
+runs the main checkout's code, and a request a spec does not intercept goes from it to the live harness on 8770, from
+whichever checkout the run started. Set `PLAYWRIGHT_PORT` to a free port, so the run starts its own dev server from your
+checkout, whose harness address `playwright.config.ts` sets to `http://studio.test`:
+
+```bash
+PLAYWRIGHT_PORT=3157 npm run test:e2e -- e2e/smoke.spec.ts
 ```
 
 ### Running a single test

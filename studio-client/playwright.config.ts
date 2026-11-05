@@ -30,6 +30,7 @@ export default defineConfig({
     timeout: 120_000,
     env: {
       NEXT_PUBLIC_KNOWLEDGE_BASE_API_URL: "http://api.test",
+      NEXT_PUBLIC_STUDIO_API_URL: "http://studio.test",
     },
   },
 });

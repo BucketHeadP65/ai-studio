@@ -7,6 +7,7 @@ import type { RunView, SessionSummary } from "@/api/sessions-types";
 import type { RunEnvelope, WorkflowGraph } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -130,15 +131,7 @@ function mountApi(overrides: {
         carried: null,
         predictions: null,
         prediction_record: null,
-        trust: {
-          approved_by: [],
-          level: "unverified",
-          runs_with_evidence: 0,
-          failed_runs: 0,
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
+        trust: singleVersionTrust(1),
       }),
     ),
   );
@@ -392,15 +385,7 @@ describe("WorkflowsPage acts", () => {
           carried: null,
           predictions: null,
           prediction_record: null,
-          trust: {
-            approved_by: [],
-            level: "unverified",
-            runs_with_evidence: 0,
-            failed_runs: 0,
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-          },
+          trust: singleVersionTrust(1),
         }),
       ),
       http.patch(`${BASE}/api/runs/history/run-9`, () => {

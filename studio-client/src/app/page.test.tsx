@@ -7,6 +7,7 @@ import type { RunView } from "@/api/sessions-types";
 import type { GraphNode, LibraryEntry, RunEnvelope, WorkflowGraph } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -74,15 +75,7 @@ function libraryEntryFixture(overrides: Partial<LibraryEntry> = {}): LibraryEntr
     title: "Weekly sweep",
     summary: "Checks the queue every week and writes up what changed.",
     provisional: false,
-    trust: {
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    trust: singleVersionTrust(2),
     needs: [],
     missing: [],
     brings: [],
@@ -161,15 +154,7 @@ function workflowDetail(id: string, graph: WorkflowGraph) {
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      approved_by: [],
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    trust: singleVersionTrust(2),
     presentation: {
       purpose: "Keeps the queue moving.",
       produces: "A short write up.",

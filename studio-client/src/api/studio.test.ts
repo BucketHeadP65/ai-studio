@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
 import { server } from "@/shared/test-support/msw/server";
+import {
+  singleVersionTrust,
+  trust,
+  trustCounts,
+  versionTrust,
+} from "@/test-support/factories/trust";
 
 import { refusedReadiness, studioApi, studioErrorMessage } from "./studio";
 
@@ -23,7 +29,7 @@ const CARD = {
   summary: "Search the knowledge base for prior art, rank the risks, write a dated ADR.",
   provisional: false,
   score: 3.0,
-  trust: { structural_grades: 0, structural_mean: null, structural_last: null, approved_by: [], level: "machine-confirmed", runs_with_evidence: 2, failed_runs: 0 },
+  trust: singleVersionTrust(5, { level: "machine-confirmed", runs_with_evidence: 2 }),
   needs: [],
   missing: [],
   brings: ["find_prior_art", "rank_risks"],
@@ -96,15 +102,32 @@ const WORKFLOW = {
   },
   birth: null,
   carried: ["counter", "per_risk"],
-  trust: {
-    approved_by: [],
+  trust: trust({
     level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    structural_grades: 3,
-    structural_mean: 0.75,
-    structural_last: 0.9,
-  },
+    ...trustCounts({
+      runs_with_evidence: 2,
+      structural_grades: 3,
+      structural_mean: 0.75,
+      structural_last: 0.9,
+    }),
+    total: trustCounts({
+      runs_with_evidence: 9,
+      failed_runs: 1,
+      approved_by: ["owner"],
+      structural_grades: 3,
+      structural_mean: 0.75,
+      structural_last: 0.9,
+    }),
+    versions: [
+      versionTrust(4, "approved", { runs_with_evidence: 7, failed_runs: 1, approved_by: ["owner"] }),
+      versionTrust(5, "machine-confirmed", {
+        runs_with_evidence: 2,
+        structural_grades: 3,
+        structural_mean: 0.75,
+        structural_last: 0.9,
+      }),
+    ],
+  }),
   predictions: [
     {
       claim: "produces",
@@ -186,6 +209,33 @@ describe("studioApi", () => {
     expect(detail.trust.level).toBe("machine-confirmed");
     expect(detail.trust.structural_grades).toBe(3);
     expect(detail.trust.structural_mean).toBe(0.75);
+    // The total over every saved version, and each version's own record, lowest first.
+    expect(detail.trust.total.runs_with_evidence).toBe(9);
+    expect(detail.trust.total.approved_by).toEqual(["owner"]);
+    expect(detail.trust.versions.map((entry) => [entry.version, entry.level])).toEqual([
+      [4, "approved"],
+      [5, "machine-confirmed"],
+    ]);
+  });
+
+  it("refuses a workflow whose trust carries no total, naming the missing field", async () => {
+    const { total: _total, ...withoutTotal } = WORKFLOW.trust;
+    server.use(
+      http.get(`${BASE}/api/workflow/${encodeURIComponent("wf.lit-check.v5")}`, () =>
+        HttpResponse.json({ ...WORKFLOW, trust: withoutTotal }),
+      ),
+    );
+
+    const refused = await studioApi.workflow("wf.lit-check.v5").then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(refused).toBeInstanceOf(ZodError);
+    const paths =
+      refused instanceof ZodError ? refused.issues.map((issue) => issue.path.join(".")) : [];
+    expect(paths).toEqual(["trust.total"]);
+    expect(refused instanceof ZodError ? refused.message : "").toContain('"total"');
   });
 
   it("parses a graph carrying an orchestrator gate node, the kind that used to break the whole page", async () => {

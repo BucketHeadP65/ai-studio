@@ -7,6 +7,7 @@ import type { SessionSummary } from "@/api/sessions-types";
 import type { RunHistoryRecord, RunState, RunValues, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { trust, trustCounts, versionTrust } from "@/test-support/factories/trust";
 
 // The page owns four things a run's history changes: what the outcome strip and the gate
 // trail report, what the canvas draws, what the timeline shows below it, and what a clicked
@@ -87,15 +88,15 @@ const DETAIL: WorkflowDetail = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
+  trust: trust({
     level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-  },
+    ...trustCounts({ runs_with_evidence: 2 }),
+    total: trustCounts({ runs_with_evidence: 9, failed_runs: 1 }),
+    versions: [
+      versionTrust(4, "machine-confirmed", { runs_with_evidence: 7, failed_runs: 1 }),
+      versionTrust(5, "machine-confirmed", { runs_with_evidence: 2 }),
+    ],
+  }),
 };
 
 const IDLE: RunState = {
@@ -706,6 +707,18 @@ describe("WorkflowPage", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(screen.queryByText("Completed")).not.toBeInTheDocument());
+  });
+
+  it("shows the total over every saved version beside the level in the header", async () => {
+    mountApi();
+    render(<WorkflowPage />);
+
+    const total = await screen.findByText(
+      (_content, element) => element?.textContent === "total 9 runs across 2 versions",
+    );
+    const chip = total.parentElement;
+    expect(chip).not.toBeNull();
+    if (chip !== null) expect(within(chip).getByText("confirmed by runs")).toBeInTheDocument();
   });
 
   it("names the run it is showing by the run's own title", async () => {

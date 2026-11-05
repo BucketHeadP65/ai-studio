@@ -8,6 +8,7 @@ import type { RunView, SessionSummary } from "@/api/sessions-types";
 import type { GateMode, RunState, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/chat",
@@ -137,15 +138,7 @@ function workflowFixture(): WorkflowDetail {
     carried: [],
     predictions: null,
     prediction_record: null,
-    trust: {
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    trust: singleVersionTrust(1),
     archived_at: null,
   };
 }

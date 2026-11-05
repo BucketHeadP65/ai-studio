@@ -13,6 +13,8 @@ import type {
 } from "@/api/studio-types";
 import type { NotePreviewSchema, RetainedNoteSchema } from "@/api/types";
 
+import { singleVersionTrust } from "./trust";
+
 // The whole automation journey as one person walks it, with no backend anywhere: ask for an
 // automation in ordinary words, read what was proposed, save it, be refused a value the workflow
 // will not take, start it deliberately, read a run a reviewer refused once and then accepted, keep
@@ -178,15 +180,7 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
-    approved_by: [],
-    level: "unverified",
-    runs_with_evidence: 0,
-    failed_runs: 0,
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-  },
+  trust: singleVersionTrust(1),
   presentation: PRESENTATION,
 };
 

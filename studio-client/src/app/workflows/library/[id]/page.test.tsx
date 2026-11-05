@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { GraphNode, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 vi.mock("next/navigation", () => ({
   useParams: () => ({ id: "wf.research-digest.v1" }),
@@ -150,15 +151,7 @@ const DETAIL: WorkflowDetail = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
-    level: "machine-confirmed",
-    runs_with_evidence: 6,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-  },
+  trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 6 }),
   archived_at: null,
 };
 

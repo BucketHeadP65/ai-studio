@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LibraryEntry } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -24,15 +25,7 @@ const CARD: LibraryEntry = {
   summary: "Pull last quarter's sales into one report.",
   provisional: false,
   score: 0.9,
-  trust: {
-    level: "machine-confirmed",
-    runs_with_evidence: 3,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-  },
+  trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 3 }),
   needs: [],
   missing: [],
   brings: [],

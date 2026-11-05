@@ -8,6 +8,7 @@ import {
   WorkflowPresentationSchema,
 } from "@/api/studio-types";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -28,15 +29,7 @@ const UNDESCRIBED_CARD = {
   title: "Quarterly close",
   summary: "Reconcile the quarter and draft the report.",
   provisional: false,
-  trust: {
-    level: "unverified",
-    runs_with_evidence: 0,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-  },
+  trust: singleVersionTrust(1),
   needs: [],
   missing: [],
   brings: [],

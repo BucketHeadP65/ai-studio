@@ -6,6 +6,8 @@ import type { KnowledgeBaseDetailSchema, KnowledgeBaseListResultSchema } from "@
 import type { RunListSchema, SessionListSchema } from "@/api/sessions-types";
 import type { LibraryEntrySchema, RunEnvelopeSchema } from "@/api/studio-types";
 
+import { singleVersionTrust } from "./trust";
+
 // Every mock below is annotated with the INPUT type of the schema the app parses it with, so a
 // fixture that drifts from the contract fails the typecheck rather than the page. The input type
 // rather than the output one, because a mock is what the wire sends: a field the schema defaults
@@ -200,15 +202,13 @@ const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
     summary: "Search the knowledge base for prior art, rank the risks, write a dated record.",
     provisional: false,
     score: 3,
-    trust: {
-      approved_by: [],
+    trust: singleVersionTrust(5, {
       level: "machine-confirmed",
       runs_with_evidence: 2,
-      failed_runs: 0,
       structural_grades: 6,
       structural_mean: 0.65,
       structural_last: 0.7,
-    },
+    }),
     needs: [],
     missing: [],
     brings: ["find_prior_art"],
@@ -223,15 +223,7 @@ const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
     summary: "Walk the eval metrics and flag drift against the last blessed run.",
     provisional: false,
     score: 1,
-    trust: {
-      approved_by: [],
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    trust: singleVersionTrust(1),
     needs: ["fetch_sales"],
     missing: ["fetch_sales"],
     brings: [],
