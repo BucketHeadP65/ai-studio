@@ -135,7 +135,7 @@ describe("RefreshCard", () => {
         lastRun={lastRun({
           outcome: "partial",
           detail: "scanned 0 entries/0 requested/1 entries failed, indexed 3 pages, 3 embedded",
-          scan_failures: [{ entry: "x:omarsar0", reason }],
+          scan_failures: [{ entry: "x:someone", reason }],
         })}
         schedule={null}
       />,
@@ -143,7 +143,7 @@ describe("RefreshCard", () => {
 
     expect(screen.getByText("partial")).toBeInTheDocument();
     expect(
-      screen.getByText(`Watch entry x:omarsar0 could not be scanned: ${reason}`),
+      screen.getByText(`Watch entry x:someone could not be scanned: ${reason}`),
     ).toBeInTheDocument();
   });
 

@@ -267,11 +267,14 @@ answering the last 20 as `{refresh_runs}`, newest first. A record carries `start
 `outcome` `ok` carrying the handler's one-sentence detail (what the scan and the sync did, then pages indexed and embedded), or as
 `outcome` `partial` when its scan could not read a watch-list entry. An `abandoned` job reads as `outcome` `failed` carrying its last error
 verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it is over.
-`scan_failures` lists each watch-list entry the run could not scan as `{entry, reason}`: `entry` is the entry's label (`x:omarsar0`) and
+`scan_failures` lists each watch-list entry the run could not scan as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
 `reason` is one line, the scanner's message cut to its first line, with no user part, query or fragment on any URL in it, and at most 300
 characters. The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
 cut, so an account out of credits reads `xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits
 or reached its monthly spending limit.` It is empty for a run whose scan read every entry or that scanned nothing, and for an abandoned run.
+Every label that leaves the knowledge base (`entry`, the keys of `counts.requested_by_entry` the harness is sent, the warning and the
+`studio sync` print) has no user part, query or fragment on a URL in it (`without_url_secrets`), while the source queue's `found_via` keeps
+the label as written.
 `trigger` is `manual` for a run this route enqueued and `schedule` for one the ticker enqueued. `GET /api/knowledge-bases/{name}` surfaces
 only the newest record, as `last_refresh_run`, so the detail page can show it without a second fetch.
 
@@ -528,7 +531,8 @@ response). `<when>` is local time with its zone abbreviation (`last_indexed_at.a
 database stores, so an afternoon local indexing run reads as an afternoon time, not as whatever hour UTC happened to land on. A
 database with no `alembic_version` table yet reports `at no revision`. A knowledge base never indexed reports `last indexed never`
 with no outcome slot, there is nothing to report an outcome for. An indexing run whose fingerprint is stale against a failed
-refresh run reports the outcome `failed`, with the run's own detail appended in parentheses. `code expects <revision>` is
+refresh run reports the outcome `failed`, with the run's own detail appended in parentheses. A `partial` refresh run leaves the
+outcome `ok`, because its index ran. `code expects <revision>` is
 `engram.init.contracts.code_head_revision()`, the alembic head the installed code declares, independent of what the database is
 actually at. `<when>` is `kb.index_fingerprint.indexed_at`, re-stamped by every indexing run that writes rows, full or
 incremental, so it names the last time the collection actually took a write, not the last global-invalidator change.
