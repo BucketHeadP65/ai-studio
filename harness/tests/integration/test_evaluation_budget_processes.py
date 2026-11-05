@@ -9,10 +9,8 @@ needed.
 
 from __future__ import annotations
 
-import asyncio
 import multiprocessing
 import os
-import time
 
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -26,6 +24,7 @@ from harness.features.evals.domain.pilot import WORKFLOW_AUTOMATION_DEVELOPMENT_
 
 if TYPE_CHECKING:
     from multiprocessing.process import BaseProcess
+    from multiprocessing.synchronize import Event
     from pathlib import Path
 
     from core.ai.evaluation.contracts import BudgetCycleState
@@ -41,11 +40,18 @@ KILLED = 3
 
 
 def spend_in_child(
-    root: str, role: BudgetRole, results: multiprocessing.Queue, *, hold_seconds: float = 0.0, die_before_settling: bool = False
+    root: str,
+    role: BudgetRole,
+    results: multiprocessing.Queue,
+    *,
+    admitted: Event | None = None,
+    release: Event | None = None,
+    die_before_settling: bool = False,
 ) -> None:
     """Make one budgeted request from a process of its own and report how it ended.
 
-    `hold_seconds` keeps the request in flight while another process tries to be admitted.
+    `admitted` is set once the record has admitted the request, and the request then stays in flight until `release`
+    is set, so another process can try to be admitted meanwhile.
     `die_before_settling` leaves the process the way a kill does: the admission is on disk and no
     settlement ever follows it.
     """
@@ -63,8 +69,10 @@ def spend_in_child(
 
     def answer(messages, info) -> ModelResponse:
         del messages, info
-        if hold_seconds:
-            time.sleep(hold_seconds)
+        if admitted is not None:
+            admitted.set()
+        if release is not None:
+            release.wait(CHILD_SECONDS)
         if die_before_settling:
             os._exit(KILLED)
         return ModelResponse(parts=[TextPart(content="done")], usage=RequestUsage(input_tokens=10, output_tokens=5))
@@ -129,11 +137,17 @@ async def test_four_roles_in_four_processes_settle_into_one_cycle_and_trial(tmp_
 
 async def test_only_one_process_holds_the_cycles_one_in_flight_request(tmp_path: Path) -> None:
     await _opened(tmp_path)
-    holder, held = _started(tmp_path, "designer", hold_seconds=1.5)
-    await asyncio.sleep(0.5)
-    other, blocked = _started(tmp_path, "worker")
+    context = multiprocessing.get_context("spawn")
+    admitted, release = context.Event(), context.Event()
+    holder, held = _started(tmp_path, "designer", admitted=admitted, release=release)
+    try:
+        assert admitted.wait(CHILD_SECONDS), "the holder's request was admitted before the other process starts"
+        other, blocked = _started(tmp_path, "worker")
+        other.join(CHILD_SECONDS)
+    finally:
+        release.set()
+    holder.join(CHILD_SECONDS)
     for worker in (holder, other):
-        worker.join(CHILD_SECONDS)
         assert worker.exitcode == 0
     assert blocked.get(timeout=CHILD_SECONDS) == ("refused", "request_in_flight")
     assert held.get(timeout=CHILD_SECONDS) == ("settled", "designer")
