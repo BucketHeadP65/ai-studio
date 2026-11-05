@@ -51,9 +51,11 @@ Entry shape: what it does, where it lives, since when, upstream candidate (yes, 
 ### UE-10. An ACP **client**: driving another agent over the protocol
 
 - **What:** the reverse direction of `experimental.acp`. `ExternalAgent.run(brief, *, cwd, permission, on_update,
-  timeout_seconds)` spawns an ACP agent (Claude Code, Codex, Pi), advertises no client capabilities, opens one session at a
+  timeout_seconds, open_timeout_seconds=None)` spawns an ACP agent (Claude Code, Codex, Pi), advertises no client capabilities, opens one session at a
   working directory, sends one prompt turn, forwards every `session/update` to a sink, answers `session/request_permission`
   through a `PermissionPolicy` (`AllowOnce` ships as the permissive one), and cancels with `session/cancel` at the timeout.
+  Starting the agent and opening its session are bounded by `open_timeout_seconds`, or by the turn's timeout when it is
+  `None`.
   `ExternalResult` is the text, the stop reason, and the paths the agent reported touching. The unadvertised client methods
   (`fs/read_text_file`, `fs/write_text_file`, `terminal/*`) answer with a clear error rather than a silent failure.
 - **Where:** `harness/src/harness/adapters/acp_client/` (`_external.py`, `_permission.py`, `__init__.py`), moved out of the

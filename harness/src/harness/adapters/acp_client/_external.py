@@ -173,10 +173,17 @@ class ExternalAgent:
     env: Mapping[str, str] = field(default_factory=dict)
     """Merged over the SDK's trimmed default environment. The agent inherits none of the launching shell's exports."""
 
-    async def run(
-        self, brief: str, *, cwd: Path, permission: PermissionPolicy, on_update: UpdateSink, timeout_seconds: float
+    async def run(  # noqa: PLR0913 (one turn's own six facts, which a params object would only rename)
+        self,
+        brief: str,
+        *,
+        cwd: Path,
+        permission: PermissionPolicy,
+        on_update: UpdateSink,
+        timeout_seconds: float,
+        open_timeout_seconds: float | None = None,
     ) -> ExternalResult:
-        """Run `brief`, the agent's whole prompt, as one turn in the absolute directory `cwd`, cancelled after `timeout_seconds` with its output kept. Opening the session any slower raises `TimeoutError`."""
+        """Run `brief`, the agent's whole prompt, as one turn in the absolute directory `cwd`, cancelled after `timeout_seconds` with its output kept. Starting the agent and opening its session slower than `open_timeout_seconds`, or than `timeout_seconds` when that is `None`, raises `TimeoutError`."""
         client = _ExternalClient(permission=permission, on_update=on_update)
         async with acp.spawn_agent_process(client, self.command, *self.args, env=dict(self.env) or None, cwd=cwd) as (conn, _process):
 
@@ -184,7 +191,8 @@ class ExternalAgent:
                 await conn.initialize(**_INITIALIZE)
                 return await conn.new_session(cwd=str(cwd), mcp_servers=[])
 
-            session = await asyncio.wait_for(_open_session(), timeout=timeout_seconds)
+            opening = timeout_seconds if open_timeout_seconds is None else open_timeout_seconds
+            session = await asyncio.wait_for(_open_session(), timeout=opening)
             turn = asyncio.ensure_future(conn.prompt(session_id=session.session_id, prompt=[acp.text_block(brief)]))
             try:
                 done, _pending = await asyncio.wait([turn], timeout=timeout_seconds)

@@ -30,6 +30,9 @@ if TYPE_CHECKING:
 
 ECHO_AGENT = Path(__file__).resolve().parents[1] / "support" / "acp_echo_agent.py"
 
+OPENING = 30.0
+"""Seconds a test gives an agent process to start and open its session, apart from the turn's own timeout."""
+
 
 @dataclass
 class Recorder:
@@ -103,7 +106,10 @@ async def test_a_disconnect_during_the_cancel_grace_window_still_settles_as_canc
     """A process that dies answering cancel still settles as cancelled, not left hanging."""
     disconnecting = _echo(tmp_path, "disconnect_on_cancel")
 
-    result = await disconnecting.run("go", cwd=tmp_path, permission=AllowOnce(), on_update=Recorder(), timeout_seconds=1.0)
+    # The process start and the handshake get their own budget, so a loaded machine never spends the 1 s cancel window.
+    result = await disconnecting.run(
+        "go", cwd=tmp_path, permission=AllowOnce(), on_update=Recorder(), timeout_seconds=1.0, open_timeout_seconds=OPENING
+    )
 
     assert result.stop_reason == "cancelled"
     pid = int(result.text.removeprefix("pid "))
@@ -142,6 +148,20 @@ async def test_a_handshake_past_its_timeout_raises_and_leaves_no_child_process(t
         os.kill(pid, 0)
 
 
+async def test_a_session_opening_past_its_own_budget_raises_whatever_the_turns_timeout(tmp_path: Path) -> None:
+    """`open_timeout_seconds` bounds the start and the handshake on their own, so a long turn timeout does not stretch them."""
+    hanging = _echo(tmp_path, "hangs_on_initialize")
+    started = time.monotonic()
+
+    with pytest.raises(TimeoutError):
+        await hanging.run("go", cwd=tmp_path, permission=AllowOnce(), on_update=Recorder(), timeout_seconds=600.0, open_timeout_seconds=0.5)
+
+    assert time.monotonic() - started < 5.0
+    pid = int((tmp_path / "hung.pid").read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
 async def test_the_working_directory_is_the_one_we_asked_for(tmp_path: Path) -> None:
     """`session/new` gets an absolute path, which is what ACP requires of a client."""
     workspace = tmp_path / "workspace"
@@ -161,7 +181,9 @@ async def test_a_turn_past_its_timeout_is_cancelled_and_still_returns_what_strea
     recorder = Recorder()
     slow = ExternalAgent(command=sys.executable, args=(str(SLOW_AGENT),), env={"PYTHONUNBUFFERED": "1"})
 
-    result = await slow.run("go", cwd=tmp_path, permission=AllowOnce(), on_update=recorder, timeout_seconds=1.0)
+    result = await slow.run(
+        "go", cwd=tmp_path, permission=AllowOnce(), on_update=recorder, timeout_seconds=1.0, open_timeout_seconds=OPENING
+    )
 
     assert result.stop_reason == "cancelled"
     assert result.text == "starting"
