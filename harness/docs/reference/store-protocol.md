@@ -587,6 +587,13 @@ adapted child re-saved at its parent's address inherits the parent's runs and re
 `machine-confirmed` having never executed anything. This is the same ruling staleness makes:
 unknown is not earned.
 
+**Trust across versions keeps the level per version.** `trust_across_versions` folds the events of every saved
+version of a name: each version's own record, a `total` over all of them (live, superseded and archived) and the
+current version's record, whose level is the one shown. Each event counts once, under the version whose content
+address it carries. An approval of an earlier version shows in the total and never makes the current version
+approved. `version_hashes` reads every version's content address from the library (`WorkflowVersionQueries`), and
+`EvidenceLog.history_for_any` reads their events in one scan.
+
 The same ruling governs `grade` (`_lineage.py`), which answers an adaptation's predictions
 only from runs that recorded the child's version, excludes runs that recorded none, and
 treats an approval as grading nothing. One derivation discipline, applied twice.
@@ -1234,7 +1241,8 @@ visible. A field added with a default trips nothing and re-keys nothing, because
 defaults out.
 
 **Two reads in the workflow view are still keyed on an address.** `features/browsing/controller.py`
-answers trust by content address on both the workflow page and `/api/library`, but
+answers trust by content address, with the total over every saved version, on both the workflow page and
+`/api/library`, but
 `_changes_since_first_run` and `_inherited_nodes` call `events_for(workflow_id)`. A workflow that
 moved therefore keeps its trust and loses its birth verdict. Switching them to `history_for` is
 mechanical and not yet done.

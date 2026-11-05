@@ -13,7 +13,18 @@ from core.ai.workflows.contract_port import WorkflowContract
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.document import SpecDocument, StepDocument, load_spec_document, load_step_document
 from core.ai.workflows.domain.events import ReusableStepSaved
-from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, approved_gates, gate_rejections, orchestrated_gates, trust_level
+from core.ai.workflows.domain.evidence import (
+    Approval,
+    Grade,
+    RunEvidence,
+    TrustAcrossVersions,
+    TrustLevel,
+    approved_gates,
+    gate_rejections,
+    orchestrated_gates,
+    trust_across_versions,
+    trust_level,
+)
 from core.ai.workflows.domain.fingerprint import (
     WorkflowFingerprint,
     canonical_step_yaml,
@@ -131,11 +142,12 @@ from core.ai.workflows.internal_contracts import (
     SaveGuard,
     StepVersionQueries,
     WorkflowLibrary,
+    WorkflowVersionQueries,
 )
 from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
-from core.ai.workflows.service import save, verify_savable
+from core.ai.workflows.service import save, verify_savable, version_hashes
 from core.ai.workflows.voice import process_instructions
 from core.lazy_imports import lazy_module_attributes
 
@@ -252,6 +264,8 @@ __all__ = [
     "StepVersionQueries",
     "TaskContract",
     "Tier",
+    "TrustAcrossVersions",
+    "TrustLevel",
     "TurnFacts",
     "Wire",
     "WiringIssue",
@@ -266,6 +280,7 @@ __all__ = [
     "WorkflowResultSpec",
     "WorkflowState",
     "WorkflowUnknownError",
+    "WorkflowVersionQueries",
     "adapt",
     "approved_gates",
     "automode_refusal",
@@ -307,11 +322,13 @@ __all__ = [
     "spec_identity",
     "step_content_address",
     "step_page_id",
+    "trust_across_versions",
     "trust_level",
     "unsatisfied_parameters",
     "validate",
     "verify_presentation",
     "verify_savable",
+    "version_hashes",
 ]
 
 _LAZY_IMPORTS = {

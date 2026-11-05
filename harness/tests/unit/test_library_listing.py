@@ -34,6 +34,7 @@ from core.ai.workflows.contracts import (
     Outcome,
     ParameterSpec,
     PersonGate,
+    RunEvidence,
     RunNode,
     SavedWorkflow,
     StepRegistry,
@@ -262,13 +263,99 @@ async def test_a_card_whose_workflow_cannot_be_read_reports_an_empty_history(tmp
 
     assert cards[0]["trust"] == {
         "level": "unverified",
-        "runs_with_evidence": 0,
-        "failed_runs": 0,
-        "approved_by": [],
-        "structural_grades": 0,
-        "structural_mean": None,
-        "structural_last": None,
+        **NO_COUNTS,
+        "total": NO_COUNTS,
+        "versions": [],
     }
+
+
+NO_COUNTS = {
+    "runs_with_evidence": 0,
+    "failed_runs": 0,
+    "approved_by": [],
+    "structural_grades": 0,
+    "structural_mean": None,
+    "structural_last": None,
+}
+"""The counts of a workflow nothing has run, graded or approved."""
+
+
+class VersionedStore(WatchfulStore):
+    """A library holding several versions of one name, listing only `listed`, and answering every saved version."""
+
+    def __init__(self, specs: dict[str, Workflow], *, listed: Sequence[str]) -> None:
+        super().__init__(specs)
+        self._listed = tuple(listed)
+
+    async def search(self, task: str, *, limit: int = 5) -> Sequence[SavedWorkflow]:
+        del task, limit
+        return tuple(SavedWorkflow(id=key, title=key, summary="") for key in self._listed)
+
+    async def versions(self, name: str) -> tuple[tuple[int, str], ...]:
+        return tuple(sorted((spec.version, key) for key, spec in self._specs.items() if spec.name == name))
+
+
+def _confirmed(workflow_id: str, spec: Workflow, *, outcome: str = "completed") -> RunEvidence:
+    return RunEvidence.model_validate(
+        {
+            "workflow_id": workflow_id,
+            "spec_hash": spec_identity(spec),
+            "workflow_version": spec.version,
+            "outcome": outcome,
+            "result": Outcome(status="succeeded", summary="published"),
+            "gates_auto": (),
+            "gates_orchestrated": (),
+        }
+    )
+
+
+async def test_a_card_and_the_workflow_page_answer_the_total_and_each_version_beside_the_current_version_s_trust(
+    quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
+) -> None:
+    first, second = (quarterly_report.model_copy(update={"version": version}) for version in (1, 2))
+    library = VersionedStore(
+        {"wf.quarterly-report.v1": first, "wf.quarterly-report.v2": second, "wf.quarterly-report.v3": quarterly_report},
+        listed=["wf.quarterly-report.v3"],
+    )
+    runtime = Runtime(registry=registry, library=library, agent=_NoAgent(), session_log=NoSessionLog(), state=a_state(tmp_path))  # type: ignore[arg-type]
+    controller = _controller(runtime, tmp_path)
+    evidence = records_under(tmp_path).evidence
+    await evidence.append(_confirmed("wf.quarterly-report.v1", first))
+    await evidence.append(_confirmed("wf.quarterly-report.v1", first))
+    await evidence.append(Approval(workflow_id="wf.quarterly-report.v1", spec_hash=spec_identity(first), workflow_version=1, by="owner"))
+    await evidence.append(_confirmed("wf.quarterly-report.v2", second, outcome="failed"))
+    await evidence.append(_confirmed("wf.quarterly-report.v3", quarterly_report))
+
+    (card,) = await _cards(controller)
+    page = json.loads(bytes((await controller.stored_workflow("wf.quarterly-report.v3")).body))
+
+    expected = {
+        "level": "machine-confirmed",
+        **NO_COUNTS,
+        "runs_with_evidence": 1,
+        "total": {**NO_COUNTS, "runs_with_evidence": 3, "failed_runs": 1, "approved_by": ["owner"]},
+        "versions": [
+            {"version": 1, "level": "approved", **NO_COUNTS, "runs_with_evidence": 2, "approved_by": ["owner"]},
+            {"version": 2, "level": "unverified", **NO_COUNTS, "failed_runs": 1},
+            {"version": 3, "level": "machine-confirmed", **NO_COUNTS, "runs_with_evidence": 1},
+        ],
+    }
+    assert card["trust"] == expected
+    assert list(card["trust"]) == ["level", *NO_COUNTS, "total", "versions"], "today's keys first, in today's order"
+    assert list(card["trust"]["versions"][0]) == ["version", "level", *NO_COUNTS]
+    assert page["trust"] == expected
+
+
+async def test_a_library_that_lists_no_versions_answers_the_workflow_as_its_only_version(
+    controller: BrowsingController, quarterly_report: Workflow, tmp_path: Path
+) -> None:
+    await records_under(tmp_path).evidence.append(_confirmed("wf.a", quarterly_report))
+
+    cards = {card["id"]: card for card in await _cards(controller)}
+
+    trust = cards["wf.a"]["trust"]
+    assert trust["total"] == {key: trust[key] for key in NO_COUNTS}, "the total is the current version's own counts"
+    assert trust["versions"] == [{"version": 3, "level": "machine-confirmed", **trust["total"]}]
 
 
 async def test_a_card_reports_its_shape_from_the_graph(registry: StepRegistry, tmp_path: Path) -> None:

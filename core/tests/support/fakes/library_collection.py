@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from core.ai.workflows.infrastructure.library_collection import (
+    ALL_VERSIONS_SQL,
     CONSUMERS_SQL,
     FETCH_SQL,
     FLAG_SQL,
@@ -118,9 +119,11 @@ class FakeCollection:
                 for page in self.pages.values()
                 if page["type"] == "step" and page["frontmatter"]["step"]["name"] in names
             ]
-        if sql in (LIVE_STEP_VERSIONS_SQL, LIVE_VERSIONS_SQL):
+        if sql in (LIVE_STEP_VERSIONS_SQL, LIVE_VERSIONS_SQL, ALL_VERSIONS_SQL):
             like = _like(str(args[1]))
-            return [{"id": page["id"]} for page in self._live("step" if sql == LIVE_STEP_VERSIONS_SQL else "workflow") if like.fullmatch(str(page["id"]))]
+            page_type = "step" if sql == LIVE_STEP_VERSIONS_SQL else "workflow"
+            held = [page for page in self.pages.values() if page["type"] == page_type] if sql == ALL_VERSIONS_SQL else self._live(page_type)
+            return [{"id": page["id"]} for page in held if like.fullmatch(str(page["id"]))]
         if sql == CONSUMERS_SQL:
             assert args[0] == self.collection
             wanted = json.loads(str(args[1]))

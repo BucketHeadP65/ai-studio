@@ -1,4 +1,4 @@
-"""Turning workflows and step contracts into what a person reads: signatures, graphs, prose.
+"""Turning workflows, step contracts and trust into what a person reads: signatures, graphs, prose.
 
 Every function here is pure. It takes a workflow, a registry of steps and tool names, and returns
 text or a JSON-ready dict.
@@ -35,7 +35,8 @@ from pydantic import BaseModel
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from core.ai.workflows.contracts import InlineStep, ParameterSpec
+    from core.ai.workflows.contracts import InlineStep, ParameterSpec, TrustAcrossVersions, TrustLevel
+    from pydantic import JsonValue
     from pydantic.json_schema import JsonSchemaValue
 
 
@@ -103,6 +104,38 @@ def prediction_payload(outcomes: Sequence[PredictionOutcome]) -> list[dict[str, 
         }
         for outcome in outcomes
     ]
+
+
+def trust_payload(trust: TrustAcrossVersions) -> dict[str, JsonValue]:
+    """The `trust` object the library card, the workflow page and the approve route answer.
+
+    The level and the counts beside it are the current version's. `total` holds the same counts over every version,
+    without a level, and `versions` holds each version's counts and level, lowest version first.
+
+    Args:
+        trust: The workflow's trust across its saved versions.
+
+    Returns:
+        The JSON-ready object, keys in the order the Studio reads them.
+    """
+    return {
+        "level": trust.level,
+        **_trust_counts(trust.current),
+        "total": _trust_counts(trust.total),
+        "versions": [{"version": version, "level": record.level, **_trust_counts(record)} for version, record in trust.versions],
+    }
+
+
+def _trust_counts(record: TrustLevel) -> dict[str, JsonValue]:
+    """The counts a `trust` object shows for one trust record."""
+    return {
+        "runs_with_evidence": record.runs_with_evidence,
+        "failed_runs": record.failed_runs,
+        "approved_by": list(record.approved_by),
+        "structural_grades": record.structural_grades,
+        "structural_mean": record.structural_mean,
+        "structural_last": record.structural_last,
+    }
 
 
 def _wires_of(node: Node) -> list[Wire]:

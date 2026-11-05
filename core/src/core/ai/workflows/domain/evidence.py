@@ -5,7 +5,8 @@ An `Approval` is a person approving a workflow, and a `Grade` is one run's measu
 
 `trust_level` folds a workflow's events into counts, and the level is derived from them, never
 stored. Events are keyed on `spec_hash`, the workflow's content address, never on a library id,
-which can change.
+which can change. `trust_across_versions` folds every saved version of a name per version and in
+total, and keeps the level the current version's.
 """
 
 from __future__ import annotations
@@ -233,6 +234,57 @@ def trust_level(
         structural_grades=len(structural),
         structural_mean=sum(score for _, score in structural) / len(structural) if structural else None,
         structural_last=max(structural, key=lambda scored: scored[0])[1] if structural else None,
+    )
+
+
+class TrustAcrossVersions(BaseModel):
+    """What the evidence log adds up to for every saved version of one workflow name, beside the current version's own record.
+
+    The level is the current version's alone. The total never sets it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    current: TrustLevel
+    """The record of the version asked about, folded over its own content address."""
+    total: TrustLevel
+    """One record folded over the events of every version's content address at once."""
+    versions: tuple[tuple[int, TrustLevel], ...]
+    """Each version's own record, by version number, lowest first."""
+
+    @property
+    def level(self) -> Literal["unverified", "machine-confirmed", "approved"]:
+        """The trust level the current version earned."""
+        return self.current.level
+
+
+def trust_across_versions(events: Iterable[RunEvidence | Approval | Grade], hashes: Mapping[str, int], current_hash: str) -> TrustAcrossVersions:
+    """Fold the events of every saved version of one workflow name per version, in total, and for the current version.
+
+    An event counts once, under the version whose content address it carries, whatever version it recorded. An event
+    whose content address is none of `hashes` counts nowhere.
+
+    Args:
+        events: The evidence log's events for these content addresses.
+        hashes: Each version's content address, mapped to its version number.
+        current_hash: The content address of the version asked about. It must be one of `hashes`.
+
+    Returns:
+        The current version's record, the total over every version and each version's own record.
+
+    Raises:
+        ValueError: When `current_hash` is empty or not one of `hashes`.
+    """
+    require_spec_identity(current_hash)
+    if current_hash not in hashes:
+        msg = f"the current content address {current_hash!r} is none of the versions' content addresses. Pass it among them"
+        raise ValueError(msg)
+    held = [event for event in events if event.spec_hash in hashes]
+    by_version = {spec_hash: trust_level(held, spec_hash=spec_hash) for spec_hash in hashes}
+    return TrustAcrossVersions(
+        current=by_version[current_hash],
+        total=trust_level(held),
+        versions=tuple(sorted(((hashes[spec_hash], record) for spec_hash, record in by_version.items()), key=lambda pair: pair[0])),
     )
 
 

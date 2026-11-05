@@ -5,7 +5,7 @@
 and writes through the ingest callable the library is given, so this module never touches the `kb.*` tables and
 holds no writer credential. Each version is its own page, `wf.<name>.v<n>` for a workflow and `st.<name>.v<n>` for
 a reusable step. Saving a version links every live lower version of the name forward to it, and `search`, `catalog`
-and `current` read only pages nothing has superseded. A reusable step version holds one content: it is never saved
+and `current` read only pages nothing has superseded, while `versions` lists every saved version of a name. A reusable step version holds one content: it is never saved
 again with different content. A saved workflow version records, under `reusable_steps`, which saved version of each
 reusable step its copies match, and the save raises a maintenance flag for each copy that matches none. Maintenance
 flags are pages of their own, `mf.<short kind>.<workflow name>.<step>` or `mf.<short kind>.<step>`, written by one rule
@@ -133,6 +133,17 @@ where c.type = 'workflow' and c.src_collection = $1 and c.id like $2
 
 The pattern is not escaped, so a caller must take each id apart with `_VERSIONED_ID` and keep only ids of the
 exact name."""
+
+ALL_VERSIONS_SQL = """
+select c.id
+from api.cards c
+where c.type = 'workflow' and c.src_collection = $1 and c.id like $2
+"""
+"""The ids of every workflow page in collection `$1` whose id matches the `like` pattern `$2` (`wf.<name>.v%`), live,
+superseded or archived.
+
+The pattern is not escaped, so a caller must take each id apart with `_VERSIONED_ID` and keep only ids of the exact
+name."""
 
 STEP_PAGES_SQL = """
 select c.id, c.frontmatter -> 'step' as step
@@ -638,15 +649,26 @@ class LibraryCollection:
         live = await self._live_versions(match["name"])
         return live[-1][1] if live else workflow_id
 
+    async def versions(self, name: str) -> tuple[tuple[int, str], ...]:
+        """Every saved version of one workflow, live, superseded or archived, lowest version first, read in one query.
+
+        Args:
+            name: The workflow's name.
+
+        Returns:
+            Each version's `(version, id)`. Empty when no version of `name` is saved.
+        """
+        return await self._version_ids(ALL_VERSIONS_SQL, f"{ID_PREFIX}{name}.v%", _VERSIONED_ID, name)
+
     async def _live_versions(self, name: str) -> tuple[tuple[int, str], ...]:
         """Every live `(version, id)` of the workflow `name`, lowest version first."""
-        return await self._live_ids(LIVE_VERSIONS_SQL, f"{ID_PREFIX}{name}.v%", _VERSIONED_ID, name)
+        return await self._version_ids(LIVE_VERSIONS_SQL, f"{ID_PREFIX}{name}.v%", _VERSIONED_ID, name)
 
     async def _live_step_versions(self, name: str) -> tuple[tuple[int, str], ...]:
         """Every live `(version, id)` of the reusable step `name`, lowest version first."""
-        return await self._live_ids(LIVE_STEP_VERSIONS_SQL, f"{STEP_ID_PREFIX}{name}.v%", _VERSIONED_STEP_ID, name)
+        return await self._version_ids(LIVE_STEP_VERSIONS_SQL, f"{STEP_ID_PREFIX}{name}.v%", _VERSIONED_STEP_ID, name)
 
-    async def _live_ids(self, sql: str, pattern: str, versioned: re.Pattern[str], name: str) -> tuple[tuple[int, str], ...]:
+    async def _version_ids(self, sql: str, pattern: str, versioned: re.Pattern[str], name: str) -> tuple[tuple[int, str], ...]:
         """The `(version, id)` of each id `sql` answers for the `like` `pattern` that `versioned` parses as `name`."""
         found = await self._rows.fetch(sql, self._collection, pattern)
         versions: list[tuple[int, str]] = []

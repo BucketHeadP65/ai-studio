@@ -20,7 +20,11 @@ from core.ai.workflows.contracts import (
     PresentationRefusedError,
     RunEvidence,
     SavedWorkflow,
+    TrustAcrossVersions,
+    TrustLevel,
     Workflow,
+    WorkflowLibrary,
+    WorkflowVersionQueries,
     carried_trust,
     check_birth,
     contract_of,
@@ -30,7 +34,8 @@ from core.ai.workflows.contracts import (
     prediction_record,
     prepare,
     spec_identity,
-    trust_level,
+    trust_across_versions,
+    version_hashes,
 )
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -45,12 +50,12 @@ from harness.features.browsing.exceptions import CardRefusedError
 from harness.features.browsing.service import saved_card
 from harness.features.running.contracts import RunArchiveQueries, SpendLogQueries, workflow_spend
 from harness.features.sessions.contracts import Sessions
-from harness.rendering import graph_payload, prediction_payload, signature_of, type_name
+from harness.rendering import graph_payload, prediction_payload, signature_of, trust_payload, type_name
 from harness.session import Runtime
 from harness.settings import SelfAuthoringSettings, custom_root
 
 type _JsonObject = dict[str, JsonValue]
-type _Trust = dict[str, str | int | float | list[str] | None]
+type _Trust = dict[str, JsonValue]
 
 
 def _shape_counts(nodes: list[_JsonObject]) -> dict[str, int]:
@@ -139,7 +144,7 @@ class BrowsingController:
                 workflow: Workflow | None = await session.library.fetch_workflow(workflow_id)
             except (LibraryError, ValidationError):
                 workflow = None
-            return workflow_id, await _trust(evidence, workflow)
+            return workflow_id, await _trust(evidence, session.library, workflow)
 
         async def fit(workflow_id: str) -> tuple[str, _JsonObject | None]:
             try:
@@ -219,7 +224,7 @@ class BrowsingController:
         # The report and the graph share one preparation. A second one would mint different step classes.
         ready = prepare(workflow, session.registry)
         evidence = self._evidence
-        trust = await _trust(evidence, workflow)
+        trust = await _trust(evidence, session.library, workflow)
         staleness = await _staleness(session, workflow, workflow_id, custom_root(self._self_authoring))
         lineage = await _lineage(session, workflow_id)
         claims = await _claims(evidence, workflow, workflow_id, lineage)
@@ -384,18 +389,14 @@ def _intent(card: SavedWorkflow) -> _JsonObject | None:
     return None if card.intent is None else card.intent.model_dump(mode="json")
 
 
-async def _trust(evidence: EvidenceLog, workflow: Workflow | None) -> _Trust:
-    """What this exact workflow has earned by its content address, or nothing when it could not be read."""
-    record = trust_level(()) if workflow is None else trust_level(await evidence.history_for(spec_hash=spec_identity(workflow)))
-    return {
-        "level": record.level,
-        "runs_with_evidence": record.runs_with_evidence,
-        "failed_runs": record.failed_runs,
-        "approved_by": list(record.approved_by),
-        "structural_grades": record.structural_grades,
-        "structural_mean": record.structural_mean,
-        "structural_last": record.structural_last,
-    }
+async def _trust(evidence: EvidenceLog, library: WorkflowLibrary, workflow: Workflow | None) -> _Trust:
+    """What this exact workflow has earned by its content address, with the total over its saved versions, or nothing when it could not be read."""
+    if workflow is None:
+        return trust_payload(TrustAcrossVersions(current=TrustLevel(), total=TrustLevel(), versions=()))
+    versions = library if isinstance(library, WorkflowVersionQueries) else None
+    hashes = await version_hashes(workflow, versions=versions, fetch_workflow=library.fetch_workflow)
+    events = await evidence.history_for_any(spec_hashes=hashes.keys())
+    return trust_payload(trust_across_versions(events, hashes, spec_identity(workflow)))
 
 
 async def _claims(

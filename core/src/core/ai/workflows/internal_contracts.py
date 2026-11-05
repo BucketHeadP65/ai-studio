@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Collection, Mapping, Sequence
 
     from pydantic import JsonValue
 
@@ -542,6 +542,25 @@ class LiveTrialLibrary(Protocol):
         ...
 
 
+@runtime_checkable
+class WorkflowVersionQueries(Protocol):
+    """The library read trust across versions needs: every saved version of one workflow name.
+
+    A library that keeps versions as pages answers it. A caller narrows a `WorkflowLibrary` with `isinstance`.
+    """
+
+    async def versions(self, name: str) -> tuple[tuple[int, str], ...]:
+        """Every saved version of one workflow, live, superseded or archived, lowest version first.
+
+        Args:
+            name: The workflow's name.
+
+        Returns:
+            Each version's `(version, id)`. Empty when no version of `name` is saved.
+        """
+        ...
+
+
 class SaveGuard(Protocol):
     """A host's own bar for a workflow worth keeping, checked before any write leaves this process.
 
@@ -612,6 +631,22 @@ class EvidenceLog(Protocol):
 
         Raises:
             ValueError: If `spec_hash` is empty.
+        """
+        ...
+
+    async def history_for_any(self, *, spec_hashes: Collection[str]) -> tuple[RunEvidence | Approval | Grade, ...]:
+        """Everything held about any of several workflows, found by content address in one read.
+
+        An implementation applies `require_spec_identity` to each of `spec_hashes` before answering.
+
+        Args:
+            spec_hashes: The workflows' content addresses. None may be empty. No address answers nothing.
+
+        Returns:
+            The events carrying any of `spec_hashes`, oldest first.
+
+        Raises:
+            ValueError: If one of `spec_hashes` is empty.
         """
         ...
 
