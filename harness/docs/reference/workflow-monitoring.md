@@ -1278,12 +1278,14 @@ deployment that runs on Temporal, a `POST` or `PATCH` that sets `gate_mode` to `
 saying the durable engine has no orchestrated gate. A fire of a schedule already stored that way launches nothing and
 stamps `refused: ` and the words that save would get as its outcome, keeping its cadence.
 
-**Capacity, blackout and catch up** are three optional holds on a fire. Schedules that share a `capacity_key` run at most
-`capacity_limit` of their fires at once: a fire that finds that many of them running is held, stamped
-`held, capacity <key> is full`, and tries again on the next tick. `blackout` is one or more daily quiet hours,
-`HH:MM-HH:MM` in UTC and comma separated, a window that may cross midnight: a fire that comes due inside one is held,
-stamped `blacked out until HH:MM`. A held overlap or blackout fire skips to the cadence's next turn unless `catch_up` is
-on, which fires it once as soon as the hold clears and stamps it `caught up`. In a `PATCH`, a field left out is not
+**Capacity and blackout** are two optional holds on a fire, and **catch up** decides what a held fire does next. Schedules
+that share a `capacity_key` run at most `capacity_limit` of their fires at once: a fire that finds that many of them
+running is held, stamped `held, capacity <key> is full`, and tries again on the next tick. `blackout` is one or more
+daily quiet hours, `HH:MM-HH:MM` in UTC and comma separated, a window that may cross midnight: a fire that comes due
+inside one is held, stamped `blacked out until HH:MM`. On a clock cadence, an interval or a cron expression, a fire
+held by an overlap or a blackout skips to the cadence's next turn unless `catch_up` is on, which fires it once as soon
+as the hold clears and stamps it `caught up`. An event cadence keeps its arm through such a hold whatever `catch_up`
+says, since it has no next turn to skip to. In a `PATCH`, a field left out is not
 changed, and a `null` sent for `capacity_key` or `capacity_limit` clears both, since one without the other caps nothing,
 and a `null` `blackout` clears it. A `null` sent for any other field changes nothing.
 
