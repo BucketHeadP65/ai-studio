@@ -17,7 +17,16 @@ from engram.sources.domain.source_queue import (
     url_key,
 )
 from engram.sources.domain.sync import SyncError, SyncMirrors, SyncReport
-from engram.sources.domain.watch_list import EntryScan, FoundSource, ScanReport, ScanWatchList, WatchEntry, without_url_secrets
+from engram.sources.domain.watch_list import (
+    REASON_LIMIT,
+    EntryScan,
+    FoundSource,
+    ScanReport,
+    ScanWatchList,
+    WatchEntry,
+    scan_failure_reason,
+    without_url_secrets,
+)
 from engram.sources.exceptions import ConnectorNotInstalledError, ConversionError, ScanError, SourceQueueUnreadableError
 from engram.sources.infrastructure.source_queue import SourceQueue
 from engram.sources.infrastructure.watch_list import WatchListFile
@@ -38,6 +47,7 @@ from engram.sources.service.watch_list import ScanWatchListHandler
 
 __all__ = [
     "NOT_SERVED",
+    "REASON_LIMIT",
     "Connector",
     "ConnectorNotInstalledError",
     "ConnectorSource",
@@ -84,6 +94,7 @@ __all__ = [
     "converter_factory",
     "doi_of",
     "known_scanners",
+    "scan_failure_reason",
     "scanner_class",
     "url_key",
     "without_url_secrets",
