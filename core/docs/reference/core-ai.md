@@ -661,9 +661,9 @@ fails with that same `ApplicationError`.
   pydantic-ai's own (`Content filter triggered. Finish reason: 'content_filter'.`) and ends by naming each filter
   category that filtered or detected, with its source and severity, for example
   `Filter results: completion violence filtered at severity medium.` When the response holds no filter result, it says
-  so. On either engine, a map item that fails this way records that sentence as its failure reason and among the run's
-  skipped reasons, and the chat shows it whole. A map item that fails with any other `UnexpectedModelBehavior` records the
-  error's message without its body in both places.
+  so. On either engine, a run node or a map item that fails this way records that sentence as its failure reason, a
+  skipped map item records it among the run's skipped reasons too, and the chat shows it whole. One that fails with any
+  other `UnexpectedModelBehavior` records the error's message without its body in the same places.
 - The error's body is the whole response as JSON, provider details included, and its text too when it was streamed.
 - The response stays in the run's history with its usage: a streamed one marked `interrupted` with its text, a whole one
   with no parts.

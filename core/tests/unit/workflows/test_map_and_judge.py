@@ -781,6 +781,31 @@ async def test_a_skipped_model_failure_records_its_message_without_the_body_and_
     assert state.skipped == {"each": [details[keys[1]], details[keys[2]]]}, "the skipped reasons carry no body either"
 
 
+@pytest.mark.parametrize(
+    ("item", "detail"),
+    [
+        ("b", "ContentFilterError: Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium."),
+        ("c", "UnexpectedModelBehavior: Exceeded maximum output retries (4)"),
+    ],
+    ids=["content-filter", "model-behaviour"],
+)
+async def test_a_run_node_a_model_error_fails_records_its_message_without_the_body(item: str, detail: str) -> None:
+    spec = Workflow(
+        name="one-flaky-step",
+        version=1,
+        description="One run node over one item.",
+        parameters={"item": ParameterSpec(description="the item", json_schema={"type": "string"})},
+        nodes=(RunNode(id="each", work="flaky", inputs={"item": FromParameter(parameter="item")}),),
+        output=FromNode(node="each"),
+    )
+    state = WorkflowState(params={"item": item})
+
+    with pytest.raises((ContentFilterError, UnexpectedModelBehavior)):
+        await build_graph(spec, _filtered_registry(), approval=ApproveAll()).run(state=state)
+
+    assert state.work_facts[("each", 0, "")].detail == detail
+
+
 async def test_on_error_left_at_fail_still_fails_the_run() -> None:
     """The default is unchanged: the first item that raises fails the whole run."""
     with pytest.raises((ValueError, BaseExceptionGroup)):

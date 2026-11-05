@@ -530,7 +530,8 @@ def _build_run_step(
             with performing_step(_step_identity(node.id, ctx.state, tier=node.tier)):
                 output = await _observed(node.id, watching, _attempted(partial(performing.perform, node.id, impl, kwargs), node_id=node.id, item_key=None, sleep=sleep))
         except Exception as exc:
-            _settle(ctx.state, node.id, 0, "", "failed", f"{type(exc).__qualname__}: {exc}")
+            said = _failure_text(exc)
+            _settle(ctx.state, node.id, 0, "", "failed", f"{type(exc).__qualname__}: {said.splitlines()[0] if said else type(exc).__name__}")
             raise
         _settle(ctx.state, node.id, 0, "", "succeeded")
         _record_value(ctx.state, node.id, output)
