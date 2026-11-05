@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
-summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 8
+summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge found weak, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
+version: 9
 step:
   name: write_stance_flags
   source: |
@@ -10,7 +10,7 @@ step:
     refusal = ""
     try:
         for row in await list_pages(knowledge_base=collection, page_type="flag", limit=10000):
-            indexed[row["page_id"]] = True
+            indexed[row["page_id"]] = row["status"]
     except Exception as error:
         flags_listed = False
         refusal = "list_pages refused the flags, so no flag was written: " + str(error)
@@ -96,17 +96,62 @@ step:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(flag_id)
-    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unread": listed["unread"], "missing": listed["missing"], "unplaced": unplaced}
+    removing = []
+    for duplicate in grouped["duplicates"]:
+        removing.append({"flag_id": duplicate["flag_id"], "title": duplicate["title"], "reason": "The grouping found it the same idea as " + duplicate["kept"] + "."})
+    for dropped in listed["dropped"]:
+        if not dropped["judged_weak"]:
+            continue
+        stance_id = dropped["stance_id"]
+        name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
+        flag_id = "flag.stance-" + name
+        reason = "The newest judge dropped its proposal: " + " ".join(dropped["reasons"])
+        if not flags_listed:
+            removing.append({"flag_id": flag_id, "title": dropped["title"], "reason": reason, "unlisted": True})
+        elif indexed.get(flag_id) == "pending":
+            removing.append({"flag_id": flag_id, "title": dropped["title"], "reason": reason})
+    removed = []
+    refused_removals = []
+    asked = {}
+    for entry in removing:
+        flag_id = entry["flag_id"]
+        if flag_id in asked or flag_id in written:
+            continue
+        asked[flag_id] = True
+        if entry.get("unlisted"):
+            refused_removals.append({"flag_id": flag_id, "title": entry["title"], "reason": "list_pages refused the flags, so its flag was not looked for: " + refusal})
+            continue
+        try:
+            page = await read_page(knowledge_base=collection, page_id=flag_id)
+        except Exception as error:
+            refused_removals.append({"flag_id": flag_id, "title": entry["title"], "reason": "read_page refused the flag, so it was left as it is: " + str(error)})
+            continue
+        front = page["payload"]["frontmatter"]
+        title = str(front.get("title") or entry["title"])
+        if front.get("flag_kind") != "stance":
+            refused_removals.append({"flag_id": flag_id, "title": title, "reason": "a flag of kind " + str(front.get("flag_kind")) + " holds this id, so it was left as it is"})
+            continue
+        if front.get("status") != "pending":
+            refused_removals.append({"flag_id": flag_id, "title": title, "reason": "its file is at " + str(front.get("status")) + ", not pending, so it was left as it is"})
+            continue
+        try:
+            await remove_undecided_page(knowledge_base=collection, page_id=flag_id, reason=entry["reason"])
+        except Exception as error:
+            refused_removals.append({"flag_id": flag_id, "title": title, "reason": "remove_undecided_page refused it, so it was left as it is: " + str(error)})
+            continue
+        removed.append({"flag_id": flag_id, "title": title, "path": page["path"], "reason": entry["reason"]})
+    {"written": written, "kept_decided": kept_decided, "failed": failed, "removed": removed, "refused_removals": refused_removals, "dropped": listed["dropped"], "unread": listed["unread"], "missing": listed["missing"], "unplaced": unplaced}
   inputs:
     listed: {like: list_proposals}
     unplaced: {like: list_unplaced}
+    grouped: {like: apply_groups}
     collection:
       json_schema: {type: string}
   output:
     json_schema:
       type: object
       title: StanceFlagsWritten
-      required: [written, kept_decided, failed, dropped, unread, missing, unplaced]
+      required: [written, kept_decided, failed, removed, refused_removals, dropped, unread, missing, unplaced]
       properties:
         written:
           type: array
@@ -125,19 +170,43 @@ step:
             properties:
               flag_id: {type: string}
               reason: {type: string}
+        removed:
+          type: array
+          description: Each pending stance flag removed, by its id, title and the path its file was read from, with why. The base keeps no copy of a removed file.
+          items:
+            type: object
+            title: StanceFlagRemoved
+            required: [flag_id, title, path, reason]
+            properties:
+              flag_id: {type: string}
+              title: {type: string}
+              path: {type: string}
+              reason: {type: string}
+        refused_removals:
+          type: array
+          description: Each flag the run asked to remove and left as it is, with why. A later step fails the run naming each one.
+          items:
+            type: object
+            title: StanceFlagNotRemoved
+            required: [flag_id, title, reason]
+            properties:
+              flag_id: {type: string}
+              title: {type: string}
+              reason: {type: string}
         dropped:
           type: array
           description: The stance proposals the run dropped, each with why, as `list_proposals` handed them.
           items:
             type: object
             title: DroppedStanceProposal
-            required: [stance_id, title, reasons]
+            required: [stance_id, title, reasons, judged_weak]
             properties:
               stance_id: {type: string}
               title: {type: string}
               reasons:
                 type: array
                 items: {type: string}
+              judged_weak: {type: boolean}
         unread:
           type: array
           description: Each digest the base holds that the run could not read, with read_page's refusal, as `list_proposals` handed them.
@@ -170,7 +239,7 @@ step:
               stance_id: {type: string}
               title: {type: string}
               reason: {type: string}
-  tools: [list_pages, read_page, read_notes, write_note]
+  tools: [list_pages, read_page, read_notes, write_note, remove_undecided_page]
 ---
 
 Use as the tail of a stance refresh, after its proposals are judged and listed, with `listed` wired from
@@ -197,3 +266,14 @@ Its answer is the run's output, so it also answers, unchanged, the proposals `li
 in `dropped`, the digests the base holds that the run could not read in `unread` and the cited ids the base does not
 hold in `missing`, each with read_page's refusal, and the placements `list_unplaced` named, each under a stance id no
 stance page carries, in `unplaced`.
+
+Once every flag is written it removes flags, with `grouped` wired from the same run's `apply_groups`: each pending flag
+the grouping found the same idea as the flag a group keeps, and the pending flag of each proposal `list_proposals`
+dropped as `judged_weak`, the judge's own verdicts leaving it findings from fewer than two digests. A flag the index
+does not list at `pending` has nothing to remove for a dropped proposal. Before each removal it reads the flag's file
+with `read_page` and removes it with `remove_undecided_page` only while that file is a stance flag at `pending`, so a
+flag the owner decided is never removed, nor one this run wrote. Each removal is caught on its own. Every removed flag
+is answered in `removed` with its id, its title, the path its file was read from and why, since the base keeps no
+copy. Every flag it asked to remove and left as it is, because `read_page` refused it, another kind holds its id, its
+file is not at `pending`, `remove_undecided_page` refused it, or the flags could not be listed, is answered in
+`refused_removals` with why, for the step after it to fail the run on.

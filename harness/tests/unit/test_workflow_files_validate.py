@@ -132,9 +132,10 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `excise_source`, `check_excision` and `removal_report` type against `plan_items` and
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
-    `place_stance_pages`, `refresh_stance`, `back_proposal`, `judge_proposal`, `write_stances` and `write_stance_flags`
-    type against `group_pages`, `merge_work`, `merge_proposals`, `check_findings`, `list_backings`, `list_proposals` and
-    `list_unplaced`, defined only inside `research-stance-refresh.md`'s own `inline:`.
+    `place_stance_pages`, `refresh_stance`, `find_same_ideas`, `back_proposal`, `judge_proposal`, `write_stances` and
+    `write_stance_flags` type against `group_pages`, `merge_work`, `list_candidates`, `merge_proposals`, `check_findings`,
+    `list_backings`, `list_proposals`, `list_unplaced` and `apply_groups`, defined only inside
+    `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
     """
@@ -252,6 +253,7 @@ async def test_every_step_file_loads_and_asks_only_for_tools_this_app_offers() -
         "place_stance_pages",
         "refresh_stance",
         "check_stances",
+        "find_same_ideas",
         "back_proposal",
         "judge_proposal",
         "write_stances",
@@ -448,8 +450,23 @@ _DROPPED_PROPOSAL: dict[str, object] = {
     "stance_id": "stance.z",
     "title": "Z",
     "reasons": ["The judge found it repeats the existing stance stance.x."],
+    "judged_weak": False,
 }
 """The one stance proposal dropped here, which the flag writer answers unchanged."""
+
+_SAME_IDEA_FLAG: dict[str, object] = {"flag_id": "flag.stance-old", "title": "Old", "kept": "flag.stance-y"}
+"""The one pending stance flag the grouping found the same idea as the flag the proposal here is written as."""
+
+_PENDING_STANCE_FLAG: dict[str, object] = {
+    "page_id": "flag.stance-old",
+    "path": "Wiki/Flags/stance-old.md",
+    "payload": {
+        "frontmatter": {"id": "flag.stance-old", "type": "flag", "title": "Old", "status": "pending", "flag_kind": "stance"},
+        "sections": [],
+        "claims": [],
+    },
+}
+"""What `read_page` answers here for a flag id: a pending stance flag."""
 
 _UNREAD_DIGEST: dict[str, object] = {"digest": "talk.c", "reason": "talk.c at Wiki/Talks/c.md cannot be read as a payload"}
 """One digest the run could not read, which the flag writer answers unchanged."""
@@ -534,6 +551,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "write_stance_flags": {
         "listed": {"proposals": [_STANCE_PROPOSAL], "dropped": [_DROPPED_PROPOSAL], "unread": [_UNREAD_DIGEST], "missing": [_MISSING_ID]},
         "unplaced": [_UNPLACED],
+        "grouped": {"proposals": [_STANCE_PROPOSAL], "groups": [], "duplicates": [_SAME_IDEA_FLAG], "refused": [], "not_grouped": ""},
         "collection": "research",
     },
     "write_adrs": {
@@ -596,6 +614,14 @@ _TOOL_ANSWERS: dict[str, object] = {
     "read_notes": {"path": "", "exists": True, "text": "# Design\n", "threads": [_OPEN_THREAD]},
     "resolve_note": "resolved",
     "read_page": _STANCE_PAGE,
+    "remove_undecided_page": {
+        "page_id": "flag.stance-old",
+        "page_type": "flag",
+        "title": "Old",
+        "path": "Wiki/Flags/stance-old.md",
+        "reason": "The grouping found it the same idea as flag.stance-y.",
+        "indexed": "indexed clean",
+    },
     "list_pages": [
         {"page_id": "adr-0030-something", "page_type": "adr", "title": "Something", "status": "accepted"},
         {"page_id": "engram-adr-0044-elsewhere", "page_type": "adr", "title": "Elsewhere", "status": "accepted"},
@@ -825,17 +851,31 @@ def _assert_stance_refresh_programs(ran: dict[str, object], called_by_step: _Cal
 
 
 def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledByStep) -> None:
-    """The stance flag writer: no listed flag carries the proposal's id and no file sits at its path, so it writes one pending flag."""
+    """The stance flag writer: no listed flag carries the proposal's id, so it writes one pending flag, then removes the flag of the same idea."""
     assert to_jsonable_python(ran["write_stance_flags"]) == {
         "written": ["flag.stance-y"],
         "kept_decided": [],
         "failed": [],
+        "removed": [
+            {
+                "flag_id": "flag.stance-old",
+                "title": "Old",
+                "path": "Wiki/Flags/stance-old.md",
+                "reason": "The grouping found it the same idea as flag.stance-y.",
+            }
+        ],
+        "refused_removals": [],
         "dropped": [_DROPPED_PROPOSAL],
         "unread": [_UNREAD_DIGEST],
         "missing": [_MISSING_ID],
         "unplaced": [_UNPLACED],
     }
-    assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note"]
+    assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note", "read_page", "remove_undecided_page"]
+    assert called_by_step["write_stance_flags"][4][1] == {
+        "knowledge_base": "research",
+        "page_id": "flag.stance-old",
+        "reason": "The grouping found it the same idea as flag.stance-y.",
+    }
     assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
     assert called_by_step["write_stance_flags"][1][1] == {"knowledge_base": "research", "path": "Wiki/Flags/stance-y.md"}
     written = to_jsonable_python(called_by_step["write_stance_flags"][2][1])
@@ -933,6 +973,8 @@ async def test_every_shipped_program_runs_in_the_real_sandbox_and_calls_the_tool
             return _COMPOUNDING_ANSWERS[str(args["name"])]
         if name == "read_notes" and str(args["path"]).startswith("Wiki/Flags/"):
             return {"path": args["path"], "exists": False, "text": "", "threads": []}
+        if name == "read_page" and str(args["page_id"]).startswith("flag."):
+            return _PENDING_STANCE_FLAG
         return _TOOL_ANSWERS[name]
 
     steps = _steps()

@@ -1,18 +1,19 @@
 ---
 title: Refresh stances from the docs
 description: >-
-  Reads the records pages that changed, places each against the base's stance pages, rewrites and writes the stances
-  they change under a judge, keeping their Evidence and Alternatives, then writes each new stance they propose, with
-  the findings on it, as a pending flag.
+  Places each changed records page against the base's stances, rewrites the stances they change under a judge,
+  keeping their Evidence and Alternatives, and writes each new stance they propose as one pending flag per idea,
+  removing pending flags it repeats or a judge finds weak.
 uses:
   - st.list_stance_changes.v2
   - st.place_stance_pages.v6
   - st.refresh_stance.v4
   - st.check_stances.v4
+  - st.find_same_ideas.v1
   - st.back_proposal.v5
   - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v8
+  - st.write_stance_flags.v9
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -20,23 +21,23 @@ presentation:
     refreshes from it goes stale as soon as the work moves on.
   produces: >-
     Each stance a changed records page bears on, rewritten in place: its status following the records, and its
-    summary, TL;DR, Position and Why brought up to date with every changed sentence naming the records page behind it.
-    Its Evidence and Alternatives stay exactly as they were. A topic no stance covers is proposed as a new stance, and
-    never drafted, only when its page takes a position on a question research literature addresses. An implementation
-    choice is skipped with a reason that says so. The run card lists the stances written, the ones refused with the
-    check each failed, where every changed page was placed, every stance as it was before the run, every stance the
-    run could not read, and every placement under a stance the base does not list. A judge reads each stance proposal
-    alone and says which of its findings bear. Each proposal left with findings that bear from two of the base's
-    digests (none at status skipped) is shown among what the run left behind and written as a pending flag of kind
-    stance, `flag.stance-` and the proposed id without `stance.`, with its records pages, placement's reason for each,
-    each finding as a claim link with its side and one sentence on how, and each claim of its backings left out, with
-    why. One whose findings all contest it is marked as one the literature argues against. Every dropped proposal is
-    listed with why, and every digest the run could not read, or cited id the base does not hold, is named with the
-    refusal. A pending flag is written again with newer findings, and a flag you accepted, dismissed or completed,
-    read from its file, is left as it is and listed. The proposals start only after every rewrite is written, so a run
-    whose proposals fail keeps its rewrites. Each rewrite is written to its file at once. A knowledge base indexed
-    once per run indexes them when the run ends. Under the opt-in Temporal engine writes are never held for the run,
-    so even such a knowledge base indexes after each write.
+    summary, TL;DR, Position and Why brought up to date, every changed sentence naming its records page. Its Evidence
+    and Alternatives stay as they were. A topic no stance covers is proposed as a new stance, never drafted, only when
+    its page takes a position on a question research literature addresses, and an implementation choice is skipped
+    saying so. The card lists the stances written and refused with the check each failed, where each changed page was
+    placed, each stance as it was before the run, each stance the run could not read, and each placement under a
+    stance the base does not list. One helper call groups the proposals and the base's pending stance flags of one
+    idea, so each idea is backed once, under the pending flag it holds when it holds one. A judge reads each proposal
+    alone and says which findings bear. Each proposal left with findings that bear from two of the base's digests
+    (none skipped) is shown among what the run left behind and written as a pending stance flag, `flag.stance-` and
+    the id without `stance.`, with its records pages and placement's reasons, each finding as a claim link with its
+    side and how, and each claim left out with why. One whose findings all contest it is marked so. Every dropped
+    proposal is listed with why, and every digest the run could not read, or cited id the base does not hold, is named
+    with the refusal. A pending flag is written again with newer findings, and a flag you decided, read from its file,
+    is left as it is and listed. A pending flag a group repeats, or whose proposal the judge's own verdicts found weak,
+    is removed, with its id, title and path on the card since its file is gone, and a refused removal fails the run
+    once the rest is written. The proposals start only after every rewrite is written, so a run whose proposals fail
+    keeps its rewrites, each written to its file at once.
   owner_participation: >-
     Nothing during a run, unless a judge cannot decide. A schedule starts it when the records knowledge base is
     indexed, and you start a full pass by hand by leaving the changed pages empty. A judge, not you, rejects a rewrite
@@ -45,7 +46,8 @@ presentation:
     rewrite judge that cannot decide asks you, and the run waits for your answer, so a schedule over this workflow carries a gate policy that fails after a
     wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
     they were before it. A proposed new stance is yours to draft by hand: accept, dismiss or complete its stance flag
-    in the research knowledge base, and the run never writes a flag you decided again.
+    in the research knowledge base, and the run never writes or removes a flag you decided. A pending stance flag the run
+    finds the same idea as another, or whose proposal its judge finds weak, is removed without asking you.
   not_for: >-
     Not for adding literature to a stance, which comes from the digests and the flag pass. Not for editing a
     stance's Evidence or Alternatives, which this run never changes. Not for more than twenty-five changed pages at
@@ -62,11 +64,13 @@ presentation:
     - {label: "Digests the base holds that the run could not read, each with read_page's refusal, whose findings it lost (recorded)", path: values.check_findings.unread}
     - {label: "Ids the backings cited that the base does not hold, each with read_page's refusal (recorded)", path: values.check_findings.missing}
     - {label: "Placements under a stance the base does not list, left out of every rewrite (recorded)", path: values.list_unplaced}
-    - {label: "Stance flags written, left as the owner decided them, and refused, with the stance proposals dropped and why, and the placements under no listed stance (recorded)", path: values.write_stance_flags}
+    - {label: "Stance proposals grouped as one idea, each by the flag it is kept as, the pending flags found the same idea, each group refused with why, and why nothing was grouped when the grouping did not run (recorded)", path: values.apply_groups}
+    - {label: "Stance flags written, left as the owner decided them, refused, removed and refused removal, with the stance proposals dropped and why, and the placements under no listed stance (recorded)", path: values.write_stance_flags}
+    - {label: "Stance flags removed, each by its id, title and path with why, since the base keeps no copy of a removed file (recorded)", path: values.write_stance_flags.removed}
 workflow:
   name: research-stance-refresh
-  version: 23
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, and write each listed one as a pending stance flag, drafting no stance and never writing a flag the owner decided.
+  version: 24
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then group every new stance they propose with the base's pending stance flags of the same idea under one id, back each with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, write each listed one as a pending stance flag, and remove each pending flag a group repeats or whose proposal the judge found weak, drafting no stance and never writing or removing a flag the owner decided.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -286,6 +290,311 @@ workflow:
                 type: array
                 description: The ids of every stance the base lists, which a judge's duplicate must name.
                 items: {type: string}
+    - name: list_stance_flags
+      source: |
+        flags = []
+        refusal = ""
+        if proposals:
+            try:
+                for row in await list_pages(knowledge_base=collection, page_type="flag", status="pending", limit=10000):
+                    if row["page_id"].startswith("flag.stance-"):
+                        flags.append({"flag_id": row["page_id"], "title": row["title"]})
+            except Exception as error:
+                refusal = str(error)
+        own = {}
+        for proposal in proposals:
+            stance_id = proposal["stance_id"]
+            name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
+            own["flag.stance-" + name] = True
+        others = [flag for flag in flags if flag["flag_id"] not in own]
+        candidates = []
+        if proposals and not refusal and len(proposals) + len(others) >= 2:
+            shown = []
+            for proposal in proposals:
+                shown.append({"stance_id": proposal["stance_id"], "title": proposal["title"], "reasons": [entry["reason"] for entry in proposal["reasons"]]})
+            candidates.append({"proposals": shown, "flags": others})
+        {"flags": flags, "refusal": refusal, "candidates": candidates}
+      inputs:
+        proposals: {like: merge_proposals}
+        collection:
+          json_schema: {type: string}
+      output:
+        json_schema:
+          type: object
+          title: StanceFlagsListed
+          required: [flags, refusal, candidates]
+          properties:
+            flags:
+              type: array
+              description: Every pending stance flag the index lists, by its id and title. Empty when the run proposes nothing.
+              items:
+                type: object
+                title: PendingStanceFlag
+                required: [flag_id, title]
+                properties:
+                  flag_id: {type: string}
+                  title: {type: string}
+            refusal:
+              type: string
+              description: Why list_pages refused the pending flags, empty when it listed them.
+            candidates:
+              type: array
+              description: What the grouping call reads, one item when the run's proposals and the pending stance flags no proposal of the run already names number two or more, and none otherwise.
+              items:
+                type: object
+                title: Candidates
+                required: [proposals, flags]
+                properties:
+                  proposals:
+                    type: array
+                    items:
+                      type: object
+                      title: ProposalToGroup
+                      required: [stance_id, title, reasons]
+                      properties:
+                        stance_id: {type: string}
+                        title: {type: string}
+                        reasons:
+                          type: array
+                          items: {type: string}
+                  flags:
+                    type: array
+                    items:
+                      type: object
+                      title: FlagToGroup
+                      required: [flag_id, title]
+                      properties:
+                        flag_id: {type: string}
+                        title: {type: string}
+      tools: [list_pages]
+    - name: list_candidates
+      source: |
+        listed["candidates"]
+      inputs:
+        listed: {like: list_stance_flags}
+      output:
+        json_schema:
+          type: array
+          items:
+            type: object
+            title: Candidates
+            required: [proposals, flags]
+            properties:
+              proposals:
+                type: array
+                items:
+                  type: object
+                  title: ProposalToGroup
+                  required: [stance_id, title, reasons]
+                  properties:
+                    stance_id: {type: string}
+                    title: {type: string}
+                    reasons:
+                      type: array
+                      items: {type: string}
+              flags:
+                type: array
+                items:
+                  type: object
+                  title: FlagToGroup
+                  required: [flag_id, title]
+                  properties:
+                    flag_id: {type: string}
+                    title: {type: string}
+    - name: apply_groups
+      source: |
+        by_name = {}
+        for proposal in proposals:
+            stance_id = proposal["stance_id"]
+            name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
+            by_name[name] = proposal
+        flagged = {}
+        for flag in listed["flags"]:
+            flagged[flag["flag_id"][len("flag.stance-"):]] = flag
+        groups = []
+        for answer in groupings:
+            for group in answer["groups"]:
+                named = []
+                for raw in group["ids"]:
+                    held = raw.strip()
+                    if held.startswith("[[") and held.endswith("]]"):
+                        held = held[2:-2]
+                    held = held.split("|")[0].strip()
+                    if held.startswith("flag.stance-"):
+                        held = held[len("flag.stance-"):]
+                    elif held.startswith("stance."):
+                        held = held[len("stance."):]
+                    if held not in by_name and held not in flagged:
+                        held = ""
+                    named.append({"raw": raw, "name": held})
+                groups.append({"ids": group["ids"], "named": named})
+        times = {}
+        for group in groups:
+            for entry in group["named"]:
+                if entry["name"]:
+                    times[entry["name"]] = times.get(entry["name"], 0) + 1
+        refused = []
+        kept_groups = []
+        for group in groups:
+            outside = [entry["raw"] for entry in group["named"] if not entry["name"]]
+            twice = [entry["raw"] for entry in group["named"] if entry["name"] and times[entry["name"]] > 1]
+            names = [entry["name"] for entry in group["named"]]
+            if outside:
+                refused.append({"ids": group["ids"], "reason": "It names " + ", ".join(outside) + ", which the grouping was not given, so none of its ids was grouped."})
+            elif twice:
+                refused.append({"ids": group["ids"], "reason": "It names " + ", ".join(twice) + " more than once in the answer, so none of its ids was grouped."})
+            elif not [name for name in names if name in by_name]:
+                refused.append({"ids": group["ids"], "reason": "It names no proposal of this run, and a pass changes only its own proposals' flags, so none of its ids was grouped."})
+            elif len(names) > 1:
+                kept_groups.append({"ids": group["ids"], "names": names})
+        group_of = {}
+        count = 0
+        for group in kept_groups:
+            for name in group["names"]:
+                group_of[name] = count
+            count = count + 1
+        grouped = []
+        applied = []
+        duplicates = []
+        done = {}
+        for proposal in proposals:
+            stance_id = proposal["stance_id"]
+            name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
+            if name not in group_of:
+                grouped.append(proposal)
+                continue
+            index = group_of[name]
+            if index in done:
+                continue
+            done[index] = True
+            names = kept_groups[index]["names"]
+            kept = ""
+            for held in names:
+                if held in flagged and held not in by_name:
+                    kept = held
+                    break
+            if not kept:
+                for held in names:
+                    if held in by_name:
+                        kept = held
+                        break
+            if kept in by_name:
+                kept_id = by_name[kept]["stance_id"]
+                title = by_name[kept]["title"]
+            else:
+                kept_id = "stance." + kept
+                title = flagged[kept]["title"]
+            pages = []
+            reasons = []
+            for held in names:
+                if held not in by_name:
+                    continue
+                for page in by_name[held]["pages"]:
+                    if page["page_id"] not in [taken["page_id"] for taken in pages]:
+                        pages.append(page)
+                for entry in by_name[held]["reasons"]:
+                    if entry["page_id"] not in [taken["page_id"] for taken in reasons]:
+                        reasons.append(entry)
+            grouped.append({"stance_id": kept_id, "title": title, "pages": pages, "reasons": reasons, "stance_ids": proposal["stance_ids"]})
+            flag_id = "flag.stance-" + kept
+            applied.append({"flag_id": flag_id, "title": title, "ids": kept_groups[index]["ids"]})
+            for held in names:
+                if held != kept and held in flagged:
+                    duplicates.append({"flag_id": flagged[held]["flag_id"], "title": flagged[held]["title"], "kept": flag_id})
+        not_grouped = ""
+        if listed["refusal"]:
+            not_grouped = "list_pages refused the pending flags, so every proposal stands alone: " + listed["refusal"]
+        elif listed["candidates"] and not groupings:
+            not_grouped = "The call that finds proposals of the same idea gave no answer, so every proposal stands alone."
+        {"proposals": grouped, "groups": applied, "duplicates": duplicates, "refused": refused, "not_grouped": not_grouped}
+      inputs:
+        proposals: {like: merge_proposals}
+        listed: {like: list_stance_flags}
+        groupings: {like: find_same_ideas, many: true}
+      output:
+        json_schema:
+          type: object
+          title: ProposalsGrouped
+          required: [proposals, groups, duplicates, refused, not_grouped]
+          properties:
+            proposals:
+              type: array
+              description: Every proposal of the run, each group of one idea merged into the one it keeps, with every page and reason of the group.
+              items:
+                type: object
+                title: Proposal
+                required: [stance_id, title, pages, reasons, stance_ids]
+                properties:
+                  stance_id: {type: string}
+                  title: {type: string}
+                  pages:
+                    type: array
+                    items:
+                      type: object
+                      title: BearingPage
+                      required: [page_id, page_type, status, title]
+                      properties:
+                        page_id: {type: string}
+                        page_type: {type: string}
+                        status: {type: string}
+                        title: {type: string}
+                  reasons:
+                    type: array
+                    items:
+                      type: object
+                      title: PlacementReason
+                      required: [page_id, reason]
+                      properties:
+                        page_id: {type: string}
+                        reason: {type: string}
+                  stance_ids:
+                    type: array
+                    items: {type: string}
+            groups:
+              type: array
+              description: Each group of one idea applied, by the flag it is kept as, its title and the ids the grouping named.
+              items:
+                type: object
+                title: SameIdeaKept
+                required: [flag_id, title, ids]
+                properties:
+                  flag_id: {type: string}
+                  title: {type: string}
+                  ids:
+                    type: array
+                    items: {type: string}
+            duplicates:
+              type: array
+              description: Each pending stance flag a group holds beside the flag it keeps, to be removed, with the flag it is kept as.
+              items:
+                type: object
+                title: SameIdeaFlag
+                required: [flag_id, title, kept]
+                properties:
+                  flag_id: {type: string}
+                  title: {type: string}
+                  kept: {type: string}
+            refused:
+              type: array
+              description: Each group the grouping answered that was refused, by the ids it named, with why. Its proposals stand alone.
+              items:
+                type: object
+                title: SameIdeaRefused
+                required: [ids, reason]
+                properties:
+                  ids:
+                    type: array
+                    items: {type: string}
+                  reason: {type: string}
+            not_grouped:
+              type: string
+              description: Why no proposal was grouped, when the flags could not be listed or the grouping call gave no answer. Empty otherwise.
+    - name: list_grouped
+      source: |
+        applied["proposals"]
+      inputs:
+        applied: {like: apply_groups}
+      output: {like: merge_proposals}
     - name: check_findings
       source: |
         digest_types = ["paper", "talk", "article", "post"]
@@ -543,7 +852,7 @@ workflow:
                     reason = "No backing carries its id, title and pages: its worker failed, or changed the proposal's id, title or pages."
                 if absent:
                     reason = reason + " It cited ids the base does not hold: " + ", ".join(absent) + "."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason]})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
                 continue
             verdicts = {}
             duplicate = ""
@@ -578,11 +887,11 @@ workflow:
                     verdicts[claim].append(verdict)
             if not judged:
                 reason = "The judge gave no verdict: its judge item failed or was skipped, or its judge changed the proposal's id, title or pages."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason]})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
                 continue
             if duplicate:
                 reason = "The judge found it repeats the existing stance " + duplicate + "."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason]})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
                 continue
             order = []
             first = {}
@@ -598,15 +907,18 @@ workflow:
             findings = []
             reasons = []
             refused_claims = []
+            spared = []
             for claim in order:
                 if len(sides[claim]) > 1:
                     reasons.append(claim + " was given opposite sides by its backings.")
                     refused_claims.append({"claim": claim, "why": "Its backings gave it opposite sides."})
+                    spared.append(claim)
                     continue
                 said = verdicts.get(claim, [])
                 if not said:
                     reasons.append(claim + " has no verdict from the judge.")
                     refused_claims.append({"claim": claim, "why": "The judge gave it no verdict."})
+                    spared.append(claim)
                     continue
                 refused = [verdict for verdict in said if not verdict["bears"]]
                 if refused:
@@ -614,9 +926,11 @@ workflow:
                     refused_claims.append({"claim": claim, "why": "The judge says it does not bear: " + refused[0]["why"]})
                     continue
                 findings.append(first[claim])
+                spared.append(claim)
             digests = {finding["claim"].split("#")[0]: True for finding in findings}
             if len(digests) < 2:
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": ["Fewer than two digests are left with findings that bear."] + reasons})
+                judged_weak = len({claim.split("#")[0]: True for claim in spared}) < 2
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": ["Fewer than two digests are left with findings that bear."] + reasons, "judged_weak": judged_weak})
                 continue
             contests_only = True
             for finding in findings:
@@ -694,13 +1008,16 @@ workflow:
               items:
                 type: object
                 title: DroppedStanceProposal
-                required: [stance_id, title, reasons]
+                required: [stance_id, title, reasons, judged_weak]
                 properties:
                   stance_id: {type: string}
                   title: {type: string}
                   reasons:
                     type: array
                     items: {type: string}
+                  judged_weak:
+                    type: boolean
+                    description: True when the judge's own verdicts left it findings from fewer than two digests, every claim the judge did not refuse counted, so the idea is weak. False for every other drop.
             unread:
               type: array
               description: Each digest the base holds that check_findings could not read, with read_page's refusal.
@@ -721,6 +1038,20 @@ workflow:
                 properties:
                   digest: {type: string}
                   reason: {type: string}
+    - name: check_removals
+      source: |
+        if landed["refused_removals"]:
+            refused = [entry["flag_id"] + " (" + entry["title"] + "): " + entry["reason"] for entry in landed["refused_removals"]]
+            noun = "flag" if len(refused) == 1 else "flags"
+            message = "Refused to remove " + str(len(refused)) + " stance " + noun + " after landing the rest: " + " | ".join(refused) + "."
+            removed = [entry["flag_id"] + " (" + entry["title"] + ") at " + entry["path"] for entry in landed["removed"]]
+            if removed:
+                message = message + " Removed " + " | ".join(removed) + "."
+            raise Exception(message)
+        landed
+      inputs:
+        landed: {like: write_stance_flags}
+      output: {like: write_stance_flags}
   result:
     summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the findings from the literature that take a side on it, and written as a pending stance flag.
     primary_work: refresh_stances
@@ -804,10 +1135,41 @@ workflow:
         changes: {node: list_changes}
         placements: {node: place_pages}
         written: {node: write_stances}
+    - kind: run
+      id: list_stance_flags
+      work: list_stance_flags
+      inputs:
+        proposals: {node: merge_proposals}
+        collection: {parameter: collection}
+    - kind: run
+      id: list_candidates
+      work: list_candidates
+      inputs:
+        listed: {node: list_stance_flags}
+    - kind: map
+      id: group_proposals
+      turns: [find_same_ideas]
+      over: {node: list_candidates}
+      each: candidates
+      max_parallel: 1
+      on_error: skip
+      abort_after_repeats: 3
+    - kind: run
+      id: apply_groups
+      work: apply_groups
+      inputs:
+        proposals: {node: merge_proposals}
+        listed: {node: list_stance_flags}
+        groupings: {node: group_proposals}
+    - kind: run
+      id: list_grouped
+      work: list_grouped
+      inputs:
+        applied: {node: apply_groups}
     - kind: map
       id: back_proposals
       turns: [back_proposal]
-      over: {node: merge_proposals}
+      over: {node: list_grouped}
       each: proposal
       inputs:
         collection: {parameter: collection}
@@ -839,7 +1201,7 @@ workflow:
       id: list_proposals
       work: list_proposals
       inputs:
-        proposals: {node: merge_proposals}
+        proposals: {node: list_grouped}
         checked: {node: check_findings}
         judgements: {node: judge_proposals}
     - kind: run
@@ -848,8 +1210,14 @@ workflow:
       inputs:
         listed: {node: list_proposals}
         unplaced: {node: list_unplaced}
+        grouped: {node: apply_groups}
         collection: {parameter: collection}
-  output: {node: write_stance_flags}
+    - kind: run
+      id: check_removals
+      work: check_removals
+      inputs:
+        landed: {node: write_stance_flags}
+  output: {node: check_removals}
 ---
 
 Use on an `on index` schedule over the records knowledge base, with `collection` set to the research knowledge base,
@@ -883,7 +1251,23 @@ page does not carry, catches each refusal, and answers which were written and wh
 
 The proposals start only once every rewrite is written. `merge_proposals` waits on `write_stances` and makes one
 proposal per proposed new stance id with its title and every page behind it, combining the groups that proposed the
-same id. `back_proposals` runs one worker per proposal, two at a time. Each searches the research knowledge base,
+same id.
+
+Placement invents a proposal's id afresh each pass, so one idea can come back under a new id, and one pass can propose
+it twice. `list_stance_flags` lists the base's pending stance flags with `list_pages`, by id and title, and hands the
+grouping its one item, the run's proposals by stance_id, title and placement's reasons and those flags, only when they
+number two or more, a flag already carrying a proposal's own id left out since it is that proposal. With no proposal
+it lists nothing. `group_proposals` makes that one helper model call, which answers groups of the ids of one idea and
+nothing else. `apply_groups` checks the answer in code: an id is a proposal's `stance_id` or a flag's `flag_id`, either
+written as the other, `stance.<name>` or `flag.stance-<name>`, or as a link. A group naming an id the call was not
+given, an id the answer names twice, or no proposal of this run, so a pass never touches flags unrelated to its pages,
+is refused whole with why under `refused`, and its proposals stand alone. Each other group of two or more ids is kept
+as the first pending flag it names, or its first proposal when it names none, with that one's title, and its
+proposals become one proposal under the kept id, their pages and reasons joined. Every other pending flag in the
+group, a proposal's own flag among them, is listed under `duplicates` with the flag it is kept as. When the flags
+cannot be listed, or the call fails or gives no answer, every proposal stands alone and `not_grouped` says why, and
+the pass goes on. `list_grouped` hands the proposals on, and `list_proposals` accounts for them. `back_proposals`
+runs one worker per proposal, two at a time. Each searches the research knowledge base,
 reads the digests that may bear on the position with `read_page`, and answers its findings: each claim that supports
 or contests the position, by its reference such as `paper.ace-2025#^c8`, its side, and one sentence on how it bears.
 It types no claim text, and copies the proposal's id, title and pages into its answer. `check_findings` reads every
@@ -905,7 +1289,7 @@ items in a row failing with the same error abort the run as failed, after every 
 model never reads as a run with no proposals. There is no redo: `back_proposals` runs once, and a weak finding is
 dropped, not repaired. With no proposal the map runs nothing, so the proposals make no model call.
 
-`list_proposals` accounts for every proposal `merge_proposals` made, in this order. A proposal with no kept backing of
+`list_proposals` accounts for every proposal `list_grouped` hands it, in this order. A proposal with no kept backing of
 the same stance_id and title and the same records pages in any order is dropped, and its reason says which of three
 things happened: its backing lost claims to digests the base could not read, which it names, its backing kept claims
 from fewer than two digests that the base holds and has not skipped and that carry the cited claims, naming any cited
@@ -921,7 +1305,10 @@ bears. A judge's claim written as a wikilink, a search ref or an anchor with no 
 `check_findings` counts a backing's. A proposal left with findings from fewer than two digests is dropped with each
 finding's reason. A kept proposal carries each claim of its backings left out as `refused`, each with why: the judge
 said it does not bear, gave it no verdict, or its backings gave it opposite sides, and `contests_only` counts only the
-findings that remain. The map collects its answers as they finish, so nothing is paired by position. A backing that
+findings that remain. A dropped proposal is `judged_weak` when the judge's own verdicts did it: its claims the judge did
+not refuse, those it gave no verdict and those its backings gave opposite sides counted in, come from fewer than two
+digests. Every other drop, a failed worker or judge, a changed copy, too few digests the base holds, a digest it could
+not read, an id it does not hold, or a repeat of a listed stance, is not. The map collects its answers as they finish, so nothing is paired by position. A backing that
 matches no proposal, such as one whose worker reworded its copy, added or left out a page, or took another proposal's
 id, puts nothing on the card, and the honest backing of that proposal still does. It answers `proposals`, the run's
 `proposed_stances` artifact, `dropped`, each dropped proposal with its reasons, and `unread` and `missing` as
@@ -947,9 +1334,19 @@ answer, with the dropped proposals as `dropped`, the digests the base holds that
 the cited ids the base does not hold as `missing` and the placements `list_unplaced` named as `unplaced` beside the
 flags, is the run's output.
 
+Once every flag is written, `write_stance_flags` removes, each in its own try, every pending flag `apply_groups` named
+under `duplicates`, and the pending flag of every proposal dropped as `judged_weak` that the index lists at `pending`.
+It reads each one's file with `read_page` first and removes it with `remove_undecided_page` only while that file is a
+stance flag at `pending`, so a flag the owner decided is never removed, and neither is one this run wrote. The base
+keeps no copy of a removed file, so `removed` names each by its id, its title, the path it was read from and why, and
+the card shows it. Every flag it asked to remove and left as it is is named in `refused_removals` with why.
+`check_removals` passes the answer through as the run's output, and when `refused_removals` names any flag it fails the
+run after everything else landed, its error naming each refusal and each removed flag with its path.
+
 A run whose backing map or judge map aborts fails after every rewrite is written. Each rewrite is written to its file
 at once. A knowledge base indexed on each write indexes it then. One indexed once per run indexes the run's writes
 when the run ends, fails or pauses. No step after `write_stances` waits for a person, so nothing written waits on one.
+The grouping call that fails is skipped and leaves every proposal alone, so it never fails the run.
 Under the opt-in Temporal engine writes are never held for the run, so even a knowledge base indexed once per run
 indexes after each write. Three consecutive identical failures in any map, the judge map among them, abort the run as
 failed.

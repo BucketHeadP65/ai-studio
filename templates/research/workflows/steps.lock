@@ -16,6 +16,10 @@
       "step_hash": "b5db173b3badd39dfec8eb3a19ed29f9cf2b2b0d68d0c527d04a885d4730afd8",
       "version": 5
     },
+    "find_same_ideas": {
+      "step_hash": "8038243a536b4753db2eddfc178cca7c1b439d75eaed6ef6391070680f66b92f",
+      "version": 1
+    },
     "flag_ideas": {
       "step_hash": "13ae15d2678bc1d5d7ee5216023da0121e449796ca5477ee48e6cb21fe7027ec",
       "version": 6
@@ -69,8 +73,8 @@
       "version": 4
     },
     "write_stance_flags": {
-      "step_hash": "40c1d72cdce27e55f688d99bfe4fa56559c416f2ba1f2a8e8befd4cccc64a131",
-      "version": 8
+      "step_hash": "8d40459ed352cffa95791f8c6ae12c381c4b6a06a7cbf02c9bbdd15bd8f6a854",
+      "version": 9
     },
     "write_stances": {
       "step_hash": "b69a58192f6a82b7677cb56579e93913c67a87929a50d9cc061680e2afa2f61c",

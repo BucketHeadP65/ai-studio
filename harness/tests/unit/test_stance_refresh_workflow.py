@@ -31,8 +31,14 @@ only reordered its pages is kept, and a backing that took another proposal's id 
 since the map collects its answers as they finish. A claim two matching backings give opposite sides is dropped
 whichever finishes first. Then the stance flags: an approved proposal is written as a pending flag of kind stance that
 the research schema takes, a pending one is written again and keeps its created date, one the owner decided is left
-alone and listed, and a refused write or a refused listing is named while the run succeeds. Last, the budgets of the
-backing worker and the rewrite judge.
+alone and listed, and a refused write or a refused listing is named while the run succeeds. Then the budgets of the
+backing worker and the rewrite judge. Last, one flag per idea: a proposal the judge's own verdicts find weak removes
+its pending flag, while a drop for the code checks, an unread or missing digest, a failed worker or judge, or a claim
+the judge left unanswered keeps it. A proposal the grouping call puts with a pending flag takes that flag's id and
+title and writes it in place, two proposals of one idea are backed once, and one proposal with two pending flags of
+its idea keeps the first and removes the other. A decided flag the grouping names is never removed, a group naming an
+id outside its input, an id twice or no proposal is refused and named, a refused removal fails the run after the rest
+lands with the writer's answer still recorded, and a failed grouping call leaves every proposal alone and says why.
 """
 
 from __future__ import annotations
@@ -250,12 +256,16 @@ def _stance(slug: str, record: str, **fields: object) -> dict[str, object]:
 
 @dataclass(frozen=True)
 class FlagFile:
-    """One flag page of the scripted research base as its file holds it: status, kind, path and created date."""
+    """One flag page of the scripted research base as its file holds it: status, kind, path, created date and title.
+
+    An empty title reads as the flag's id.
+    """
 
     status: str = "pending"
     flag_kind: str = "stance"
     path: str = ""
     created: str = "2026-10-30"
+    title: str = ""
 
 
 @dataclass
@@ -273,7 +283,9 @@ class Bases:
     `refused_flags` names flag ids read_page refuses, `refuses_flag_listing` makes list_pages refuse the flags, and
     `unindexed_files` names the paths read_notes finds on disk that the index does not list. `writes` and
     `flag_writes` record every write_note of a stance and of a flag, and `listed`, `reads` and `notes_read` every
-    list_pages, read_page and read_notes call, in order.
+    list_pages, read_page and read_notes call, in order. remove_undecided_page deletes a flag whose file is pending,
+    refuses one at any other status, and refuses every id `refusing_removal` names. `removals` records each call
+    it was asked, removed or not.
     """
 
     records: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -288,6 +300,8 @@ class Bases:
     refused_flags: frozenset[str] = frozenset()
     refuses_flag_listing: bool = False
     unindexed_files: frozenset[str] = frozenset()
+    refusing_removal: frozenset[str] = frozenset()
+    removals: list[dict[str, str]] = field(default_factory=list)
     writes: list[WriteCall] = field(default_factory=list)
     flag_writes: list[FlagWriteCall] = field(default_factory=list)
     listed: list[dict[str, object]] = field(default_factory=list)
@@ -316,8 +330,26 @@ class Bases:
                 msg = "the page was refused by research's grammar:\nstatus 'settled' is not one of considering, trying, adopted, rejected"
                 raise ModelRetry(msg)
             return f"{page_id} written, indexed clean"
+        if name == "remove_undecided_page":
+            return self._remove(str(args["knowledge_base"]), str(args["page_id"]), str(args["reason"]))
         msg = f"no program in this workflow calls {name!r}"
         raise AssertionError(msg)
+
+    def _remove(self, knowledge_base: str, page_id: str, reason: str) -> dict[str, str]:
+        self.removals.append({"knowledge_base": knowledge_base, "page_id": page_id, "reason": reason})
+        if page_id in self.refusing_removal:
+            msg = f"[Errno 13] Permission denied: '{_flag_path(page_id)}'"
+            raise ModelRetry(msg)
+        flag = self.flags.get(page_id)
+        if knowledge_base != "research" or flag is None:
+            msg = f"no page {page_id!r} under /research. Nothing was removed"
+            raise ModelRetry(msg)
+        if flag.status != "pending":
+            msg = f"{page_id} is {flag.status} in its file, not pending, so it was decided. Nothing was removed"
+            raise ModelRetry(msg)
+        del self.flags[page_id]
+        path = flag.path or _flag_path(page_id)
+        return {"page_id": page_id, "page_type": "flag", "title": flag.title or page_id, "path": path, "reason": reason, "indexed": "indexed clean"}
 
     def _read(self, knowledge_base: str, page_id: str) -> object:
         if knowledge_base == "repo-docs" and page_id in self.outside_root:
@@ -348,7 +380,7 @@ class Bases:
             frontmatter = {
                 "id": page_id,
                 "type": "flag",
-                "title": page_id,
+                "title": flag.title or page_id,
                 "status": flag.status,
                 "flag_kind": flag.flag_kind,
                 "about": ["[[paper.dense-retrieval]]"],
@@ -370,6 +402,11 @@ class Bases:
             return self.indexed_status[flag_id]
         return self.flags[flag_id].status if flag_id in self.flags else "pending"
 
+    def _flag_title(self, flag_id: str) -> str:
+        """The title the index lists one flag under."""
+        flag = self.flags.get(flag_id)
+        return flag.title if flag is not None and flag.title else flag_id
+
     def _list(self, knowledge_base: str, page_type: str, status: str) -> list[dict[str, str]]:
         if knowledge_base == "research" and page_type == "stance":
             return [
@@ -382,7 +419,9 @@ class Bases:
                 raise ModelRetry(msg)
             listed = [*self.flags, *sorted(self.refused_flags)]
             return [
-                {"page_id": flag_id, "page_type": "flag", "title": flag_id, "status": self._listed_status(flag_id)} for flag_id in listed
+                {"page_id": flag_id, "page_type": "flag", "title": self._flag_title(flag_id), "status": self._listed_status(flag_id)}
+                for flag_id in listed
+                if not status or self._listed_status(flag_id) == status
             ]
         assert knowledge_base == "repo-docs", f"no program in this workflow lists the {page_type!r} pages of {knowledge_base!r}"
         return [
@@ -541,16 +580,37 @@ def _rewritten(item: Item, *, changing: str = "Position") -> dict[str, object]:
     }
 
 
+class ProposalToGroup(TypedDict):
+    stance_id: str
+    title: str
+    reasons: list[str]
+
+
+class FlagToGroup(TypedDict):
+    flag_id: str
+    title: str
+
+
+class Candidates(TypedDict):
+    proposals: list[ProposalToGroup]
+    flags: list[FlagToGroup]
+
+
+def _no_same_ideas(_: Candidates) -> dict[str, object]:
+    """A grouping call that finds no two proposals or flags of one idea."""
+    return {"groups": []}
+
+
 @dataclass
 class Scripted:
-    """The five model steps of the workflow, scripted. The programs run for real.
+    """The six model steps of the workflow, scripted. The programs run for real.
 
     `place` answers each group's placements, `rewrite` each item's draft and `back` each proposal's findings, beside
     the stance_id, title and pages `copy` answers for it, after waiting the seconds `delays` names for its stance_id.
-    The rewrite judge answers `rewrite_verdicts` in order, approving once its list runs out. `judge` answers each
-    backing's judgement, after the same wait. `calls` records every node performed, in order, and `groups`, `items`,
-    `reviewed`, `backed` and `judged` what each placement worker, refresh worker, rewrite judge call, backing worker
-    and proposal judge was handed.
+    The rewrite judge answers `rewrite_verdicts` in order, approving once its list runs out. `same_ideas` answers the
+    grouping call, and `judge` each backing's judgement, after the same wait. `calls` records every node performed, in
+    order, and `groups`, `items`, `reviewed`, `candidates`, `backed` and `judged` what each placement worker, refresh
+    worker, rewrite judge call, grouping call, backing worker and proposal judge was handed.
     """
 
     place: Callable[[Group], list[dict[str, object]]] = _skip_all
@@ -560,10 +620,12 @@ class Scripted:
     delays: Mapping[str, float] = field(default_factory=dict)
     rewrite_verdicts: list[dict[str, str]] = field(default_factory=list)
     judge: Callable[[Backing], dict[str, object]] = _every_finding_bears
+    same_ideas: Callable[[Candidates], dict[str, object]] = _no_same_ideas
     calls: list[str] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     reviewed: list[list[object]] = field(default_factory=list)
+    candidates: list[Candidates] = field(default_factory=list)
     backed: list[Proposal] = field(default_factory=list)
     judged: list[Backing] = field(default_factory=list)
 
@@ -581,6 +643,10 @@ class Scripted:
             self.reviewed.append(to_jsonable_python(kwargs["drafts"]))
             verdict = self.rewrite_verdicts.pop(0) if self.rewrite_verdicts else {"outcome": "approve", "feedback": ""}
             return _typed(implementation, verdict)
+        if node_id == "group_proposals":
+            candidates: Candidates = to_jsonable_python(kwargs["candidates"])
+            self.candidates.append(candidates)
+            return _typed(implementation, self.same_ideas(candidates))
         if node_id == "back_proposals":
             proposal: Proposal = to_jsonable_python(kwargs["proposal"])
             self.backed.append(proposal)
@@ -1678,6 +1744,8 @@ async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(s
         "written": ["flag.stance-agent-memory"],
         "kept_decided": [],
         "failed": [],
+        "removed": [],
+        "refused_removals": [],
         "dropped": [],
         "unread": [],
         "missing": [],
@@ -1704,6 +1772,8 @@ async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_an
         "written": ["flag.stance-agent-memory"],
         "kept_decided": [],
         "failed": [],
+        "removed": [],
+        "refused_removals": [],
         "dropped": [],
         "unread": [],
         "missing": [],
@@ -1727,6 +1797,8 @@ async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_lis
         "written": [],
         "kept_decided": ["flag.stance-agent-memory"],
         "failed": [],
+        "removed": [],
+        "refused_removals": [],
         "dropped": [],
         "unread": [],
         "missing": [],
@@ -1786,6 +1858,8 @@ async def test_a_stance_flag_accepted_on_disk_before_the_index_caught_up_is_neve
         "written": [],
         "kept_decided": ["flag.stance-agent-memory"],
         "failed": [],
+        "removed": [],
+        "refused_removals": [],
         "dropped": [],
         "unread": [],
         "missing": [],
@@ -1804,6 +1878,8 @@ async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sit
         "written": ["flag.stance-agent-memory"],
         "kept_decided": [],
         "failed": [],
+        "removed": [],
+        "refused_removals": [],
         "dropped": [],
         "unread": [],
         "missing": [],
@@ -1950,9 +2026,15 @@ async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bear
                 "Fewer than two digests are left with findings that bear.",
                 "art.memory-survey#^c3 does not bear: It only shares the topic.",
             ],
+            "judged_weak": True,
         },
-        {"stance_id": "stance.reranking", "title": "Reranking", "reasons": ["The judge found it repeats the existing stance stance.x."]},
-        {"stance_id": "stance.routing", "title": "Routing", "reasons": [NO_VERDICT]},
+        {
+            "stance_id": "stance.reranking",
+            "title": "Reranking",
+            "reasons": ["The judge found it repeats the existing stance stance.x."],
+            "judged_weak": False,
+        },
+        {"stance_id": "stance.routing", "title": "Routing", "reasons": [NO_VERDICT], "judged_weak": False},
     ]
     assert _dropped(state) == dropped
     flags = _value(state, "write_stance_flags")
@@ -2062,6 +2144,7 @@ async def test_a_proposal_is_dropped_as_a_duplicate_only_of_a_stance_the_base_li
                 "stance_id": "stance.agent-memory",
                 "title": "Agent memory",
                 "reasons": ["The judge found it repeats the existing stance stance.x."],
+                "judged_weak": False,
             }
         ]
     )
@@ -2159,7 +2242,9 @@ async def test_a_claim_the_judge_leaves_out_has_no_verdict_and_is_dropped(sandbo
 
     assert _proposals(state) == []
     reasons = ["Fewer than two digests are left with findings that bear.", "art.memory-survey#^c3 has no verdict from the judge."]
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}], (
+        "a claim the judge left unanswered is no verdict that the idea is weak"
+    )
 
 
 async def test_a_judge_that_rewords_its_copy_matches_nothing_and_the_reason_says_so(sandbox: AsyncMonty) -> None:
@@ -2171,7 +2256,7 @@ async def test_a_judge_that_rewords_its_copy_matches_nothing_and_the_reason_says
     )
 
     assert _proposals(state) == []
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": [NO_VERDICT]}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": [NO_VERDICT], "judged_weak": False}]
 
 
 @pytest.mark.parametrize("named", ["[[stance.x]]", "[[stance.x|X]]", "stance.x ", " [[ stance.x ]] "])
@@ -2186,7 +2271,7 @@ async def test_a_duplicate_named_as_a_link_or_with_spaces_counts_as_its_bare_id(
 
     assert _proposals(state) == []
     reasons = ["The judge found it repeats the existing stance stance.x."]
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}]
 
 
 @pytest.mark.parametrize("copy_says", ["refuses-c1", "names-a-duplicate"])
@@ -2273,3 +2358,348 @@ async def test_the_missing_id_split_keys_on_read_pages_own_refusal(tmp_path: Pat
         await tools.read_page("research", "paper.made-up")
 
     assert str(refused.value).startswith(prefix), "check_findings would file an id the base does not hold under unread"
+
+
+def _grouping(*groups: list[str]) -> Callable[[Candidates], dict[str, object]]:
+    """A grouping call answering `groups`, each the ids of one idea as the call names them."""
+
+    def same_ideas(_: Candidates) -> dict[str, object]:
+        return {"groups": [{"ids": ids} for ids in groups]}
+
+    return same_ideas
+
+
+def _refusing(claim: str) -> Callable[[Backing], dict[str, object]]:
+    """A proposal judge that says `claim` does not bear and every other finding does."""
+
+    def judge(backing: Backing) -> dict[str, object]:
+        verdicts = [
+            {
+                "claim": finding["claim"],
+                "bears": finding["claim"] != claim,
+                "why": "It only shares the topic." if finding["claim"] == claim else "It measures it.",
+            }
+            for finding in backing["findings"]
+        ]
+        return _judgement(backing, verdicts)
+
+    return judge
+
+
+def _judge_out_of_requests(_: Backing) -> dict[str, object]:
+    """A proposal judge that runs out of requests before it answers."""
+    msg = "The next request would exceed the request_limit of 15"
+    raise UsageLimitExceeded(msg)
+
+
+WEAK = ["Fewer than two digests are left with findings that bear.", "art.memory-survey#^c3 does not bear: It only shares the topic."]
+"""Why list_proposals drops stance.agent-memory when its judge says art.memory-survey#^c3 does not bear."""
+
+
+async def test_a_proposal_the_judge_finds_weak_removes_its_pending_flag(sandbox: AsyncMonty) -> None:
+    bases = _flag_bases(flags={"flag.stance-agent-memory": FlagFile(title="Agent memory")})
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=_refusing("art.memory-survey#^c3"))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": WEAK, "judged_weak": True}]
+    assert [removal["page_id"] for removal in bases.removals] == ["flag.stance-agent-memory"]
+    assert "flag.stance-agent-memory" not in bases.flags, "nobody had decided on it, so the newest judge's verdict removes it"
+    result = _value(state, "write_stance_flags")
+    assert result["removed"] == [
+        {
+            "flag_id": "flag.stance-agent-memory",
+            "title": "Agent memory",
+            "path": "Wiki/Flags/stance-agent-memory.md",
+            "reason": "The newest judge dropped its proposal: " + " ".join(WEAK),
+        }
+    ], "the card names the removed page by its id, title and path, since the base keeps no copy"
+    assert result["refused_removals"] == []
+    assert bases.flag_writes == []
+    assert scripted.calls.count("group_proposals") == 0, "one proposal and no other pending flag leave nothing to group"
+    assert _outcome(state) == "noop"
+
+
+@pytest.mark.parametrize(
+    ("refused_digests", "back", "judge", "copy", "reasons"),
+    [
+        pytest.param(
+            frozenset(),
+            lambda _: [_finding("paper.dense-retrieval#^c1"), _finding("paper.dense-retrieval#^c2")],
+            _every_finding_bears,
+            _as_handed,
+            [TOO_FEW],
+            id="too-few-digests-held",
+        ),
+        pytest.param(frozenset({"art.memory-survey"}), _backed_by_two, _every_finding_bears, _as_handed, [_unread_reason("art.memory-survey")], id="an-unread-digest"),
+        pytest.param(
+            frozenset(),
+            lambda _: [_finding("paper.dense-retrieval#^c1"), _finding("paper.made-up#^c1")],
+            _every_finding_bears,
+            _as_handed,
+            [TOO_FEW + " It cited ids the base does not hold: paper.made-up."],
+            id="a-missing-id",
+        ),
+        pytest.param(
+            frozenset(),
+            _backed_by_two,
+            _every_finding_bears,
+            lambda proposal: {**_as_handed(proposal), "title": "Agent Memory"},
+            [NO_BACKING],
+            id="a-copy-its-worker-altered",
+        ),
+        pytest.param(frozenset(), _backed_by_two, _judge_out_of_requests, _as_handed, [NO_VERDICT], id="a-failed-judge"),
+        pytest.param(
+            frozenset(),
+            _backed_by_two,
+            lambda backing: _judgement(backing, [{"claim": backing["findings"][0]["claim"], "bears": True, "why": "It measures it."}]),
+            _as_handed,
+            ["Fewer than two digests are left with findings that bear.", "art.memory-survey#^c3 has no verdict from the judge."],
+            id="a-claim-its-judge-left-unanswered",
+        ),
+    ],
+)
+async def test_a_proposal_dropped_for_anything_but_the_judges_verdict_keeps_its_pending_flag(
+    sandbox: AsyncMonty,
+    refused_digests: frozenset[str],
+    back: Callable[[Proposal], list[Finding]],
+    judge: Callable[[Backing], dict[str, object]],
+    copy: Callable[[Proposal], Mapping[str, object]],
+    reasons: list[str],
+) -> None:
+    bases = _flag_bases(flags={"flag.stance-agent-memory": FlagFile(title="Agent memory")})
+    bases.refused_digests = refused_digests
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), back=back, judge=judge, copy=copy)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}]
+    assert bases.removals == [], "a drop the judge's verdict did not make never removes a flag"
+    assert "flag.stance-agent-memory" in bases.flags
+    assert _value(state, "write_stance_flags")["removed"] == []
+
+
+async def test_a_proposal_of_an_idea_a_pending_flag_holds_takes_its_id_and_writes_that_page_in_place(sandbox: AsyncMonty) -> None:
+    moved = "Wiki/Flags/Later/stance-agent-recall.md"
+    bases = _flag_bases(flags={"flag.stance-agent-recall": FlagFile(title="Agent recall", path=moved)})
+    grouped = ["stance.agent-memory", "flag.stance-agent-recall"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert scripted.candidates == [
+        Candidates(
+            proposals=[ProposalToGroup(stance_id="stance.agent-memory", title="Agent memory", reasons=["Papers argue for it."])],
+            flags=[FlagToGroup(flag_id="flag.stance-agent-recall", title="Agent recall")],
+        )
+    ], "the grouping call reads ids, titles and reasons, and nothing it could copy into a page"
+    assert scripted.backed == [
+        Proposal(stance_id="stance.agent-recall", title="Agent recall", pages=[_listed("adr-1")], reasons=[PLACED_ADR_1], stance_ids=["stance.x"])
+    ], "the proposal is backed under the flag's own id and title"
+    written = _flag_written(bases, path=moved)
+    assert (written["frontmatter"]["id"], written["frontmatter"]["title"], written["frontmatter"]["created"]) == (
+        "flag.stance-agent-recall",
+        "Agent recall",
+        "2026-10-30",
+    ), "the pending flag is written again in place with the run's findings"
+    result = _value(state, "write_stance_flags")
+    assert (result["written"], result["removed"]) == (["flag.stance-agent-recall"], [])
+    assert _value(state, "apply_groups")["groups"] == [{"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "ids": grouped}]
+
+
+async def test_two_proposals_of_one_idea_merge_into_one_backing(sandbox: AsyncMonty) -> None:
+    bases = _with_memory_and_reranking()
+    scripted = Scripted(place=_two_proposals, same_ideas=_grouping(["stance.agent-memory", "stance.reranking"]))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2")
+
+    merged = Proposal(
+        stance_id="stance.agent-memory",
+        title="Agent memory",
+        pages=[_listed("adr-1"), _listed("adr-2")],
+        reasons=[PLACED_ADR_1, Reason(page_id="adr-2", reason="Papers argue for it.")],
+        stance_ids=["stance.x"],
+    )
+    assert scripted.backed == [merged], "one worker backs the idea once, with every page and reason of both proposals"
+    assert [flag["payload"]["frontmatter"]["id"] for flag in bases.flag_writes] == ["flag.stance-agent-memory"]
+    assert _proposals(state) == [{**MEMORY, "pages": [_listed("adr-1"), _listed("adr-2")]}]
+    assert bases.removals == []
+
+
+async def test_one_proposal_and_two_pending_flags_of_its_idea_keep_one_flag_and_remove_the_other(sandbox: AsyncMonty) -> None:
+    flags = {
+        "flag.stance-agent-recall": FlagFile(title="Agent recall"),
+        "flag.stance-memory-for-agents": FlagFile(title="Memory for agents"),
+        "flag.stance-reranking": FlagFile(title="Reranking"),
+    }
+    bases = _flag_bases(flags=dict(flags))
+    grouped = ["stance.agent-memory", "flag.stance-memory-for-agents", "flag.stance-agent-recall"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert [flag["flag_id"] for flag in scripted.candidates[0]["flags"]] == list(flags)
+    assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.memory-for-agents"], "the first flag the group names keeps the idea"
+    assert _value(state, "apply_groups")["duplicates"] == [
+        {"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "kept": "flag.stance-memory-for-agents"}
+    ]
+    result = _value(state, "write_stance_flags")
+    assert result["written"] == ["flag.stance-memory-for-agents"]
+    assert result["removed"] == [
+        {
+            "flag_id": "flag.stance-agent-recall",
+            "title": "Agent recall",
+            "path": "Wiki/Flags/stance-agent-recall.md",
+            "reason": "The grouping found it the same idea as flag.stance-memory-for-agents.",
+        }
+    ]
+    assert set(bases.flags) == {"flag.stance-memory-for-agents", "flag.stance-reranking"}, "a flag of another idea is left alone"
+    assert _outcome(state) == "noop"
+
+
+async def test_a_decided_flag_the_grouping_names_is_refused_and_never_removed(sandbox: AsyncMonty) -> None:
+    flags = {"flag.stance-agent-recall": FlagFile(status="accepted", title="Agent recall"), "flag.stance-memory-for-agents": FlagFile(title="Memory for agents")}
+    bases = _flag_bases(flags=flags, indexed_status={"flag.stance-agent-recall": "pending"})
+    grouped = ["flag.stance-memory-for-agents", "stance.agent-memory", "flag.stance-agent-recall"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1", raises=RuntimeError)
+
+    assert bases.removals == [], "the flag's own file says the owner decided it, so removal is never asked"
+    assert bases.flags["flag.stance-agent-recall"].status == "accepted"
+    result = _value(state, "write_stance_flags")
+    assert result["written"] == ["flag.stance-memory-for-agents"], "the rest still lands"
+    assert result["refused_removals"] == [
+        {"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "reason": "its file is at accepted, not pending, so it was left as it is"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("groups", "refused"),
+    [
+        pytest.param(
+            [["stance.agent-memory", "flag.stance-made-up"]],
+            [
+                {
+                    "ids": ["stance.agent-memory", "flag.stance-made-up"],
+                    "reason": "It names flag.stance-made-up, which the grouping was not given, so none of its ids was grouped.",
+                }
+            ],
+            id="an-id-outside-the-input",
+        ),
+        pytest.param(
+            [["stance.agent-memory", "flag.stance-agent-recall"], ["[[flag.stance-agent-recall]]", "stance.agent-memory"]],
+            [
+                {
+                    "ids": ["stance.agent-memory", "flag.stance-agent-recall"],
+                    "reason": "It names stance.agent-memory, flag.stance-agent-recall more than once in the answer, so none of its ids was grouped.",
+                },
+                {
+                    "ids": ["[[flag.stance-agent-recall]]", "stance.agent-memory"],
+                    "reason": "It names [[flag.stance-agent-recall]], stance.agent-memory more than once in the answer, so none of its ids was grouped.",
+                },
+            ],
+            id="an-id-named-twice",
+        ),
+        pytest.param(
+            [["flag.stance-agent-recall", "flag.stance-reranking"]],
+            [
+                {
+                    "ids": ["flag.stance-agent-recall", "flag.stance-reranking"],
+                    "reason": "It names no proposal of this run, and a pass changes only its own proposals' flags, so none of its ids was grouped.",
+                }
+            ],
+            id="a-group-of-flags-alone",
+        ),
+    ],
+)
+async def test_a_group_the_grouping_answers_wrong_is_refused_and_named_and_its_proposal_stands_alone(
+    sandbox: AsyncMonty, groups: list[list[str]], refused: list[dict[str, object]]
+) -> None:
+    flags = {"flag.stance-agent-recall": FlagFile(title="Agent recall"), "flag.stance-reranking": FlagFile(title="Reranking")}
+    bases = _flag_bases(flags=dict(flags))
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(*groups))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    applied = _value(state, "apply_groups")
+    assert (applied["refused"], applied["groups"], applied["duplicates"]) == (refused, [], [])
+    assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.agent-memory"]
+    assert _value(state, "write_stance_flags")["written"] == ["flag.stance-agent-memory"]
+    assert (bases.removals, set(bases.flags)) == ([], set(flags)), "a refused group touches no flag"
+
+
+async def test_a_refused_removal_is_named_and_the_run_fails_after_landing_the_rest(sandbox: AsyncMonty) -> None:
+    flags = {
+        "flag.stance-memory-for-agents": FlagFile(title="Memory for agents"),
+        "flag.stance-agent-recall": FlagFile(title="Agent recall"),
+        "flag.stance-agent-memory-kinds": FlagFile(title="Agent memory kinds"),
+    }
+    bases = _flag_bases(flags=dict(flags))
+    bases.refusing_removal = frozenset({"flag.stance-agent-recall"})
+    grouped = ["stance.agent-memory", "flag.stance-memory-for-agents", "flag.stance-agent-recall", "flag.stance-agent-memory-kinds"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+
+    with pytest.raises(RuntimeError) as failed:
+        await _run(sandbox, bases, scripted, changed="adr-1")
+
+    refusal = "remove_undecided_page refused it, so it was left as it is: [Errno 13] Permission denied: 'Wiki/Flags/stance-agent-recall.md'"
+    said = str(failed.value)
+    assert "flag.stance-agent-recall (Agent recall): " + refusal in said, "the run's error names the refusal"
+    assert "flag.stance-agent-memory-kinds (Agent memory kinds) at Wiki/Flags/stance-agent-memory-kinds.md" in said, "and every page it removed"
+    assert [write["payload"]["frontmatter"]["id"] for write in bases.flag_writes] == ["flag.stance-memory-for-agents"]
+    assert set(bases.flags) == {"flag.stance-memory-for-agents", "flag.stance-agent-recall"}
+
+
+async def test_a_refused_removal_leaves_the_writers_answer_on_the_card(sandbox: AsyncMonty) -> None:
+    flags = {"flag.stance-memory-for-agents": FlagFile(title="Memory for agents"), "flag.stance-agent-recall": FlagFile(title="Agent recall")}
+    bases = _flag_bases(flags=dict(flags))
+    bases.refusing_removal = frozenset({"flag.stance-agent-recall"})
+    grouped = ["stance.agent-memory", "flag.stance-memory-for-agents", "flag.stance-agent-recall"]
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1", raises=RuntimeError)
+
+    result = _value(state, "write_stance_flags")
+    assert (result["written"], result["removed"]) == (["flag.stance-memory-for-agents"], [])
+    assert [entry["flag_id"] for entry in to_jsonable_python(result["refused_removals"])] == ["flag.stance-agent-recall"]
+
+
+async def test_a_failed_grouping_call_leaves_every_proposal_alone_and_says_why(sandbox: AsyncMonty) -> None:
+    bases = _flag_bases(flags={"flag.stance-agent-recall": FlagFile(title="Agent recall")})
+
+    def same_ideas(_: Candidates) -> dict[str, object]:
+        raise ModelHTTPError(status_code=503, model_name="helper", body={"error": "overloaded"})
+
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=same_ideas)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
+
+    assert scripted.calls.count("group_proposals") == 1
+    applied = _value(state, "apply_groups")
+    assert applied["not_grouped"] == "The call that finds proposals of the same idea gave no answer, so every proposal stands alone."
+    assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.agent-memory"]
+    assert _value(state, "write_stance_flags")["written"] == ["flag.stance-agent-memory"], "the pass goes on"
+    assert (bases.removals, list(bases.flags)) == ([], ["flag.stance-agent-recall"])
+    assert _outcome(state) == "noop"
+
+
+def test_the_run_card_shows_the_groups_and_every_removed_flag() -> None:
+    text = (RESEARCH / "workflows" / "research-stance-refresh.md").read_text(encoding="utf-8")
+    presentation = yaml.safe_load(text.split("---", 2)[1])["presentation"]
+    paths = [field["path"] for field in presentation["result_fields"]]
+    assert {"values.apply_groups", "values.write_stance_flags.removed"} <= set(paths)
+
+
+async def test_the_grouping_call_holds_no_tool_and_answers_ids_alone() -> None:
+    step = next(step for step in _spec().inline if step.name == "find_same_ideas")
+    assert isinstance(step, Briefing)
+    assert (step.tools, step.tier) == ((), "helper")
+    assert step.budget is not None
+    assert step.budget.requests <= 3
+    assert isinstance(step.output, Shape)
+    group = step.output.json_schema["properties"]["groups"]["items"]
+    assert set(group["properties"]) == {"ids"}, "the call names ids, and code copies everything a page holds"
+    writer = next(step for step in _spec().inline if step.name == "write_stance_flags")
+    assert "remove_undecided_page" in writer.tools
+    assert set(writer.tools) <= set(await app_grants())

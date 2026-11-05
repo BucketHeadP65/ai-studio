@@ -26,7 +26,12 @@ from this template can register its own vocabulary for any research domain.
   spec-doc:executed`, or by hand with `changed_page_ids` empty for a full pass. A topic no stance covers is proposed
   as a new stance only when its records page takes a position on a question research literature addresses. A placement
   under a stance the base does not list, such as a misspelt id, changes no stance and is named on the run card and in
-  the run's output. Once every rewrite is written, one worker per proposal names the claims of the base's digests (its
+  the run's output. Once every rewrite is written, one helper model call groups the run's proposals and the base's
+  pending stance flags that hold the same idea, answering ids alone. Code refuses a group that names an id twice, an
+  id it was not given, or no proposal of the run, and keeps each other group as the pending flag it names first, or
+  its first proposal, so a proposal that returns under a new id updates the flag already holding its idea and one
+  pass never writes two flags for one idea. When that call fails, every proposal stands alone and the card says why.
+  Then one worker per proposal names the claims of the base's digests (its
   paper, talk, article and post pages) that support or contest that position. The run reads each cited digest and
   keeps a claim only when the digest is not at status skipped and holds that claim, copying the claim's text from the
   page. A digest it cannot read, and an id the base does not hold, are each named with the refusal on the run card and
@@ -40,8 +45,13 @@ from this template can register its own vocabulary for any research domain.
   ones you pick by hand. Each kept stance proposal is also written as a pending stance flag, `flag.stance-` and the
   proposed id without `stance.`, in `Wiki/Flags`, with its records pages, the reason placement gave for each, its
   findings as claim links, and each claim of its backings left out, with why. You accept, dismiss or complete it
-  there, and the run never writes a flag you decided again, even before the base is indexed again. A pending flag you
-  moved is written where it sits, and a page of another kind under the same id is left alone and named. A proposal
+  there, and the run never writes or removes a flag you decided, even before the base is indexed again. A pending flag
+  you moved is written where it sits, and a page of another kind under the same id is left alone and named. Once every
+  flag is written, the run removes each pending flag a group found the same idea as the flag it kept, and the pending
+  flag of each proposal its judge's own verdicts left findings from fewer than two digests, reading each file first.
+  A drop for any other reason, such as a failed worker or a digest the base could not read, keeps the flag. The base
+  keeps no copy of a removed file, so the card names each by its id, title and path, and a refused removal fails the
+  run once everything else has landed. A proposal
   whose worker changed its id or title, or added or left out a page, is left off. A run whose proposals fail keeps its
   rewrites: each is written to its file at once, and a knowledge base indexed once per run indexes them when the run
   ends. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes
