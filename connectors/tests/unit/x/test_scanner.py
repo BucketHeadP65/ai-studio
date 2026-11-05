@@ -11,6 +11,8 @@ import pytest
 from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import ScanError, SourceType, WatchEntry, claimants_for, url_key
 from pydantic_ai import Agent, NativeOutput
+from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
 from engram_connectors.x.contracts import XScanner
@@ -23,6 +25,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from engram.sources.contracts import Connector, ItemPreview, SourceItem, UrlClaimant
+    from pydantic_ai.messages import ModelMessage, ModelResponse
+    from pydantic_ai.models.function import AgentInfo
 
     from engram_connectors.x.infrastructure.scanner import AgentFactory
 
@@ -185,6 +189,44 @@ async def test_a_factory_failure_becomes_a_feed_scan_error(tmp_path: Path) -> No
 
     with pytest.raises(ScanError, match="no xai api key configured"):
         await scanner.scan(WatchEntry(scanner="x", ref="someone"), since=None)
+
+
+_OUT_OF_CREDITS = (
+    "Your team 0c3b7a52-9d1e-4f6a-8b2c-5e4d3f2a1b0c has either used all available credits or reached its monthly spending limit. "
+    "To continue making API requests, please purchase more credits or raise your spending limit."
+)
+"""What xAI answers over gRPC when the account behind the API key has run out of credits."""
+
+
+def _failing_with(error: ModelHTTPError) -> AgentFactory:
+    """An agent factory whose agent's model call raises `error`, as the xAI model does on an error status."""
+
+    def answer(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise error
+
+    return lambda _handles, _since: Agent(FunctionModel(answer), output_type=XScan)
+
+
+async def test_an_http_error_from_xai_is_one_line_with_the_first_sentence_and_no_team_id(tmp_path: Path) -> None:
+    scanner = _scanner(_failing_with(ModelHTTPError(403, "grok-4-fast-non-reasoning", body=_OUT_OF_CREDITS)), cache_dir=tmp_path)
+
+    with pytest.raises(ScanError) as raised:
+        await scanner.scan(WatchEntry(scanner="x", ref="someone"), since=None)
+
+    assert str(raised.value) == (
+        "xAI answered HTTP 403 for grok-4-fast-non-reasoning: "
+        "Your team has either used all available credits or reached its monthly spending limit."
+    )
+
+
+async def test_an_http_error_whose_body_is_longer_than_a_line_drops_the_body(tmp_path: Path) -> None:
+    page = "<html><head><title>Bad gateway</title></head><body>" + "x" * 500 + "</body></html>"
+    scanner = _scanner(_failing_with(ModelHTTPError(502, "grok-4-fast-non-reasoning", body=page)), cache_dir=tmp_path)
+
+    with pytest.raises(ScanError) as raised:
+        await scanner.scan(WatchEntry(scanner="x", ref="someone"), since=None)
+
+    assert str(raised.value) == "xAI answered HTTP 502 for grok-4-fast-non-reasoning"
 
 
 def test_the_scan_agent_answers_as_native_structured_output() -> None:

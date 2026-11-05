@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import TYPE_CHECKING
 
 from core.files import atomic_write
 from engram.sources.contracts import FoundSource, ScanError, claimants_for, classify_url
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.capabilities import XSearch
+from pydantic_ai.exceptions import ModelHTTPError
 
 from engram_connectors.x.domain import XScan, render_post
 from engram_connectors.xai import build_xai_model, xai_resource
@@ -68,6 +71,31 @@ def grok_agent_factory(resource: XaiResource) -> AgentFactory:
         A factory that takes the handles and the window of one scan.
     """
     return lambda handles, since: x_scan_agent(resource, handles=handles, since=since)
+
+
+_ID = re.compile(r"\s*\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+"""A UUID and the space before it, the shape of the team id xAI names in an account error."""
+_SENTENCE = re.compile(r".*?[.!?](?=\s|$)")
+_SENTENCE_LIMIT = 200
+"""The longest first sentence of a response body a failure keeps. A longer one is dropped."""
+
+
+def _first_sentence(body: str) -> str:
+    """The first sentence of a response body with any team id cut, or empty when it is longer than `_SENTENCE_LIMIT`."""
+    line = next((line.strip() for line in body.splitlines() if line.strip()), "")
+    found = _SENTENCE.match(line)
+    sentence = _ID.sub("", found.group(0) if found else line)
+    return sentence if len(sentence) <= _SENTENCE_LIMIT else ""
+
+
+def _scan_failure(error: Exception) -> str:
+    """One line saying why a scan failed: xAI's status, model and first body sentence for an HTTP error, else the first line."""
+    if isinstance(error, ModelHTTPError):
+        said = f"xAI answered HTTP {error.status_code} for {error.model_name}"
+        sentence = _first_sentence(error.body) if isinstance(error.body, str) else ""
+        return f"{said}: {sentence}" if sentence else said
+    lines = str(error).strip().splitlines()
+    return lines[0] if lines else type(error).__name__
 
 
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
@@ -168,14 +196,14 @@ class XScanner:
             One source per post, followed by one source per link that post carries.
 
         Raises:
-            ScanError: The agent could not be built or its run failed.
+            ScanError: The agent could not be built or its run failed, with one line saying why.
         """
         window = f" since {since.isoformat()}" if since is not None else " over the last seven days"
         try:
             agent = self._agent_factory([entry.ref], since)
             result = await agent.run(f"List every post by @{entry.ref}{window}.")
         except Exception as error:
-            raise ScanError(str(error)) from error
+            raise ScanError(_scan_failure(error)) from error
         cap = min(self._max_posts, entry.max_items)
         newest_first = sorted(result.output.posts, key=_by_date_descending)
         entries: list[FoundSource] = []
