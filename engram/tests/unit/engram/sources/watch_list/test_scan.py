@@ -140,6 +140,45 @@ async def test_a_scan_that_found_nothing_but_covered_part_of_its_window_moves_th
     assert watch_list.entries()[0].last_scanned == covered, "a quiet stretch the scan walked is not asked for again"
 
 
+async def test_a_scan_covering_up_to_a_time_before_the_stamp_leaves_the_stamp_in_place(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    stamp = _NOW - timedelta(days=7)
+    watch_list.stamp(_PODCAST, "someone", stamp)
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    scanner = FakeScanner(entries={"someone": [_entry("https://podcast.example.org/2", 1)]}, covered_until={"someone": _NOW - timedelta(days=10)})
+
+    await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert watch_list.entries()[0].last_scanned == stamp
+
+
+async def test_a_stamp_in_the_future_is_pulled_back_to_the_scans_time_and_scanned_from_there(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    watch_list.stamp(_PODCAST, "someone", _NOW + timedelta(days=2))
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    scanner = FakeScanner(entries={"someone": []})
+
+    await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert scanner.since == [_NOW]
+    assert watch_list.entries()[0].last_scanned == _NOW, "no post between now and the future stamp is skipped"
+
+
+async def test_a_scans_notes_reach_the_report_by_entry_and_are_not_failures(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    note = "the day from 2026-08-24T09:00:00+00:00 answered 20 posts, X search may have held more"
+    scanner = FakeScanner(entries={"someone": [_entry("https://podcast.example.org/2", 1)]}, notes={"someone": [note]})
+
+    report = await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert report.notes == (("podcast:someone", note),)
+    assert report.failed == ()
+
+
 async def test_a_feeds_whole_scan_lands_in_one_write_and_counts_only_the_new_rows(tmp_path: Path) -> None:
     watch_list = WatchListFile(tmp_path / "watch-list.yaml")
     watch_list.add(_BLOGS, "https://blog.example.org/entry.xml")

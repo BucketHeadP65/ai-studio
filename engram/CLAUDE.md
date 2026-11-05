@@ -132,7 +132,9 @@ is new into the source queue, and stamps the row's last scan. A scanner answers 
 the scan covered up to (`covered_until`, `None` for its whole window) and, for a scan that stopped on a failure, why
 (`failure`). A scan of the whole window that found nothing keeps the row's stamp, so its next scan asks for the same
 window again. A scan that covered its window only up to `covered_until` stamps that time, found sources or not, and one
-that stopped on a failure also has its reason reported. A stamp never moves back. A row whose scanner nothing serves,
+that stopped on a failure also has its reason reported. A stamp never moves back, except that a stamp later than the
+scan's time is first set to it, so no source after now is skipped. A scan's `notes` (what it saw that is not a failure,
+such as a day whose search may have held more) reach `ScanReport.notes` by label. A row whose scanner nothing serves,
 or whose scan fails, is reported against that one row and never fails the run. Its reason is one line
 (`scan_failure_reason`: the message's first line, at most 300 characters, through `without_url_secrets`, which drops the
 user part of any URL and masks as `***` the value of any query, fragment or `;` path parameter whose name holds a word of

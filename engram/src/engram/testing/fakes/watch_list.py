@@ -20,6 +20,7 @@ class FakeScanner:
     `errors` maps a ref to the message of a `ScanError`. `raises` maps a ref to an exception
     object to raise as-is, for the failures a scanner never declared. `covered_until` and `stopped`
     map a ref to the time its scan covered up to and the reason it stopped, for a scan that stops partway.
+    `notes` maps a ref to the notes its scan answers.
     """
 
     entries: dict[str, list[FoundSource]] = field(default_factory=dict)
@@ -27,6 +28,7 @@ class FakeScanner:
     raises: dict[str, Exception] = field(default_factory=dict)
     covered_until: dict[str, datetime] = field(default_factory=dict)
     stopped: dict[str, str] = field(default_factory=dict)
+    notes: dict[str, list[str]] = field(default_factory=dict)
     since: list[datetime | None] = field(default_factory=list)
 
     async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
@@ -37,7 +39,7 @@ class FakeScanner:
             since: Only sources published after this time, or with no publish time, are returned.
 
         Returns:
-            The scripted sources for the ref that pass the `since` filter, with the ref's scripted cover and reason.
+            The scripted sources for the ref that pass the `since` filter, with the ref's scripted cover, reason and notes.
 
         Raises:
             ScanError: When `errors` holds the ref.
@@ -48,7 +50,12 @@ class FakeScanner:
         if entry.ref in self.errors:
             raise ScanError(self.errors[entry.ref])
         found = [source for source in self.entries.get(entry.ref, []) if since is None or source.published is None or source.published > since]
-        return EntryScan(sources=found, covered_until=self.covered_until.get(entry.ref), failure=self.stopped.get(entry.ref, ""))
+        return EntryScan(
+            sources=found,
+            covered_until=self.covered_until.get(entry.ref),
+            failure=self.stopped.get(entry.ref, ""),
+            notes=self.notes.get(entry.ref, []),
+        )
 
 
 @dataclass

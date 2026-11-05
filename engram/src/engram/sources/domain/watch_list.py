@@ -66,6 +66,8 @@ class EntryScan(BaseModel):
     """Every source published after the entry's last scan and up to this time was asked for. `None` means the scan's whole window up to its own time was."""
     failure: str = ""
     """Why the scan stopped on a failure before covering its window, or empty when it did not."""
+    notes: list[str] = []
+    """What the scan saw that is not a failure, one line each, such as a day whose search may have held more."""
 
 
 REASON_LIMIT = 300
@@ -145,7 +147,7 @@ def scan_failure_reason(message: str) -> str:
 
 
 class ScanReport(BaseModel):
-    """What a scan did: sources seen, rows added in all and by watch entry, and the watch entries that failed with their reasons.
+    """What a scan did: sources seen, rows added in all and by watch entry, the watch entries that failed with their reasons, and notes.
 
     `failed` pairs each failed entry's label with its reason, one line from `scan_failure_reason`.
     """
@@ -157,6 +159,8 @@ class ScanReport(BaseModel):
     failed: tuple[tuple[str, str], ...] = ()
     requested_by_entry: dict[str, int] = Field(default_factory=dict)
     """The rows each watch entry added to the source queue, by the entry's label. An entry that added none is absent."""
+    notes: tuple[tuple[str, str], ...] = ()
+    """Each note a scan made that is not a failure, paired with its entry's label."""
 
 
 class ScanWatchList(Command):
