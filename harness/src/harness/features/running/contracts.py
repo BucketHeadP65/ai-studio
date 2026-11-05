@@ -20,7 +20,7 @@ from harness.features.running.exceptions import (
 )
 from harness.features.running.infrastructure.durable import DurableTurns
 from harness.features.running.internal_contracts import GateAsker, RunArchive, RunArchiveQueries, SpendLog, SpendLogQueries
-from harness.features.running.records import RunCollaborators, RunEndObserver, RunRecords, SpendLimit, spend_limits
+from harness.features.running.records import RunCollaborators, RunEndObserver, RunEndObservers, RunRecords, SpendLimit, spend_limits
 from harness.features.running.spend import SCHEDULE_RUNNER_PREFIX, rows_for, schedule_runner, schedule_spend, workflow_spend
 from harness.features.running.spend_report import DEFAULT_SINCE_HOURS, Scope, SpendReporter
 from harness.features.running.step_stream import StepSteerDelivery, run_relayed
@@ -57,6 +57,7 @@ __all__ = [
     "RunArchiveQueries",
     "RunCollaborators",
     "RunEndObserver",
+    "RunEndObservers",
     "RunEngineUnavailableError",
     "RunGraphRefusedError",
     "RunRecords",

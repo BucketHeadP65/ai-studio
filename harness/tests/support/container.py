@@ -21,6 +21,7 @@ from pydantic_ai_harness.step_persistence import InMemoryStepStore
 
 from harness.adapters.logfire_query import Telemetry
 from harness.adapters.model_list import ModelList
+from harness.adapters.notify import NoopNotifier, Notifier
 from harness.adapters.store import DatabaseBinding, LibraryOutbox, RecordDatabase, ScheduleDatabase, SessionsDatabase
 from harness.adapters.wiring import RecordPoolOpener
 from harness.domain.ports import ConversationHistory, SessionTranscript
@@ -93,6 +94,7 @@ IO_LEAVES: tuple[tuple[type, object], ...] = (
     (InfrastructureSettings, AN_INFRASTRUCTURE),
     (Tracing, FakeTracing()),
     (PriceUpdater, FakePriceUpdater()),
+    (Notifier, NoopNotifier()),
 )
 """Every registration that would otherwise reach a network or change this process, and what answers
 for it instead.
@@ -111,8 +113,9 @@ for the first reason too: without it every test that enters a lifespan runs the 
 outbox of `engram_workflows`, closing the rows it finds there. `RecordPoolOpener`, `InspectionDatabase`, `JobsEngine` and
 `JobsAndQueries` are on it for the first reason as well: each is opened over the sessions database, where the inspection's
 workers would otherwise claim real jobs. `JobsEngine` answers an engine on `AN_INFRASTRUCTURE`'s host, which no name
-server resolves, so it never connects, and the jobs themselves are in memory. `test_test_container_reaches_no_database.py`
-fails when a registration that reaches a database is missing here.
+server resolves, so it never connects, and the jobs themselves are in memory. `Notifier` is on it because on macOS
+it posts a notification on this machine whenever a test's scheduled run fails or a live trial reverts.
+`test_test_container_reaches_no_database.py` fails when a registration that reaches a database is missing here.
 """
 
 

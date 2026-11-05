@@ -1366,6 +1366,26 @@ tick while the schedule's previous fire is still live stamps `last_outcome: "mis
 is never queued. `POST .../run-now` shares this same firing path, so a fire an owner clicks and one the ticker takes
 leave identical session state and tick-log entries behind them.
 
+## What hears a run's ending
+
+Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells
+four parts in turn, and a part that fails is logged while the next is still told:
+
+1. **The arming** (`RunEndArming`, scheduling slice) arms every `after <workflow name>` schedule the run satisfies.
+2. **The live trial watch** (`LiveTrialWatch`, maintenance slice) reads a run of a consumer version on live trial, one
+   that carries a `live_trial` marker, by core's `live_trial_verdict` against the previous version's newest three
+   completed runs from the evidence log. Ignored runs change nothing, and once three runs counted (the marker's `runs`)
+   the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
+   the previous version is live again, its consumer record declines the step version as reverted, a
+   `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
+   and the owner is told. A version that is no longer the newest live one of its name, because a person saved a newer
+   one, is never reverted.
+3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per id in
+   `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
+   `max_attempts`, which is how a run ends with nothing landed.
+4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
+   starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A run started by hand tells nobody.
+
 ## What this station does not do (v1)
 
 Agent-authored schedules, catch-up replay of ticks missed while the process was down, retention policy narrower than

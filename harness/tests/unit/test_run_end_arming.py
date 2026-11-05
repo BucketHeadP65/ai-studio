@@ -10,7 +10,7 @@ import pytest
 from core.ai.workflows.contracts import Approval, Outcome, RunEvidence, StepRegistry
 
 from harness.container import create_container
-from harness.features.running.records import ObservedEvidenceLog, RunRecords
+from harness.features.running.records import ObservedEvidenceLog, RunEndObservers, RunRecords
 from harness.features.scheduling.domain import Schedule
 from harness.features.scheduling.service import RunEndArming, Scheduler
 from harness.session import SessionPool
@@ -84,6 +84,16 @@ async def test_an_observer_that_raises_leaves_the_ending_written_and_raises_noth
     await log.append(ending)
 
     assert list(await log.events_for(GATHER)) == [ending]
+
+
+async def test_a_part_that_raises_is_logged_and_every_part_after_it_is_still_told() -> None:
+    first, last = RecordingObserver(), RecordingObserver()
+    ending = _ended(GATHER, "failed")
+
+    await RunEndObservers((first, RaisingObserver(), last)).run_ended(ending)
+
+    assert first.seen == [ending]
+    assert last.seen == [ending], "a failing part never keeps the parts after it from hearing the ending"
 
 
 async def test_an_approval_is_written_and_tells_nobody(tmp_path: Path) -> None:
