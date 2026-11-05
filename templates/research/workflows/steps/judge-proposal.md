@@ -1,7 +1,7 @@
 ---
 title: Judge one stance proposal
 summary: Whether each finding of one backed stance proposal bears on its position, with one sentence on why, and the existing stance it repeats, if any, under the proposal's own id, title and pages.
-version: 3
+version: 4
 step:
   name: judge_proposal
   instructions: |-
@@ -15,7 +15,7 @@ step:
 
     The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the backing, character for character and every page: a judgement whose copy differs is ignored, and the proposal is dropped as unjudged. Then answer one entry in findings for every finding of the backing, each with its claim copied exactly, bears and why, and duplicates. Never add a claim the backing does not hold.
   inputs:
-    backing: {like: check_findings, element: true}
+    backing: {like: list_backings, element: true}
     collection:
       json_schema: {type: string}
   output:
@@ -59,7 +59,7 @@ step:
   budget: {requests: 15, tool_calls: 60}
 ---
 
-Use once per backing of a stance refresh, inside a map over check_findings, with `collection` wired from the
+Use once per backing of a stance refresh, inside a map over list_backings, with `collection` wired from the
 workflow's parameters. It answers, for each finding, whether its claim bears on the proposal's position and why, and
 for the proposal the id of an existing stance it repeats, or null. It copies the proposal's id, title and pages, so its
 answer is matched to the proposal it judged. It judges one proposal and never the list, so a weak proposal never costs

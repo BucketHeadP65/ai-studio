@@ -10,9 +10,9 @@ uses:
   - st.refresh_stance.v4
   - st.check_stances.v4
   - st.back_proposal.v5
-  - st.judge_proposal.v3
+  - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v6
+  - st.write_stance_flags.v7
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -31,8 +31,9 @@ presentation:
     stance, `flag.stance-` and the proposed id without `stance.`, with its records pages, placement's reason for each,
     each finding as a claim link with its side and one sentence on how, and each claim of its backings left out, with
     why. One whose findings all contest it is marked as one the literature argues against. Every dropped proposal is
-    listed with why. A pending flag is written again with newer findings, and a flag you accepted, dismissed or
-    completed, read from its file, is left as it is and listed. The proposals start only after every rewrite is
+    listed with why, and every digest the run could not read is named with the refusal, so a run that lost evidence to
+    unreadable pages shows it. A pending flag is written again with newer findings, and a flag you accepted, dismissed
+    or completed, read from its file, is left as it is and listed. The proposals start only after every rewrite is
     written, so a run whose proposals fail keeps its rewrites. Each rewrite is written to its file at once. A
     knowledge base indexed once per run indexes them when the run ends. Under the opt-in Temporal engine writes are
     never held for the run, so even such a knowledge base indexes after each write.
@@ -58,11 +59,12 @@ presentation:
     - {label: "Stances written and refused (recorded)", path: values.write_stances}
     - {label: "What the run read: each stance as it was, the stances it could not read, and whether it kept nothing past the cap of 25 (recorded)", path: values.list_changes}
     - {label: Where each changed page was placed (recorded), path: values.place_pages}
+    - {label: "Digests the run could not read, each with read_page's refusal, whose findings it lost (recorded)", path: values.check_findings.unread}
     - {label: "Placements under a stance the base does not list, left out of every rewrite (recorded)", path: values.list_unplaced}
     - {label: "Stance flags written, left as the owner decided them, and refused, with the stance proposals dropped and why, and the placements under no listed stance (recorded)", path: values.write_stance_flags}
 workflow:
   name: research-stance-refresh
-  version: 21
+  version: 22
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, and write each listed one as a pending stance flag, drafting no stance and never writing a flag the owner decided.
   parameters:
     collection:
@@ -287,10 +289,14 @@ workflow:
       source: |
         digest_types = ["paper", "talk", "article", "post"]
         read = {}
+        refusals = {}
+        unread = []
         kept = []
+        too_few = []
         for backing in backings:
             findings = []
             digests = []
+            lost = []
             for finding in backing["findings"]:
                 claim = finding["claim"].strip()
                 if claim.startswith("[[") and claim.endswith("]]"):
@@ -313,8 +319,12 @@ workflow:
                         read[page_id] = await read_page(knowledge_base=collection, page_id=page_id)
                     except Exception as error:
                         read[page_id] = None
+                        refusals[page_id] = str(error)
+                        unread.append({"digest": page_id, "reason": str(error)})
                 page = read[page_id]
                 if page is None:
+                    if page_id not in lost:
+                        lost.append(page_id)
                     continue
                 front = page["payload"]["frontmatter"]
                 if front.get("type") not in digest_types or front.get("status") == "skipped":
@@ -334,11 +344,103 @@ workflow:
                     if held["side"] != "contests":
                         contests_only = False
                 kept.append({"stance_id": backing["stance_id"], "title": backing["title"], "pages": backing["pages"], "findings": findings, "contests_only": contests_only})
-        kept
+            else:
+                too_few.append({"stance_id": backing["stance_id"], "title": backing["title"], "pages": backing["pages"], "unread": lost})
+        {"backings": kept, "unread": unread, "too_few": too_few}
       inputs:
         backings: {like: back_proposal, many: true}
         collection:
           json_schema: {type: string}
+      output:
+        json_schema:
+          type: object
+          title: CheckedBackings
+          required: [backings, unread, too_few]
+          properties:
+            backings:
+              type: array
+              description: Each backing left with findings from at least two digests.
+              items:
+                type: object
+                title: ProposedStance
+                required: [stance_id, title, pages, findings, contests_only]
+                properties:
+                  stance_id: {type: string}
+                  title: {type: string}
+                  pages:
+                    type: array
+                    items:
+                      type: object
+                      title: BearingPage
+                      required: [page_id, page_type, status, title]
+                      properties:
+                        page_id: {type: string}
+                        page_type: {type: string}
+                        status: {type: string}
+                        title: {type: string}
+                  findings:
+                    type: array
+                    description: The claims that take a side on the position, each on a digest the base holds at a status other than skipped, from at least two digests.
+                    items:
+                      type: object
+                      title: CheckedFinding
+                      required: [claim, claim_text, side, how]
+                      properties:
+                        claim:
+                          type: string
+                          description: The claim's reference, the digest id and the claim's anchor, such as paper.ace-2025#^c8.
+                        claim_text:
+                          type: string
+                          description: The claim's own text, copied from the digest.
+                        side:
+                          enum: [supports, contests]
+                          type: string
+                        how:
+                          type: string
+                          description: One sentence on how the claim bears on the position.
+                  contests_only:
+                    type: boolean
+                    description: True when every finding contests the position, so the literature argues against it.
+            unread:
+              type: array
+              description: Each cited digest read_page refused, once, with its refusal.
+              items:
+                type: object
+                title: UnreadDigest
+                required: [digest, reason]
+                properties:
+                  digest: {type: string}
+                  reason: {type: string}
+            too_few:
+              type: array
+              description: Each backing dropped for claims from fewer than two digests, with the cited digests read_page refused.
+              items:
+                type: object
+                title: ThinBacking
+                required: [stance_id, title, pages, unread]
+                properties:
+                  stance_id: {type: string}
+                  title: {type: string}
+                  pages:
+                    type: array
+                    items:
+                      type: object
+                      title: BearingPage
+                      required: [page_id, page_type, status, title]
+                      properties:
+                        page_id: {type: string}
+                        page_type: {type: string}
+                        status: {type: string}
+                        title: {type: string}
+                  unread:
+                    type: array
+                    items: {type: string}
+      tools: [read_page]
+    - name: list_backings
+      source: |
+        checked["backings"]
+      inputs:
+        checked: {like: check_findings}
       output:
         json_schema:
           type: array
@@ -383,7 +485,6 @@ workflow:
               contests_only:
                 type: boolean
                 description: True when every finding contests the position, so the literature argues against it.
-      tools: [read_page]
     - name: list_proposals
       source: |
         listed = []
@@ -391,14 +492,30 @@ workflow:
         for made in proposals:
             wanted = {page["page_id"]: True for page in made["pages"]}
             matching = []
-            for held in backings:
+            for held in checked["backings"]:
                 if held["stance_id"] != made["stance_id"] or held["title"] != made["title"]:
                     continue
                 if {page["page_id"]: True for page in held["pages"]} != wanted:
                     continue
                 matching.append(held)
             if not matching:
-                reason = "No backing of it passed the code checks: its worker failed, changed the proposal's id, title or pages, or cited claims from fewer than two digests the base holds."
+                lost = []
+                thin = False
+                for held in checked["too_few"]:
+                    if held["stance_id"] != made["stance_id"] or held["title"] != made["title"]:
+                        continue
+                    if {page["page_id"]: True for page in held["pages"]} != wanted:
+                        continue
+                    thin = True
+                    for digest in held["unread"]:
+                        if digest not in lost:
+                            lost.append(digest)
+                if lost:
+                    reason = "Its backing kept claims from fewer than two digests because the base could not read " + ", ".join(lost) + ", each named with its refusal under unread."
+                elif thin:
+                    reason = "Its backing kept claims from fewer than two digests that the base holds, has not skipped and carry the cited claims."
+                else:
+                    reason = "No backing carries its id, title and pages: its worker failed, or changed the proposal's id, title or pages."
                 dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason]})
                 continue
             verdicts = {}
@@ -479,16 +596,16 @@ workflow:
                 if finding["side"] != "contests":
                     contests_only = False
             listed.append({"stance_id": made["stance_id"], "title": made["title"], "pages": made["pages"], "reasons": made["reasons"], "findings": findings, "refused": refused_claims, "contests_only": contests_only})
-        {"proposals": listed, "dropped": dropped}
+        {"proposals": listed, "dropped": dropped, "unread": checked["unread"]}
       inputs:
         proposals: {like: merge_proposals}
-        backings: {like: check_findings}
+        checked: {like: check_findings}
         judgements: {like: judge_proposal, many: true}
       output:
         json_schema:
           type: object
           title: StanceProposalsListed
-          required: [proposals, dropped]
+          required: [proposals, dropped, unread]
           properties:
             proposals:
               type: array
@@ -557,6 +674,16 @@ workflow:
                   reasons:
                     type: array
                     items: {type: string}
+            unread:
+              type: array
+              description: Each digest check_findings could not read, with read_page's refusal.
+              items:
+                type: object
+                title: UnreadDigest
+                required: [digest, reason]
+                properties:
+                  digest: {type: string}
+                  reason: {type: string}
   result:
     summary: The stances the changed records pages bear on, rewritten and written, with each refused page named beside them and each new stance they propose listed with its pages and the findings from the literature that take a side on it, and written as a pending stance flag.
     primary_work: refresh_stances
@@ -656,10 +783,15 @@ workflow:
       inputs:
         backings: {node: back_proposals}
         collection: {parameter: collection}
+    - kind: run
+      id: list_backings
+      work: list_backings
+      inputs:
+        checked: {node: check_findings}
     - kind: map
       id: judge_proposals
       turns: [judge_proposal]
-      over: {node: check_findings}
+      over: {node: list_backings}
       each: backing
       inputs:
         collection: {parameter: collection}
@@ -671,7 +803,7 @@ workflow:
       work: list_proposals
       inputs:
         proposals: {node: merge_proposals}
-        backings: {node: check_findings}
+        checked: {node: check_findings}
         judgements: {node: judge_proposals}
     - kind: run
       id: write_stance_flags
@@ -722,8 +854,10 @@ cited digest once with `read_page` and keeps a finding only when the page is a d
 post pages, not at status skipped, and holds that claim anchor. It copies the claim's text from the page beside the
 worker's sentence. A claim cited as a wikilink, such as `[[paper.x#^c3|label]]`, or as a search ref, such as
 `page:research/paper.x#^c3` or `unit:research/paper.x#c3`, counts as `paper.x#^c3`. A digest `read_page` refuses drops
-its own findings, and the run carries on. It drops a proposal left with findings from fewer than two different
-digests, and marks one whose findings all contest its position with `contests_only`. `judge_proposals` runs one judge
+its own findings, and the run carries on, but it is named once with the refusal under `unread`, which the run card and
+the run's output both show. It drops a backing left with findings from fewer than two different digests, naming it
+under `too_few` with the digests it cited that could not be read, and marks one whose findings all contest its
+position with `contests_only`. `list_backings` hands the kept backings to the judges. `judge_proposals` runs one judge
 per backing, four at a time, and never judges the list as a whole. Each judge answers, per finding by its claim,
 whether it bears on the position as the title states it and one sentence on why, and for the proposal the id of an
 existing stance it repeats, or null. It copies the proposal's id, title and pages exactly, since a judgement whose
@@ -733,24 +867,26 @@ three judge items in a row failing with the same error abort the run as failed, 
 broken judge model never reads as a run with no proposals. There is no redo: `back_proposals` runs once, and a weak
 finding is dropped, not repaired. With no proposal the map runs nothing, so the proposals make no model call.
 
-`list_proposals` accounts for every proposal `merge_proposals` made, in this order. A proposal with no backing of the
-same stance_id and title and the same records pages in any order is dropped, since its backing worker failed, changed
-its copy, or code left it claims from fewer than two digests. A judge's answer counts for a proposal only when it
-carries the same stance_id and title and the same records pages, the match a backing gets, so a judge of a copy under
-another title never touches the honest proposal. One with no such answer is dropped, since its judge item failed or
-was skipped, or its judge changed the proposal's id, title or pages. One its judge says repeats a stance is dropped,
-but only when the id it names is a stance the base lists other than the proposal's own, which `merge_proposals`
-carries on each proposal as `stance_ids`, and an id written as a link or with spaces counts as its bare id. Of the
-rest, each claim of its matching backings is kept once, a claim two backings give opposite sides is left out, and a
-claim is kept only when every judge that answered it says it bears. A judge's claim written as a wikilink, a search
-ref or an anchor with no caret counts as its bare reference, as `check_findings` counts a backing's. A proposal left
-with findings from fewer than two digests is dropped with each finding's reason. A kept proposal carries each claim of
-its backings left out as `refused`, each with why: the judge said it does not bear, gave it no verdict, or its
-backings gave it opposite sides, and `contests_only` counts only the findings that remain. The map collects its
-answers as they finish, so nothing is paired by position. A backing that matches no proposal, such as one whose worker
-reworded its copy, added or left out a page, or took another proposal's id, puts nothing on the card, and the honest
-backing of that proposal still does. It answers `proposals`, the run's `proposed_stances` artifact, and `dropped`,
-each dropped proposal with its reasons, and writes no page.
+`list_proposals` accounts for every proposal `merge_proposals` made, in this order. A proposal with no kept backing of
+the same stance_id and title and the same records pages in any order is dropped, and its reason says which of three
+things happened: its backing lost claims to digests the base could not read, which it names, its backing cited claims
+from fewer than two digests the base holds, or no backing carries its id, title and pages because its worker failed or
+changed its copy. A judge's answer counts for a proposal only when it carries the same stance_id and title and the
+same records pages, the match a backing gets, so a judge of a copy under another title never touches the honest
+proposal. One with no such answer is dropped, since its judge item failed or was skipped, or its judge changed the
+proposal's id, title or pages. One its judge says repeats a stance is dropped, but only when the id it names is a
+stance the base lists other than the proposal's own, which `merge_proposals` carries on each proposal as `stance_ids`,
+and an id written as a link or with spaces counts as its bare id. Of the rest, each claim of its matching backings is
+kept once, a claim two backings give opposite sides is left out, and a claim is kept only when every judge that
+answered it says it bears. A judge's claim written as a wikilink, a search ref or an anchor with no caret counts as
+its bare reference, as `check_findings` counts a backing's. A proposal left with findings from fewer than two digests
+is dropped with each finding's reason. A kept proposal carries each claim of its backings left out as `refused`, each
+with why: the judge said it does not bear, gave it no verdict, or its backings gave it opposite sides, and
+`contests_only` counts only the findings that remain. The map collects its answers as they finish, so nothing is
+paired by position. A backing that matches no proposal, such as one whose worker reworded its copy, added or left out
+a page, or took another proposal's id, puts nothing on the card, and the honest backing of that proposal still does.
+It answers `proposals`, the run's `proposed_stances` artifact, `dropped`, each dropped proposal with its reasons, and
+`unread` as `check_findings` named it, and writes no page.
 
 `write_stance_flags` writes each listed proposal to the research knowledge base as a flag page, `flag.stance-` and the
 proposed id without `stance.`, at status `pending` and of kind `stance`, in the flag type's own folder. Its title is
@@ -768,8 +904,8 @@ owner moved stays one file, with the newer findings and its `created` date. A li
 in `failed` and not written. A flag the index does not list is written to `Wiki/Flags`, at the very path `read_notes`
 checked, unless a file already sits there, which is named in `failed` and left as it is. A write the base refuses is
 named in `failed` with the reason and never fails the run, and when the flags cannot be listed no flag is written. Its
-answer, with the dropped proposals as `dropped` and the placements `list_unplaced` named as `unplaced` beside the
-flags, is the run's output.
+answer, with the dropped proposals as `dropped`, the digests the run could not read as `unread` and the placements
+`list_unplaced` named as `unplaced` beside the flags, is the run's output.
 
 A run whose backing map or judge map aborts fails after every rewrite is written. Each rewrite is written to its file
 at once. A knowledge base indexed on each write indexes it then. One indexed once per run indexes the run's writes

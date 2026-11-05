@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals and the placements under no listed stance.
-version: 6
+version: 7
 step:
   name: write_stance_flags
   source: |
@@ -96,7 +96,7 @@ step:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(flag_id)
-    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unplaced": unplaced}
+    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unread": listed["unread"], "unplaced": unplaced}
   inputs:
     listed: {like: list_proposals}
     unplaced: {like: list_unplaced}
@@ -106,7 +106,7 @@ step:
     json_schema:
       type: object
       title: StanceFlagsWritten
-      required: [written, kept_decided, failed, dropped, unplaced]
+      required: [written, kept_decided, failed, dropped, unread, unplaced]
       properties:
         written:
           type: array
@@ -138,6 +138,16 @@ step:
               reasons:
                 type: array
                 items: {type: string}
+        unread:
+          type: array
+          description: Each digest the run could not read, with read_page's refusal, as `list_proposals` handed them.
+          items:
+            type: object
+            title: UnreadDigest
+            required: [digest, reason]
+            properties:
+              digest: {type: string}
+              reason: {type: string}
         unplaced:
           type: array
           description: The placements under a stance the base does not list, as `list_unplaced` handed them.

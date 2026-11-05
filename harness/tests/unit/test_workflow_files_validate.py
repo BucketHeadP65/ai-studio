@@ -451,6 +451,9 @@ _DROPPED_PROPOSAL: dict[str, object] = {
 }
 """The one stance proposal dropped here, which the flag writer answers unchanged."""
 
+_UNREAD_DIGEST: dict[str, object] = {"digest": "talk.c", "reason": "talk.c at Wiki/Talks/c.md cannot be read as a payload"}
+"""One digest the run could not read, which the flag writer answers unchanged."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -526,7 +529,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
         "collection": "research",
     },
     "write_stance_flags": {
-        "listed": {"proposals": [_STANCE_PROPOSAL], "dropped": [_DROPPED_PROPOSAL]},
+        "listed": {"proposals": [_STANCE_PROPOSAL], "dropped": [_DROPPED_PROPOSAL], "unread": [_UNREAD_DIGEST]},
         "unplaced": [_UNPLACED],
         "collection": "research",
     },
@@ -825,6 +828,7 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
         "kept_decided": [],
         "failed": [],
         "dropped": [_DROPPED_PROPOSAL],
+        "unread": [_UNREAD_DIGEST],
         "unplaced": [_UNPLACED],
     }
     assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note"]

@@ -478,11 +478,32 @@ PLACED_ADR_1 = Reason(page_id="adr-1", reason="Papers argue for it.")
 NO_VERDICT = "The judge gave no verdict: its judge item failed or was skipped, or its judge changed the proposal's id, title or pages."
 """Why list_proposals drops a proposal no judgement of which matches it."""
 
-NO_BACKING = (
-    "No backing of it passed the code checks: its worker failed, changed the proposal's id, title or pages, "
-    "or cited claims from fewer than two digests the base holds."
-)
-"""Why list_proposals drops a proposal no backing of which reached the judge."""
+NO_BACKING = "No backing carries its id, title and pages: its worker failed, or changed the proposal's id, title or pages."
+"""Why list_proposals drops a proposal no backing of which matches it."""
+
+TOO_FEW = "Its backing kept claims from fewer than two digests that the base holds, has not skipped and carry the cited claims."
+"""Why list_proposals drops a proposal whose backing code left with claims from fewer than two digests."""
+
+
+def _unread_reason(*digests: str) -> str:
+    """Why list_proposals drops a proposal whose backing lost claims to the digests read_page refused."""
+    return (
+        "Its backing kept claims from fewer than two digests because the base could not read "
+        + ", ".join(digests)
+        + ", each named with its refusal under unread."
+    )
+
+
+def _refusal(digest: str) -> str:
+    """What the scripted read_page says when it refuses a digest of `refused_digests`."""
+    return f"{digest} at Wiki/{digest}.md cannot be read as a payload: claim ^c1 does not read back"
+
+
+def _unread(state: WorkflowState) -> list[dict[str, str]]:
+    """Each digest check_findings could not read, with its refusal."""
+    unread: list[dict[str, str]] = to_jsonable_python(_value(state, "check_findings")["unread"])
+    return unread
+
 
 MEMORY = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c1", "art.memory-survey#^c3"])
 """The proposal stance.agent-memory as the run keeps it, proposed for adr-1 alone and backed by BACKED."""
@@ -924,6 +945,12 @@ def _proposing(stance_id: str, title: str, *, first_only: bool = False) -> Calla
     return place
 
 
+def test_the_run_card_shows_the_digests_the_run_could_not_read() -> None:
+    text = (RESEARCH / "workflows" / "research-stance-refresh.md").read_text(encoding="utf-8")
+    presentation = yaml.safe_load(text.split("---", 2)[1])["presentation"]
+    assert "values.check_findings.unread" in [field["path"] for field in presentation["result_fields"]]
+
+
 def test_placement_names_a_new_stance_by_its_id_title_and_pages_alone() -> None:
     place = next(step for step in _spec().inline if step.name == "place_stance_pages")
     assert isinstance(place, Briefing)
@@ -972,7 +999,7 @@ async def test_a_proposal_only_run_carries_its_judged_proposals_as_an_artifact_a
     outcome = _checked(state)
     assert outcome.status == "noop", "no stance was rewritten"
     listed = [{**MEMORY, "reasons": [PLACED_ADR_1], "refused": []}]
-    assert _value(state, "list_proposals") == {"proposals": listed, "dropped": []}
+    assert _value(state, "list_proposals") == {"proposals": listed, "dropped": [], "unread": []}
     assert [(ref.id, ref.node_id, ref.media_type, ref.value_digest) for ref in outcome.artifacts] == [
         ("proposed_stances", "list_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value(listed)))
     ], "the card shows each approved proposal with its title, its pages and every finding's claim, text, side and sentence"
@@ -1134,7 +1161,7 @@ async def _kept_beside_memory(
         return BACKED if proposal["stance_id"] == "stance.agent-memory" else findings
 
     state = await _run(sandbox, bases, Scripted(place=_two_proposals, back=back), changed="adr-x,adr-1,adr-2")
-    kept: list[dict[str, object]] = to_jsonable_python(state.values["check_findings"])
+    kept: list[dict[str, object]] = to_jsonable_python(_value(state, "check_findings")["backings"])
     return kept, bases, state
 
 
@@ -1151,19 +1178,30 @@ def _reranking(claims: list[str], *, sides: tuple[str, ...] = ()) -> dict[str, o
 
 
 @pytest.mark.parametrize(
-    "findings",
+    ("findings", "reason", "unread"),
     [
-        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("art.memory-survey#^c9")], id="a-missing-anchor"),
-        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("post.keep-shipping#^c1")], id="a-skipped-digest"),
-        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("con.memory#^c1")], id="a-page-that-is-no-digest"),
-        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("paper.dense-retrieval#^c2")], id="one-digest-cited-twice"),
-        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("paper.made-up#^c1")], id="an-id-the-base-does-not-hold"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("art.memory-survey#^c9")], TOO_FEW, [], id="a-missing-anchor"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("post.keep-shipping#^c1")], TOO_FEW, [], id="a-skipped-digest"),
+        pytest.param([_finding("paper.dense-retrieval#^c1"), _finding("con.memory#^c1")], TOO_FEW, [], id="a-page-that-is-no-digest"),
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1"), _finding("paper.dense-retrieval#^c2")], TOO_FEW, [], id="one-digest-cited-twice"
+        ),
+        pytest.param(
+            [_finding("paper.dense-retrieval#^c1"), _finding("paper.made-up#^c1")],
+            _unread_reason("paper.made-up"),
+            ["paper.made-up"],
+            id="an-id-the-base-does-not-hold",
+        ),
     ],
 )
-async def test_a_proposal_left_with_one_digest_after_the_checks_is_dropped(sandbox: AsyncMonty, findings: list[Finding]) -> None:
-    kept, _, _ = await _kept_beside_memory(sandbox, findings)
+async def test_a_proposal_left_with_one_digest_after_the_checks_is_dropped(
+    sandbox: AsyncMonty, findings: list[Finding], reason: str, unread: list[str]
+) -> None:
+    kept, _, state = await _kept_beside_memory(sandbox, findings)
 
     assert kept == [MEMORY], "stance.reranking keeps findings from one digest at most and is dropped, and stance.agent-memory stays"
+    assert [(proposal["stance_id"], proposal["reasons"]) for proposal in _dropped(state)] == [("stance.reranking", [reason])]
+    assert [entry["digest"] for entry in _unread(state)] == unread
 
 
 async def test_a_finding_that_fails_a_check_is_dropped_and_the_proposal_keeps_the_rest(sandbox: AsyncMonty) -> None:
@@ -1208,6 +1246,13 @@ async def test_a_digest_read_page_refuses_drops_its_findings_and_the_rewrite_is_
 
     assert ("research", "talk.agent-loops") in bases.reads
     assert kept == [MEMORY], "the refused digest's finding is dropped, which leaves stance.reranking one digest"
+    unread = [{"digest": "talk.agent-loops", "reason": _refusal("talk.agent-loops")}]
+    assert _unread(state) == unread, "the run says which digest it could not read and why"
+    assert [(proposal["stance_id"], proposal["reasons"]) for proposal in _dropped(state)] == [
+        ("stance.reranking", [_unread_reason("talk.agent-loops")])
+    ], "the dropped proposal's reason names the digest it lost"
+    flags = _value(state, "write_stance_flags")
+    assert flags["unread"] == unread, "the run's output carries the unread digests"
     assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite lands"
     assert _outcome(state) == "succeeded"
 
@@ -1595,6 +1640,7 @@ async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(s
         "kept_decided": [],
         "failed": [],
         "dropped": [],
+        "unread": [],
         "unplaced": [],
     }
     assert bases.notes_read == ["Wiki/Flags/stance-agent-memory.md"], "a new flag's path is checked on disk first"
@@ -1619,6 +1665,7 @@ async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_an
         "kept_decided": [],
         "failed": [],
         "dropped": [],
+        "unread": [],
         "unplaced": [],
     }
 
@@ -1640,6 +1687,7 @@ async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_lis
         "kept_decided": ["flag.stance-agent-memory"],
         "failed": [],
         "dropped": [],
+        "unread": [],
         "unplaced": [],
     }
 
@@ -1697,6 +1745,7 @@ async def test_a_stance_flag_accepted_on_disk_before_the_index_caught_up_is_neve
         "kept_decided": ["flag.stance-agent-memory"],
         "failed": [],
         "dropped": [],
+        "unread": [],
         "unplaced": [],
     }
 
@@ -1713,6 +1762,7 @@ async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sit
         "kept_decided": [],
         "failed": [],
         "dropped": [],
+        "unread": [],
         "unplaced": [],
     }
 
@@ -1862,7 +1912,9 @@ async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bear
     ]
     assert _dropped(state) == dropped
     flags = _value(state, "write_stance_flags")
-    assert (flags["written"], flags["dropped"]) == (["flag.stance-memory"], dropped), "the run's output says why each one went"
+    assert (flags["written"], flags["dropped"], flags["unread"]) == (["flag.stance-memory"], dropped, []), (
+        "the run's output says why each one went"
+    )
     assert _outcome(state) == "succeeded"
 
 
