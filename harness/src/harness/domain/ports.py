@@ -7,13 +7,14 @@ composition needs from outside. Nothing here constructs anything.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from pydantic_ai_harness.step_persistence import StepStore
 from pydantic_ai_harness.tool_output_limits import READ_TOOL_NAME
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Mapping
 
     from core.ai.workflows.contracts import Tier
     from core.settings import InfrastructureSettings
@@ -134,6 +135,29 @@ JUDGE_TOOLS: frozenset[str] = frozenset(
     }
 )
 """Tools a judge's inline step may hold: every read, no write, no act. A judge changes a run through its verdict alone."""
+
+CaseRunTreatment = Literal["read", "checked_write", "recorded_write"]
+"""How a step's case run serves one tool the step holds.
+
+`read` runs the real tool. `checked_write` runs `check_note` with the same arguments in its place. `recorded_write` checks
+the arguments against the real tool's schema and records the call. Neither write lands anything."""
+
+CASE_RUN_TOOLS: Mapping[str, CaseRunTreatment] = MappingProxyType(
+    {
+        **dict.fromkeys(sorted(JUDGE_TOOLS), "read"),
+        "check_note": "read",
+        "check_change": "read",
+        "write_note": "checked_write",
+        "request_source": "recorded_write",
+        "decide_page": "recorded_write",
+        "skip_digest": "recorded_write",
+        "resolve_note": "recorded_write",
+        "remember_belief": "recorded_write",
+    }
+)
+"""Every tool a step's case run reaches, and how. A step holding any other tool gets no case run.
+
+`resolve_entities` is not here, because it creates entity pages."""
 
 
 @dataclass(frozen=True)

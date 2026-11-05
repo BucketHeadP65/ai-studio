@@ -16,10 +16,13 @@ import pytest
 from core.ai.workflows.contracts import Briefing, InlineStep, Program, Shape
 from core.ai.workflows.domain.vocabulary import SameAs
 from pydantic import BaseModel
+from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
+from pydantic_evals.evaluators import LLMJudge
 
 from harness.cli import _dataset_path
-from harness.features.evals.domain.step_evaluation import OutcomeMatches, bind_collection, report_failed
+from harness.domain.contracts import CaseResult
+from harness.features.evals.domain.step_evaluation import OutcomeMatches, bind_collection, case_result, report_failed
 from harness.features.evals.exceptions import StepNotABriefingError, StepOutputReusesAnotherError
 from harness.features.evals.infrastructure.files import load_dataset
 from harness.features.evals.service.step_evaluation import resolve_step, run_step_evals
@@ -247,3 +250,53 @@ class TestRunStepEvals:
 
         with pytest.raises(StepOutputReusesAnotherError):
             await run_step_evals(dataset, perform, step)
+
+
+def _judge(*, passed: bool) -> LLMJudge:
+    """An `LLMJudge` whose model grades every case `passed`, as an assertion with no score."""
+    return LLMJudge(rubric="The verdict names a reason.", model=TestModel(custom_output_args={"reason": "it names one", "pass": passed, "score": 1.0}))
+
+
+class TestReportFailedOverEveryEvaluator:
+    """A case passes when every evaluator that judged it passed, read from its scores and its assertions alike."""
+
+    async def test_a_case_judged_only_by_a_passing_llm_judge_assertion_passed(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="judged", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[_judge(passed=True)])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert set(report.cases[0].assertions) == {"LLMJudge"}
+        assert report.cases[0].scores == {}
+        assert report_failed(report) is False
+
+    async def test_a_case_whose_llm_judge_assertion_failed_failed(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="judged", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[_judge(passed=False)])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.cases[0]) == CaseResult(name="judged", passed=False, reason="LLMJudge: it names one")
+
+    async def test_a_case_no_evaluator_judged_failed(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="unjudged", inputs={"drafts": [], "collection": "repo-docs"})])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.cases[0]).reason == "no evaluator judged this case"
+
+    async def test_a_case_whose_step_raised_failed_and_names_the_error(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="raises", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[OutcomeMatches()])
+
+        report = await run_step_evals(dataset, RaisingPerform(), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.failures[0]) == CaseResult(name="raises", passed=False, reason="the step raised: RuntimeError: the model is unreachable")
+
+
+class RaisingPerform:
+    """A perform whose every call fails, as a step whose model cannot be reached does."""
+
+    async def __call__(self, task: Briefing, output_type: type, /, **inputs: object) -> object:
+        msg = "the model is unreachable"
+        raise RuntimeError(msg)

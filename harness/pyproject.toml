@@ -50,6 +50,9 @@ dependencies = [
     # here even though the test group already carries it for ASGI-transport route tests, so the
     # manifest names the runtime use too.
     "httpx>=0.28.1",
+    # A case run's stand-ins (`harness.adapters.stand_ins`) check a write call's arguments against the real tool's
+    # JSON Schema before recording it.
+    "jsonschema>=4.26.0",
     "logfire[fastapi,variables]>=5.2.0",
     # META distribution: ships pydantic-ai-slim with the evals/mcp/logfire extras the app needs.
     "pydantic-ai>=2.66.0",

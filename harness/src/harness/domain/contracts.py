@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from harness.domain.arguments import AdmissionRefused, KnowledgeBaseNames, admitted_arguments, presentation_of, selected_knowledge_bases
+from harness.domain.case_reports import CaseReport, CaseResult
 from harness.domain.events import (
     Booted,
     ConversationForgotten,
@@ -44,6 +45,7 @@ from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode
 from harness.domain.page_context import PageContext, compose_prompt, strip_page_context
 from harness.domain.ports import (
     BRIEFING_ONLY_BUDGET,
+    CASE_RUN_TOOLS,
     DEFINED_STEP_BUDGET,
     JUDGE_TOOLS,
     NOT_FOR_STEPS,
@@ -52,6 +54,7 @@ from harness.domain.ports import (
     PROGRAM_OUTPUT_LIMIT,
     SANDBOX,
     SHELL_TOOL,
+    CaseRunTreatment,
     ConversationHistory,
     ConversationMessages,
     EmbeddingContract,
@@ -73,6 +76,7 @@ from harness.domain.session_types import DEFAULT_SESSION_TYPE, UNKNOWN_SESSION, 
 
 __all__ = [
     "BRIEFING_ONLY_BUDGET",
+    "CASE_RUN_TOOLS",
     "DEFAULT_GATE_MODE",
     "DEFAULT_SESSION_TYPE",
     "DEFINED_STEP_BUDGET",
@@ -88,6 +92,9 @@ __all__ = [
     "AdmissionRefused",
     "Booted",
     "CardUnreadableError",
+    "CaseReport",
+    "CaseResult",
+    "CaseRunTreatment",
     "ConversationForgotten",
     "ConversationHistory",
     "ConversationMessages",
