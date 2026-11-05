@@ -6,7 +6,8 @@ A plain `openai.AsyncOpenAI` client pointed at Azure's OpenAI-compatible
 pydantic-ai's `TestModel` so unit tests never touch the network.
 
 Every generation model built here except `TestModel` is a `ContentFilterGuard`: a response that finishes on
-`content_filter` raises `ContentFilterError` at once instead of reaching output validation.
+`content_filter` ends the turn with `ContentFilterError` instead of reaching output validation. A streamed one raises it as
+its stream closes, and a whole one is handed back with no parts, so the agent records it and raises it.
 
 This module reads no environment variables. The caller must pass the endpoint
 and deployment explicitly.

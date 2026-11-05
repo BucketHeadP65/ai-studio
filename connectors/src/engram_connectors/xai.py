@@ -52,7 +52,9 @@ def xai_resource(resources: SourceResources) -> XaiResource | None:
 def build_xai_model(resource: XaiResource) -> Model:
     """Build the xAI model client for a connection, inside a `ContentFilterGuard`.
 
-    A response the provider cut on `content_filter` raises `ContentFilterError` at once instead of reaching output validation.
+    A response the provider cut on `content_filter` ends the turn with `ContentFilterError` instead of reaching output
+    validation. A streamed one raises it as its stream closes, and a whole one is handed back with no parts, so the agent
+    records it and raises it.
 
     Args:
         resource: The connection whose model and API key the client uses.

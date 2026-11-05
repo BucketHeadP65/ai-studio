@@ -38,9 +38,10 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
 - `core.ai.tool_call_limit`: `ToolCallLimitWarning`, the warning a model gets as its run's tool calls near their limit
 - `core.ai.sandbox`: `SandboxDiscipline`, the sandbox's dialect as instructions for an agent under pydantic-ai-harness's
   `CodeMode`, and the way out it adds to a `run_code` refusal of an unknown name
-- `core.ai.content_filter`: `ContentFilterGuard`, the wrapper around every generation model the repo builds, which raises
-  `ContentFilterError` for a response that finishes on `content_filter`, and `FilterReportingResponsesModel`, which keeps
-  Azure's content filter results in a response's provider details
+- `core.ai.content_filter`: `ContentFilterGuard`, the wrapper around every generation model the repo builds, which ends a
+  turn with `ContentFilterError` for a response that finishes on `content_filter` and for a prompt Azure refuses with HTTP
+  400, `content_filter_message`, the sentence naming the categories the filter flagged, and `FilterReportingResponsesModel`,
+  which keeps Azure's content filter results in a response's provider details
 - `core.ai.history`: the conversation record behind pydantic-ai-harness's step-store port (every message once, forms, stamps,
   step entries), its Postgres store over asyncpg, the request-parameters recorder and the DDL it ships, the per-step
   usage tap (`StepUsageTap`) and `recording_capabilities`

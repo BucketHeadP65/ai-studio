@@ -1,4 +1,4 @@
-"""A model response that a content filter cut ends the turn at once, with an error that names the filter that fired.
+"""A model response that a content filter cut ends the turn at once, and `content_filter_message` names the filter that fired.
 
 `ContentFilterGuard` makes every response that finishes on `content_filter`, whatever text it carries, streamed or not,
 and every prompt Azure's content filter refuses with HTTP 400, end the turn with pydantic-ai's `ContentFilterError`, so

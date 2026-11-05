@@ -179,8 +179,9 @@ def model_for(model_id: str, *, infrastructure: InfrastructureSettings, models: 
         thinking: The thinking level the model is built at.
 
     Returns:
-        The model, inside a `ContentFilterGuard` whatever its route, so a response a content filter cut raises
-        `ContentFilterError` at once.
+        The model, inside a `ContentFilterGuard` whatever its route, so a response a content filter cut ends the turn
+        with `ContentFilterError`: a streamed one raises it as its stream closes, and a whole one is handed back with no
+        parts, so the agent records it and raises it.
 
     Raises:
         ValueError: The route `model_id` needs has no key in the settings file's infrastructure section.
