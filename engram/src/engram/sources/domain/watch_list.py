@@ -55,15 +55,37 @@ class FoundSource(BaseModel):
 REASON_LIMIT = 300
 """The most characters a scan failure's reason keeps. A longer one is cut and ends in `...`."""
 
-_URL = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?(?P<rest>[^\s?#'\"]*)(?:[?#][^\s'\"]*)?")
-"""A URL in a message, with its user part, its query and its fragment as separate pieces to drop."""
+_URL = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/'\"]*@)?(?P<rest>[^\s?#'\"]*)(?:[?#][^\s'\"]*)?")
+"""A URL with a scheme. Its user part runs to the last `@` before the first `/`, and its query and fragment follow its path."""
+_HOST_PATH = re.compile(
+    r"(?<![^\s'\"(<\[=:])(?:[^\s/'\"]*@)?"
+    r"(?P<rest>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?(?:/[^\s?#'\"]*|(?=[?#][^\s'\"])))"
+    r"(?:[?#][^\s'\"]*)?"
+)
+"""A URL with no scheme: a dotted host starting a word or following a `:`, with a path or a query after it, and a user part before it."""
+
+
+def without_url_secrets(text: str) -> str:
+    """`text` with the user part, the query and the fragment of every URL in it dropped, where a credential would sit.
+
+    A URL with a scheme loses them wherever it stands. A host with no scheme loses them when a path or a query
+    follows it, so a bare host or an email address is left as it is.
+
+    Args:
+        text: Any text, such as a failure's message or a watch entry's label.
+
+    Returns:
+        The text with those parts dropped.
+    """
+    text = _URL.sub(lambda found: found["scheme"] + found["rest"], text)
+    return _HOST_PATH.sub(lambda found: found["rest"], text)
 
 
 def scan_failure_reason(message: str) -> str:
     """One readable line of why a watch entry's scan failed, built from the failure's message.
 
-    It keeps the message's first line that is not blank, drops the user part, the query and the fragment of every URL
-    in it, where a credential would sit, and cuts it to `REASON_LIMIT` characters.
+    It keeps the message's first line that is not blank, passes it through `without_url_secrets`, and cuts it to
+    `REASON_LIMIT` characters.
 
     Args:
         message: The failure's message as the scanner raised it.
@@ -72,7 +94,7 @@ def scan_failure_reason(message: str) -> str:
         The reason, or an empty string when the message holds no text.
     """
     line = next((line.strip() for line in message.splitlines() if line.strip()), "")
-    line = _URL.sub(lambda found: found["scheme"] + found["rest"], line)
+    line = without_url_secrets(line)
     return line if len(line) <= REASON_LIMIT else line[: REASON_LIMIT - 3] + "..."
 
 

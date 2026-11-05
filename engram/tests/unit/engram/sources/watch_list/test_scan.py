@@ -15,7 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from engram.sources.contracts import FoundSource, SourceQueue, WatchEntry, WatchListFile, claimants_for
-from engram.sources.domain.watch_list import REASON_LIMIT, scan_failure_reason
+from engram.sources.domain.watch_list import REASON_LIMIT, scan_failure_reason, without_url_secrets
 from engram.sources.service.watch_list import scan_watch_list
 from engram.testing.fakes.source_queue import FakeQueueLock
 from engram.testing.fakes.watch_list import FakeScanner
@@ -223,6 +223,30 @@ def test_a_reason_keeps_no_credential_a_url_in_the_message_carries() -> None:
     message = "Client error '401 Unauthorized' for url 'https://reader:hunter2@feeds.example.org/private.xml?token=s3cr3t&page=2#top'"
 
     assert scan_failure_reason(message) == "Client error '401 Unauthorized' for url 'https://feeds.example.org/private.xml'"
+
+
+def test_a_user_part_holding_an_at_sign_is_dropped_whole() -> None:
+    assert scan_failure_reason("fetch https://a@b@feeds.example.org/x.xml failed") == "fetch https://feeds.example.org/x.xml failed"
+
+
+def test_a_host_path_with_no_scheme_loses_its_query_and_its_user_part() -> None:
+    assert scan_failure_reason("see feeds.example.org/a.xml?token=abc") == "see feeds.example.org/a.xml"
+    assert scan_failure_reason("see 'me:pw@feeds.example.org/a.xml#top'") == "see 'feeds.example.org/a.xml'"
+    assert scan_failure_reason("see www.example.org?token=abc now") == "see www.example.org now"
+
+
+def test_text_with_no_url_secret_is_left_as_it_is() -> None:
+    message = "no scanner named 'x' (scanners: blogs, xml). Is example.org? Mail me@example.org, version 1.5."
+
+    assert scan_failure_reason(message) == message
+
+
+def test_a_watch_entry_label_loses_the_secrets_its_url_carries() -> None:
+    label = "xml:https://user:pw@feeds.example.org/me.atom?token=s3cr3t"
+
+    assert without_url_secrets(label) == "xml:https://feeds.example.org/me.atom"
+    assert without_url_secrets("xml:feeds.example.org/me.atom?token=s3cr3t") == "xml:feeds.example.org/me.atom"
+    assert without_url_secrets("x:someone") == "x:someone"
 
 
 def test_a_reason_longer_than_the_limit_is_cut_and_says_so() -> None:
