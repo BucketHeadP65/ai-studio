@@ -179,7 +179,7 @@ def test_a_gate_the_previous_version_did_not_hold_is_not_compared() -> None:
     assert verdict.kind == "counts"
 
 
-@pytest.mark.parametrize(("score", "kind"), [(0.6, "worse"), (0.75, "counts")])
+@pytest.mark.parametrize(("score", "kind"), [(0.6, "worse"), (0.65, "worse"), (0.75, "counts")])
 def test_a_structural_grade_more_than_a_tenth_below_the_baselines_mean_is_worse(score: float, kind: str) -> None:
     run = _run()
     baseline = _baseline("succeeded", "succeeded")
