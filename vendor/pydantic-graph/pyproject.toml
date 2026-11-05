@@ -1,0 +1,31 @@
+[build-system]
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pydantic-graph"
+# pydantic-ai-slim 2.66.0 pins `pydantic-graph==2.66.0`, so this copy keeps the version it patches.
+version = "2.66.0"
+description = "Graph and state machine library"
+authors = [
+    { name = "Samuel Colvin", email = "samuel@pydantic.dev" },
+    { name = "Marcelo Trylesinski", email = "marcelotryle@gmail.com" },
+    { name = "David Montague", email = "david@pydantic.dev" },
+    { name = "Alex Hall", email = "alex@pydantic.dev" },
+    { name = "Douwe Maan", email = "douwe@pydantic.dev" },
+]
+license = "MIT"
+requires-python = ">=3.11"
+# The runtime dependencies the 2.66.0 wheel's METADATA declares.
+dependencies = [
+    "anyio>=4.7.0",
+    "logfire-api>=3.14.1",
+    "pydantic>=2.12",
+    "typing-inspection>=0.4.0",
+]
+
+[project.urls]
+Source = "https://github.com/pydantic/pydantic-ai"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pydantic_graph"]

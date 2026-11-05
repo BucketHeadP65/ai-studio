@@ -37,6 +37,11 @@ dependencies = [
     # `typesafe`: `core.ai.decision_models` builds TypeSafe's Jev on pydantic-ai's own TypeSafe model.
     "pydantic-ai[retries,typesafe]>=2.66.0",
     "pydantic-ai-harness>=0.66.0",
+    # The workflow engine's graph library. The path source below points it at the patched copy in
+    # `vendor/pydantic-graph`, at the version pydantic-ai pins exactly. It is a main dependency, not an
+    # extra, because uv applies core's sources in another project's lock only to a requirement that
+    # project installs, and every project must get the patched copy.
+    "pydantic-graph==2.66.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.4",
     # `core.ai.retrieval.statement` reads a model's SQL by its tokens before it reaches the database.
@@ -47,18 +52,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# `core.ai.workflows` ships behind these extras. What they actually gate for consumers is
-# temporalio and pydantic-handlebars — pydantic-graph is a hard dependency of pydantic-ai and is
-# present in every consumer venv regardless; it is declared here because the engine imports it
-# directly. `core.ai`'s package init never imports `workflows` (consumers reach it by explicit
-# submodule import).
+# `core.ai.workflows` ships behind these extras, which gate temporalio and pydantic-handlebars. The
+# engine's graph library, pydantic-graph, is a main dependency above. `core.ai`'s package init never
+# imports `workflows` (consumers reach it by explicit submodule import).
 # pydantic-handlebars: `AgentSpec.model_validate` (the authoring path) triggers pydantic-ai's
 # `TemplateStr` validator on `{{...}}` instructions, which imports it — without it the engine
 # raises ImportError instead of refusing the artifact.
-workflows          = ["pydantic-graph>=2.49.0", "pydantic-handlebars>=0.2.1"]
+workflows          = ["pydantic-handlebars>=0.2.1"]
 # `core.ai.workflows.infrastructure.temporal` additionally needs the Temporal SDK; pydantic-ai's shipped
 # integration (payload converter, workflow-sandbox configuration) rides the base pydantic-ai dep.
-workflows-temporal = ["pydantic-graph>=2.49.0", "pydantic-handlebars>=0.2.1", "temporalio>=1.34.0"]
+workflows-temporal = ["pydantic-handlebars>=0.2.1", "temporalio>=1.34.0"]
 
 [dependency-groups]
 dev = ["pyright (>=1.1.0,<2.0.0)", "ruff (>=0.17.1,<0.18.0)"]
@@ -68,13 +71,17 @@ test = [
     # Mirrors [project.optional-dependencies] workflows-temporal (uv has no default-extras):
     # the bare-`uv sync` gate must collect and run the engine suite under tests/unit/workflows.
     # PEP 735 groups are never inherited by consumers, so engram stays engine-free.
-    "pydantic-graph>=2.49.0",
     "pydantic-handlebars>=0.2.1",
     "pytest (>=9.0.2,<10.0.0)",
     "pytest-asyncio (>=1.3.0,<2.0.0)",
     "temporalio>=1.34.0",
     "testcontainers[postgres]>=4.15.0",
 ]
+
+[tool.uv.sources]
+# pydantic-graph 2.66.0 with one upstream fix applied. `vendor/pydantic-graph/README.md` says which and when
+# it goes.
+pydantic-graph = { path = "../vendor/pydantic-graph", editable = true }
 
 [tool.uv]
 # The acceptance gate is bare ``uv sync`` followed by ``uv run pyright`` / ``uv run pytest``;
