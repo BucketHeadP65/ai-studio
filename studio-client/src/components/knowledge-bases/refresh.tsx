@@ -147,7 +147,7 @@ function RunRow({ record, label }: { record: RefreshRun; label?: string }) {
       {record.scan_failures.length > 0 ? (
         <ul className="mt-1 space-y-0.5 text-caption text-warn-ink">
           {record.scan_failures.map((failure) => (
-            <li key={failure.entry} className="break-words">
+            <li key={`${failure.entry} ${failure.reason}`} className="break-words">
               {`Watch entry ${failure.entry} could not be scanned: ${failure.reason}`}
             </li>
           ))}
