@@ -26,6 +26,7 @@ from pydantic_ai.toolsets import FunctionToolset
 
 from core.ai.workflows.contract_port import LibraryVocabulary
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
+from core.ai.workflows.domain.events import ReusableStepSaved
 from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, step_content_address
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage
@@ -947,7 +948,9 @@ class LibraryCollection:
         A version holds one step content and refuses a different one. Saving an unchanged step writes nothing, except
         that a live version takes new cases in place, with no new version and no move of its content address. A new
         version links every live lower version of the name forward to it, and a link that fails warns with
-        `SupersessionIncompleteWarning`. It assumes one writer at a time, such as an import or a CLI.
+        `SupersessionIncompleteWarning`. A version above every saved version of the name, live, superseded or archived,
+        hands the ingest one `ReusableStepSaved` with its page, so the event lands in the page's transaction or not at
+        all. No other save raises it. It assumes one writer at a time, such as an import or a CLI.
 
         Args:
             step: The step to save. Its name and `version` choose the page.
@@ -972,6 +975,12 @@ class LibraryCollection:
         if saved:
             await self._keep_saved_version(saved[0], step, cases)
             return step_id
+        saved_by = provenance.get("saved_by", "unknown")
+        retired = tuple(lower_id for lower, lower_id in await self._live_step_versions(step.name) if lower < version)
+        events: tuple[ReusableStepSaved, ...] = ()
+        if version > await self._newest_step_version(step.name):
+            step_hash = step_content_address(step)
+            events = (ReusableStepSaved(step=step.name, version=version, step_id=step_id, step_hash=step_hash, saved_by=saved_by, superseded=retired),)
         frontmatter: dict[str, Any] = {
             "id": step_id,
             "type": STEP_PAGE_TYPE,
@@ -979,7 +988,7 @@ class LibraryCollection:
             "summary": summary,
             "status": "draft",
             "step_version": version,
-            "saved_by": provenance.get("saved_by", "unknown"),
+            "saved_by": saved_by,
             "step": step.model_dump(mode="json"),
         }
         if cases:
@@ -988,16 +997,25 @@ class LibraryCollection:
             await self._ingest(
                 {"frontmatter": frontmatter, "sections": [{"heading": "Applicability", "body": applicability}]},
                 collection=self._collection,
+                events=events,
             )
         except LibraryError:
             raise
         except Exception as exc:
             msg = f"the collection refused {step_id!r}: {exc}"
             raise LibraryError(msg) from exc
-        for lower, lower_id in await self._live_step_versions(step.name):
-            if lower < version:
-                await self._supersede(lower_id, by=step_id)
+        for lower_id in retired:
+            await self._supersede(lower_id, by=step_id)
         return step_id
+
+    async def _newest_step_version(self, name: str) -> int:
+        """The highest version of the reusable step `name` any page holds, live, superseded or archived, else 0."""
+        versions = [
+            int(match["version"])
+            for row in await self._rows.fetch(STEP_PAGES_SQL, self._collection, [name])
+            if (match := _VERSIONED_STEP_ID.match(str(row["id"]))) is not None and match["name"] == name
+        ]
+        return max(versions, default=0)
 
     async def _keep_saved_version(self, page: Mapping[str, Any], step: InlineStep, cases: Mapping[str, JsonValue] | None) -> None:
         """Refuse a different step at a saved version, else bring a live version's cases in place up to `cases` when given."""

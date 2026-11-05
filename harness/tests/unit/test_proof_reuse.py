@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from core.cqrs.contracts import Event
+
 
 async def test_the_harness_never_fabricates_a_human_approval() -> None:
     with pytest.raises(RuntimeError, match="fabricate"):
@@ -60,8 +62,8 @@ class _FakeRows:
 class _FakeIngest:
     """`run_reuse` never saves anything, so a call here is a bug -- not a fixture to script."""
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
-        msg = f"run_reuse must never write ({collection!r}, {payload!r})"
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        msg = f"run_reuse must never write ({collection!r}, {payload!r}, {events!r})"
         raise AssertionError(msg)
 
 

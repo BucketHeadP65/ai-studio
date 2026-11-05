@@ -12,6 +12,7 @@ from core.ai.workflows.birth import check_birth, shapes_of
 from core.ai.workflows.contract_port import WorkflowContract
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.document import SpecDocument, StepDocument, load_spec_document, load_step_document
+from core.ai.workflows.domain.events import ReusableStepSaved
 from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, approved_gates, orchestrated_gates, trust_level
 from core.ai.workflows.domain.fingerprint import (
     WorkflowFingerprint,
@@ -205,6 +206,7 @@ __all__ = [
     "RetryExhaustedError",
     "RetryFeedback",
     "ReusableStepQueries",
+    "ReusableStepSaved",
     "ReusableStepsRefusedError",
     "ReviewedArtifactRef",
     "ReviewedArtifacts",

@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from core.ai.embedding import ModelQueryEmbedder
     from core.ai.retrieval.contracts import SqlResult
     from core.ai.workflows.contracts import Ingest
+    from core.cqrs.contracts import Event
     from engram import ReadDials, RetrievalKnowledgeBase
     from engram.agent_memory.contracts import EngramMemoryStore
     from engram.authoring.contracts import Reindex
@@ -943,7 +944,8 @@ async def store_ingest() -> AsyncGenerator[Ingest]:
     ranks in the library's search the same way any indexed page does.
 
     Yields:
-        The ingest function, which writes one validated payload into the collection it names.
+        The ingest function, which writes one validated payload into the collection it names, and the events handed
+        with it into the outbox in the same transaction.
     """
     contract = embedding_contract()
     async with embedded_authoring(
@@ -952,7 +954,7 @@ async def store_ingest() -> AsyncGenerator[Ingest]:
         embedder=document_embedder(deployment=contract.deployment, infrastructure=contract.infrastructure, dimensions=contract.dimensions),
     ) as write:
 
-        async def ingest(payload: Mapping[str, Any], *, collection: str) -> None:
-            await write(payload, collection=collection)
+        async def ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+            await write(payload, collection=collection, events=events)
 
         yield ingest

@@ -17,21 +17,23 @@ from pydantic import BaseModel, ConfigDict
 from proof.instrument import surfaced_ids
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
+
+    from core.cqrs.contracts import Event
 
     from proof.groundtruth import ResearchQuestion
     from proof.instrument import RecordingModel, ToolTrace
 
 
-async def read_only_ingest(payload: Mapping[str, Any], *, collection: str) -> None:
+async def read_only_ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
     """The store's write slot, filled with a refusal: neither proof path ever saves.
 
     The proof reads a saved artifact and grades what ran; a write from either path would mean
     the experiment mutated its own subject. Refusing loudly beats opening a writer credential
     that nothing here should hold.
     """
-    del payload
+    del payload, events
     msg = f"the proof paths are read-only; nothing here may write into {collection!r}"
     raise RuntimeError(msg)
 

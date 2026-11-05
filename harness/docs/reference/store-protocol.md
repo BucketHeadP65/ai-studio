@@ -833,7 +833,7 @@ neither pretends to be.
 | **fetch_lineage** | frontmatter key `lineage`. Unparseable to `None` | same key, same rule |
 | **fetch_card** | one file's frontmatter, no ranking pass | `PAGE_SQL`, card columns plus the applicability section |
 | **locate** | is `<name>-v<n>.md` a file? | does `wf.<name>.v<n>` have a row? |
-| **put: transport** | direct filesystem write | an `Ingest` callable (`engram ingest`). This adapter never touches `kb.*` tables |
+| **put: transport** | direct filesystem write | an `Ingest` callable (`engram ingest`). This adapter never touches `kb.*` tables. The callable also takes `events`, written to the outbox in the page's transaction. `put` passes none, and `put_step` passes `ReusableStepSaved` for a version above every saved version of the step |
 | **put: read/write split** | one process, one path | reads over the `kb_reader` read-only role. The process holds no writer credential |
 | **put: applicability** | a frontmatter key *and* a `## Applicability` body section | a real page section, `canon = 'applicability'`, which search ranks over |
 | **put: status written** | `"draft"` | `"draft"` |

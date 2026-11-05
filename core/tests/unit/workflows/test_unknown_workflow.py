@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from core.cqrs.contracts import Event
+
 
 class FakeRows:
     """Answers every read with the one page value a test scripted, and no rows."""
@@ -35,7 +37,7 @@ class FakeRows:
 class FakeIngest:
     """Accepts every payload and keeps nothing."""
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
         return None
 
 

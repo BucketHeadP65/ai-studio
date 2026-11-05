@@ -17,6 +17,7 @@ from core.ai.workflows.contracts import (
     LibraryCollection,
     PresentationRefusedError,
     Program,
+    ReusableStepSaved,
     SaveRefusedError,
     StepRegistry,
     WorkflowPresentation,
@@ -30,6 +31,8 @@ from harness.features.browsing.importing import import_path
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
+
+    from core.cqrs.contracts import Event
 
 STEP_A = """---
 title: Step A
@@ -132,9 +135,11 @@ class _FakeIngest:
 
     def __init__(self) -> None:
         self.payloads: list[tuple[Mapping[str, Any], str]] = []
+        self.events: list[Event] = []
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
         self.payloads.append((payload, collection))
+        self.events.extend(events)
 
 
 def _registry() -> StepRegistry:
@@ -172,6 +177,20 @@ async def test_save_path_writes_steps_before_the_workflow_that_uses_them(tmp_pat
     workflow_frontmatter = ingest.payloads[2][0]["frontmatter"]
     assert workflow_frontmatter["id"] == "wf.two-step.v1"
     assert "uses" not in workflow_frontmatter, "the copies are recorded under reusable_steps (test_save_paths_record_consumers.py)"
+
+
+async def test_an_import_of_new_step_versions_hands_one_event_per_step_and_none_with_the_workflow(tmp_path: Path) -> None:
+    _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B}, workflows={"two-step.md": WORKFLOW})
+    ingest = _FakeIngest()
+    store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
+
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+
+    assert all(isinstance(event, ReusableStepSaved) for event in ingest.events)
+    assert [(event.step_id, event.version, event.saved_by) for event in ingest.events if isinstance(event, ReusableStepSaved)] == [
+        ("st.step_a.v1", 1, "test:save"),
+        ("st.step_b.v1", 1, "test:save"),
+    ]
 
 
 async def test_a_workflow_that_fails_validation_writes_nothing(tmp_path: Path) -> None:

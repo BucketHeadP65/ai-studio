@@ -30,10 +30,12 @@ from core.ai.workflows.infrastructure.library_collection import STEP_PAGES_SQL, 
 from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from pydantic import JsonValue
+
+    from core.cqrs.contracts import Event
 
 def _library(store: FakeCollection) -> LibraryCollection:
     return LibraryCollection(store, store.ingest)
@@ -340,8 +342,8 @@ async def test_a_library_error_from_the_ingest_on_a_cases_update_keeps_its_own_w
     library = _library(store)
     await _save(library, _digest(), 1, cases=CASES_A)
 
-    async def refusing(payload: Mapping[str, Any], *, collection: str) -> None:
-        del payload, collection
+    async def refusing(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del payload, collection, events
         msg = "the page grammar refused the cases"
         raise LibraryError(msg)
 
