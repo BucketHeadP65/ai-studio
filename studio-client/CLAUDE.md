@@ -36,13 +36,13 @@ npm run lint         # biome check
 npm run test:e2e     # playwright
 ```
 
-`npm run test:e2e` serves on 3031 by default and reuses a server already there, which is the always-on dev server of
-the main checkout. From a worktree, give it a free port and a harness address that does not resolve, so it starts its
-own dev server from the worktree and a request a spec does not intercept fails instead of reaching the live harness on
-8770:
+`npm run test:e2e` serves on 3031 by default and reuses a server already there, which is the always-on dev server. It
+runs the main checkout's code, and a request a spec does not intercept goes from it to the live harness on 8770, from
+whichever checkout the run started. Set `PLAYWRIGHT_PORT` to a free port, so the run starts its own dev server from your
+checkout, whose harness address `playwright.config.ts` sets to `http://studio.test`:
 
 ```bash
-PLAYWRIGHT_PORT=3157 NEXT_PUBLIC_STUDIO_API_URL=http://studio.test npm run test:e2e -- e2e/smoke.spec.ts
+PLAYWRIGHT_PORT=3157 npm run test:e2e -- e2e/smoke.spec.ts
 ```
 
 ### Running a single test
