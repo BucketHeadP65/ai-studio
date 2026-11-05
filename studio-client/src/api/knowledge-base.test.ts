@@ -166,9 +166,9 @@ describe("knowledgeBaseApi", () => {
       ),
     );
 
-    await expect(
-      knowledgeBaseApi.graph({ knowledge_base: "missing" }),
-    ).rejects.toMatchObject({ status: 404 });
+    await expect(knowledgeBaseApi.graph({ knowledge_base: "missing" })).rejects.toMatchObject({
+      status: 404,
+    });
   });
 
   it("parses a /api/knowledge-bases response listing all four states", async () => {
@@ -260,7 +260,9 @@ describe("knowledgeBaseApi", () => {
   });
 
   it("parses a /api/knowledge-bases/{name}/schema response", async () => {
-    server.use(http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () => HttpResponse.json(SCHEMA)));
+    server.use(
+      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () => HttpResponse.json(SCHEMA)),
+    );
 
     const schema = await knowledgeBaseApi.knowledgeBaseSchema("inbox");
 
@@ -275,7 +277,9 @@ describe("knowledgeBaseApi", () => {
       sources: { enabled: true, quote_verify: false, connectors: ["zotero", "intake"] },
     };
     server.use(
-      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () => HttpResponse.json(schemaWithConnectors)),
+      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () =>
+        HttpResponse.json(schemaWithConnectors),
+      ),
     );
 
     const schema = await knowledgeBaseApi.knowledgeBaseSchema("inbox");
@@ -296,7 +300,9 @@ describe("knowledgeBaseApi", () => {
       ],
     };
     server.use(
-      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () => HttpResponse.json(schemaWithHeadings)),
+      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () =>
+        HttpResponse.json(schemaWithHeadings),
+      ),
     );
 
     const schema = await knowledgeBaseApi.knowledgeBaseSchema("inbox");
@@ -323,7 +329,9 @@ describe("knowledgeBaseApi", () => {
       ],
     };
     server.use(
-      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () => HttpResponse.json(schemaWithQualifiers)),
+      http.get(`${BASE}/api/knowledge-bases/inbox/schema`, () =>
+        HttpResponse.json(schemaWithQualifiers),
+      ),
     );
 
     const schema = await knowledgeBaseApi.knowledgeBaseSchema("inbox");
@@ -382,7 +390,10 @@ describe("knowledgeBaseApi", () => {
     server.use(
       http.post(`${BASE}/api/knowledge-bases/ghost/refresh`, () =>
         HttpResponse.json(
-          { error: "unknown_knowledge_base", detail: "no knowledge base named 'ghost' is registered" },
+          {
+            error: "unknown_knowledge_base",
+            detail: "no knowledge base named 'ghost' is registered",
+          },
           { status: 404 },
         ),
       ),
@@ -419,7 +430,9 @@ describe("knowledgeBaseErrorMessage", () => {
       }),
     );
 
-    expect(knowledgeBaseErrorMessage(error)).toBe("no knowledge base named 'missing' is registered");
+    expect(knowledgeBaseErrorMessage(error)).toBe(
+      "no knowledge base named 'missing' is registered",
+    );
   });
 
   it("falls back to the raw message when the body is not JSON", () => {

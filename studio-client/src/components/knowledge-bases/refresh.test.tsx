@@ -36,7 +36,9 @@ function job(state: JobState): Job {
 // `states` is drained one entry per job read, so a test scripts the run's progress.
 function serveRefresh(states: JobState[]) {
   server.use(
-    http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () => HttpResponse.json({ refresh_runs: [] })),
+    http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () =>
+      HttpResponse.json({ refresh_runs: [] }),
+    ),
     http.post("http://api.test/api/knowledge-bases/:name/refresh", () =>
       HttpResponse.json({ job_id: 7 }, { status: 202 }),
     ),
@@ -92,7 +94,9 @@ describe("RefreshCard", () => {
   it("stops naming a run that was already underway once it is over", async () => {
     const states: JobState[] = ["running", "abandoned"];
     server.use(
-      http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () => HttpResponse.json({ refresh_runs: [] })),
+      http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () =>
+        HttpResponse.json({ refresh_runs: [] }),
+      ),
       http.post("http://api.test/api/knowledge-bases/:name/refresh", () =>
         HttpResponse.json(
           { error: "refresh_in_progress", detail: "already underway.", job_id: 7 },
