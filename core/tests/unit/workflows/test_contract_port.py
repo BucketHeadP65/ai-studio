@@ -64,6 +64,8 @@ from tests.unit.workflows.conftest import CallLog, register_quarterly_steps
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from core.cqrs.contracts import Event
+
 # --- a foreign host --------------------------------------------------------------------
 
 
@@ -1394,5 +1396,5 @@ class _NoRows:
         raise AssertionError(sql)
 
 
-async def _no_ingest(payload: Mapping[str, Any], *, collection: str) -> None:
+async def _no_ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
     raise AssertionError(collection)

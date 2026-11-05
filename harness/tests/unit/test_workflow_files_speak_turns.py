@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
 
     from core.ai.workflows.contracts import Briefing, CodeRunner, GateDecision, InlineStep, Program, Workflow
+    from core.cqrs.contracts import Event
 
 WORKFLOW_FILES = Path(__file__).resolve().parents[2] / "workflows"
 TEMPLATES = Path(__file__).resolve().parents[3] / "templates"
@@ -175,7 +176,8 @@ class _FakeIngest:
     def __init__(self) -> None:
         self.payloads: list[tuple[Mapping[str, Any], str]] = []
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del events
         self.payloads.append((payload, collection))
 
 

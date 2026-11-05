@@ -21,6 +21,8 @@ from core.ai.workflows.infrastructure.library_collection import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from core.cqrs.contracts import Event
+
 COLUMNS = ("id", "type", "title", "summary", "status")
 """The modelled keys `api.cards` answers as columns, outside the `frontmatter` column."""
 
@@ -58,8 +60,9 @@ class FakeCollection:
 
     `pages` holds each page by id: the `COLUMNS` keys, `superseded`, the remaining `frontmatter` and the
     `applicability`. With `prune` on, the ingest drops `None` and empty containers at every depth before it stores, as
-    engram's ingest does. `payloads` keeps every payload the ingest was handed and `sent` every statement read, in
-    order. A statement the fake does not answer fails the test.
+    engram's ingest does. `payloads` keeps every payload the ingest was handed, `events` every event handed with one,
+    beside the id of the page it came with, and `sent` every statement read, in order. A statement the fake does not
+    answer fails the test.
     """
 
     def __init__(self, *, collection: str = "workflows", prune: bool = False) -> None:
@@ -67,13 +70,15 @@ class FakeCollection:
         self.prune = prune
         self.pages: dict[str, dict[str, Any]] = {}
         self.payloads: list[Mapping[str, Any]] = []
+        self.events: list[tuple[str, Event]] = []
         self.sent: list[tuple[str, tuple[object, ...]]] = []
 
-    async def ingest(self, payload: Mapping[str, Any], *, collection: str) -> None:
-        """Store the payload's page, as the knowledge base's validated write path would."""
+    async def ingest(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        """Store the payload's page and keep the events handed with it, as the knowledge base's validated write path would."""
         assert collection == self.collection
         self.payloads.append(payload)
         authored = dict(payload["frontmatter"])
+        self.events.extend((str(authored["id"]), event) for event in events)
         long_tail = {key: value for key, value in authored.items() if key not in (*COLUMNS, "superseded_by")}
         if self.prune:
             long_tail = {key: kept for key, kept in ((key, pruned(value)) for key, value in long_tail.items()) if kept is not None}

@@ -26,14 +26,16 @@ from core.ai.workflows.contracts import (
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
-from core.ai.workflows.infrastructure.library_collection import STEP_PAGES_SQL, collection_toolset
+from core.ai.workflows.infrastructure.library_collection import STEP_PAGES_SQL, SupersessionIncompleteWarning, collection_toolset
 from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from pydantic import JsonValue
+
+    from core.cqrs.contracts import Event
 
 def _library(store: FakeCollection) -> LibraryCollection:
     return LibraryCollection(store, store.ingest)
@@ -127,6 +129,60 @@ async def test_a_later_save_never_clears_an_older_version_s_supersession() -> No
         "only the live lower version is linked forward, the retired one is not written again"
     )
     assert store.pages["st.digest.v1"]["superseded"]
+
+
+def _failing_links(store: FakeCollection) -> LibraryCollection:
+    """The collection over an ingest that refuses every page carrying a supersession link, as a dropped connection would."""
+
+    async def ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        if "superseded_by" in payload["frontmatter"]:
+            msg = "connection reset"
+            raise RuntimeError(msg)
+        await store.ingest(payload, collection=collection, events=events)
+
+    return LibraryCollection(store, ingest)
+
+
+V2_INSTRUCTIONS = "Read the whole source and write one digest page that quotes every claim."
+
+
+async def test_saving_the_newest_version_again_links_forward_a_lower_version_a_failed_link_left_live() -> None:
+    store = FakeCollection()
+    await _save(_library(store), _digest(), 1)
+    with pytest.warns(SupersessionIncompleteWarning) as warned:
+        await _save(_failing_links(store), _digest(V2_INSTRUCTIONS), 2)
+    assert str(warned[0].message) == (
+        "stored 'st.digest.v2', but could not link 'st.digest.v1' forward to it (connection reset). "
+        "Both versions will be offered until 'st.digest.v1' is linked forward. Saving it again writes the link."
+    )
+    assert store.pages["st.digest.v1"]["superseded"] is False, "the failed link left v1 live beside v2"
+    store.events.clear()
+    written_so_far = len(store.payloads)
+
+    await _save(_library(store), _digest(V2_INSTRUCTIONS), 2)
+
+    assert [payload["frontmatter"]["id"] for payload in store.payloads[written_so_far:]] == ["st.digest.v1"], "only the link is written"
+    assert store.written("st.digest.v1")["superseded_by"] == "[[st.digest.v2]]"
+    assert store.pages["st.digest.v1"]["superseded"] is True
+    assert store.events == []
+
+
+async def test_saving_a_version_below_the_newest_live_one_again_links_nothing() -> None:
+    """v1 and v2, saved after v3, stay live beside it, and saving v2 again leaves v1 live too."""
+    store = FakeCollection()
+    library = _library(store)
+    await _save(library, _digest("Read the whole source and write one digest page that quotes every claim it makes."), 3)
+    await _save(library, _digest(), 1)
+    with pytest.warns(SupersessionIncompleteWarning):
+        await _save(_failing_links(store), _digest(V2_INSTRUCTIONS), 2)
+    store.events.clear()
+    written_so_far = len(store.payloads)
+
+    await _save(library, _digest(V2_INSTRUCTIONS), 2)
+
+    assert len(store.payloads) == written_so_far
+    assert [store.pages[f"st.digest.v{version}"]["superseded"] for version in (1, 2, 3)] == [False, False, False]
+    assert store.events == []
 
 
 async def test_step_versions_answers_every_saved_version_with_its_content_address_lowest_first() -> None:
@@ -340,8 +396,8 @@ async def test_a_library_error_from_the_ingest_on_a_cases_update_keeps_its_own_w
     library = _library(store)
     await _save(library, _digest(), 1, cases=CASES_A)
 
-    async def refusing(payload: Mapping[str, Any], *, collection: str) -> None:
-        del payload, collection
+    async def refusing(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del payload, collection, events
         msg = "the page grammar refused the cases"
         raise LibraryError(msg)
 

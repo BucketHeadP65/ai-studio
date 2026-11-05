@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.graph_builder import GateDecision
     from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
     from core.ai.workflows.registry import StepImplementation
+    from core.cqrs.contracts import Event
 
 
 @runtime_checkable
@@ -717,11 +718,13 @@ class Ingest(Protocol):
     A failure raises. There is no partial success to interpret.
     """
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
         """Validate one authoring payload against the page grammar and land it as rows.
 
         Args:
             payload: The authoring payload.
             collection: The knowledge base partition the rows land in.
+            events: Events written to the outbox in the transaction that writes the page, so they land with the page
+                or not at all.
         """
         ...

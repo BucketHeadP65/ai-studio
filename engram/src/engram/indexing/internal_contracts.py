@@ -476,6 +476,7 @@ class IngestUnitOfWork(EmbedUnitOfWork, Protocol):
 
     `pages`, `sections` and `claims` add the upsert. It has no source, cell, vocabulary or prune repository.
     Of the fingerprint it reads and writes only the retrieval switches, and `signals` measures what decides them.
+    `record` writes events to the outbox in the same transaction as the page.
     """
 
     @property
@@ -521,6 +522,14 @@ class IngestUnitOfWork(EmbedUnitOfWork, Protocol):
     @property
     def signals(self) -> _SwitchSignalsRepo:
         """The knowledge base shape counts."""
+        ...
+
+    def record(self, *events: Event) -> None:
+        """Record events to be written to the outbox when this scope commits.
+
+        Args:
+            *events: The events to write.
+        """
         ...
 
 

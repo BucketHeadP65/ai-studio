@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from core.cqrs.contracts import Event
+
 
 def _spec(name: str = "audit-a-claim", version: int = 1) -> Workflow:
     return Workflow(
@@ -320,7 +322,8 @@ class FakeIngest:
     def __init__(self) -> None:
         self.payloads: list[tuple[Mapping[str, Any], str]] = []
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        assert not events
         self.payloads.append((payload, collection))
 
 

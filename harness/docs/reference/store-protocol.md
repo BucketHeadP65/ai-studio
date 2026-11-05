@@ -603,9 +603,11 @@ this adapter reimplementing supersession. The child is written first because
 
 The two writes are not equal and are not treated as one: the child's write *is* the save,
 the link is bookkeeping. A bookkeeping failure raises a `SupersessionIncompleteWarning` warning
-and still returns the child's id, because losing the link degrades retrieval (both versions
-stay on the library until somebody re-saves) while losing the child loses the work. Both
-writes are upserts, so saving again redoes them.
+and still returns the child's id, because losing the link degrades retrieval while losing the
+child loses the work. Both versions are offered until the older one is linked forward. Saving
+the new version again writes the link, for a workflow and for a reusable step alike: a reusable
+step's equal re-save writes nothing else, and it links only when it is the newest live version
+of its name.
 
 `touched` may only widen. `moved_nodes(parent, child)` re-derives what actually differs, comparing each node's wiring **and** the step definition it binds to, because a workflow
 that brings its own steps can be changed completely by rewriting `tasks[x].instructions`
@@ -833,7 +835,7 @@ neither pretends to be.
 | **fetch_lineage** | frontmatter key `lineage`. Unparseable to `None` | same key, same rule |
 | **fetch_card** | one file's frontmatter, no ranking pass | `PAGE_SQL`, card columns plus the applicability section |
 | **locate** | is `<name>-v<n>.md` a file? | does `wf.<name>.v<n>` have a row? |
-| **put: transport** | direct filesystem write | an `Ingest` callable (`engram ingest`). This adapter never touches `kb.*` tables |
+| **put: transport** | direct filesystem write | an `Ingest` callable (`engram ingest`). This adapter never touches `kb.*` tables. The callable also takes `events`, written to the outbox in the page's transaction. `put` passes none, and `put_step` passes `ReusableStepSaved` for a version above every saved version of the step |
 | **put: read/write split** | one process, one path | reads over the `kb_reader` read-only role. The process holds no writer credential |
 | **put: applicability** | a frontmatter key *and* a `## Applicability` body section | a real page section, `canon = 'applicability'`, which search ranks over |
 | **put: status written** | `"draft"` | `"draft"` |

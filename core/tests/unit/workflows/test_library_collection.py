@@ -50,6 +50,8 @@ from core.ai.workflows.infrastructure.library_collection import CATALOG_COUNT_SQ
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from core.cqrs.contracts import Event
+
 
 class FakeRows:
     """Records every statement and its arguments; answers with rows a test scripted."""
@@ -74,11 +76,13 @@ class FakeIngest:
     def __init__(self, *, refuse: str | None = None) -> None:
         self.refuse = refuse
         self.payloads: list[tuple[Mapping[str, Any], str]] = []
+        self.events: list[Event] = []
 
-    async def __call__(self, payload: Mapping[str, Any], *, collection: str) -> None:
+    async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
         if self.refuse is not None:
             raise RuntimeError(self.refuse)
         self.payloads.append((payload, collection))
+        self.events.extend(events)
 
 
 def _spec(name: str = "audit-a-claim", version: int = 1) -> Workflow:
@@ -237,8 +241,8 @@ async def test_a_stamp_with_no_registered_steps_survives_the_store() -> None:
     """
     written: dict[str, Any] = {}
 
-    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str) -> None:
-        del collection
+    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
         frontmatter = dict(payload["frontmatter"])
         stamp = {key: value for key, value in frontmatter["fingerprint"].items() if value not in ({}, [])}
         written["frontmatter"] = {**frontmatter, "fingerprint": stamp}
@@ -567,8 +571,8 @@ async def test_an_adaptation_that_moved_no_node_still_reads_back_as_an_adaptatio
     """
     written: dict[str, Any] = {}
 
-    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str) -> None:
-        del collection
+    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
         frontmatter = dict(payload["frontmatter"])
         written["frontmatter"] = {**frontmatter, "lineage": {k: v for k, v in frontmatter["lineage"].items() if v not in ([], {})}}
 
@@ -605,8 +609,8 @@ async def test_a_child_that_could_not_be_linked_is_still_a_child_that_was_stored
     """
     calls: list[str] = []
 
-    async def ingest(payload: Mapping[str, Any], *, collection: str) -> None:
-        del collection
+    async def ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
         page = str(payload["frontmatter"]["id"])
         calls.append(page)
         if "superseded_by" in payload["frontmatter"]:

@@ -18,6 +18,8 @@ from core.ai.workflows.infrastructure.library_collection import SEARCH_SQL, half
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from core.cqrs.contracts import Event
+
 
 class FakeRows:
     """Records every statement and its arguments; answers with rows a test scripted."""
@@ -35,9 +37,9 @@ class FakeRows:
         return None
 
 
-async def _never_ingest(payload: Mapping[str, Any], *, collection: str) -> None:
+async def _never_ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
     """Search never writes; a store still needs a write side to exist."""
-    raise AssertionError((payload, collection))
+    raise AssertionError((payload, collection, events))
 
 
 class FakeEmbedder:

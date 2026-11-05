@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -41,6 +41,11 @@ from core.ai.workflows.domain.validator import IssueType
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.exceptions import TaskShapeError
 from tests.unit.workflows.conftest import CallLog, Ledger, ReportDraft
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
+    from core.cqrs.contracts import Event
 
 BRIEFING = "Read the ledger and say, in one line, whether the quarter looks healthy and why it looks that way."
 """Long enough to satisfy the vocabulary's minimum -- a briefing shorter than a label is not a
@@ -339,22 +344,22 @@ async def test_a_brought_step_survives_the_round_trip_through_the_store(registry
         """The collection, minus engram: the ingest keeps the payload, the fetch returns its frontmatter."""
 
         def __init__(self) -> None:
-            self.frontmatter: object = None
+            self.frontmatter: Mapping[str, Any] | None = None
 
-        async def ingest(self, payload: dict[str, object], *, collection: str) -> None:
-            del collection
+        async def ingest(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+            del collection, events
             self.frontmatter = payload["frontmatter"]
 
-        async def fetch(self, sql: str, /, *args: object) -> list[dict[str, object]]:
+        async def fetch(self, sql: str, /, *args: object) -> Sequence[Mapping[str, Any]]:
             del sql, args
             return []
 
-        async def fetchval(self, sql: str, /, *args: object) -> object:
+        async def fetchval(self, sql: str, /, *args: object) -> Mapping[str, Any] | None:
             del sql, args
             return self.frontmatter
 
     page = OnePage()
-    store = LibraryCollection(page, page.ingest)  # type: ignore[arg-type]
+    store = LibraryCollection(page, page.ingest)
     stored_id = await store.put(
         spec,
         title="Judged report",

@@ -27,7 +27,7 @@ from engram.kb.contracts import parse as parse_note
 from engram.kb.contracts import render
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from core.ai.embedding import BatchEmbedder
     from core.cqrs.contracts import Command, Event
@@ -88,7 +88,7 @@ class IngestPageHandler:
             raise TypeError(msg)
         return await self.handle(command)
 
-    async def handle(self, command: IngestPage) -> IngestResult:
+    async def handle(self, command: IngestPage, *, events: Sequence[Event] = ()) -> IngestResult:
         """Write one authored page into a written collection and embed what changed.
 
         Under a `mode: "auto"` spec the write then decides and stores the collection's switches from its
@@ -97,6 +97,8 @@ class IngestPageHandler:
 
         Args:
             command: The page payload, its collection and whether to embed.
+            events: The caller's events. They are written to the outbox in the transaction that writes the page, so
+                they land with the page or not at all. They are not added to the handler's own `events` list.
 
         Returns:
             The page id and the counts of rows written and embedded.
@@ -152,6 +154,7 @@ class IngestPageHandler:
             if edge_delta:
                 await uow.edges.refresh_graph()
 
+            uow.record(*events)
             await uow.commit()
 
         # A `mode: "fixed"` spec leaves `command.embed` as the whole decision. A `mode: "auto"` spec decides

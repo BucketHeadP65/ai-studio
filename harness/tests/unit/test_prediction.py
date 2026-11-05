@@ -56,6 +56,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from core.cqrs.contracts import Event
+
 
 def _completed(version: int, **kwargs: object) -> RunEvidence:
     """One completed run of a version, as the observer writes it."""
@@ -366,8 +368,8 @@ async def test_the_collection_keeps_the_claims_and_the_prose_beside_the_diff(qua
     """Same invariant in the library the app runs on: what a model claimed comes back as what it claimed."""
     written: dict[str, Mapping[str, Any]] = {}
 
-    async def ingest(payload: Mapping[str, Any], *, collection: str) -> None:
-        del collection
+    async def ingest(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
         written["frontmatter"] = payload["frontmatter"]
 
     child, lineage = adapt(
@@ -391,8 +393,8 @@ async def test_a_collection_record_whose_empty_claims_were_dropped_still_reads_a
     """Engram's ingest keeps no empty container, so an adaptation that claimed nothing loses both keys."""
     written: dict[str, Mapping[str, Any]] = {}
 
-    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str) -> None:
-        del collection
+    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
         frontmatter = dict(payload["frontmatter"])
         written["frontmatter"] = {**frontmatter, "lineage": _dropping_empties(frontmatter["lineage"])}
 
