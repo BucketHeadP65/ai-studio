@@ -40,7 +40,8 @@ class LastRun(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     finished_at: datetime
-    outcome: Literal["ok", "failed"]
+    outcome: Literal["ok", "partial", "failed"]
+    """`partial` is a run whose index ran while some of its other work failed. Only `failed` changes the identity."""
     detail: str
 
 

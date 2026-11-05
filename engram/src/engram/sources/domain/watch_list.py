@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from datetime import UTC, datetime
 
 from core.cqrs.contracts import Command
@@ -50,8 +52,35 @@ class FoundSource(BaseModel):
     published: datetime | None = None
 
 
+REASON_LIMIT = 300
+"""The most characters a scan failure's reason keeps. A longer one is cut and ends in `...`."""
+
+_URL = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/@'\"]*@)?(?P<rest>[^\s?#'\"]*)(?:[?#][^\s'\"]*)?")
+"""A URL in a message, with its user part, its query and its fragment as separate pieces to drop."""
+
+
+def scan_failure_reason(message: str) -> str:
+    """One readable line of why a watch entry's scan failed, built from the failure's message.
+
+    It keeps the message's first line that is not blank, drops the user part, the query and the fragment of every URL
+    in it, where a credential would sit, and cuts it to `REASON_LIMIT` characters.
+
+    Args:
+        message: The failure's message as the scanner raised it.
+
+    Returns:
+        The reason, or an empty string when the message holds no text.
+    """
+    line = next((line.strip() for line in message.splitlines() if line.strip()), "")
+    line = _URL.sub(lambda found: found["scheme"] + found["rest"], line)
+    return line if len(line) <= REASON_LIMIT else line[: REASON_LIMIT - 3] + "..."
+
+
 class ScanReport(BaseModel):
-    """What a scan did: sources seen, rows added in all and by watch entry, and the watch entries that failed with their reasons."""
+    """What a scan did: sources seen, rows added in all and by watch entry, and the watch entries that failed with their reasons.
+
+    `failed` pairs each failed entry's label with its reason, one line from `scan_failure_reason`.
+    """
 
     model_config = ConfigDict(frozen=True)
 

@@ -84,6 +84,13 @@ class TestReadIdentity:
         assert identity.last_index_outcome == "failed"
         assert identity.last_index_reason == "connection refused"
 
+    async def test_a_partial_run_newer_than_the_fingerprint_reads_ok_because_its_index_ran(self):
+        run = LastRun(finished_at=COMPILED.replace(hour=23, minute=59), outcome="partial", detail="indexed 3 pages, 3 embedded")
+
+        identity = await _identity(_gateway(), last_run=run)
+
+        assert (identity.last_index_outcome, identity.last_index_reason) == ("ok", "")
+
     async def test_a_failed_run_older_than_the_fingerprint_reads_ok(self):
         run = LastRun(finished_at=COMPILED.replace(hour=1), outcome="failed", detail="connection refused")
 

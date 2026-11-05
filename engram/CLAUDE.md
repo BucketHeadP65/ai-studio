@@ -129,7 +129,10 @@ straight into the source-queue cache rather than queuing it for a later resolve)
 one `build(resources: SourceResources)` classmethod, refusing there when a resource it needs is
 absent. `scan_watch_list` resolves every watch-list row's `scanner` against the scanners the host built, drops what
 is new into the source queue, and stamps the row's last scan. A row whose scanner nothing serves,
-or whose scan fails, is reported against that one row and never fails the run.
+or whose scan fails, is reported against that one row and never fails the run. Its reason is one line
+(`scan_failure_reason`: the message's first line, with no user part, query or fragment on any URL, at most 300
+characters), and the `x` scanner words an HTTP error from xAI as its status, its model and the first sentence of
+the answer, with the team id cut.
 
 ## Authoring tools
 

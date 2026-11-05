@@ -15,6 +15,7 @@ import pytest
 from pydantic import ValidationError
 
 from engram.sources.contracts import FoundSource, SourceQueue, WatchEntry, WatchListFile, claimants_for
+from engram.sources.domain.watch_list import REASON_LIMIT, scan_failure_reason
 from engram.sources.service.watch_list import scan_watch_list
 from engram.testing.fakes.source_queue import FakeQueueLock
 from engram.testing.fakes.watch_list import FakeScanner
@@ -202,3 +203,45 @@ async def test_an_entry_whose_scan_fails_is_absent_from_the_counts(tmp_path: Pat
 
     assert report.requested_by_entry == {}
     assert [label for label, _ in report.failed] == ["podcast:https://pod.example.org/feed.xml"]
+
+
+async def test_a_failure_spread_over_several_lines_is_recorded_as_its_first_line(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_BLOGS, "https://down.example.org/entry.xml")
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    message = "Server error '503 Service Unavailable' for url 'https://down.example.org/entry.xml'\nFor more information check: https://developer.mozilla.org/503"
+    scanner = FakeScanner(raises={"https://down.example.org/entry.xml": RuntimeError(message)})
+
+    report = await scan_watch_list(watch_list, {_BLOGS: scanner}, queue, now=_NOW)
+
+    assert report.failed == (
+        ("blogs:https://down.example.org/entry.xml", "Server error '503 Service Unavailable' for url 'https://down.example.org/entry.xml'"),
+    )
+
+
+def test_a_reason_keeps_no_credential_a_url_in_the_message_carries() -> None:
+    message = "Client error '401 Unauthorized' for url 'https://reader:hunter2@feeds.example.org/private.xml?token=s3cr3t&page=2#top'"
+
+    assert scan_failure_reason(message) == "Client error '401 Unauthorized' for url 'https://feeds.example.org/private.xml'"
+
+
+def test_a_reason_longer_than_the_limit_is_cut_and_says_so() -> None:
+    reason = scan_failure_reason("status: " + "x" * 1000)
+
+    assert len(reason) == REASON_LIMIT
+    assert reason.endswith("...")
+
+
+def test_a_message_with_no_text_has_no_reason() -> None:
+    assert scan_failure_reason("  \n \n") == ""
+
+
+async def test_an_exception_with_no_message_is_recorded_by_its_type(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_BLOGS, "https://odd.example.org/entry.xml")
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    scanner = FakeScanner(raises={"https://odd.example.org/entry.xml": TimeoutError()})
+
+    report = await scan_watch_list(watch_list, {_BLOGS: scanner}, queue, now=_NOW)
+
+    assert report.failed == (("blogs:https://odd.example.org/entry.xml", "TimeoutError"),)

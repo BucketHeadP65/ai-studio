@@ -10,7 +10,7 @@ class ConversionError(Exception):
 
 
 class ScanError(Exception):
-    """A watch entry could not be scanned. The message is what the report records."""
+    """A watch entry could not be scanned. Its message is the reason the report records, cut to its first line."""
 
 
 class SourceQueueUnreadableError(Exception):

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from core.cqrs.contracts import Command, narrow_command, utcnow
 
-from engram.sources.domain.watch_list import ScanReport, ScanWatchList
+from engram.sources.domain.watch_list import ScanReport, ScanWatchList, scan_failure_reason
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -25,7 +25,8 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
     An entry's `scanner` is resolved against `scanners`, the names the host actually built. A name
     nothing there serves is that entry's own reported failure, naming what is available. Whatever
     a scanner raises is that entry's failure alone, so one unscannable entry never aborts the run,
-    the entries after it still scan and the sync that follows still starts.
+    the entries after it still scan and the sync that follows still starts. Its reason is one line
+    of what the scanner raised, with no URL credentials in it.
 
     Args:
         watch_list: The knowledge base's watch-list file.
@@ -47,7 +48,7 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
         try:
             sources = await scanner.scan(entry, since=entry.last_scanned)
         except Exception as error:  # noqa: BLE001 (any scanner failure is this entry's reported reason, never the run's end)
-            failed.append((entry.label, str(error) or type(error).__name__))
+            failed.append((entry.label, scan_failure_reason(str(error)) or type(error).__name__))
             continue
         found += len(sources)
         added = queue.add_many([source.url for source in sources], found_via=entry.label, found_at=now)
