@@ -64,8 +64,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   limit in a test (`harness/tests/unit/test_agent_mounts.py`,
   `test_the_prompted_output_preamble_is_a_static_pydantic_ai_injection_not_ours_to_reorder`, retired with `8191d8ac` when the
   chat agent moved to plain text).
-- **Upstream state:** by design, still present in 2.51.0: an agent with a dynamic identity instruction and `PromptedOutput`
-  still receives the output-format block first (reproduced 2026-09-27). The ask would be a way to position the output-format block (or mark it dynamic) so an
+- **Upstream state:** by design, still present in 2.51.0 and 2.66.0: an agent with a dynamic identity instruction and
+  `PromptedOutput` still receives the output-format block first (reproduced 2026-09-27, and on 2.66.0 2026-11-05). In
+  2.66.0 `Model.prepare_request` (`pydantic_ai/models/__init__.py`, lines 1654-1656) adds the block as a literal
+  `InstructionPart`, and `InstructionPart.sorted` puts literal parts before dynamic ones. The ask would be a way to position the output-format block (or mark it dynamic) so an
   agent's identity can open the prompt.
 - **Issue:** not filed.
 
@@ -205,8 +207,11 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** first patched a fork's `CodeMode.call_tool` to pass the result through `to_jsonable_python(..., fallback=repr)`.
   That patch went with the fork: pydantic-ai-harness 0.36.0 renders a result with no JSON form as its `repr` itself.
 - **Upstream state:** the `CodeMode` half is fixed in pydantic-ai-harness 0.36.0 (#1077, a result with no JSON form comes back
-  as its `repr`). The instrumentation half is still present in 2.51.0: a plain tool returning `str` (the class) under the
-  `Instrumentation` capability ends the run with `PydanticSerializationError` (reproduced 2026-09-27). The remaining ask: the
+  as its `repr`). The instrumentation half is still present in 2.51.0 and 2.66.0: a plain tool returning `str` (the class) under the
+  `Instrumentation` capability ends the run with `PydanticSerializationError` (reproduced 2026-09-27, and on 2.66.0
+  2026-11-05). In 2.66.0 the function tool span serializes with `tool_return_ta.dump_json` and no fallback
+  (`pydantic_ai/capabilities/instrumentation.py`, line 755), while the output tool span already falls back through
+  `safe_to_json(serialize_any(...))` (line 826). The remaining ask: the
   instrumentation span should record a `repr` rather than raise when a tool result cannot be serialized, since observability
   must never end a run.
 - **Issue:** not filed.
