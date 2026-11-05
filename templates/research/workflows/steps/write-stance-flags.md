@@ -1,27 +1,27 @@
 ---
 title: Write stance flags
-summary: Each approved stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the placements under no listed stance.
-version: 3
+summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals and the placements under no listed stance.
+version: 4
 step:
   name: write_stance_flags
   source: |
     indexed = {}
-    listed = True
+    flags_listed = True
     refusal = ""
     try:
         for row in await list_pages(knowledge_base=collection, page_type="flag", limit=10000):
             indexed[row["page_id"]] = True
     except Exception as error:
-        listed = False
+        flags_listed = False
         refusal = "list_pages refused the flags, so no flag was written: " + str(error)
     written = []
     kept_decided = []
     failed = []
-    for proposal in proposals:
+    for proposal in listed["proposals"]:
         stance_id = proposal["stance_id"]
         name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
         flag_id = "flag.stance-" + name
-        if not listed:
+        if not flags_listed:
             failed.append({"flag_id": flag_id, "reason": refusal})
             continue
         created = ""
@@ -90,9 +90,9 @@ step:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(flag_id)
-    {"written": written, "kept_decided": kept_decided, "failed": failed, "unplaced": unplaced}
+    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unplaced": unplaced}
   inputs:
-    proposals: {like: list_proposals}
+    listed: {like: list_proposals}
     unplaced: {like: list_unplaced}
     collection:
       json_schema: {type: string}
@@ -100,7 +100,7 @@ step:
     json_schema:
       type: object
       title: StanceFlagsWritten
-      required: [written, kept_decided, failed, unplaced]
+      required: [written, kept_decided, failed, dropped, unplaced]
       properties:
         written:
           type: array
@@ -119,6 +119,19 @@ step:
             properties:
               flag_id: {type: string}
               reason: {type: string}
+        dropped:
+          type: array
+          description: The stance proposals the run dropped, each with why, as `list_proposals` handed them.
+          items:
+            type: object
+            title: DroppedStanceProposal
+            required: [stance_id, title, reasons]
+            properties:
+              stance_id: {type: string}
+              title: {type: string}
+              reasons:
+                type: array
+                items: {type: string}
         unplaced:
           type: array
           description: The placements under a stance the base does not list, as `list_unplaced` handed them.
@@ -134,8 +147,8 @@ step:
   tools: [list_pages, read_page, read_notes, write_note]
 ---
 
-Use as the tail of a stance refresh, after its proposals are judged and listed, with `collection` set to the research
-knowledge base. Each proposal becomes the flag `flag.stance-` followed by its stance id without `stance.`, of kind
+Use as the tail of a stance refresh, after its proposals are judged and listed, with `listed` wired from
+`list_proposals` and `collection` set to the research knowledge base. Each proposal in its `proposals` becomes the flag `flag.stance-` followed by its stance id without `stance.`, of kind
 `stance` at status `pending`. Its title is the proposed stance. `about` links each digest a finding cites, once. Why
 names each records page by its id in backticks, with the reason placement gave, since a records page lives in another
 knowledge base and a link to it would not resolve. Proposal says that accepting the flag asks for a new stance page.
@@ -151,5 +164,5 @@ not list is written to `Wiki/Flags`, at the very path `read_notes` checked, unle
 answered in `failed` and left as it is. A base whose flags live in another folder refuses that path, and each new flag
 is answered in `failed`. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
 other flag still lands. When `list_pages` refuses the flags, no flag is written, and each is answered in `failed`.
-It answers the placements `list_unplaced` named, each under a stance id no stance page carries, unchanged in
-`unplaced`, since its answer is the run's output.
+Its answer is the run's output, so it also answers, unchanged, the proposals `list_proposals` dropped, each with why,
+in `dropped`, and the placements `list_unplaced` named, each under a stance id no stance page carries, in `unplaced`.

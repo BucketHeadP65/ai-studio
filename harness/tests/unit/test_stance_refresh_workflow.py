@@ -48,8 +48,6 @@ import yaml
 
 from core.ai.workflows.contracts import (
     Briefing,
-    GateDecision,
-    RetryExhaustedError,
     Shape,
     StepRegistry,
     Workflow,
@@ -78,7 +76,6 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
     from core.ai.workflows.contracts import InlineStep, Outcome
-    from core.ai.workflows.internal_contracts import ApprovalHook
     from core.ai.workflows.registry import StepImplementation
 
 RESEARCH = Path(__file__).resolve().parents[3] / "templates" / "research" / "workflows"
@@ -416,6 +413,27 @@ def _backed_by_two(_: Proposal) -> list[Finding]:
     return BACKED
 
 
+class CheckedFindingRow(TypedDict):
+    claim: str
+    claim_text: str
+    side: str
+    how: str
+
+
+class Backing(TypedDict):
+    stance_id: str
+    title: str
+    pages: list[Page]
+    findings: list[CheckedFindingRow]
+    contests_only: bool
+
+
+def _every_finding_bears(backing: Backing) -> dict[str, object]:
+    """A proposals judge that finds every finding of the backing bears and the proposal repeats no stance."""
+    verdicts = [{"claim": finding["claim"], "bears": True, "why": "It measures the position."} for finding in backing["findings"]]
+    return {"stance_id": backing["stance_id"], "findings": verdicts}
+
+
 def _as_handed(proposal: Proposal) -> Mapping[str, object]:
     """The stance_id, title and pages a backing worker copies into its answer, exactly as it was handed."""
     return {"stance_id": proposal["stance_id"], "title": proposal["title"], "pages": proposal["pages"]}
@@ -441,6 +459,12 @@ def _kept(stance_id: str, title: str, pages: list[Page], claims: list[str], *, c
 
 PLACED_ADR_1 = Reason(page_id="adr-1", reason="Papers argue for it.")
 """The reason a proposing placement gives for adr-1."""
+
+NO_BACKING = (
+    "No backing of it passed the code checks: its worker failed, changed the proposal's id, title or pages, "
+    "or cited claims from fewer than two digests the base holds."
+)
+"""Why list_proposals drops a proposal no backing of which reached the judge."""
 
 MEMORY = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c1", "art.memory-survey#^c3"])
 """The proposal stance.agent-memory as the run keeps it, proposed for adr-1 alone and backed by BACKED."""
@@ -468,10 +492,10 @@ class Scripted:
 
     `place` answers each group's placements, `rewrite` each item's draft and `back` each proposal's findings, beside
     the stance_id, title and pages `copy` answers for it, after waiting the seconds `delays` names for its stance_id.
-    The rewrite judge answers `rewrite_verdicts` in order and the
-    proposals judge `proposal_verdicts`, each approving once its list runs out. `calls` records every node performed,
-    in order, and `groups`, `items`, `reviewed`, `backed` and `judged` what each placement worker, refresh worker,
-    rewrite judge call, backing worker and proposals judge call was handed.
+    The rewrite judge answers `rewrite_verdicts` in order, approving once its list runs out. `judge` answers each
+    backing's judgement, after the same wait. `calls` records every node performed, in order, and `groups`, `items`,
+    `reviewed`, `backed` and `judged` what each placement worker, refresh worker, rewrite judge call, backing worker
+    and proposal judge was handed.
     """
 
     place: Callable[[Group], list[dict[str, object]]] = _skip_all
@@ -480,13 +504,13 @@ class Scripted:
     copy: Callable[[Proposal], Mapping[str, object]] = _as_handed
     delays: Mapping[str, float] = field(default_factory=dict)
     rewrite_verdicts: list[dict[str, str]] = field(default_factory=list)
-    proposal_verdicts: list[dict[str, str]] = field(default_factory=list)
+    judge: Callable[[Backing], dict[str, object]] = _every_finding_bears
     calls: list[str] = field(default_factory=list)
     groups: list[Group] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     reviewed: list[list[object]] = field(default_factory=list)
     backed: list[Proposal] = field(default_factory=list)
-    judged: list[list[object]] = field(default_factory=list)
+    judged: list[Backing] = field(default_factory=list)
 
     async def perform(self, node_id: str, implementation: StepImplementation, kwargs: Mapping[str, object]) -> object:
         self.calls.append(node_id)
@@ -508,9 +532,10 @@ class Scripted:
             await asyncio.sleep(self.delays.get(proposal["stance_id"], 0))
             return _typed(implementation, {**self.copy(proposal), "findings": self.back(proposal)})
         if node_id == "judge_proposals":
-            self.judged.append(to_jsonable_python(kwargs["proposals"]))
-            verdict = self.proposal_verdicts.pop(0) if self.proposal_verdicts else {"outcome": "approve", "feedback": ""}
-            return _typed(implementation, verdict)
+            backing: Backing = to_jsonable_python(kwargs["backing"])
+            self.judged.append(backing)
+            await asyncio.sleep(self.delays.get(backing["stance_id"], 0))
+            return _typed(implementation, self.judge(backing))
         return await implementation.function(**kwargs)
 
 
@@ -533,22 +558,15 @@ async def _registry(sandbox: AsyncMonty, bases: Bases) -> StepRegistry:
 
 
 async def _run(
-    sandbox: AsyncMonty,
-    bases: Bases,
-    scripted: Scripted,
-    *,
-    changed: str,
-    progress: str = PROGRESS,
-    approval: ApprovalHook | None = None,
-    raises: type[Exception] | None = None,
+    sandbox: AsyncMonty, bases: Bases, scripted: Scripted, *, changed: str, progress: str = PROGRESS, raises: type[Exception] | None = None
 ) -> WorkflowState:
     """One whole run of the shipped workflow, as the schedule starts it with `changed` as its changed page ids.
 
-    `approval` answers a judge that cannot judge, nobody by default. With `raises` the run must end with that error.
+    With `raises` the run must end with that error.
     """
     params = {"collection": "research", "records": "repo-docs", "progress": progress, "changed_page_ids": changed}
     state = WorkflowState(params=dict(params))
-    graph = build_graph(_spec(), await _registry(sandbox, bases), approval=approval or NoPerson(), executor=scripted)
+    graph = build_graph(_spec(), await _registry(sandbox, bases), approval=NoPerson(), executor=scripted)
     if raises is None:
         await graph.run(state=state)
     else:
@@ -565,9 +583,15 @@ def _value(state: WorkflowState, node_id: str) -> dict[str, object]:
 
 
 def _proposals(state: WorkflowState) -> list[dict[str, object]]:
-    """The proposals the run lists on its card, the value of list_proposals, as plain data without each one's reasons."""
-    listed: list[dict[str, object]] = to_jsonable_python(state.values["list_proposals"])
+    """The proposals the run lists on its card, from list_proposals, as plain data without each one's reasons."""
+    listed: list[dict[str, object]] = to_jsonable_python(_value(state, "list_proposals")["proposals"])
     return [{key: value for key, value in proposal.items() if key != "reasons"} for proposal in listed]
+
+
+def _dropped(state: WorkflowState) -> list[dict[str, object]]:
+    """The proposals the run dropped, from list_proposals, each with its reasons."""
+    dropped: list[dict[str, object]] = to_jsonable_python(_value(state, "list_proposals")["dropped"])
+    return dropped
 
 
 def _checked(state: WorkflowState) -> Outcome:
@@ -906,12 +930,21 @@ async def test_a_proposal_only_run_carries_its_judged_proposals_as_an_artifact_a
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    assert scripted.judged == [[MEMORY]], "the proposals judge reads every finding with the claim's own text"
-    assert to_jsonable_python(state.values["judge_proposals"]) == [MEMORY]
+    assert scripted.judged == [MEMORY], "the proposal judge reads every finding with the claim's own text"
+    assert to_jsonable_python(state.values["judge_proposals"]) == [
+        {
+            "stance_id": "stance.agent-memory",
+            "findings": [
+                {"claim": "paper.dense-retrieval#^c1", "bears": True, "why": "It measures the position."},
+                {"claim": "art.memory-survey#^c3", "bears": True, "why": "It measures the position."},
+            ],
+            "duplicates": None,
+        }
+    ], "each judgement names its proposal and answers every finding by its claim"
     outcome = _checked(state)
     assert outcome.status == "noop", "no stance was rewritten"
     listed = [{**MEMORY, "reasons": [PLACED_ADR_1]}]
-    assert to_jsonable_python(state.values["list_proposals"]) == listed
+    assert _value(state, "list_proposals") == {"proposals": listed, "dropped": []}
     assert [(ref.id, ref.node_id, ref.media_type, ref.value_digest) for ref in outcome.artifacts] == [
         ("proposed_stances", "list_proposals", "application/json", reviewed_value_digest(canonical_reviewed_value(listed)))
     ], "the card shows each approved proposal with its title, its pages and every finding's claim, text, side and sentence"
@@ -1165,33 +1198,6 @@ async def test_a_proposal_whose_findings_all_contest_it_is_kept_and_marked(
     assert _proposals(state) == [MEMORY, reranking], "and reaches the card marked as such"
 
 
-async def test_a_proposals_judge_rejection_backs_the_proposals_again_and_never_reruns_the_rewrites(sandbox: AsyncMonty) -> None:
-    bases = Bases(
-        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
-    )
-    first = [_finding("paper.dense-retrieval#^c2"), _finding("art.memory-survey#^c3")]
-
-    def back(_: Proposal) -> list[Finding]:
-        return first if not scripted.judged else BACKED
-
-    feedback = "stance.agent-memory: paper.dense-retrieval#^c2 is about training data and does not bear on agent memory."
-    scripted = Scripted(
-        place=_proposing("stance.agent-memory", "Agent memory"), back=back, proposal_verdicts=[{"outcome": "reject", "feedback": feedback}]
-    )
-
-    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1")
-
-    rejected = _kept("stance.agent-memory", "Agent memory", [_listed("adr-1")], ["paper.dense-retrieval#^c2", "art.memory-survey#^c3"])
-    assert scripted.judged == [[rejected], [MEMORY]], "the second backing answers the judge's feedback"
-    assert scripted.calls.count("back_proposals") == 2
-    assert (scripted.calls.count("refresh_stances"), scripted.calls.count("check_stances")) == (1, 1), "the rewrites run once"
-    assert {node_id: [entry.feedback for entry in entries] for node_id, entries in state.retry_feedback.items()} == {
-        "back_proposals": [feedback]
-    }
-    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"]
-    assert _proposals(state) == [MEMORY]
-
-
 async def test_a_run_with_no_proposal_backs_nothing_and_reads_no_digest(sandbox: AsyncMonty) -> None:
     bases = Bases(
         records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
@@ -1203,10 +1209,9 @@ async def test_a_run_with_no_proposal_backs_nothing_and_reads_no_digest(sandbox:
     assert scripted.backed == [], "no backing worker runs"
     assert scripted.calls.count("check_findings") == 1, "check_findings is code"
     assert [page_id for _, page_id in bases.reads if page_id in DIGESTS] == [], "and reads no digest"
-    assert scripted.judged == [[]], "the proposals judge is reached once, on an empty list, as the rewrite judge is"
-    judge = next(step for step in _spec().inline if step.name == "judge_proposals")
-    assert isinstance(judge, Briefing)
-    assert "When proposals is an empty list, answer outcome approve" in judge.instructions, "and approves it calling no tool"
+    assert (scripted.judged, scripted.calls.count("judge_proposals")) == ([], 0), (
+        "no proposal judge runs, so the branch makes no model call"
+    )
     assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
     assert _proposals(state) == []
     assert _outcome(state) == "succeeded"
@@ -1218,6 +1223,9 @@ def test_the_backing_worker_and_the_rewrite_judge_hold_budgets_that_fit_their_wo
     assert isinstance(back, Briefing)
     assert isinstance(check, Briefing)
     assert set(back.tools) == {"search", "fetch", "read_page"}
+    judge = steps["judge_proposal"]
+    assert isinstance(judge, Briefing)
+    assert set(judge.tools) == {"read_page", "search"}, "the proposal judge reads and writes nothing"
     assert back.budget is not None
     assert (back.budget.requests, back.budget.tool_calls) == (20, 120)
     assert isinstance(back.output, Shape)
@@ -1232,43 +1240,6 @@ def _rewrite_and_propose() -> Bases:
     return Bases(
         records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1")}, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS
     )
-
-
-@dataclass
-class NobodyAnswers:
-    """The person a judge escalates to, who never answers, so each escalation ends as the gate policy's timeout."""
-
-    asked: list[str] = field(default_factory=list)
-
-    async def review(self, gate_id: str, value: object, *, note: str = "") -> GateDecision:
-        del value, note
-        self.asked.append(gate_id)
-        return GateDecision(approve=False, feedback="Nobody answered before the wait ran out.", source="timeout")
-
-
-async def test_a_proposals_judge_that_spends_its_last_attempt_fails_the_run_after_the_rewrites_are_written(sandbox: AsyncMonty) -> None:
-    bases = _rewrite_and_propose()
-    reject = {"outcome": "reject", "feedback": "stance.agent-memory: no finding bears on agent memory."}
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), proposal_verdicts=[reject, reject, reject])
-
-    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1", raises=RetryExhaustedError)
-
-    assert scripted.calls.count("judge_proposals") == 3
-    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite was written first"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
-
-
-async def test_a_proposals_judge_nobody_answers_fails_the_run_after_the_rewrites_are_written(sandbox: AsyncMonty) -> None:
-    bases = _rewrite_and_propose()
-    unsure = {"outcome": "cannot_judge", "feedback": "The proposals are cut off."}
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), proposal_verdicts=[unsure, unsure, unsure])
-    nobody = NobodyAnswers()
-
-    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1", approval=nobody, raises=RetryExhaustedError)
-
-    assert nobody.asked == ["judge_proposals"] * 3, "each escalation of the proposals judge waits and times out"
-    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite was written first"
-    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
 
 
 def _three_proposals(group: Group) -> list[dict[str, object]]:
@@ -1336,10 +1307,10 @@ async def test_a_proposal_its_worker_copied_back_altered_is_dropped_after_the_ju
 
     state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2")
 
-    approved: list[dict[str, object]] = to_jsonable_python(state.values["judge_proposals"])
-    assert [proposal["stance_id"] for proposal in approved] == ["stance.agent-memory", altered.get("stance_id", "stance.reranking")]
+    judged = sorted(backing["stance_id"] for backing in scripted.judged)
+    assert judged == sorted(["stance.agent-memory", str(altered.get("stance_id", "stance.reranking"))]), "the judge reads the copy"
     assert _proposals(state) == [MEMORY], "the altered copy is dropped and the honest proposal passes"
-    assert state.retry_feedback == {}, "dropping the altered copy sends nothing back to the workers"
+    assert [(proposal["stance_id"], proposal["reasons"]) for proposal in _dropped(state)] == [("stance.reranking", [NO_BACKING])]
 
 
 async def test_a_rewrite_judge_rejection_redrafts_once_and_the_proposals_still_wait_for_the_write(sandbox: AsyncMonty) -> None:
@@ -1564,7 +1535,13 @@ async def test_an_approved_stance_proposal_is_written_as_a_pending_stance_flag(s
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert _flag_written(bases) == MEMORY_FLAG
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
+    assert _value(state, "write_stance_flags") == {
+        "written": ["flag.stance-agent-memory"],
+        "kept_decided": [],
+        "failed": [],
+        "dropped": [],
+        "unplaced": [],
+    }
     assert bases.notes_read == ["Wiki/Flags/stance-agent-memory.md"], "a new flag's path is checked on disk first"
     assert bases.writes == [], "no stance page is written for a proposal"
 
@@ -1582,7 +1559,13 @@ async def test_a_pending_stance_flag_is_written_again_with_the_newer_findings_an
     written = _flag_written(bases, path="Wiki/Flags/stance-agent-memory.md")
     assert written["frontmatter"] == {**MEMORY_FLAG["frontmatter"], "created": "2026-10-30"}
     assert written["sections"] == MEMORY_FLAG["sections"]
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
+    assert _value(state, "write_stance_flags") == {
+        "written": ["flag.stance-agent-memory"],
+        "kept_decided": [],
+        "failed": [],
+        "dropped": [],
+        "unplaced": [],
+    }
 
 
 @pytest.mark.parametrize("status", ["accepted", "dismissed", "completed"])
@@ -1597,7 +1580,13 @@ async def test_a_stance_flag_the_owner_decided_is_never_written_again_and_is_lis
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert bases.flag_writes == []
-    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": [], "unplaced": []}
+    assert _value(state, "write_stance_flags") == {
+        "written": [],
+        "kept_decided": ["flag.stance-agent-memory"],
+        "failed": [],
+        "dropped": [],
+        "unplaced": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -1648,7 +1637,13 @@ async def test_a_stance_flag_accepted_on_disk_before_the_index_caught_up_is_neve
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert bases.flag_writes == [], "the owner's decision in the file wins over the index"
-    assert _value(state, "write_stance_flags") == {"written": [], "kept_decided": ["flag.stance-agent-memory"], "failed": [], "unplaced": []}
+    assert _value(state, "write_stance_flags") == {
+        "written": [],
+        "kept_decided": ["flag.stance-agent-memory"],
+        "failed": [],
+        "dropped": [],
+        "unplaced": [],
+    }
 
 
 async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sits(sandbox: AsyncMonty) -> None:
@@ -1658,7 +1653,13 @@ async def test_a_pending_stance_flag_the_owner_moved_is_written_where_it_now_sit
     state = await _run(sandbox, bases, Scripted(place=_proposing("stance.agent-memory", "Agent memory")), changed="adr-1")
 
     assert _flag_written(bases, path=moved)["sections"] == MEMORY_FLAG["sections"]
-    assert _value(state, "write_stance_flags") == {"written": ["flag.stance-agent-memory"], "kept_decided": [], "failed": [], "unplaced": []}
+    assert _value(state, "write_stance_flags") == {
+        "written": ["flag.stance-agent-memory"],
+        "kept_decided": [],
+        "failed": [],
+        "dropped": [],
+        "unplaced": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -1732,3 +1733,83 @@ async def test_a_stance_flag_counts_its_findings_in_its_summary_and_links_each_d
 
     frontmatter = _flag_written(bases)["frontmatter"]
     assert (frontmatter["summary"], frontmatter["about"]) == (summary, about)
+
+
+def _four_proposals(group: Group) -> list[dict[str, object]]:
+    """A placement worker proposing one new stance per page of its group: memory, retrieval, reranking and routing."""
+    topics = ["memory", "retrieval", "reranking", "routing"]
+    return [
+        {
+            "page_id": page["page_id"],
+            "placement": "new",
+            "stance_id": f"stance.{topics[index]}",
+            "title": topics[index].capitalize(),
+            "reason": "Papers argue for it.",
+        }
+        for index, page in enumerate(group["pages"])
+    ]
+
+
+def _judge_the_four(backing: Backing) -> dict[str, object]:
+    """A proposal judge that refuses one claim each of memory and retrieval, calls reranking a duplicate and fails on routing."""
+    stance_id = backing["stance_id"]
+    if stance_id == "stance.routing":
+        msg = "The next request would exceed the request_limit of 15"
+        raise UsageLimitExceeded(msg)
+    refused = {"stance.memory": "talk.agent-loops#^c4", "stance.retrieval": "art.memory-survey#^c3"}.get(stance_id, "")
+    verdicts = [
+        {
+            "claim": finding["claim"],
+            "bears": finding["claim"] != refused,
+            "why": "It only shares the topic." if finding["claim"] == refused else "It measures it.",
+        }
+        for finding in backing["findings"]
+    ]
+    judgement: dict[str, object] = {"stance_id": stance_id, "findings": verdicts}
+    if stance_id == "stance.reranking":
+        judgement["duplicates"] = "stance.x"
+    return judgement
+
+
+async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bearing_digests_is_written(sandbox: AsyncMonty) -> None:
+    records = {page_id: _record(page_id) for page_id in ("adr-x", "adr-1", "adr-2", "adr-3", "adr-4")}
+    bases = Bases(records=records, stances={"stance.x": _stance("x", record="adr-x")}, digests=DIGESTS)
+
+    def back(proposal: Proposal) -> list[Finding]:
+        return [*BACKED, _finding("talk.agent-loops#^c4")] if proposal["stance_id"] == "stance.memory" else BACKED
+
+    scripted = Scripted(place=_four_proposals, back=back, judge=_judge_the_four, delays={"stance.memory": 0.3, "stance.retrieval": 0.1})
+
+    state = await _run(sandbox, bases, scripted, changed=",".join(records))
+
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the rewrite is written"
+    assert scripted.calls.count("back_proposals") == 4, "each proposal is backed once, and a weak finding is never sent back"
+    assert scripted.calls.count("judge_proposals") == 4
+    for program in ("merge_proposals", "check_findings", "list_proposals", "write_stance_flags"):
+        assert scripted.calls.count(program) == 1, f"{program} runs once, after everything it waits on"
+    [written] = bases.flag_writes
+    assert written["payload"]["frontmatter"]["id"] == "flag.stance-memory"
+    assert (
+        written["payload"]["sections"][2]["body"]
+        == f"- [[paper.dense-retrieval#^c1]] supports: {HOW}\n- [[art.memory-survey#^c3]] supports: {HOW}"
+    ), "only the findings that bear are on the flag"
+    dropped = [
+        {
+            "stance_id": "stance.retrieval",
+            "title": "Retrieval",
+            "reasons": [
+                "Fewer than two digests are left with findings that bear.",
+                "art.memory-survey#^c3 does not bear: It only shares the topic.",
+            ],
+        },
+        {"stance_id": "stance.reranking", "title": "Reranking", "reasons": ["The judge found it repeats the existing stance stance.x."]},
+        {
+            "stance_id": "stance.routing",
+            "title": "Routing",
+            "reasons": ["The judge gave no verdict: its judge item failed or was skipped before it answered."],
+        },
+    ]
+    assert _dropped(state) == dropped
+    flags = _value(state, "write_stance_flags")
+    assert (flags["written"], flags["dropped"]) == (["flag.stance-memory"], dropped), "the run's output says why each one went"
+    assert _outcome(state) == "succeeded"
