@@ -163,6 +163,14 @@ def test_a_quote_broken_over_two_lines_is_refused_rather_than_dropped() -> None:
         payload_of(text, source_path="note.md", spec=spec)
 
 
+def test_a_page_without_a_final_line_break_is_refused_naming_its_last_line() -> None:
+    spec = research_spec()
+    text = _rendered(_PAYLOAD).removesuffix("\n")
+
+    with pytest.raises(ValueError, match=r"cannot carry whole, first at 'Revisit next year\.'"):
+        payload_of(text, source_path="note.md", spec=spec)
+
+
 def _with_tl_dr_body(body: str) -> dict[str, object]:
     """`_PAYLOAD` with its TL;DR section's body replaced, the way a writer puts extra headings inside a body."""
     sections = _PAYLOAD["sections"]

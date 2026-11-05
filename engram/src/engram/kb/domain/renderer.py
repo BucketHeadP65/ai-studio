@@ -146,7 +146,7 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
         payload["sections"] = carried
         rendered_body = _rendered_parts(payload, spec)[1]
     if rendered_body != written_body:
-        first = _first_difference(written_body.splitlines(), rendered_body.splitlines())
+        first = _first_difference(written_body.splitlines(keepends=True), rendered_body.splitlines(keepends=True))
         msg = f"{note.frontmatter.id} holds text a payload cannot carry whole, first at {first!r}"
         raise ValueError(msg)
     return payload
@@ -208,12 +208,12 @@ def _renders_as_written(section: Section, lines: Sequence[str], spans: Sequence[
 
 
 def _first_difference(written: Sequence[str], rendered: Sequence[str]) -> str:
-    """The first line of `written` that `rendered` does not reproduce, or the first extra line of either."""
+    """The first line of `written` that `rendered` does not reproduce with its line ending, or the first extra line of either, ending dropped."""
     for line, other in zip(written, rendered, strict=False):
         if line != other:
-            return line
+            return line.rstrip("\r\n")
     longer = written if len(written) > len(rendered) else rendered
-    return longer[min(len(written), len(rendered))]
+    return longer[min(len(written), len(rendered))].rstrip("\r\n")
 
 
 @dataclass(frozen=True)
