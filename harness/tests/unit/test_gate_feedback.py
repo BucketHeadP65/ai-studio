@@ -130,7 +130,7 @@ async def test_a_rejection_answers_with_the_exact_words_and_who_said_them(tmp_pa
     assert decision.approve is False
     assert decision.feedback == "tighten the second paragraph"
     assert decision.source == "person"
-    assert approval.rejections() == {"approve": 1}
+    assert approval.decisions == {"approve": [False]}
 
 
 async def test_a_gate_nobody_answered_is_refused_by_the_deadline_and_says_so(tmp_path: Path) -> None:
@@ -147,7 +147,7 @@ async def test_a_gate_nobody_answered_is_refused_by_the_deadline_and_says_so(tmp
     assert [decision.source for decision in decisions] == ["timeout"] * 3
     assert not any(decision.approve for decision in decisions)
     assert decisions[0].feedback == "Nobody decided this gate before it timed out."
-    assert approval.rejections() == {"approve": 3}
+    assert approval.decisions == {"approve": [False, False, False]}
 
 
 async def test_automode_crosses_the_gate_with_no_decision_future(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
@@ -159,7 +159,7 @@ async def test_automode_crosses_the_gate_with_no_decision_future(quarterly_repor
     assert session.active.decision is None
     assert session.active.pending is None
     assert approval.auto_gates() == ("approve",)
-    assert approval.rejections() == {}
+    assert approval.decisions == {}
 
 
 async def test_an_automode_run_attests_the_gate_as_auto_not_approved(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:

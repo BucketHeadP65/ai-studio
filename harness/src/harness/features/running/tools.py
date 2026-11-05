@@ -30,6 +30,7 @@ from core.ai.workflows.contracts import (
     WorkflowArguments,
     approved_gates,
     build_graph,
+    gate_rejections,
     performing_step,
     shapes_of,
     spec_identity,
@@ -63,6 +64,7 @@ from harness.rendering import render_for_review
 from harness.session import PooledSessions, Runtime, bind_active, run_log_path
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from decimal import Decimal
 
     from core.ai.workflows.contracts import Node
@@ -346,7 +348,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
                 gates_approved = tuple(
                     g for g in approved_gates(requested.spec, run_log.state.values) if g not in auto and g not in orchestrated
                 )
-                gates_rejected = approval.rejections()
+                gates_rejected = gate_rejections(run_log.state.gate_decisions)
                 result = checked_outcome(
                     EndedRun(
                         spec=requested.spec,
@@ -402,7 +404,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
             session.active.result = f"The run stopped with an error: {failure}"
             return f"{requested.source} failed while running: {failure}\nThe failure is recorded. Tell the person what happened. Do not silently retry."
         session.active.result = f"Finished. Result ({type(produced).__name__}):\n{render_for_review(produced)}"
-        return _finished(requested.source, requested.spec, approval, produced)
+        return _finished(requested.source, requested.spec, gate_rejections(run_log.state.gate_decisions), produced)
 
     # The turn that started the run never waits for it: `settlement` waits the run out however
     # that turn ends, and `deliver` hands the outcome back to the conversation as one headless
@@ -615,11 +617,11 @@ def _settled_prompt(source: str, answer: str) -> str:
     )
 
 
-def _finished(source: str, spec: Workflow, approval: ChatApproval, produced: object) -> str:
+def _finished(source: str, spec: Workflow, rejected: Mapping[str, int], produced: object) -> str:
     """The turn's account of a finished run: the steps, the gates as they actually went with each rejection named, the result."""
     ran = ", ".join(node.work for node in spec.nodes if node.kind == "run")
     gates = [node.id for node in spec.nodes if node.kind == "gate"]
     gate_note = f" Gates crossed: {', '.join(gates)}." if gates else ""
-    if rejected := approval.rejections():
+    if rejected:
         gate_note += " Rejected first: " + ", ".join(f"{gate_id} ({count}x, reran its upstream)" for gate_id, count in rejected.items())
     return f"{source} finished. Steps: {ran}.{gate_note}\nResult ({type(produced).__name__}):\n{render_for_review(produced)}"

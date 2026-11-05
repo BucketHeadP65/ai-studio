@@ -71,7 +71,7 @@ async def test_an_unanswered_park_refuses_in_the_deadlines_own_name(quarterly_re
 
     assert (first.approve, first.source) == (False, "timeout")
     assert (second.approve, second.source) == (False, "timeout")
-    assert approval.rejections() == {"approve": 2}, "every unanswered wait is a refusal on the record"
+    assert approval.decisions == {"approve": [False, False]}, "every unanswered wait is a refusal on the record"
 
 
 async def test_a_person_present_and_rejecting_may_keep_rejecting(quarterly_report: Workflow, registry: StepRegistry) -> None:
@@ -88,7 +88,7 @@ async def test_a_person_present_and_rejecting_may_keep_rejecting(quarterly_repor
 
     assert (clicked.approve, clicked.source) == (False, "person")
     assert (await approval.review("approve", "second pass")).source == "timeout"
-    assert approval.rejections() == {"approve": 2}
+    assert approval.decisions == {"approve": [False, False]}
 
 
 class FakeAsker:
@@ -114,7 +114,7 @@ async def test_a_door_with_an_asker_never_parks(quarterly_report: Workflow, regi
     assert (await routed.review("approve", "second pass")).approve is True
     assert [gate for gate, _ in asker.asked] == ["approve", "approve"]
     assert routed.session.active.pending is None, "nothing waiting: no panel is polling for it"
-    assert routed.rejections() == {"approve": 1}, "the asker's verdicts are evidence like any click"
+    assert routed.decisions == {"approve": [False, True]}, "the asker's verdicts are evidence like any click"
 
 
 # --- a judge that cannot decide, under each gate mode -----------------------------------------
@@ -132,7 +132,6 @@ async def test_under_automode_a_judge_that_cannot_decide_sends_the_work_back_wit
 
     assert decision == GateDecision(approve=False, feedback="The drafts are empty.", source="judge")
     assert approval.decisions == {"check": [False]}
-    assert approval.rejections() == {"check": 1}
     assert approval.auto_gates() == (), "automode passed nothing, so the record counts nothing in its name"
     assert approval.session.active.pending is None, "nothing waits for a person"
 

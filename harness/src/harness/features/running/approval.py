@@ -74,14 +74,6 @@ class ChatApproval:
     _orchestrated: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     """How many times this run's own orchestrator approved each person gate under `gate_mode="orchestrate"`."""
 
-    def rejections(self) -> dict[str, int]:
-        """How many times each gate was refused, for the evidence record.
-
-        Returns:
-            Gate id to refusal count. A gate nobody refused does not appear.
-        """
-        return {gate_id: refused for gate_id, verdicts in self.decisions.items() if (refused := verdicts.count(False))}
-
     def auto_gates(self) -> tuple[str, ...]:
         """The gates automode passed with nobody asked.
 

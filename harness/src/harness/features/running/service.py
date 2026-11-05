@@ -29,6 +29,7 @@ from core.ai.workflows.contracts import (
     WorkflowArguments,
     approved_gates,
     build_graph,
+    gate_rejections,
     moved_nodes,
     normalize_arguments,
     shapes_of,
@@ -313,7 +314,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
                     auto = session.active.auto_gates()
                     orchestrated = combined_orchestrated_gates(session, spec, run_log.state.values)
                     gates_approved = tuple(g for g in approved_gates(spec, run_log.state.values) if g not in auto and g not in orchestrated)
-                    gates_rejected = approval.rejections()
+                    gates_rejected = gate_rejections(run_log.state.gate_decisions)
                     result = checked_outcome(
                         EndedRun(
                             spec=spec,

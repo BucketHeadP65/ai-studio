@@ -1231,6 +1231,9 @@ feedback to the step the gate reruns. A blank or whitespace-only note is replace
 budget before it answers is a `cannot_judge` too, so under `"auto"` it reruns the step the gate names with the budget
 stop as its note. The refusal spends one of the gate's reaches, so a judge that never decides ends the run at the
 gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in `gates_auto`.
+`gates_rejected` counts every rejection the run's gate decisions recorded, once each, whoever gave it: a judge's own
+plain rejection, a person's, an orchestrator's or a deadline's, on both engines (core's `gate_rejections`). A judge's
+`cannot_judge` is no rejection, and whoever answered in its place records a decision of its own.
 
 **The honesty rule, now three columns.** `gates_approved` means a person clicked approve. `gates_auto` means automode
 passed the gate with nobody asked. `gates_orchestrated` means this run's own orchestrator decided it: either because
