@@ -126,7 +126,7 @@ def test_a_diverged_copy_with_no_parent_entry_names_the_closest_saved_version() 
 
 def test_a_tie_for_the_closest_saved_version_goes_to_the_higher_version() -> None:
     copy = _briefing("digest", DIGEST_V1.replace("one digest", "a digest"))
-    versions = (_version(_briefing("digest", DIGEST_V1), 5), _version(_briefing("digest", DIGEST_V1), 2), DIGESTS[2])
+    versions = (_version(_briefing("digest", DIGEST_V1), 2), _version(_briefing("digest", DIGEST_V1), 5), DIGESTS[2])
 
     record = consumer_record(_workflow(copy), {"digest": versions})
 
