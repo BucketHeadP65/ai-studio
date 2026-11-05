@@ -316,11 +316,12 @@ async def test_a_prompt_azure_refused_with_http_400_raises_and_names_the_categor
     )
 
 
-async def test_every_other_http_400_passes_through_unchanged() -> None:
+@pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
+async def test_every_other_http_400_passes_through_unchanged(streamed: bool) -> None:
     transport = RefusedPrompts({"error": {"message": "Unsupported parameter.", "type": "invalid_request_error", "code": "unsupported_parameter"}})
 
     with pytest.raises(ModelHTTPError) as raised:
-        await _run(ContentFilterGuard(_responses_model(transport)), streamed=False)
+        await _run(ContentFilterGuard(_responses_model(transport)), streamed=streamed)
 
     assert raised.value.status_code == 400
 
