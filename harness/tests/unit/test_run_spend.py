@@ -9,6 +9,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+import pytest
+
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.usage import RequestUsage
 
@@ -28,8 +30,6 @@ from harness.features.running.spend import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 _EPOCH_BASE = 1_700_000_000
@@ -84,6 +84,25 @@ def test_rows_for_keeps_only_model_responses_with_their_priced_inputs() -> None:
     assert rows[0].provider_name == "openrouter"
     assert (rows[0].input_tokens, rows[0].output_tokens) == (1_000, 500)
     assert rows[0].cost == Decimal("0.004")
+
+
+def test_a_response_that_reports_no_tokens_and_no_cost_files_no_row() -> None:
+    """A stop that cut an answer before its first word leaves an empty response. Nothing was reported billed, so nothing is filed."""
+    finished = _response()
+    cut = ModelResponse(parts=[], model_name="deepseek-v4-pro-0813", usage=RequestUsage(), state="interrupted")
+
+    assert rows_for("draft", [finished, cut]) == rows_for("draft", [finished])
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [RequestUsage(unmeasured_requests=1), RequestUsage(cost=Decimal("0.001")), RequestUsage(cache_read_tokens=10)],
+    ids=["usage-unreported", "billed", "cache-read-only"],
+)
+def test_a_response_with_no_token_counts_still_files_a_row_when_it_was_billed_or_its_usage_went_unreported(usage: RequestUsage) -> None:
+    response = ModelResponse(parts=[], model_name="deepseek-v4-pro-0813", usage=usage)
+
+    assert len(rows_for("draft", [response])) == 1
 
 
 def test_a_run_folds_per_step_and_in_total(tmp_path: Path) -> None:

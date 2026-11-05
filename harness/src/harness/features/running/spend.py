@@ -153,14 +153,17 @@ class SpendWindow(BaseModel):
 
 
 def rows_for(step: str, messages: Iterable[ModelMessage]) -> list[SpendRow]:
-    """The spend rows `messages` yields for `step`, one per model response.
+    """The spend rows `messages` yields for `step`, one per model response that was billed.
+
+    A response that reports no tokens and no cost, and whose usage its provider did not leave unreported, yields no row,
+    such as an answer a stop cut before its first word.
 
     Args:
         step: The step that produced the messages.
         messages: The step's messages. A request yields no row.
 
     Returns:
-        One row per model response, in order.
+        One row per billed model response, in order.
     """
     return [
         SpendRow(
@@ -175,8 +178,15 @@ def rows_for(step: str, messages: Iterable[ModelMessage]) -> list[SpendRow]:
             cost=billed_cost(message),
         )
         for message in messages
-        if isinstance(message, ModelResponse)
+        if isinstance(message, ModelResponse) and _was_billed(message)
     ]
+
+
+def _was_billed(response: ModelResponse) -> bool:
+    """Whether `response` reports tokens, a cost, or usage its provider left unreported."""
+    usage = response.usage
+    counted = usage.input_tokens or usage.output_tokens or usage.cache_read_tokens or usage.cache_write_tokens
+    return bool(counted or usage.unmeasured_requests or billed_cost(response))
 
 
 class UsageView(TypedDict):

@@ -321,8 +321,8 @@ async def test_a_turn_stopped_mid_answer_files_what_it_was_billed_and_its_resume
     with pytest.raises(asyncio.CancelledError):
         await running
 
-    assert [row.step for row in ledger.rows] == ["digest", "digest"], "the answer the turn finished, then the one the stop cut"
-    assert ledger.rows[0].output_tokens > 0, "the finished answer was billed, so it is filed"
+    assert [row.step for row in ledger.rows] == ["digest"], "the finished answer was billed, and the one the stop cut before its first word was not"
+    assert ledger.rows[0].output_tokens > 0
     stopped = len(ledger.rows)
 
     result = await run_workflow(WORKER_SPEC, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=_no_wait)
