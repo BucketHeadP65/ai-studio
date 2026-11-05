@@ -71,11 +71,10 @@ const BLANK_VALUES: FormValues = {
 
 // The interval fields hold minutes, hours and days. An interval in seconds is kept as written.
 const INTERVAL = /^every\s+(\d+)\s*([mhd])$/i;
-const EVENT_CADENCES = [
-  /^on\s+refresh$/i,
-  /^after\s+\S+$/i,
-  /^on\s+index\s+\S+(?:\s+quiet\s+\d+\s*[smh])?$/i,
-];
+const ON_REFRESH = /^on\s+refresh$/i;
+const AFTER_RUN = /^after\s+\S+$/i;
+const ON_INDEX = /^on\s+index\s+\S+(?:\s+quiet\s+\d+\s*[smh])?$/i;
+const EVENT_CADENCES = [ON_REFRESH, AFTER_RUN, ON_INDEX];
 // Checked after the event cadences, since "on index docs quiet 30m" also has five words.
 const CRON = /^\S+(?:\s+\S+){4}$/;
 const FAIL_AFTER = /^fail_after:(.*)$/;
@@ -159,7 +158,7 @@ function composePayload(
 
 // The fields `current` changes from `opened`, both composed the same way, so a value the form only
 // rewrote (such as "EVERY 30M" reopened as "every 30m") is never sent. Arguments go whole, since a
-// change replaces every stored argument.
+// change replaces every stored argument. An emptied field goes as null, which clears it.
 function scheduleChanges(
   opened: ScheduleFormPayload,
   current: ScheduleFormPayload,
@@ -180,24 +179,7 @@ function scheduleChanges(
   return changes;
 }
 
-// The saved fields this edit empties. The backend keeps a capacity key, capacity limit or blackout
-// once set and ignores an empty one, so the form refuses to save rather than drop the change.
-function emptiedFields(opened: ScheduleFormPayload, current: ScheduleFormPayload): string[] {
-  const emptied: string[] = [];
-  if (opened.capacityKey !== null && current.capacityKey === null) emptied.push("capacity key");
-  if (opened.capacityLimit !== null && current.capacityLimit === null) {
-    emptied.push("capacity limit");
-  }
-  if (opened.blackout !== null && current.blackout === null) emptied.push("blackout windows");
-  return emptied;
-}
-
-function joinWords(words: string[]): string {
-  if (words.length <= 1) return words.join("");
-  return `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
-}
-
-// A loose shape check for a nudge only — the backend's own refusal sentence (rendered through
+// A loose shape check for a nudge only. The backend's own refusal sentence (rendered through
 // this form's `error` prop) is what actually decides whether a blackout parses.
 const BLACKOUT_SHAPE = /^\d{2}:\d{2}-\d{2}:\d{2}(\s*,\s*\d{2}:\d{2}-\d{2}:\d{2})*$/;
 
@@ -467,17 +449,18 @@ export function ScheduleForm(props: ScheduleFormProps) {
           opening,
         );
   const changes = opened === null ? null : scheduleChanges(opened, payload);
-  const emptied = opened === null ? [] : emptiedFields(opened, payload);
   const nothingChanged = changes !== null && Object.keys(changes).length === 0;
+  // An on refresh or after cadence fires only over a knowledge base the schedule's arguments choose,
+  // so on a workflow that asks for none it would never fire.
+  const firesNever =
+    workflowQuery.data !== undefined &&
+    cadenceMode === "event" &&
+    (ON_REFRESH.test(cadence) || AFTER_RUN.test(cadence)) &&
+    !usesKnowledgeBases(fields);
 
   if (!open) return null;
 
-  const canSubmit =
-    effectiveWorkflowId !== "" &&
-    cadence !== "" &&
-    !submitting &&
-    !nothingChanged &&
-    emptied.length === 0;
+  const canSubmit = effectiveWorkflowId !== "" && cadence !== "" && !submitting && !nothingChanged;
 
   function submit() {
     if (!canSubmit) return;
@@ -637,12 +620,26 @@ export function ScheduleForm(props: ScheduleFormProps) {
             />
           </label>
           {cadenceMode === "event" ? (
-            <p className="text-label-3 text-micro">
-              Write <code className="font-mono">on refresh</code> to run after a refresh brings in
-              new sources, <code className="font-mono">after &lt;workflow name&gt;</code> to run
-              after another workflow&apos;s run ends, or{" "}
-              <code className="font-mono">on index &lt;knowledge base&gt; quiet 30m</code> to run
-              after a knowledge base is indexed.
+            <ul className="flex flex-col gap-0.5 text-label-3 text-micro">
+              <li>
+                <code className="font-mono">on refresh</code> runs after a refresh brings new
+                sources into a knowledge base this schedule&apos;s arguments choose.
+              </li>
+              <li>
+                <code className="font-mono">after &lt;workflow name&gt;</code> runs after a run of
+                that workflow succeeds, fully or in part, over a knowledge base this schedule&apos;s
+                arguments also choose.
+              </li>
+              <li>
+                <code className="font-mono">on index &lt;knowledge base&gt; quiet 30m</code> runs
+                once that knowledge base is indexed with changed pages and 30 minutes pass with no
+                further index.
+              </li>
+            </ul>
+          ) : null}
+          {firesNever ? (
+            <p className="text-micro text-warn-ink">
+              This workflow does not ask for a knowledge base, so this event will never run it.
             </p>
           ) : null}
           {keptAsWritten ? (
@@ -793,12 +790,6 @@ export function ScheduleForm(props: ScheduleFormProps) {
         {showErrors && unanswered > 0 ? (
           <p role="alert" className="text-caption text-danger-ink">
             {unanswered === 1 ? "1 field needs an answer." : `${unanswered} fields need an answer.`}
-          </p>
-        ) : null}
-
-        {emptied.length > 0 ? (
-          <p className="text-caption text-warn-ink">
-            The saved {joinWords(emptied)} cannot be emptied. Put a value back to save your changes.
           </p>
         ) : null}
 

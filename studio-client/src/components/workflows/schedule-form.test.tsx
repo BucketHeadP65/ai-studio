@@ -15,6 +15,7 @@ import { ScheduleForm } from "./schedule-form";
 // unhandled).
 
 const BASE = "http://studio.test";
+const KNOWLEDGE = "http://api.test";
 
 const CARD = {
   archived_at: null,
@@ -113,6 +114,47 @@ function workflowFixture() {
   };
 }
 
+// A workflow that also asks which knowledge bases to work over.
+function knowledgeBaseWorkflowFixture() {
+  const plain = workflowFixture();
+  return {
+    ...plain,
+    id: "wf-digest",
+    name: "wf-digest",
+    graph: {
+      ...plain.graph,
+      nodes: [
+        ...plain.graph.nodes,
+        {
+          key: "param:knowledge_bases",
+          id: "knowledge_bases",
+          kind: "param",
+          signature: "array",
+          detail: "",
+          tools: [],
+          required: false,
+          is_output: false,
+          unknown: false,
+          brought: false,
+          briefing: "",
+          input_schemas: {},
+          output_schema: { type: "array", items: { type: "string" } },
+          source: "",
+        },
+      ],
+    },
+    presentation: {
+      purpose: "",
+      produces: "",
+      owner_participation: "",
+      not_for: "",
+      inputs: [{ key: "knowledge_bases", label: "Knowledge bases", control: "knowledge-base" }],
+      result_fields: [],
+      actions: [],
+    },
+  };
+}
+
 // A second workflow asking the very same questions: two schedules, two drafts.
 const OTHER_CARD = { ...CARD, id: "wf-costs", title: "Fetch costs" };
 
@@ -122,6 +164,24 @@ function mountApi(): void {
     http.get(`${BASE}/api/workflow/wf-sales`, () => HttpResponse.json(workflowFixture())),
     http.get(`${BASE}/api/workflow/wf-costs`, () =>
       HttpResponse.json({ ...workflowFixture(), id: "wf-costs", name: "wf-costs" }),
+    ),
+    http.get(`${BASE}/api/workflow/wf-digest`, () =>
+      HttpResponse.json(knowledgeBaseWorkflowFixture()),
+    ),
+    http.get(`${KNOWLEDGE}/api/knowledge-bases`, () =>
+      HttpResponse.json({
+        knowledge_bases: ["research", "repo-docs"].map((name) => ({
+          name,
+          registered: true,
+          indexed: true,
+          broken: false,
+          path: `/kb/${name}`,
+          description: "",
+          pages: 1,
+          page_types: [],
+          last_indexed: null,
+        })),
+      }),
     ),
     // An event cadence has no set times, so the preview answers none for it.
     http.post(`${BASE}/api/schedules/preview`, async ({ request }) => {
@@ -622,7 +682,9 @@ describe("ScheduleForm", () => {
 
     await userEvent.type(await screen.findByLabelText("quarter"), "Q1");
     await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
-    expect(screen.getByText(/to run after a refresh brings in new sources/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/runs after a refresh brings new sources into a knowledge base/),
+    ).toBeInTheDocument();
     await userEvent.type(screen.getByRole("textbox", { name: "Event" }), "after research-digest");
 
     expect(
@@ -632,6 +694,71 @@ describe("ScheduleForm", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ cadence: "after research-digest" }),
     );
+  });
+
+  it.each(["on refresh", "after research-digest"])(
+    "warns that %s never runs a workflow that asks for no knowledge base",
+    async (cadence) => {
+      mountApi();
+      render(
+        <ScheduleForm
+          open
+          workflowId="wf-sales"
+          submitting={false}
+          onSubmit={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      await screen.findByLabelText("quarter");
+      await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+      await userEvent.type(screen.getByRole("textbox", { name: "Event" }), cadence);
+
+      expect(
+        screen.getByText(
+          "This workflow does not ask for a knowledge base, so this event will never run it.",
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("does not warn for an on index event, which names its own knowledge base", async () => {
+    mountApi();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-sales"
+        submitting={false}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await screen.findByLabelText("quarter");
+    await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Event" }), "on index repo-docs");
+
+    expect(screen.queryByText(/does not ask for a knowledge base/)).toBeNull();
+  });
+
+  it("does not warn when the workflow asks for a knowledge base", async () => {
+    mountApi();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-digest"
+        submitting={false}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await screen.findByLabelText("quarter");
+    expect(screen.getByText("Knowledge bases")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Event" }), "on refresh");
+
+    expect(screen.queryByText(/does not ask for a knowledge base/)).toBeNull();
   });
 
   it("shows the create mutation's own error", async () => {
@@ -765,19 +892,27 @@ describe("ScheduleForm, editing a schedule", () => {
     expect(onSave).toHaveBeenCalledWith({ catch_up: true });
   });
 
-  it("refuses to save an emptied blackout, saying why", async () => {
+  it("clears an emptied blackout by sending null", async () => {
     mountApi();
     const { onSave } = renderEdit({ blackout: "22:00-06:00" });
 
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
     await userEvent.click(screen.getByText("Advanced"));
     await userEvent.clear(screen.getByLabelText("Blackout windows"));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(
-      screen.getByText(
-        "The saved blackout windows cannot be emptied. Put a value back to save your changes.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-    expect(onSave).not.toHaveBeenCalled();
+    expect(onSave).toHaveBeenCalledWith({ blackout: null });
+  });
+
+  it("clears an emptied capacity key, and the limit that goes with it, by sending null", async () => {
+    mountApi();
+    const { onSave } = renderEdit({ capacity_key: "gpu-pool", capacity_limit: 3 });
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.clear(screen.getByLabelText("Capacity key"));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith({ capacity_key: null, capacity_limit: null });
   });
 });
