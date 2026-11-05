@@ -529,6 +529,31 @@ in-process engine.
 machine confirmation. Every other completed run counts in `unconfirmed_runs`. A workflow that declares no result
 therefore stays `unverified` however often it runs. Approval is untouched and still independent.
 
+**The `trust` object.** `GET /api/library`'s cards, `GET /api/workflow/{workflow_id}` and
+`POST /api/workflows/{workflow_id}/approve` answer one `trust` object, built by `trust_payload` (`rendering.py`). Its
+first seven keys are the version the route is about: its level and its counts. `total` holds the same counts over every
+saved version of the workflow's name (live, superseded and archived) without a level, and `versions` holds one object
+per version, lowest first, each with its own `version` and `level`. The level is always the version's own, and the total
+never sets it.
+
+```json
+{
+  "level": "machine-confirmed",
+  "runs_with_evidence": 2, "failed_runs": 0, "approved_by": [],
+  "structural_grades": 0, "structural_mean": null, "structural_last": null,
+  "total": {"runs_with_evidence": 37, "failed_runs": 3, "approved_by": ["owner"],
+            "structural_grades": 0, "structural_mean": null, "structural_last": null},
+  "versions": [{"version": 1, "level": "approved", "runs_with_evidence": 20, "failed_runs": 1,
+                "approved_by": ["owner"], "structural_grades": 0, "structural_mean": null,
+                "structural_last": null}]
+}
+```
+
+A library that cannot list its versions answers the version itself as the only one, so `total` equals its counts and
+`versions` holds one entry. A saved version that no longer reads, or whose workflow names another version than its id,
+is left out of both. A workflow that cannot be read
+answers zero counts, a zero `total` and an empty `versions` list.
+
 **`recent_runs`** (the chat read) says both halves per line, `ran <outcome>, checked outcome <status> (n/m succeeded,
 …)`. **`run_values`** answers what the run recorded and is not a check
 of any kind: a full list of values there is no evidence at all about whether the work was any good.

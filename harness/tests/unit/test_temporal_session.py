@@ -1,4 +1,4 @@
-"""A deployment on the temporal engine composes its chat session.
+"""A deployment on the temporal engine composes its chat session, and the session's workflow contract reads its library's versions.
 
 The chat agent runs in this process and never inside a durable workflow, so it carries no durability
 capability on either engine. Proven by running `harness_session` to the end with the temporal engine
@@ -27,6 +27,7 @@ from harness.adapters.store import DatabaseBinding
 from harness.adapters.studio_http import studio_http_client
 from harness.composition import harness_session
 from harness.domain.contracts import EmbeddingContract
+from harness.features.authoring.contracts import WorkflowProcess
 from harness.features.running.infrastructure.durable import DurableTurns
 from harness.features.running.spend_report import SpendReporter
 from harness.features.scheduling.contracts import Scheduler
@@ -170,3 +171,14 @@ async def test_a_temporal_deployment_composes_its_chat_session(tmp_path: Path) -
     session.agent.root_capability.apply(lambda capability: durable.append(capability) if isinstance(capability, TemporalDurability) else None)
 
     assert durable == [], "the chat agent never runs inside a durable workflow, so nothing makes it durable"
+
+
+async def test_the_workflow_contract_reads_every_saved_version_from_the_session_s_library(tmp_path: Path) -> None:
+    """The agent's trust line states the total over a workflow's saved versions only when the port holds the library's versions read."""
+    session = await _a_session(tmp_path, RunSettings())
+
+    processes: list[WorkflowProcess] = []
+    session.agent.root_capability.apply(lambda capability: processes.append(capability) if isinstance(capability, WorkflowProcess) else None)
+
+    assert len(processes) == 1
+    assert processes[0].port.versions is session.library

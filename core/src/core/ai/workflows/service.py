@@ -1,21 +1,30 @@
-"""Saving a workflow: check it against this run's steps, then keep it in a library stamped with this run's environment."""
+"""Saving a workflow and reading its saved versions.
+
+A save checks the workflow against this run's steps, then keeps it in a library stamped with this run's environment.
+`version_hashes` reads the content address of every saved version of a workflow's name, which trust across versions
+folds by.
+"""
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.domain.fingerprint import fingerprint
+from pydantic import ValidationError
+
+from core.ai.workflows.domain.fingerprint import fingerprint, spec_identity
 from core.ai.workflows.domain.validator import unsatisfied_parameters, validate
-from core.ai.workflows.exceptions import SaveRefusedError
+from core.ai.workflows.exceptions import LibraryError, SaveRefusedError
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from core.ai.workflows.domain.intent import WorkflowIntent
     from core.ai.workflows.domain.lineage import Lineage
     from core.ai.workflows.domain.presentation import WorkflowPresentation
     from core.ai.workflows.domain.vocabulary import Workflow
-    from core.ai.workflows.internal_contracts import WorkflowLibrary
+    from core.ai.workflows.internal_contracts import WorkflowLibrary, WorkflowVersionQueries
     from core.ai.workflows.registry import StepRegistry
 
 
@@ -92,3 +101,37 @@ async def save(
         presentation=presentation,
         intent=intent,
     )
+
+
+async def version_hashes(
+    workflow: Workflow, *, versions: WorkflowVersionQueries | None, fetch_workflow: Callable[[str], Awaitable[Workflow]]
+) -> dict[str, int]:
+    """The content address of every saved version of `workflow`'s name that reads, mapped to its version number.
+
+    `workflow` stands for its own version under its own content address and is never read again. A version
+    `fetch_workflow` refuses with `LibraryError` or `ValidationError` is left out, and so is one whose workflow names a
+    version other than the one its id is listed under. The other versions are read at once.
+
+    Args:
+        workflow: The version asked about.
+        versions: The library's read of every saved version of a name. None counts `workflow` alone.
+        fetch_workflow: Reads one saved version by its id.
+
+    Returns:
+        Content address to version number, holding `workflow`'s own at least.
+    """
+    hashes = {spec_identity(workflow): workflow.version}
+    if versions is None:
+        return hashes
+
+    async def address(version: int, workflow_id: str) -> str | None:
+        try:
+            saved = await fetch_workflow(workflow_id)
+        except (LibraryError, ValidationError):
+            return None
+        return spec_identity(saved) if saved.version == version else None
+
+    others = [(version, workflow_id) for version, workflow_id in await versions.versions(workflow.name) if version != workflow.version]
+    addresses = await asyncio.gather(*(address(version, workflow_id) for version, workflow_id in others))
+    hashes.update({spec_hash: version for (version, _), spec_hash in zip(others, addresses, strict=True) if spec_hash is not None})
+    return hashes

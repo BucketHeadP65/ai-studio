@@ -1180,6 +1180,8 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
         # With the evidence log on the port, search hits and fetches carry the evidence each
         # workflow has earned. Every runner writes the same file.
         evidence_log=records.evidence,
+        # Each trust line then adds the total over every saved version of the workflow's name.
+        versions=library,
         # `save_workflow` stays hidden until the model loads the `saving-a-workflow` skill, the
         # same guidance it needs to draft a workflow worth saving in the first place.
         save_capability_id="saving-a-workflow",

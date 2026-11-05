@@ -22,11 +22,13 @@ from core.ai.workflows.contracts import (
     Outcome,
     ResultArtifactSpec,
     Workflow,
+    WorkflowVersionQueries,
     prepare,
     spec_identity,
-    trust_level,
+    trust_across_versions,
     unsatisfied_parameters,
     validate,
+    version_hashes,
 )
 from core.observability import get_logger
 from fastapi import APIRouter, Query
@@ -62,7 +64,7 @@ from harness.features.running.spend import SpendView, view_of
 from harness.features.running.spend_report import DEFAULT_SINCE_HOURS, SpendReport, SpendReporter, parse_scope
 from harness.features.running.step_stream import replay_floor_chunk, steer_chunk
 from harness.features.sessions.contracts import Sessions
-from harness.rendering import graph_payload, render_for_review
+from harness.rendering import graph_payload, render_for_review, trust_payload
 from harness.session import Runtime, SessionBusyError
 
 if TYPE_CHECKING:
@@ -777,8 +779,8 @@ class RunningController:
         """Record a person approving a saved workflow, in the evidence log a run writes to.
 
         No agent tool offers this, because only a person approves a workflow. `by` must name who is
-        approving. Answers with the trust record this exact version now carries, in the shape the
-        library card and the workflow detail route both read.
+        approving. Answers with the trust record this exact version now carries, beside the total
+        over every saved version, in the shape the library card and the workflow detail route both read.
         """
         session = self._sessions.default
         by = body.by.strip()
@@ -797,21 +799,11 @@ class RunningController:
         evidence = self._run.records.evidence
         spec_hash = spec_identity(spec)
         await evidence.append(Approval(workflow_id=workflow_id, spec_hash=spec_hash, workflow_version=spec.version, by=by))
-        record = trust_level(await evidence.history_for(spec_hash=spec_hash))
-        return JSONResponse(
-            {
-                "ok": True,
-                "trust": {
-                    "level": record.level,
-                    "runs_with_evidence": record.runs_with_evidence,
-                    "failed_runs": record.failed_runs,
-                    "approved_by": list(record.approved_by),
-                    "structural_grades": record.structural_grades,
-                    "structural_mean": record.structural_mean,
-                    "structural_last": record.structural_last,
-                },
-            }
-        )
+        library = session.library
+        versions = library if isinstance(library, WorkflowVersionQueries) else None
+        hashes = await version_hashes(spec, versions=versions, fetch_workflow=library.fetch_workflow)
+        trust = trust_across_versions(await evidence.history_for_any(spec_hashes=hashes.keys()), hashes, spec_hash)
+        return JSONResponse({"ok": True, "trust": trust_payload(trust)})
 
     @router.get("/runs/recent")
     async def recent_runs(self, limit: int = 20) -> JSONResponse:

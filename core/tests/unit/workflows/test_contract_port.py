@@ -36,6 +36,7 @@ from pydantic_ai.usage import RunUsage, UsageLimits
 
 from core.ai.workflows.contract_port import SEARCH_TOOL, LibraryVocabulary, WorkflowWrite, cards_from_mapping, render_cards
 from core.ai.workflows.contracts import (
+    Approval,
     Briefing,
     FileEvidenceLog,
     FromNode,
@@ -59,6 +60,7 @@ from core.ai.workflows.contracts import (
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION, collection_toolset
 from core.ai.workflows.reusable_steps import SEARCH_STEPS_TOOL
+from tests.support.fakes.workflow_versions import FakeWorkflowVersions
 from tests.unit.workflows.conftest import CallLog, register_quarterly_steps
 
 if TYPE_CHECKING:
@@ -83,6 +85,8 @@ class FakeHost:
     catalog_rows: dict[str, str] | None = None
     """Scriptable: when set, `list_rows` answers from this instead of `rows` -- lets a test prove
     the catalog fallback reads its own listing rather than repeating the search."""
+    unlisted: dict[str, str] = field(default_factory=dict)
+    """Scriptable: rows `read_row` answers and neither listing shows, such as a workflow's earlier versions."""
 
     def toolset(self) -> FunctionToolset[None]:
         toolset: FunctionToolset[None] = FunctionToolset()
@@ -125,7 +129,7 @@ class FakeHost:
     async def read_row(self, key: str) -> dict[str, object]:
         """Return one row's content under `document`, not `spec`."""
         self.calls.append(("read_row", {"key": key}))
-        return {"document": self.rows.get(key, "")}
+        return {"document": self.rows.get(key) or self.unlisted.get(key, "")}
 
     async def store_row(self, key: str, doc: str, label: str, note: str, guide: str, who: str) -> dict[str, object]:
         """Keep a row. Six positional concepts, none of them named the way we name them."""
@@ -433,6 +437,69 @@ async def test_a_card_keeps_the_runs_its_workflow_earned_under_another_id(
 
     assert lines["search_workflows"] == lines["fetch_workflow"], "one workflow, one trust"
     assert "machine-confirmed, 1 runs with evidence" in lines["search_workflows"]
+
+
+async def _earned_by_tool(port: WorkflowContract[None], workflow_id: str) -> dict[str, str]:
+    """The whole trust line `workflow_id`'s card and its fetch state."""
+    script = Script(
+        calls=[
+            ToolCallPart("search_workflows", {"task": "close the quarter", "limit": 3}),
+            ToolCallPart("fetch_workflow", {"workflow_id": workflow_id}),
+        ]
+    )
+    result = await _agent(script, port).run("find and read one", usage_limits=LIMITS)
+    returns = {
+        part.tool_name: part.model_response_str() for message in result.all_messages() for part in message.parts if isinstance(part, ToolReturnPart)
+    }
+    card = returns["search_workflows"].splitlines()
+    under_card = card[card.index(next(line for line in card if line.startswith(f"{workflow_id} ["))) + 1]
+    fetched = next(line for line in str(json.loads(returns["fetch_workflow"])["summary"]).splitlines() if line.strip().startswith("earned: "))
+    return {"search_workflows": under_card.split("earned: ", 1)[1], "fetch_workflow": fetched.split("earned: ", 1)[1]}
+
+
+async def test_a_card_and_its_fetch_add_the_total_over_every_saved_version_beside_the_current_level(
+    quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
+) -> None:
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    first, second = (quarterly_report.model_copy(update={"version": version}) for version in (1, 2))
+    await ledger.append(_confirmed_run("wf-quarterly-report-v1", first))
+    await ledger.append(_confirmed_run("wf-quarterly-report-v1", first))
+    await ledger.append(_confirmed_run("wf-quarterly-report-v2", second).model_copy(update={"outcome": "failed"}))
+    await ledger.append(Approval(workflow_id="wf-quarterly-report-v1", spec_hash=spec_identity(first), workflow_version=1, by="owner"))
+    await ledger.append(_confirmed_run("wf-quarterly-report", quarterly_report))
+    host = FakeHost(
+        rows={"wf-quarterly-report": yaml.safe_dump(quarterly_report.model_dump(mode="json"))},
+        unlisted={
+            "wf-quarterly-report-v1": yaml.safe_dump(first.model_dump(mode="json")),
+            "wf-quarterly-report-v2": yaml.safe_dump(second.model_dump(mode="json")),
+        },
+    )
+    versions = FakeWorkflowVersions(
+        {"quarterly-report": ((1, "wf-quarterly-report-v1"), (2, "wf-quarterly-report-v2"), (3, "wf-quarterly-report"))}
+    )
+    port = WorkflowContract[None](source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger, versions=versions)
+
+    lines = await _earned_by_tool(port, "wf-quarterly-report")
+
+    assert lines["search_workflows"] == (
+        "machine-confirmed, 1 runs with evidence. Total over 3 versions: 3 runs with evidence, 1 failed, approved by owner (v1)"
+    ), "an approval names its version, so the current one never reads as approved"
+    assert lines["fetch_workflow"] == lines["search_workflows"], "one workflow, one trust"
+
+
+async def test_a_workflow_with_one_saved_version_states_no_total(quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
+    ledger = FileEvidenceLog(tmp_path / "evidence.jsonl")
+    await ledger.append(_confirmed_run("wf-quarterly-report", quarterly_report))
+    host = FakeHost(rows={"wf-quarterly-report": yaml.safe_dump(quarterly_report.model_dump(mode="json"))})
+    versions = FakeWorkflowVersions({"quarterly-report": ((3, "wf-quarterly-report"),)})
+    with_versions = WorkflowContract[None](
+        source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger, versions=versions
+    )
+    without = WorkflowContract[None](source=host.toolset(), vocabulary=WRITABLE, expose=(), registry=registry, evidence_log=ledger)
+
+    assert (await _earned_by_tool(with_versions, "wf-quarterly-report"))["search_workflows"] == "machine-confirmed, 1 runs with evidence"
+    assert (await _earned_by_tool(without, "wf-quarterly-report"))["search_workflows"] == "machine-confirmed, 1 runs with evidence"
+    assert versions.asked, "the port asked the library for the name's versions"
 
 
 async def test_a_card_whose_workflow_cannot_be_read_claims_no_trust(registry: StepRegistry, tmp_path: Path) -> None:

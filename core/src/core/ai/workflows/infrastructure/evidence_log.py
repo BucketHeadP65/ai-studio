@@ -1,8 +1,8 @@
 """The evidence log as one append-only JSONL file, with no database and no dependencies.
 
 Lines are only ever added, never edited. A line that no longer parses is skipped with a warning naming the file,
-the line number and why, and the rest of the history is still read. Every read scans the whole file, so a lookup can match a workflow's content hash rather than the
-library id a line carries.
+the line number and why, and the rest of the history is still read. Every read scans the whole file once, so a lookup can match a workflow's content hash,
+or any of several, rather than the library id a line carries.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, requ
 from core.observability import get_logger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Collection, Iterator
     from pathlib import Path
 
     from pydantic_core import ErrorDetails
@@ -72,6 +72,25 @@ class FileEvidenceLog:
         """
         require_spec_identity(spec_hash)
         return tuple(event for event in self._surviving() if event.spec_hash == spec_hash)
+
+    async def history_for_any(self, *, spec_hashes: Collection[str]) -> tuple[RunEvidence | Approval | Grade, ...]:
+        """The events of any of several workflows by content hash, read in one scan of the file.
+
+        Args:
+            spec_hashes: The workflows' content hashes. None may be empty. No hash reads nothing.
+
+        Returns:
+            The events carrying any of `spec_hashes`, oldest first.
+
+        Raises:
+            ValueError: If one of `spec_hashes` is empty.
+        """
+        wanted = frozenset(spec_hashes)
+        for spec_hash in wanted:
+            require_spec_identity(spec_hash)
+        if not wanted:
+            return ()
+        return tuple(event for event in self._surviving() if event.spec_hash in wanted)
 
     def _surviving(self) -> Iterator[RunEvidence | Approval | Grade]:
         """Every line that still parses, in the order it was written. A missing file holds nothing."""

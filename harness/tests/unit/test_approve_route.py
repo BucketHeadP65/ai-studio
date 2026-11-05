@@ -47,9 +47,20 @@ class FakeStore(EmptyLibrary):
             raise LibraryError(msg) from exc
 
 
-async def _approve(specs: dict[str, Workflow], registry: StepRegistry, state: Path, by: str, workflow_id: str = "wf.report", note: str = "") -> tuple[int, dict[str, Any]]:
-    """The route's own answer, over a session whose library holds `specs`."""
-    pool = SessionPool(a_runtime(registry=registry, library=FakeStore(specs)))
+class VersionedStore(FakeStore):
+    """A `FakeStore` that also answers every saved version of a name from what it was stocked with."""
+
+    async def versions(self, name: str) -> tuple[tuple[int, str], ...]:
+        """Each stocked `(version, id)` of `name`, lowest first."""
+        return tuple(sorted((spec.version, key) for key, spec in self._specs.items() if spec.name == name))
+
+
+async def _approve(
+    specs: dict[str, Workflow], registry: StepRegistry, state: Path, by: str, workflow_id: str = "wf.report", note: str = "", *, versioned: bool = False
+) -> tuple[int, dict[str, Any]]:
+    """The route's own answer, over a session whose library holds `specs`, and answers every saved version when `versioned`."""
+    library = VersionedStore(specs) if versioned else FakeStore(specs)
+    pool = SessionPool(a_runtime(registry=registry, library=library))
     response = await a_running_controller(pool, state).approve_workflow(workflow_id, ApproveRequest(by=by, note=note))
     return response.status_code, json.loads(bytes(response.body))
 
@@ -105,3 +116,30 @@ async def test_an_unknown_workflow_404s(registry: StepRegistry, tmp_path: Path) 
 
     assert status == 404
     assert body["ok"] is False
+
+
+async def test_the_answer_carries_the_total_and_each_version_beside_the_approved_version_s_trust(
+    quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path
+) -> None:
+    earlier = quarterly_report.model_copy(update={"version": 2})
+    await _ledger(tmp_path).append(Approval(workflow_id="wf.report.v2", spec_hash=spec_identity(earlier), workflow_version=2, by="owner"))
+    specs = {"wf.report.v2": earlier, "wf.report.v3": quarterly_report}
+
+    status, body = await _approve(specs, registry, tmp_path, "alex", workflow_id="wf.report.v3", versioned=True)
+
+    counts = {"runs_with_evidence": 0, "failed_runs": 0, "structural_grades": 0, "structural_mean": None, "structural_last": None}
+    assert status == 200
+    assert body["trust"] == {
+        "level": "approved",
+        "runs_with_evidence": 0,
+        "failed_runs": 0,
+        "approved_by": ["alex"],
+        "structural_grades": 0,
+        "structural_mean": None,
+        "structural_last": None,
+        "total": {**counts, "approved_by": ["owner", "alex"]},
+        "versions": [
+            {"version": 2, "level": "approved", **counts, "approved_by": ["owner"]},
+            {"version": 3, "level": "approved", **counts, "approved_by": ["alex"]},
+        ],
+    }

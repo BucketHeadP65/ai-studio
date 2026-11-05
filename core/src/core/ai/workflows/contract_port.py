@@ -26,7 +26,7 @@ from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.tools import AgentDepsT, RunContext, ToolDefinition
 from pydantic_ai.toolsets import AbstractToolset, CombinedToolset, FilteredToolset, FunctionToolset, PreparedToolset
 
-from core.ai.workflows.domain.evidence import trust_level
+from core.ai.workflows.domain.evidence import TrustLevel, trust_across_versions
 from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, drift, fingerprint, spec_identity
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage, Prediction, adapt
@@ -39,13 +39,13 @@ from core.ai.workflows.exceptions import AdaptationRefusedError, LibraryError, R
 from core.ai.workflows.internal_contracts import SaveGuard
 from core.ai.workflows.read_models import SavedWorkflow
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, SEARCH_STEPS_TOOL, copy_reusable_steps, fetch_reusable_step
-from core.ai.workflows.service import verify_savable
+from core.ai.workflows.service import verify_savable, version_hashes
 
 if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from core.ai.workflows.domain.vocabulary import InlineStep
-    from core.ai.workflows.internal_contracts import EvidenceLog
+    from core.ai.workflows.internal_contracts import EvidenceLog, WorkflowVersionQueries
     from core.ai.workflows.registry import StepRegistry
 
 SEARCH_TOOL = "search_workflows"
@@ -159,6 +159,17 @@ class LibraryVocabulary:
     def can_write(self) -> bool:
         """Whether this host has a write surface the port can drive."""
         return self.put_tool is not None and self.put_args is not None and self.to_id is not None
+
+
+_VERSIONS_FOR_A_TOTAL = 2
+"""The fewest versions counted for a trust line to state a total beside the version it shows."""
+
+
+def _counts_line(record: TrustLevel) -> str:
+    """A trust record's counts as a trust line states them: runs with evidence, failed runs and structural grades."""
+    failed = f", {record.failed_runs} failed" if record.failed_runs else ""
+    grades = f", {record.structural_grades} structural grades, mean {record.structural_mean:.3f}" if record.structural_mean is not None else ""
+    return f"{record.runs_with_evidence} runs with evidence{failed}{grades}"
 
 
 class _WriteRefusedError(Exception):
@@ -302,6 +313,11 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
     When set, search hits and fetches show the model what each workflow has earned, derived by
     `trust_level` over the runs of its exact content on every read and never stored. A search then
     reads each hit's workflow through the host's fetch tool. `None` shows no trust line at all."""
+    versions: WorkflowVersionQueries | None = None
+    """The library's read of every saved version of a workflow name, if it has one.
+
+    When set beside `evidence_log`, a trust line also states the total over every saved version, read through the
+    host's fetch tool, when the name has more than one. `None` keeps each line to the version it shows."""
     save_requires_approval: bool = False
     """Mark the save tool as requiring approval, for hosts whose protocol can ask.
 
@@ -519,18 +535,29 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
                 workflow = await self.workflow_for(ctx, card.id)
             except (ModelRetry, LibraryError, ValueError, KeyError, TypeError):
                 continue
-            if (line := await self._earned_line(workflow)) is not None:
+            if (line := await self._earned_line(ctx, workflow)) is not None:
                 earned[card.id] = line
         return earned
 
-    async def _earned_line(self, workflow: Workflow) -> str | None:
-        """One trust line for this workflow, counted by its content address, or None without an evidence log."""
+    async def _earned_line(self, ctx: RunContext[AgentDepsT], workflow: Workflow) -> str | None:
+        """One trust line for this workflow, by its content address, then the total over its saved versions with each approval's version, or None without an evidence log."""
         if self.evidence_log is None:
             return None
-        record = trust_level(await self.evidence_log.history_for(spec_hash=spec_identity(workflow)))
-        failed = f", {record.failed_runs} failed" if record.failed_runs else ""
-        grades = f", {record.structural_grades} structural grades, mean {record.structural_mean:.3f}" if record.structural_mean is not None else ""
-        return f"{record.level}, {record.runs_with_evidence} runs with evidence{failed}{grades}"
+
+        async def read(workflow_id: str) -> Workflow:
+            try:
+                return await self.workflow_for(ctx, workflow_id)
+            except (ModelRetry, ValueError, KeyError, TypeError) as exc:
+                raise LibraryError(str(exc)) from exc
+
+        hashes = await version_hashes(workflow, versions=self.versions, fetch_workflow=read)
+        trust = trust_across_versions(await self.evidence_log.history_for_any(spec_hashes=hashes.keys()), hashes, spec_identity(workflow))
+        line = f"{trust.level}, {_counts_line(trust.current)}"
+        if len(trust.versions) < _VERSIONS_FOR_A_TOTAL:
+            return line
+        approvals = dict.fromkeys(f"{name} (v{version})" for version, record in trust.versions for name in record.approved_by)
+        approved = f", approved by {', '.join(approvals)}" if approvals else ""
+        return f"{line}. Total over {len(trust.versions)} versions: {_counts_line(trust.total)}{approved}"
 
     async def _search_steps(self, ctx: RunContext[AgentDepsT], task: str, limit: int = 5) -> str:
         """Find reusable steps by what they do. Reuse one by naming its id in `save_workflow`'s `uses`."""
@@ -869,7 +896,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         fit, fits_here = self._fit(works, brought=brought, stale=bool(staleness))
         if staleness:
             fit = f"STALE: the environment moved under this workflow: {'. '.join(staleness)}. {fit}"
-        earned = await self._earned_line(workflow)
+        earned = await self._earned_line(ctx, workflow)
         return FetchedWorkflow(
             summary=(
                 f"{workflow.name} v{workflow.version}: {workflow.description}\n"
