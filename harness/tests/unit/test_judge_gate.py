@@ -226,3 +226,20 @@ async def test_the_orchestrate_mode_decider_hears_the_reviewers_note(tmp_path: P
 
     assert len(heard) == 1
     assert "The reviewer could not judge it and said: The drafts are empty." in heard[0]
+
+
+async def test_under_automode_a_judge_that_cannot_decide_spends_the_gates_reaches_and_ends_the_run(tmp_path: Path) -> None:
+    """Nobody passes what the judge could not judge: each reach is the judge's refusal, and the third ends the run."""
+    environment = await world_over(streaming_function_model(_cannot_judge_respond))
+    environment.register(_empty_draft, name="draft")
+    session = Runtime(registry=environment, library=cast("Any", None), agent=cast("Any", None), waiting_run_file=tmp_path / "run-log.json", session_log=NoSessionLog(), state=a_state(tmp_path))
+
+    service.launch(session, records=records_under(tmp_path), topics=FakeBroadcaster(), spec=_judged_spec(), workflow_id="wf.judge-auto", params={}, gate_mode="auto")
+    task = session.active.task
+    assert task is not None
+    await task
+
+    assert session.active.result == (
+        "The run stopped with an error: RetryExhaustedError: gate 'check' refused 'drafted' on reach 3 of 3: The drafts are empty."
+    )
+    assert session.active.auto_gates() == (), "automode passed nothing"

@@ -131,8 +131,8 @@ class ActiveRun:
     """Resolved by the person clicking Approve or Reject, and awaited inside the gate."""
     gate_mode: GateMode = "wait"
     """The mode this run's own gates decide under. `"wait"` holds a person gate, `"auto"` passes every
-    gate itself with nobody asked, and `"orchestrate"` hands a person gate to this run's own
-    orchestrator. The record never counts an automatic pass as a person's approval. Set at launch
+    person gate itself with nobody asked and refuses a judge's `cannot_judge` in the judge's name, and
+    `"orchestrate"` hands a person gate to this run's own orchestrator. The record never counts an automatic pass as a person's approval. Set at launch
     from the launcher's own choice (the Run button, a schedule's own setting, the agent's own
     argument) and changeable mid-run through `/api/run/automode`, so a gate reads it live off this
     field, never off a value the approval was built with. A declared orchestrator gate decides the

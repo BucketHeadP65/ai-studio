@@ -421,7 +421,8 @@ what was wrong, and what to change.
 Every decision is recorded as a fact of its own: the gate, the reach, the verdict (`approve`, `reject`,
 `cannot_judge`), **who decided** (`judge`, `person`, `orchestrator`, `auto`, `timeout`) and the digest of the value
 decided over. A judge that answers `cannot_judge` and the person it escalates to record one fact each and count as one
-reach. `auto` is automode crossing a gate with nobody asked, and it may pass a gate but never refuse one. An approval
+reach. `auto` is automode crossing a gate with nobody asked, and it may pass a gate but never refuse one. Under automode a
+judge's `cannot_judge` is refused in the judge's own name, so the second fact of that reach is a `reject` by `judge`. An approval
 belongs to the generation it was given over: a gate re-reached because something downstream rewound must be approved
 again, even when the new value is byte-identical to the one approved before.
 
@@ -1203,15 +1204,16 @@ review.
 
 A run's own gates decide under one of three modes, `GateMode = "wait" | "orchestrate" | "auto"`
 (`harness/domain/gates.py`, see [ADR 0008](../adr/0008-orchestrator-gates-and-run-gate-modes.md)): `"wait"` (default)
-steps a `PersonGate` waiting for a person exactly as before. `"auto"` is automode, passing every gate the run reaches
-with nobody asked. `"orchestrate"` hands a `PersonGate` to this run's own orchestrator instead of leaving it waiting.
+steps a `PersonGate` waiting for a person exactly as before. `"auto"` is automode, passing every person gate the run reaches
+with nobody asked and refusing a judge's `cannot_judge` in the judge's name (below). `"orchestrate"` hands a `PersonGate` to this run's own orchestrator instead of leaving it waiting.
 Set at launch (`RunRequest.gate_mode` on `POST /api/run`, the `gate_mode` argument of the agent's own `run_workflow`
 tool, a schedule's own `gate_mode`) or flipped mid-run via `POST /api/run/automode {"on": bool}` (which sets
 `gate_mode` to `"auto"` or `"wait"`, and answers with the `auto_approve` it now reads, derived from `gate_mode`). A
 durable run carries its mode in core's Temporal `RunRequest.gate_mode`, `"wait"` or `"auto"` only. A
 workflow may also author an `orchestrator-gate` node in the graph itself, naming its own review brief for this run's
 orchestrator to decide against. That gate is answered the same way under every one of the three modes. A run's
-`gate_mode` only changes what happens to a `PersonGate`, the one kind that would otherwise wait on a person.
+`gate_mode` only changes what happens to a gate that would otherwise wait on a person: a `PersonGate`, or a judge's
+`cannot_judge`.
 Whichever gate the orchestrator decides, its turn reads the charge, the gate id, the arguments the run was started with
 (a `collection` argument named as the knowledge base the run works in, from `ActiveRun.params`) and the whole value
 under review.
@@ -1221,7 +1223,11 @@ names a step file whose typed output carries the verdict, and the step answers `
 `cannot_judge`. A `cannot_judge` verdict steps the run waiting for a person exactly as a `PersonGate` would, the
 reviewer's own words appearing above the workflow in the gate card so the owner reads why before deciding. Under
 `gate_mode="orchestrate"` this run's own orchestrator answers that escalation instead, the same conversion a
-`PersonGate` gets under that mode.
+`PersonGate` gets under that mode. Under `gate_mode="auto"` nobody answers in the judge's place, so
+`ChatApproval.review` refuses the escalation in the judge's name: the judge's note goes back as the feedback to the
+step the gate reruns, and the refusal spends one of the gate's reaches. A judge that never decides ends the run at the
+gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in `gates_auto`. A durable
+run on the Temporal engine still passes the escalation under `"auto"`.
 
 **The honesty rule, now three columns.** `gates_approved` means a person clicked approve. `gates_auto` means automode
 passed the gate with nobody asked. `gates_orchestrated` means this run's own orchestrator decided it: either because
