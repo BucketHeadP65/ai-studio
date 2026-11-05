@@ -22,7 +22,6 @@ from core.db import build_engine
 from engram.testing.infrastructure.knowledge_base_db import migrated, pg  # noqa: F401 (imported to be used as pytest fixtures, never called directly)
 
 from harness.adapters.store import LibraryOutbox, ScheduleDatabase
-from harness.features.inspection.infrastructure.postgres import InspectionDatabase, JobsEngine, open_inspection_pool, open_jobs_engine
 from harness.features.scheduling.contracts import StepChangeArming
 from harness.features.scheduling.domain import Schedule
 from harness.features.scheduling.infrastructure.postgres import PostgresSchedules
@@ -144,41 +143,51 @@ async def test_a_step_save_with_no_on_step_change_schedule_is_closed_and_arms_no
         assert (stored.next_run_at, stored.pending_step_ids, stored.pending_page_ids) == (None, (), ()), "a consumed event never arms a later schedule"
 
 
-def _library_event_loops() -> list[asyncio.Task[object]]:
-    return [task for task in asyncio.all_tasks() if task.get_name().endswith(":library-events")]
-
-
-async def test_the_server_lifespan_delivers_a_waiting_step_save_and_stops_its_loop(library: _Library, migrated: str, tmp_path: Path) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
-    """The whole lifespan, every database it opens pointed at the throwaway one, so no loop it starts reaches another."""
+async def test_a_delivery_the_arm_recorded_before_a_stop_is_closed_on_the_next_pass_without_arming_again(library: _Library) -> None:
+    """The arm committed its record, then the worker stopped before it closed the row: the next pass only closes it."""
     waiting = Schedule(workflow_id="wf.step-maintenance", cadence="on step change quiet 10m")
     await library.schedules.insert(waiting)
     event = _saved("st.digest_source.v12")
     await library.outbox.append([event])
-    plain = f"{_asyncpg_dsn(migrated)}?sslmode=disable"
-    jobs = await open_jobs_engine(library.pool, dsn=plain)
-    inspection = await open_inspection_pool(library.pool, dsn=plain)
-    answering = {
-        LibraryOutbox: LibraryOutbox(library.outbox),
-        ScheduleDatabase: ScheduleDatabase(library.pool),
-        JobsEngine: JobsEngine(jobs),
-        InspectionDatabase: InspectionDatabase(inspection),
-    }
+    await library.pool.execute(
+        "INSERT INTO coordination.event_deliveries (event_id, subscriber) VALUES ($1, 'schedules.on_step_change')", event.event_id
+    )
+
+    arming, driving = library.worker_arming_at(T0)
+    worked = await library_event_worker(arming, library.outbox, driving).tick()
+
+    assert worked.deliveries == 1
+    (row,) = await _outbox_rows(library.pool)
+    assert row["delivered_at"] is not None, "the open row is closed"
+    assert await _subscribers(library.pool, event.event_id) == ["schedules.on_step_change"], "no second delivery is recorded"
+    stored = await library.schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_step_ids) == (None, ()), "the schedule is not armed again"
+
+def _library_event_loops() -> list[asyncio.Task[object]]:
+    return [task for task in asyncio.all_tasks() if task.get_name().endswith(":library-events")]
+
+
+async def test_the_server_lifespan_delivers_a_waiting_step_save_and_stops_its_loop(library: _Library, tmp_path: Path) -> None:
+    """The whole lifespan over the test leaves, its outbox and schedules on the throwaway database."""
+    waiting = Schedule(workflow_id="wf.step-maintenance", cadence="on step change quiet 10m")
+    await library.schedules.insert(waiting)
+    event = _saved("st.digest_source.v12")
+    await library.outbox.append([event])
+    answering = {LibraryOutbox: LibraryOutbox(library.outbox), ScheduleDatabase: ScheduleDatabase(library.pool)}
     before = datetime.now(UTC)
-    try:
-        async with a_served_client(state=tmp_path, answering=answering):
-            delivered_at = None
-            for _ in range(500):
-                (row,) = await _outbox_rows(library.pool)
-                delivered_at = row["delivered_at"]
-                if delivered_at is not None:
-                    break
-                await asyncio.sleep(0.02)
-            assert delivered_at is not None, "the server's library worker never delivered the waiting row"
-            assert len(_library_event_loops()) == 1, "the server runs one library event loop"
-        assert _library_event_loops() == [], "the loop outlived the server"
-    finally:
-        await jobs.dispose()
-        await inspection.close()
+
+    async with a_served_client(state=tmp_path, answering=answering):
+        delivered_at = None
+        for _ in range(500):
+            (row,) = await _outbox_rows(library.pool)
+            delivered_at = row["delivered_at"]
+            if delivered_at is not None:
+                break
+            await asyncio.sleep(0.02)
+        assert delivered_at is not None, "the server's library worker never delivered the waiting row"
+        assert len(_library_event_loops()) == 1, "the server runs one library event loop"
+    assert _library_event_loops() == [], "the loop outlived the server"
 
     stored = await library.schedules.get(waiting.id)
     assert stored is not None
