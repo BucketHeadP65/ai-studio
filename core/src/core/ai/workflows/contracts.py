@@ -71,6 +71,7 @@ from core.ai.workflows.domain.run_events import (
 from core.ai.workflows.domain.task import TaskContract, contract_of
 from core.ai.workflows.domain.validator import Prepared, WiringIssue, prepare, unsatisfied_parameters, validate
 from core.ai.workflows.domain.vocabulary import (
+    JUDGE_NOTE_FALLBACK,
     AgentStep,
     Briefing,
     FromNode,
@@ -141,6 +142,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CURRENT_STEP",
     "DEFAULT_TASK_QUEUE",
+    "JUDGE_NOTE_FALLBACK",
     "KNOWLEDGE_BASE_CONTROL",
     "NO_REUSABLE_STEPS",
     "AdaptationRefusedError",

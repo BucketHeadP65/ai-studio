@@ -132,11 +132,11 @@ class ActiveRun:
     gate_mode: GateMode = "wait"
     """The mode this run's own gates decide under. `"wait"` holds a person gate, `"auto"` passes every
     person gate itself with nobody asked and refuses a judge's `cannot_judge` in the judge's name, and
-    `"orchestrate"` hands a person gate to this run's own orchestrator. The record never counts an automatic pass as a person's approval. Set at launch
-    from the launcher's own choice (the Run button, a schedule's own setting, the agent's own
-    argument) and changeable mid-run through `/api/run/automode`, so a gate reads it live off this
-    field, never off a value the approval was built with. A declared orchestrator gate decides the
-    same way whatever this holds."""
+    `"orchestrate"` hands a person gate to this run's own orchestrator. The record never counts an
+    automatic pass as a person's approval. Set at launch from the launcher's own choice (the Run
+    button, a schedule's own setting, the agent's own argument) and changeable mid-run through
+    `/api/run/automode`, so a gate reads it live off this field, never off a value the approval was
+    built with. A declared orchestrator gate decides the same way whatever this holds."""
     gate_timeout: float | None = 900.0
     """How long this run's own gates wait before giving up, the same figure the run's approval was
     built with. A declared orchestrator gate reads it to bound how long its decider waits for a busy

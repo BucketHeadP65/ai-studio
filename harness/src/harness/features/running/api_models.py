@@ -27,8 +27,9 @@ class RunRequest(BaseModel):
     the run unnamed, and no name is borrowed from elsewhere."""
     gate_mode: GateMode = "wait"
     """`"wait"` holds a person gate for a person, `"auto"` passes every person gate with nobody asked
-    and refuses a judge's `cannot_judge` in the judge's name, `"orchestrate"` hands a person gate to this run's own orchestrator instead of waiting for a
-    person. A declared orchestrator gate decides the same way under every one of the three."""
+    and refuses a judge's `cannot_judge` in the judge's name, `"orchestrate"` hands a person gate to
+    this run's own orchestrator instead of waiting for a person. A declared orchestrator gate decides
+    the same way under every one of the three."""
 
 
 class SteerStepIn(BaseModel):

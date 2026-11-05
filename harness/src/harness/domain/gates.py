@@ -2,9 +2,9 @@
 
 `gate_mode` is the whole grammar: `"wait"` holds every person gate for a person, `"auto"` passes
 every person gate itself with nobody asked and refuses a judge's `cannot_judge` in the judge's
-name, `"orchestrate"` hands a person gate to this run's own orchestrator instead of waiting it. A declared orchestrator gate decides the same way under
-every one of the three. The mode only changes what happens to a gate that would otherwise wait
-on a person.
+name, `"orchestrate"` hands a person gate to this run's own orchestrator instead of waiting it. A
+declared orchestrator gate decides the same way under every one of the three. The mode only
+changes what happens to a gate that would otherwise wait on a person.
 """
 
 from __future__ import annotations

@@ -10,7 +10,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import DecisionSource, GateDecision, GateReached, JudgeGate, PersonGate
+from core.ai.workflows.contracts import JUDGE_NOTE_FALLBACK, DecisionSource, GateDecision, GateReached, JudgeGate, PersonGate
 from core.ai.workflows.contracts import orchestrated_gates as _declared_orchestrated_gates
 from core.observability import get_logger
 
@@ -108,7 +108,8 @@ class ChatApproval:
         `gate_mode="orchestrate"`, then the browser. Automode and the gate mode are read live off the
         session, so a flip mid-run applies at the next gate. The orchestrator and the browser share
         one wait and one timeout. A judge gate reaches here only when its judge could not decide, and
-        automode refuses it in the judge's name with `note` as the feedback. Automode passes every other gate.
+        automode refuses it in the judge's name with `note` as the feedback, or `JUDGE_NOTE_FALLBACK`
+        when the note is blank. Automode passes every other gate.
 
         Args:
             gate_id: Which gate this is.
@@ -128,7 +129,7 @@ class ChatApproval:
                 # The engine refuses a rejection credited to automode, so this one names the judge.
                 self.decisions.setdefault(gate_id, []).append(False)
                 _logger.info("gate {gate} refused under automode, its judge could not decide", gate=gate_id)
-                return GateDecision(approve=False, feedback=note, source="judge")
+                return GateDecision(approve=False, feedback=note or JUDGE_NOTE_FALLBACK, source="judge")
             self._auto[gate_id] = self._auto.get(gate_id, 0) + 1
             _logger.info("gate {gate} auto-approved, nobody asked", gate=gate_id)
             return GateDecision(approve=True, source="auto")

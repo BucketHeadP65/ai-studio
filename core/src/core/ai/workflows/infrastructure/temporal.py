@@ -59,7 +59,7 @@ with workflow.unsafe.imports_passed_through():
     from core.ai.workflows.domain.in_flight import NodesInFlight
     from core.ai.workflows.domain.parameter_values import WorkflowArguments
     from core.ai.workflows.domain.run_events import GateDecisionFact, RetryFeedback
-    from core.ai.workflows.domain.vocabulary import PersonGate, Tier, Workflow
+    from core.ai.workflows.domain.vocabulary import JUDGE_NOTE_FALLBACK, JudgeGate, PersonGate, Tier, Workflow
     from core.ai.workflows.exceptions import RetryExhaustedError
     from core.ai.workflows.graph_builder import GateDecision, WorkflowState, build_graph
 
@@ -295,8 +295,9 @@ class RunRequest(BaseModel):
     run_title: str = ""
     """What this run itself is called, in the words of whoever started it. Empty for a run nobody named."""
     gate_mode: Literal["wait", "auto"] = "wait"
-    """What a person gate does: `wait` holds it for a signal, `auto` passes it with nobody asked. Travels
-    with the request, so a history says what this run was allowed to decide on its own."""
+    """What a person gate does: `wait` holds it for a signal, `auto` passes it with nobody asked. Under
+    `auto` a judge's `cannot_judge` is refused in the judge's name. Travels with the request, so a
+    history says what this run was allowed to decide on its own."""
 
 
 class TurnOnTheWire(BaseModel):
@@ -754,11 +755,13 @@ class DurableWorkflowRun:
         )
 
     async def review(self, gate_id: str, value: object, *, note: str = "") -> GateDecision:
-        """Wait until somebody signals a verdict for this gate, or pass it when gates pass automatically.
+        """Wait until somebody signals a verdict for this gate, or answer it under gate mode `auto`.
 
         The run waits here as long as it takes and survives a worker dying meanwhile, because the
-        wait is part of the workflow's history. Under gate mode `auto` the gate never waits, and its
-        id is recorded apart from the approvals so the evidence names what decided it.
+        wait is part of the workflow's history. Under gate mode `auto` the gate never waits. A person
+        gate passes, and its id is recorded apart from the approvals so the evidence names what
+        decided it. A judge gate reaches here only when its judge could not decide, and automode
+        refuses it in the judge's name with `note`, or `JUDGE_NOTE_FALLBACK` when the note is blank.
 
         Args:
             gate_id: Which gate this is.
@@ -767,9 +770,13 @@ class DurableWorkflowRun:
                 the value.
 
         Returns:
-            The person's verdict, or an automatic approval.
+            The person's verdict, an automatic approval, or the judge's refusal under gate mode `auto`.
         """
         if self.gate_mode == "auto":
+            if self._workflow is not None and any(isinstance(node, JudgeGate) and node.id == gate_id for node in self._workflow.nodes):
+                # The engine refuses a rejection credited to automode, so this one names the judge.
+                self._refused[gate_id] = self._refused.get(gate_id, 0) + 1
+                return GateDecision(approve=False, feedback=note or JUDGE_NOTE_FALLBACK, source="judge")
             if gate_id not in self._auto:
                 self._auto.append(gate_id)
             return GateDecision(approve=True, source="auto")

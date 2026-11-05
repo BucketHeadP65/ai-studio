@@ -13,7 +13,7 @@ import asyncio
 
 from typing import TYPE_CHECKING, Any, cast
 
-from core.ai.workflows.contracts import FromNode, GateDecision, JudgeGate, RunNode, Workflow
+from core.ai.workflows.contracts import JUDGE_NOTE_FALLBACK, FromNode, GateDecision, JudgeGate, RunNode, Workflow
 
 from harness.features.running.approval import ChatApproval
 from harness.features.running.domain.progress import GateVerdict
@@ -133,6 +133,14 @@ async def test_under_automode_a_judge_that_cannot_decide_sends_the_work_back_wit
     assert approval.rejections() == {"check": 1}
     assert approval.auto_gates() == (), "automode passed nothing, so the record counts nothing in its name"
     assert approval.session.active.pending is None, "nothing waits for a person"
+
+
+async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on(registry: StepRegistry) -> None:
+    approval = _approval(_judged(), registry, timeout=0.01, gate_mode="auto")
+
+    decision = await approval.review("check", "the draft")
+
+    assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
 
 
 async def test_under_automode_a_person_gate_still_passes_with_nobody_asked(quarterly_report: Workflow, registry: StepRegistry) -> None:

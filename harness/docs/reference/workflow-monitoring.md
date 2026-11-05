@@ -421,9 +421,9 @@ what was wrong, and what to change.
 Every decision is recorded as a fact of its own: the gate, the reach, the verdict (`approve`, `reject`,
 `cannot_judge`), **who decided** (`judge`, `person`, `orchestrator`, `auto`, `timeout`) and the digest of the value
 decided over. A judge that answers `cannot_judge` and the person it escalates to record one fact each and count as one
-reach. `auto` is automode crossing a gate with nobody asked, and it may pass a gate but never refuse one. Under automode a
-judge's `cannot_judge` is refused in the judge's own name, so the second fact of that reach is a `reject` by `judge`. An approval
-belongs to the generation it was given over: a gate re-reached because something downstream rewound must be approved
+reach. `auto` is automode crossing a gate with nobody asked, and it may pass a gate but never refuse one. Under
+automode a judge's `cannot_judge` is refused in the judge's own name, so the second fact of that reach is a `reject` by
+`judge`. An approval belongs to the generation it was given over: a gate re-reached because something downstream rewound must be approved
 again, even when the new value is byte-identical to the one approved before.
 
 ### The ceiling on reruns
@@ -1223,11 +1223,13 @@ names a step file whose typed output carries the verdict, and the step answers `
 `cannot_judge`. A `cannot_judge` verdict steps the run waiting for a person exactly as a `PersonGate` would, the
 reviewer's own words appearing above the workflow in the gate card so the owner reads why before deciding. Under
 `gate_mode="orchestrate"` this run's own orchestrator answers that escalation instead, the same conversion a
-`PersonGate` gets under that mode. Under `gate_mode="auto"` nobody answers in the judge's place, so
-`ChatApproval.review` refuses the escalation in the judge's name: the judge's note goes back as the feedback to the
-step the gate reruns, and the refusal spends one of the gate's reaches. A judge that never decides ends the run at the
-gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in `gates_auto`. A durable
-run on the Temporal engine still passes the escalation under `"auto"`.
+`PersonGate` gets under that mode. Under `gate_mode="auto"` nobody answers in the judge's place, so the approval hook
+refuses the escalation in the judge's name, on both engines (`ChatApproval.review` in process,
+`DurableWorkflowRun.review` on Temporal). The judge's note goes back as the feedback to the step the gate reruns. A
+blank note is replaced by core's `JUDGE_NOTE_FALLBACK`, "The judge could not decide and gave no reason. Rework the
+value so its judge can decide it." The refusal spends one of the gate's reaches, so a judge that never decides ends
+the run at the gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in
+`gates_auto`.
 
 **The honesty rule, now three columns.** `gates_approved` means a person clicked approve. `gates_auto` means automode
 passed the gate with nobody asked. `gates_orchestrated` means this run's own orchestrator decided it: either because
