@@ -82,9 +82,11 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   grammar). Most of the time the script fails with the refusal text as a plain exception and the model reads it. Some of the time
   the worker answers `monty worker protocol error: invalid exception payload: invalid value for ...` and pydantic-ai reports
   `Code execution failed and the session was reset`, so the model never sees which field was refused and spends a retry blind.
-- **Cause:** not isolated. Both observed cases carried a refusal whose text embeds pydantic's `input_value={...}` dump of the whole
-  payload. The plain-exception cases carried shorter refusals. The exception payload the runtime serializes appears to choke on
-  that content.
+- **Cause:** most likely pydantic/monty#631, the bug behind UB-6: the host refused the frame of an exception raised
+  inside a call written across lines with its closing parenthesis left of the callee, and a `write_note(...)` call with
+  one argument per line is that shape. Both observed cases also carried a refusal whose text embeds pydantic's
+  `input_value={...}` dump of the whole payload, and the plain-exception cases carried shorter refusals, which first
+  looked like the cause.
 - **Found:** 2026-08-26, watching `wf.research-digest.v2` digest steps (logfire, 08:58:02Z and 08:58:20Z, span `execute_tool
   run_code`).
 - **What we did:** nothing in code yet. The digest brief tells the agent to fix exactly the named field on a refusal, and the
@@ -163,7 +165,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Issue:** not filed by us. The fix closed pydantic/pydantic-ai#7785, a related report of a join dropping a fanned
   producer's contribution.
 
-## UB-6. A syntax error in a long `run_code` program crashes the sandbox worker instead of reporting the error
+## UB-6. An error whose span crosses lines crashes the sandbox worker instead of reaching the model
 
 - **Library:** pydantic-monty runtime 0.0.21 under pydantic-ai's `CodeMode` (`run_code`).
 - **Symptom:** a program of a few thousand characters that contains a syntax error (a pasted string literal that breaks the
@@ -271,7 +273,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-10. `sanitize_messages` warns about the message id `load_messages` wrote itself
 
-- **Library:** pydantic-ai 2.61.0 to 2.63.0 (`pydantic_ai/messages.py`, `sanitize_messages`. `pydantic_ai/ui/_utils.py`,
+- **Library:** pydantic-ai 2.61.0 to 2.66.0 (`pydantic_ai/messages.py`, `sanitize_messages`. `pydantic_ai/ui/_utils.py`,
   `set_ui_message_id`).
 - **Symptom:** `UserWarning: Framework-reserved __pydantic_ai__ metadata was dropped from 1 client-submitted message(s)` on
   every chat turn, for a request whose messages carry no metadata at all.
@@ -294,7 +296,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-11. `CapabilityStore.write` lands every entry active, and its directory lock is private
 
-- **Library:** pydantic-ai-harness 0.61.0 to 0.63.0 (`pydantic_ai_harness/capability_creation/_store.py`, `write` and
+- **Library:** pydantic-ai-harness 0.61.0 to 0.66.0 (`pydantic_ai_harness/capability_creation/_store.py`, `write` and
   `_directory_lock`).
 - **Symptom:** a store that must land authored code inactive cannot do it in one step. `FileCustomCapabilities.write` calls
   the store's `write`, which saves the entry `active`, then the store's `disable`. Between the two, a `load_active` in the
@@ -490,12 +492,12 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-18. A plain-text answer the agent refuses and retries leaves nothing in the event stream
 
-- **Library:** pydantic-ai 2.63.0, read in the harness venv's installed copy. The retry: `pydantic_ai/_agent_graph.py`,
-  the `except ToolRetryError` blocks of `CallToolsNode` at lines 2883-2886 and 2989-2991, and
-  `ModelRequestNode._build_retry_node` at lines 2699-2715. The event union: `AgentStreamEvent` (`pydantic_ai/messages.py`, line 7507) and its `HandleResponseEvent`
-  member (line 6995). The Vercel AI adapter: `pydantic_ai/ui/vercel_ai/_event_stream.py`,
-  `VercelAIEventStream._handle_tool_result`, the `ERROR_OUTCOMES` branch at lines 528-534, and
-  `UIEventStream.transform_stream` (`pydantic_ai/ui/_event_stream.py`, the `ToolCallEvent` branch at lines 251-262).
+- **Library:** pydantic-ai 2.63.0 to 2.66.0, with 2.66.0's line numbers. The retry: `pydantic_ai/_agent_graph.py`,
+  the `except ToolRetryError` blocks of `CallToolsNode` at lines 3936-3940 and 4042-4044, and
+  `ModelRequestNode._build_retry_node` at lines 3759-3776. The event union: `AgentStreamEvent` (`pydantic_ai/messages.py`,
+  line 8065) and its `HandleResponseEvent` member (line 7546). The Vercel AI adapter: `pydantic_ai/ui/vercel_ai/_event_stream.py`,
+  `VercelAIEventStream._handle_tool_result`, the `ERROR_OUTCOMES` branch at lines 539-544, and
+  `UIEventStream.transform_stream` (`pydantic_ai/ui/_event_stream.py`, the `ToolCallEvent` branch at lines 252-263).
 - **Symptom:** a workflow step that must answer with a structured output answers in plain text. The agent refuses the text
   with a `RetryFeedbackPart` ("Invalid JSON: expected value at line 1 column 1") and the model tries again. The live step
   drawer draws the step's Vercel AI stream, so it shows the plain-text answer and then the retry's tool call in one step
@@ -735,16 +737,18 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `ContinuationRefused` failure: the run fails rather than pausing, and a retry of the same attempt is refused too,
   because the attempt began and never settled. Nothing was moved forward, unlike the 2.60 `retry` field: the in-process
   engine never reads a checkpoint, and the restart guard in the entry above is required.
-- **Messages dump three more fields** (pydantic-ai 2.64.0 to 2.66.0): `ModelResponse.model_id`, the id of the model the
-  agent sent the request to, `SystemPromptPart.context_id`, `null` by default, and `content_file_digests` on a tool
-  return whose content is not a scalar, which lists the files that content holds (the fix of GHSA-4cj4-hgwf-4hc4). A tool
-  return stored before 2.66 has no such list, and on load its content rebuilds only an HTTP or HTTPS file URL as a file.
-  Any other mapping shaped like a file stays a mapping. Message keys do not change, and the record stores a message
+- **Messages dump four more fields** (pydantic-ai 2.64.0 to 2.66.0): `ModelResponse.model_id`, the id of the model the
+  agent sent the request to, `SystemPromptPart.context_id`, `null` by default, `content_file_digests` on a tool
+  return whose content is not a scalar, which lists the files that content holds (the fix of GHSA-4cj4-hgwf-4hc4), and
+  `SpeechPart.timestamps`, which only realtime sessions write. A tool return stored before 2.66 has no such list, and on
+  load its content rebuilds only an HTTP or HTTPS file URL as a file, with its `force_download` reset to `False`. Any
+  other mapping shaped like a file stays a mapping. Message keys do not change, and the record stores a message
   re-sent under 2.66 as a new form, once per message. A checkpoint committed before the upgrade digests differently
   after it, with the same consequence on the Temporal engine as the entry above, so the same restart guard is required.
   `CapabilityLoadDeltaPart` is a new request part. It records a capability loaded by code (`RunContext.load_capability`),
   which no code here does, and a compaction that removes a `load_capability` exchange now records the load again as one,
   where 0.63 wrote a call and return the model never made. The chat agent's history can therefore hold it after a
-  compaction, the capability stays loaded as before, and `message_key` keys the part by its position. `json-repair` left
+  compaction, and the capability stays loaded as before. The request that records the load again holds no part with a
+  tool call id or a timestamp, so `message_key` keys it by its content. `json-repair` left
   the core, engram, studio and connectors locks, since only `Coder` and `RepairToolArguments` need it now, and the harness
   keeps it through the `coder` extra.
