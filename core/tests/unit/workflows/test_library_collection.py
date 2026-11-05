@@ -801,14 +801,6 @@ async def test_search_steps_asks_for_step_pages_only() -> None:
     assert 3 in args
 
 
-async def test_put_records_which_shelf_steps_a_workflow_used() -> None:
-    ingest = FakeIngest()
-    await LibraryCollection(FakeRows(), ingest).put(
-        _spec(), title="t", summary="s", applicability="when", provenance={"saved_by": "agent", "uses": "st.a.v1,st.b.v2"}
-    )
-    assert ingest.payloads[0][0]["frontmatter"]["uses"] == ["st.a.v1", "st.b.v2"]
-
-
 async def test_the_collection_catalog_tool_answers_a_total_alongside_its_rows() -> None:
     """`list_workflows` gains a `total` field; the row shape `find_workflows` already answers in is untouched."""
     catalog_rows: list[Mapping[str, Any]] = [

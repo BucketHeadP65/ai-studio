@@ -89,7 +89,7 @@ def test_a_diverged_copy_names_the_version_its_parent_record_named() -> None:
     copy = _briefing("digest", DIGEST_V3.replace("closely", "carefully"))
     parent = (ConsumerEntry(step="digest", version=2, step_hash=DIGESTS[1].step_hash),)
 
-    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, parent=parent)
+    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, prior=parent)
 
     assert record == (
         ConsumerEntry(step="digest", version=None, step_hash=step_content_address(copy), diverged_from=2, diverged_basis="parent"),
@@ -100,7 +100,7 @@ def test_a_diverged_copy_keeps_the_version_a_diverged_parent_traced_to_its_own_p
     copy = _briefing("digest", DIGEST_V3.replace("closely", "carefully"))
     parent = (ConsumerEntry(step="digest", version=None, step_hash="0" * 64, diverged_from=1, diverged_basis="parent"),)
 
-    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, parent=parent)
+    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, prior=parent)
 
     assert (record[0].diverged_from, record[0].diverged_basis) == (1, "parent")
 
@@ -109,7 +109,7 @@ def test_a_diverged_copy_whose_parent_only_guessed_is_matched_again_by_text() ->
     copy = _briefing("digest", DIGEST_V3.replace("closely", "carefully"))
     parent = (ConsumerEntry(step="digest", version=None, step_hash="0" * 64, diverged_from=1, diverged_basis="closest"),)
 
-    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, parent=parent)
+    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, prior=parent)
 
     assert (record[0].diverged_from, record[0].diverged_basis) == (3, "closest")
 
@@ -141,7 +141,7 @@ def test_a_decline_carries_over_while_the_copy_is_unchanged() -> None:
         ),
     )
 
-    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, parent=parent)
+    record = consumer_record(_workflow(copy), {"digest": DIGESTS}, prior=parent)
 
     assert (record[0].declined, record[0].declined_because) == (DIGESTS[2].step_hash, "reverted")
 
@@ -151,7 +151,7 @@ def test_a_decline_is_dropped_once_the_copy_changed() -> None:
         ConsumerEntry(step="digest", version=2, step_hash=DIGESTS[1].step_hash, declined=DIGESTS[2].step_hash, declined_because="kept"),
     )
 
-    record = consumer_record(_workflow(_briefing("digest", DIGEST_V1)), {"digest": DIGESTS}, parent=parent)
+    record = consumer_record(_workflow(_briefing("digest", DIGEST_V1)), {"digest": DIGESTS}, prior=parent)
 
     assert record == (ConsumerEntry(step="digest", version=1, step_hash=DIGESTS[0].step_hash),)
 

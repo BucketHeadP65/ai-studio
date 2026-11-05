@@ -56,8 +56,8 @@ class ConsumerEntry(BaseModel):
     diverged_from: int | None = None
     """The saved version a diverged copy diverged from. None for a copy that matches a version."""
     diverged_basis: Literal["parent", "closest"] | None = None
-    """How `diverged_from` was found: `parent` when the parent version's record named it, `closest` when it is the
-    saved version closest to the copy by text."""
+    """How `diverged_from` was found: `parent` when the prior record named it (the record of an earlier save of the same
+    version, or of the parent version), `closest` when it is the saved version closest to the copy by text."""
     declined: str | None = None
     """The content address of a step version this consumer keeps its copy instead of."""
     declined_because: Literal["kept", "reverted"] | None = None
@@ -82,34 +82,35 @@ class ConsumerEntry(BaseModel):
 
 
 def consumer_record(
-    workflow: Workflow, versions: Mapping[str, Sequence[StepVersion]], *, parent: Sequence[ConsumerEntry] = ()
+    workflow: Workflow, versions: Mapping[str, Sequence[StepVersion]], *, prior: Sequence[ConsumerEntry] = ()
 ) -> tuple[ConsumerEntry, ...]:
     """The consumer record of `workflow`: one entry per inline step whose name a reusable step has saved versions of.
 
-    A copy equal to several saved versions names the highest. A diverged copy names the version the parent's entry
-    named: its `version`, or the version a diverged parent entry traced to its own parent. Otherwise it names the
+    A copy equal to several saved versions names the highest. A diverged copy names the version the prior entry
+    named: its `version`, or the version a diverged prior entry traced to its own parent. Otherwise it names the
     saved version whose canonical YAML is closest to the copy's by line, ties going to the higher version. A
-    parent entry's decline carries over while the copy's content address is unchanged, and is dropped once it
+    prior entry's decline carries over while the copy's content address is unchanged, and is dropped once it
     changed. The order of each sequence in `versions` does not matter.
 
     Args:
         workflow: The workflow being saved.
         versions: Every saved version of each reusable step, by step name. A name absent or mapped to an empty
             sequence has no saved versions.
-        parent: The consumer record of the version `workflow` derives from. Empty for a first version.
+        prior: The prior consumer record: the one this same version already holds when it is saved again, else the
+            record of the version `workflow` derives from. Empty for a first save.
 
     Returns:
         The entries, sorted by step name.
     """
-    earlier = {entry.step: entry for entry in parent}
+    earlier = {entry.step: entry for entry in prior}
     entries: list[ConsumerEntry] = []
     for copy in workflow.inline:
         saved = versions.get(copy.name, ())
         if not saved:
             continue
         address = step_content_address(copy)
-        prior = earlier.get(copy.name)
-        same_copy = prior if prior is not None and prior.step_hash == address else None
+        before = earlier.get(copy.name)
+        same_copy = before if before is not None and before.step_hash == address else None
         declined = same_copy.declined if same_copy is not None else None
         declined_because = same_copy.declined_because if same_copy is not None else None
         matching = [saved_version.version for saved_version in saved if saved_version.step_hash == address]
@@ -120,7 +121,7 @@ def consumer_record(
                 )
             )
             continue
-        diverged_from, basis = _diverged_from(copy, saved, prior)
+        diverged_from, basis = _diverged_from(copy, saved, before)
         entries.append(
             ConsumerEntry(
                 step=copy.name,

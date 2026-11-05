@@ -6,14 +6,14 @@ calls to perform a step, ask a gate and report progress.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from pydantic import JsonValue
 
-    from core.ai.workflows.domain.consumers import StepVersion
+    from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion
     from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence
     from core.ai.workflows.domain.fingerprint import WorkflowFingerprint
     from core.ai.workflows.domain.intent import WorkflowIntent
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.domain.run_events import ReviewedArtifactRef
     from core.ai.workflows.domain.vocabulary import AgentStep, Briefing, InlineStep, Program, Workflow
     from core.ai.workflows.graph_builder import GateDecision
-    from core.ai.workflows.read_models import SavedWorkflow
+    from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
     from core.ai.workflows.registry import StepImplementation
 
 
@@ -328,6 +328,64 @@ class StepVersionQueries(Protocol):
         Raises:
             LibraryError: No page has that id, the page carries no reusable step, or its cases are not the JSON text
                 of an object.
+        """
+        ...
+
+
+@runtime_checkable
+class ConsumerRecords(Protocol):
+    """The library reads and the one write over consumer records: who holds a copy of a step, and what a version records.
+
+    A library that keeps reusable steps answers it. A caller narrows a library with `isinstance`.
+    """
+
+    async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
+        """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.
+
+        Live means neither archived nor superseded.
+
+        Args:
+            step_name: The reusable step's name.
+
+        Returns:
+            One card per workflow version, carrying its record's entry for the step. Empty when no live version holds a copy.
+
+        Raises:
+            LibraryError: The record on one of those pages does not parse.
+        """
+        ...
+
+    async def fetch_consumer_record(self, workflow_id: str) -> tuple[ConsumerEntry, ...]:
+        """The consumer record one workflow version was saved with, one entry per copy of a reusable step, by step name.
+
+        Args:
+            workflow_id: A workflow version's id, or `wf.<name>` or a bare name for its newest live version.
+
+        Returns:
+            The entries. Empty for a workflow that holds no copy of a reusable step.
+
+        Raises:
+            WorkflowUnknownError: No workflow has that id.
+            LibraryError: The record on the page does not parse.
+        """
+        ...
+
+    async def record_decline(self, workflow_id: str, *, step: str, step_hash: str, because: Literal["kept", "reverted"]) -> None:
+        """Record on a workflow version nothing has superseded that it keeps its copy of a step instead of one step version.
+
+        An archived version takes a decline too. The page keeps every other key and entry, and a decline already recorded
+        writes nothing. The decline carries over to a later version, and to a save of the same version, while its copy is
+        unchanged.
+
+        Args:
+            workflow_id: The workflow version's id.
+            step: The reusable step's name.
+            step_hash: The content address of the step version declined.
+            because: `kept` when step maintenance kept the copy, `reverted` when a live trial of that version reverted.
+
+        Raises:
+            LibraryError: No page has that id, it is superseded, its record holds no copy of `step`, or the write fails.
+                Nothing is written in each case.
         """
         ...
 

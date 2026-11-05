@@ -113,6 +113,7 @@ from core.ai.workflows.infrastructure.library_collection import LibraryCollectio
 from core.ai.workflows.internal_contracts import (
     AgentResolver,
     CodeRunner,
+    ConsumerRecords,
     EvidenceLog,
     Ingest,
     OrchestratorDecider,
@@ -124,7 +125,7 @@ from core.ai.workflows.internal_contracts import (
     StepVersionQueries,
     WorkflowLibrary,
 )
-from core.ai.workflows.read_models import SavedWorkflow
+from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
 from core.ai.workflows.service import save, verify_savable
@@ -156,7 +157,9 @@ __all__ = [
     "ArtifactRef",
     "Briefing",
     "CodeRunner",
+    "ConsumerCard",
     "ConsumerEntry",
+    "ConsumerRecords",
     "DecisionSource",
     "DocumentError",
     "DurableWorkflowRun",

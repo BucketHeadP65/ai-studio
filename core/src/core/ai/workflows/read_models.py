@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ConfigDict
+
+from core.ai.workflows.domain.consumers import ConsumerEntry
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
@@ -38,3 +42,16 @@ class SavedWorkflow:
     intent: WorkflowIntent | None = None
     """What the person who wanted this automation asked for, when the library kept it. `None` means
     nobody stated an intent. No intent is ever inferred from the workflow."""
+
+
+class ConsumerCard(BaseModel):
+    """One live workflow version that holds a copy of a reusable step, with what its consumer record says about that copy."""
+
+    model_config = ConfigDict(frozen=True)
+
+    workflow_id: str
+    """The workflow version's library id, `wf.<name>.v<version>`."""
+    name: str
+    version: int
+    entry: ConsumerEntry
+    """The record's entry for the step that was asked about."""

@@ -171,7 +171,7 @@ async def test_save_path_writes_steps_before_the_workflow_that_uses_them(tmp_pat
         assert payload["frontmatter"]["saved_by"] == "test:save"
     workflow_frontmatter = ingest.payloads[2][0]["frontmatter"]
     assert workflow_frontmatter["id"] == "wf.two-step.v1"
-    assert workflow_frontmatter["uses"] == ["st.step_a.v1", "st.step_b.v1"]
+    assert "uses" not in workflow_frontmatter, "the copies are recorded under reusable_steps (test_save_paths_record_consumers.py)"
 
 
 async def test_a_workflow_that_fails_validation_writes_nothing(tmp_path: Path) -> None:

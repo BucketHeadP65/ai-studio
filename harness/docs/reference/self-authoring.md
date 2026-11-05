@@ -193,8 +193,9 @@ gives it: each step is read from the library and copied into the draft's `inline
 and an id named twice, an id no step has, or a step whose name is already under `inline` is refused
 in the save's words. The settled draft carries the copies, so `run_workflow("draft")` and the Save
 button both work on it with nothing saved first. A library that keeps no reusable steps refuses `uses`.
-Only `save_workflow` with `uses` records where the steps came from. A Save-button save keeps the copies
-under `inline` and records no `uses`. Both `check_draft` and `save_workflow` copy through
+Every save records the copies the same way, whichever path saved them: `LibraryCollection.put` writes the
+consumer record under `reusable_steps`, the saved version of each reusable step a copy matches by content address.
+Both `check_draft` and `save_workflow` copy through
 `core.ai.workflows.reusable_steps.copy_reusable_steps`, so the two refuse the same `uses` in the same words.
 The standing instruction block says the rule. What one draft owes is the tool result's, so the
 instructions stay byte-identical while the registry holds still.

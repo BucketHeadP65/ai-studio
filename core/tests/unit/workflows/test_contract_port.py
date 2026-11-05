@@ -19,7 +19,7 @@ import re
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
@@ -41,6 +41,7 @@ from core.ai.workflows.contracts import (
     FromNode,
     FromParameter,
     InlineStep,
+    LibraryCollection,
     LibraryError,
     Outcome,
     ParameterSpec,
@@ -56,7 +57,7 @@ from core.ai.workflows.contracts import (
     spec_identity,
 )
 from core.ai.workflows.domain.vocabulary import SameAs
-from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION
+from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION, collection_toolset
 from core.ai.workflows.reusable_steps import SEARCH_STEPS_TOOL
 from tests.unit.workflows.conftest import CallLog, register_quarterly_steps
 
@@ -74,7 +75,7 @@ class FakeHost:
     steps: dict[str, dict] = field(default_factory=dict)
     calls: list[tuple[str, Mapping[str, object]]] = field(default_factory=list)
     stored: list[dict[str, object]] = field(default_factory=list)
-    """Every `store_row` write, decoded back to data: `{"spec": ..., "uses": [...]}` per call."""
+    """Every `store_row` write, decoded back to data: `{"spec": ...}` per call."""
     refuse_store: str | None = None
     """Scriptable: when set, `store_row` raises `LibraryError` with this message instead of writing."""
     catalog_rows: dict[str, str] | None = None
@@ -124,13 +125,13 @@ class FakeHost:
         self.calls.append(("read_row", {"key": key}))
         return {"document": self.rows.get(key, "")}
 
-    async def store_row(self, key: str, doc: str, label: str, note: str, guide: str, who: str, uses: list[str] | None = None) -> dict[str, object]:
+    async def store_row(self, key: str, doc: str, label: str, note: str, guide: str, who: str) -> dict[str, object]:
         """Keep a row. Six positional concepts, none of them named the way we name them."""
         self.calls.append(("store_row", {"key": key, "label": label, "who": who, "guide": guide, "note": note}))
         if self.refuse_store is not None:
             raise LibraryError(self.refuse_store)
         self.rows[key] = doc
-        self.stored.append({"spec": yaml.safe_load(doc), "uses": uses or []})
+        self.stored.append({"spec": yaml.safe_load(doc)})
         return {"saved": key}
 
     async def send_survey(self, feedback: str) -> str:
@@ -191,7 +192,6 @@ def _write_args(write: WorkflowWrite) -> dict[str, object]:
         "note": write.summary,
         "guide": write.applicability,
         "who": write.saved_by,
-        "uses": list(write.uses) if write.uses is not None else None,
     }
 
 
@@ -1243,7 +1243,7 @@ async def test_a_step_search_with_no_hits_says_so_in_its_own_words(tmp_path: Pat
     assert "workflow" not in found
 
 
-async def test_save_copies_used_steps_into_the_artifact_and_records_them(tmp_path: Path) -> None:
+async def test_save_copies_used_steps_into_the_artifact(tmp_path: Path) -> None:
     host = FakeHost(steps={"st.digest_source.v1": _digest_step().model_dump(mode="json")})
     port = _port(host, tmp_path)
     spec = Workflow(
@@ -1258,8 +1258,7 @@ async def test_save_copies_used_steps_into_the_artifact_and_records_them(tmp_pat
     assert "saved as" in said
     stored = host.stored[-1]
     written = Workflow.model_validate(stored["spec"])
-    assert [task.name for task in written.inline] == ["digest_source"]
-    assert stored["uses"] == ["st.digest_source.v1"]
+    assert written.inline == (_digest_step(),)
 
 
 async def test_save_refuses_a_used_step_that_collides_with_a_carried_one(tmp_path: Path) -> None:
@@ -1372,15 +1371,28 @@ def test_shelf_tools_appear_only_when_the_vocabulary_names_them() -> None:
     assert "fetch_step" in contract_tool_names(WRITABLE_WITH_SHELF)
 
 
-def test_the_production_vocabularys_put_args_carries_uses_through(quarterly_report: Workflow) -> None:
-    """`WORKFLOW_COLLECTION.put_args` is where `uses` reaches `write_workflow`.
+def test_the_production_vocabularys_put_args_names_exactly_the_arguments_write_workflow_takes(quarterly_report: Workflow) -> None:
+    """`WORKFLOW_COLLECTION.put_args` and the `write_workflow` tool it calls name the same arguments.
 
-    Proven against the production mapping directly, not through the test-only stand-in whose
-    own mapping hid this gap.
+    Proven against the production mapping directly, not through the test-only stand-in whose own mapping could hide
+    an argument the tool no longer takes.
     """
-    write = WorkflowWrite(
-        workflow=quarterly_report, title="t", summary="s", applicability="a", saved_by="agent:test", uses=["st.digest_source.v1"]
-    )
+    write = WorkflowWrite(workflow=quarterly_report, title="t", summary="s", applicability="a", saved_by="agent:test")
     put_args = WORKFLOW_COLLECTION.put_args
     assert put_args is not None
-    assert put_args(write)["uses"] == ["st.digest_source.v1"]
+    tool = collection_toolset(LibraryCollection(_NoRows(), _no_ingest)).tools["write_workflow"]
+    assert set(put_args(write)) == set(tool.function_schema.json_schema["properties"])
+
+
+class _NoRows:
+    """A library reader nothing is read through: building the toolset reads nothing."""
+
+    async def fetch(self, sql: str, /, *args: object) -> Sequence[Mapping[str, Any]]:
+        raise AssertionError(sql)
+
+    async def fetchval(self, sql: str, /, *args: object) -> str | Mapping[str, Any] | None:
+        raise AssertionError(sql)
+
+
+async def _no_ingest(payload: Mapping[str, Any], *, collection: str) -> None:
+    raise AssertionError(collection)
