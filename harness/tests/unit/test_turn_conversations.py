@@ -54,11 +54,11 @@ from harness.settings import WebSearchSettings
 from tests.conftest import ApproveAll
 from tests.support.environment import fake_engram
 from tests.support.fakes.model_listing import FakeModelListing
+from tests.support.fakes.spend import FiledRows
 from tests.support.fakes.step_store import FakeContinuationCheckpoints, FakeStepStore
 from tests.support.state import records_under
 from tests.support.streaming import streaming_function_model, usage_preserving_function_model
 from tests.support.tiers import tiers_under
-from tests.unit.test_turn_reconnects import FiledRows
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence

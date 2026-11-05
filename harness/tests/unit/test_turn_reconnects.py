@@ -48,7 +48,7 @@ from harness.session import ActiveRun, NoSessionLog, Runtime
 from harness.settings import WebSearchSettings
 from tests.conftest import ApproveAll
 from tests.support.environment import fake_engram
-from tests.support.fakes.spend import FakeSpendLog
+from tests.support.fakes.spend import FiledRows
 from tests.support.state import a_state, records_under
 from tests.support.tiers import tiers_under
 
@@ -60,7 +60,6 @@ if TYPE_CHECKING:
     from pydantic_ai.models.function import AgentInfo, DeltaToolCalls
 
     from harness.features.running.contracts import RunRecords
-    from harness.features.running.spend import SpendRow
 
 ITEM_SCHEMA = {"type": "object", "title": "Digest", "properties": {"title": {"type": "string"}}, "required": ["title"]}
 WORKING = "Working on it."
@@ -83,18 +82,6 @@ SPEC = Workflow(
     output=FromNode(node="each_item"),
 )
 ITEMS: WorkflowArguments = {"items": [{"title": "quantum computing"}]}
-
-
-class FiledRows(FakeSpendLog):
-    """A spend ledger that keeps every row a step files, in order."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.rows: list[SpendRow] = []
-
-    def record(self, run_id: str, workflow_id: str, rows: Sequence[SpendRow]) -> None:
-        del run_id, workflow_id
-        self.rows.extend(rows)
 
 
 async def _no_wait(seconds: float) -> None:

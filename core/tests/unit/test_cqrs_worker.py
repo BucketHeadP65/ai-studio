@@ -29,6 +29,7 @@ from core.cqrs.contracts import (
     Worker,
 )
 from tests.support.fakes.bus_spy import BusSpy
+from tests.support.fakes.outbox import FailingOutbox
 from tests.support.fakes.wake import BlockingWake
 
 if TYPE_CHECKING:
@@ -36,7 +37,6 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from core.cqrs.contracts import UnitOfWork
-    from core.cqrs.domain import StoredEvent
 
 T0 = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
@@ -179,23 +179,6 @@ def _starting_up() -> DBAPIError:
     wrapped.__cause__ = adapted
     assert isinstance(wrapped, DBAPIError)
     return wrapped
-
-
-class _OnceFailingOutbox(MemoryOutbox):
-    """An outbox whose first reads of undelivered events raise `errors` in turn, and whose first good read sets `read_again`."""
-
-    def __init__(self, *errors: Exception) -> None:
-        super().__init__()
-        self.errors = list(errors)
-        self.reads = 0
-        self.read_again = asyncio.Event()
-
-    async def undelivered(self, *, limit: int = 100) -> list[StoredEvent]:
-        self.reads += 1
-        if self.errors:
-            raise self.errors.pop(0)
-        self.read_again.set()
-        return await super().undelivered(limit=limit)
 
 
 @pytest.fixture
@@ -494,7 +477,7 @@ class TestRunForever:
     async def test_a_tick_that_loses_its_database_is_logged_and_the_loop_goes_on(
         self, error: Exception, clock: _Clock, caplog: pytest.LogCaptureFixture
     ):
-        outbox = _OnceFailingOutbox(error)
+        outbox = FailingOutbox(error)
         worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
 
         await asyncio.wait_for(worker.run_forever(stop=outbox.read_again), timeout=2)
@@ -503,7 +486,7 @@ class TestRunForever:
         assert "tick lost its database connection" in caplog.text
 
     async def test_a_database_down_for_several_ticks_is_logged_once_and_its_return_once(self, clock: _Clock, caplog: pytest.LogCaptureFixture):
-        outbox = _OnceFailingOutbox(*(_starting_up() for _ in range(3)))
+        outbox = FailingOutbox(*(_starting_up() for _ in range(3)))
         worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
 
         with caplog.at_level(logging.INFO, logger="core.cqrs.worker"):
@@ -516,7 +499,7 @@ class TestRunForever:
         assert "restored after 3 failed attempts" in said[1][1]
 
     async def test_a_tick_that_fails_any_other_way_ends_the_loop(self, clock: _Clock):
-        outbox = _OnceFailingOutbox(RuntimeError("a bug in a port"))
+        outbox = FailingOutbox(RuntimeError("a bug in a port"))
         worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
 
         with pytest.raises(RuntimeError, match="a bug in a port"):

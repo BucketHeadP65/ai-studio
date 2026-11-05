@@ -45,3 +45,16 @@ class FakeSpendLog:
         """Every one of `workflow_id`'s filed runs: a fake never truncates a window."""
         del since, limit
         return SpendWindow(runs=self.for_workflow(workflow_id, limit=len(self._runs)), complete=True)
+
+
+class FiledRows(FakeSpendLog):
+    """A spend ledger that keeps every row a step files, in order, in `rows`."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[SpendRow] = []
+
+    def record(self, run_id: str, workflow_id: str, rows: Sequence[SpendRow]) -> None:
+        """Keep `rows`, whichever run and workflow they belong to."""
+        del run_id, workflow_id
+        self.rows.extend(rows)
