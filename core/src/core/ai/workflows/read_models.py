@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from core.ai.workflows.domain.consumers import ConsumerEntry
+from core.ai.workflows.domain.flags import FlagKind
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -55,3 +56,24 @@ class ConsumerCard(BaseModel):
     version: int
     entry: ConsumerEntry
     """The record's entry for the step that was asked about."""
+
+
+class FlagCard(BaseModel):
+    """One maintenance flag as a list shows it: its id, kind and status, what it is about, and its two sections."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    """The flag's page id, `mf.<short kind>.<workflow name>.<step>` or `mf.<short kind>.<step>`."""
+    kind: FlagKind
+    status: Literal["open", "resolved"]
+    step: str
+    """The reusable step's name."""
+    workflow: str
+    """The consumer's workflow version id, empty for a flag about a step."""
+    title: str
+    summary: str
+    raised_at: AwareDatetime
+    """When the flag was raised, written in JSON as ISO 8601 with its offset."""
+    evidence: str
+    proposed_change: str
