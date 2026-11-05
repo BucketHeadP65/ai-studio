@@ -11,7 +11,7 @@ import pytest
 from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import ScanError, SourceType, WatchEntry, claimants_for, url_key
 from pydantic_ai import Agent, NativeOutput
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -198,7 +198,7 @@ _OUT_OF_CREDITS = (
 """What xAI answers over gRPC when the account behind the API key has run out of credits."""
 
 
-def _failing_with(error: ModelHTTPError) -> AgentFactory:
+def _failing_with(error: Exception) -> AgentFactory:
     """An agent factory whose agent's model call raises `error`, as the xAI model does on an error status."""
 
     def answer(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
@@ -227,6 +227,32 @@ async def test_an_http_error_whose_body_is_longer_than_a_line_drops_the_body(tmp
         await scanner.scan(WatchEntry(scanner="x", ref="someone"), since=None)
 
     assert str(raised.value) == "xAI answered HTTP 502 for grok-4-fast-non-reasoning"
+
+
+async def _scan_failure(error: Exception, tmp_path: Path) -> str:
+    """The message of the `ScanError` a scan raises when the agent's model call raises `error`."""
+    scanner = _scanner(_failing_with(error), cache_dir=tmp_path)
+    with pytest.raises(ScanError) as raised:
+        await scanner.scan(WatchEntry(scanner="x", ref="someone"), since=None)
+    return str(raised.value)
+
+
+async def test_an_unexpected_model_behavior_is_its_message_without_the_body(tmp_path: Path) -> None:
+    error = UnexpectedModelBehavior("Received empty model response", body='{"choices": [], "id": "resp-1"}')
+
+    assert await _scan_failure(error, tmp_path) == "Received empty model response"
+
+
+async def test_a_content_filter_is_its_message_without_the_body(tmp_path: Path) -> None:
+    error = ContentFilterError("Content filter triggered. Finish reason: 'content_filter'.", body='{"finish_reason": "content_filter"}')
+
+    assert await _scan_failure(error, tmp_path) == "Content filter triggered. Finish reason: 'content_filter'."
+
+
+async def test_a_team_id_is_cut_from_any_failure(tmp_path: Path) -> None:
+    error = RuntimeError("Your team 0c3b7a52-9d1e-4f6a-8b2c-5e4d3f2a1b0c is blocked from X search.")
+
+    assert await _scan_failure(error, tmp_path) == "Your team is blocked from X search."
 
 
 def test_the_scan_agent_answers_as_native_structured_output() -> None:

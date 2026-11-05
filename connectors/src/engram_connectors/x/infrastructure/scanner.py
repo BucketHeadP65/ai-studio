@@ -6,11 +6,12 @@ import re
 
 from typing import TYPE_CHECKING
 
+from core.ai.content_filter import content_filter_message
 from core.files import atomic_write
 from engram.sources.contracts import FoundSource, ScanError, claimants_for, classify_url
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.capabilities import XSearch
-from pydantic_ai.exceptions import ModelHTTPError
+from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
 
 from engram_connectors.x.domain import XScan, render_post
 from engram_connectors.xai import build_xai_model, xai_resource
@@ -88,14 +89,25 @@ def _first_sentence(body: str) -> str:
     return sentence if len(sentence) <= _SENTENCE_LIMIT else ""
 
 
+def _failure_text(error: Exception) -> str:
+    """What `error` says without a response body: a filter's categories, a model error's message, else its whole text."""
+    if isinstance(error, ContentFilterError):
+        return content_filter_message(error)
+    if isinstance(error, UnexpectedModelBehavior):
+        return error.message
+    return str(error)
+
+
 def _scan_failure(error: Exception) -> str:
-    """One line saying why a scan failed: xAI's status, model and first body sentence for an HTTP error, else the first line."""
+    """One line saying why a scan failed, any team id cut: xAI's status, model and first body sentence, else the first line."""
     if isinstance(error, ModelHTTPError):
         said = f"xAI answered HTTP {error.status_code} for {error.model_name}"
         sentence = _first_sentence(error.body) if isinstance(error.body, str) else ""
-        return f"{said}: {sentence}" if sentence else said
-    lines = str(error).strip().splitlines()
-    return lines[0] if lines else type(error).__name__
+        line = f"{said}: {sentence}" if sentence else said
+    else:
+        lines = _failure_text(error).strip().splitlines()
+        line = lines[0] if lines else type(error).__name__
+    return _ID.sub("", line)
 
 
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
