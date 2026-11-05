@@ -346,6 +346,21 @@ class TestCanonicalOrdering:
         aside_at = rendered.index("## Another aside")
         assert tldr_at < tangent_at < aside_at  # canonical first, then unknowns in original order
 
+    def test_a_level_one_section_renders_first_with_its_body_under_it(self):
+        payload = AuthoringPayload(
+            frontmatter=_paper_frontmatter(),
+            sections=(
+                AuthoringSection(heading="Sample", body="An introduction.", level=1),
+                AuthoringSection(heading="Approach", body="how"),
+                AuthoringSection(heading="TL;DR", body="short"),
+            ),
+            knowledge_base_schema=research_spec(),
+        )
+
+        rendered = render(payload, spec=research_spec())
+
+        assert rendered.split("---\n", 2)[2].startswith("\n# Sample\n\nAn introduction.\n\n## TL;DR\n\nshort\n\n## Approach\n")
+
     def test_findings_emitted_when_claims_present_without_explicit_section(self):
         # Claims imply a Findings section even if the author didn't list one.
         payload = AuthoringPayload(

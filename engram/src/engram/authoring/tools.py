@@ -944,7 +944,8 @@ class AuthoringTools:
 
         The payload is the file on disk now, parsed by the knowledge base's own grammar: `frontmatter`, `sections` and
         `claims` exactly as write_note takes them. Passed back with `path`, it rewrites the page with the same
-        frontmatter values and the same body, byte for byte. A section the page type does not declare can come inside the
+        frontmatter values and the same body, byte for byte. A page that opens with an H1 has it as the first section, at
+        level 1, with the text under it as its body. Keep it first. A section the page type does not declare can come inside the
         body of the section before it, heading included. Leave it there, or the page changes. The path is the one
         the index last read the page from, relative to the knowledge base root. A page written since the knowledge base
         last indexed is not found.

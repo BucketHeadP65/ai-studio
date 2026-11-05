@@ -93,6 +93,26 @@ def heading_lines(body: str) -> tuple[tuple[int, int], ...]:
     return tuple((token.map[0], token.map[1]) for _index, token in _headings(tokens) if token.map is not None)
 
 
+def title_heading(body: str) -> tuple[str, int, int] | None:
+    """The H1 heading that `parse` reads a page's preamble after: the first H1 before the first H2 or H3.
+
+    Args:
+        body: The page's markdown body, the frontmatter fence left out.
+
+    Returns:
+        The heading's text, the index of its line and the index of the first line after it, counted from zero.
+        None when no H1 comes before the first H2 or H3.
+    """
+    tokens = MarkdownIt("commonmark").parse(body)
+    title = _title_token(tokens, _preamble_end(_headings(tokens), len(body.splitlines())))
+    if title is None:
+        return None
+    index, token = title
+    if token.map is None:
+        return None
+    return tokens[index + 1].content, token.map[0], token.map[1]
+
+
 def _headings(tokens: Sequence[Token]) -> list[tuple[int, Token]]:
     """Each H2 and H3 heading's opening token with its index, in source order."""
     return [(i, t) for i, t in enumerate(tokens) if t.type == "heading_open" and t.tag in {"h2", "h3"}]
@@ -141,20 +161,31 @@ def _parse_sections(tokens: Sequence[Token], body_lines: Sequence[str], canon_se
 
 def _preamble_section(tokens: Sequence[Token], body_lines: Sequence[str], headings: Sequence[tuple[int, Token]]) -> Section | None:
     """Build the reserved preamble section from meaningful source before the first H2/H3."""
-    end = len(body_lines)
-    if headings and headings[0][1].map is not None:
-        end = headings[0][1].map[0]
-
-    start = 0
-    for token in tokens:
-        if token.type == "heading_open" and token.tag == "h1" and token.map is not None and token.map[0] < end:
-            start = token.map[1]
-            break
+    end = _preamble_end(headings, len(body_lines))
+    title = _title_token(tokens, end)
+    start = title[1].map[1] if title is not None and title[1].map is not None else 0
 
     body = _strip_preamble_comments(tokens, body_lines, start, end)
     if not body:
         return None
     return Section(kind="preamble", heading="Introduction", level=0, path="__preamble__", canon=None, body=body, ord=0)
+
+
+def _preamble_end(headings: Sequence[tuple[int, Token]], line_count: int) -> int:
+    """The index of the first H2 or H3 heading's line, or `line_count` when there is none."""
+    if headings and headings[0][1].map is not None:
+        return headings[0][1].map[0]
+    return line_count
+
+
+def _title_token(tokens: Sequence[Token], end: int) -> tuple[int, Token] | None:
+    """The index and opening token of the first H1 heading that starts before line `end`, or None."""
+    titles = (
+        (index, token)
+        for index, token in enumerate(tokens)
+        if token.type == "heading_open" and token.tag == "h1" and token.map is not None and token.map[0] < end
+    )
+    return next(titles, None)
 
 
 def _section_body(open_token: Token, headings: Sequence[tuple[int, Token]], ord_: int, body_lines: Sequence[str]) -> str:

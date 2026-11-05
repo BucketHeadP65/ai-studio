@@ -54,6 +54,9 @@ def _coerce_edges(value: object) -> object:
 # An edge is a `(relation, target)` pair.
 _EDGE_PAIR_LEN = 2
 
+TITLE_LEVEL = 1
+"""The section level of a page's title heading, its H1, which only a payload's first section may take."""
+
 
 class AuthoringClaim(BaseModel):
     """One claim as a writer emits it: a `ClaimBlock` with an optional anchor.
@@ -97,6 +100,7 @@ class AuthoringClaim(BaseModel):
 class AuthoringSection(BaseModel):
     """One body section the writer provides: a heading, a body and a level that defaults to H2.
 
+    Level 1 is the page's title heading, which only a payload's first section may take. It renders first.
     `heading` may be left out when `canon`, a canonical section slug such as `tl_dr`, is given in its place.
     The heading is then derived from the slug. A heading whose slug disagrees with `canon` is refused.
     Claims do not go in a body. The renderer writes them from `AuthoringPayload.claims`.
@@ -162,6 +166,14 @@ class AuthoringPayload(BaseModel):
         if refusals:
             raise ValidationError.from_exception_data(cls.__name__, refusals)
         return {**data, "claims": folded}
+
+    @model_validator(mode="after")
+    def _refuse_a_title_heading_after_the_first_section(self) -> AuthoringPayload:
+        """Refuse a level-1 section anywhere but first."""
+        if any(section.level == TITLE_LEVEL for section in self.sections[1:]):
+            msg = "a section at level 1 is the page's title heading, which only the first section may take. Give this one level 2"
+            raise ValueError(msg)
+        return self
 
     @model_validator(mode="after")
     def _validate_frontmatter(self) -> AuthoringPayload:
@@ -432,7 +444,11 @@ def _sections_schema(pt: PageTypeSpec) -> dict[str, Any]:
             "heading": heading_schema,
             "canon": canon_schema,
             "body": {"type": "string"},
-            "level": {"type": "integer", "default": 2},
+            "level": {
+                "type": "integer",
+                "default": 2,
+                "description": "2 for a section, 3 for a subsection. 1 is the page's title heading, for the first section only.",
+            },
         },
         "required": ["body"],
         "anyOf": [{"required": ["heading"]}, {"required": ["canon"]}],

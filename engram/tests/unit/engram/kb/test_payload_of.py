@@ -265,3 +265,65 @@ def test_a_claim_the_grammar_does_not_read_back_is_refused_rather_than_dropped()
 
     with pytest.raises(ValueError, match="holds text a payload cannot carry whole"):
         payload_of(text, source_path="note.md", spec=spec)
+
+
+def _with_title_heading(text: str, opening: str) -> str:
+    """`text` with `opening`, such as an H1 and the text under it, written between the frontmatter and the first section."""
+    return text.replace("\n## TL;DR", f"\n{opening}\n\n## TL;DR", 1)
+
+
+def test_a_page_that_opens_with_an_h1_and_text_under_it_comes_with_them_as_its_first_section_and_renders_back() -> None:
+    spec = research_spec()
+    text = _with_title_heading(_rendered(_PAYLOAD), "# Agents that plan\n\nRecorded at a meetup.\n\nTwo speakers.")
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    assert sections[0] == {"heading": "Agents that plan", "body": "Recorded at a meetup.\n\nTwo speakers.", "level": 1}
+    assert _rendered(payload) == text
+
+
+def test_a_page_that_opens_with_an_h1_alone_renders_back() -> None:
+    spec = research_spec()
+    text = _with_title_heading(_rendered(_PAYLOAD), "# Agents that plan")
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    assert sections[0] == {"heading": "Agents that plan", "body": "", "level": 1}
+    assert _rendered(payload) == text
+
+
+def test_an_h1_stays_first_on_a_page_whose_section_is_carried() -> None:
+    spec = research_spec()
+    text = _rendered(_with_tl_dr_body("Planning agents keep a task list.\n\n## Background\n\nRecorded at a meetup."))
+    text = _with_title_heading(text, "# Agents that plan")
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    assert sections[0] == {"heading": "Agents that plan", "body": "", "level": 1}
+    assert _rendered(payload) == text
+
+
+def test_a_section_the_page_type_does_not_declare_between_the_h1_and_the_first_declared_one_is_carried_under_the_h1() -> None:
+    spec = research_spec()
+    text = _with_title_heading(_rendered(_PAYLOAD), "# Agents that plan\n\nRecorded at a meetup.\n\n## Status\n\nCurrent.")
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    assert sections[0] == {"heading": "Agents that plan", "body": "Recorded at a meetup.\n\n## Status\n\nCurrent.", "level": 1}
+    assert _rendered(payload) == text
+
+
+def test_text_before_the_h1_is_refused_naming_it() -> None:
+    spec = research_spec()
+    text = _with_title_heading(_rendered(_PAYLOAD), "An opening line.\n\n# Agents that plan")
+
+    with pytest.raises(ValueError, match=r"holds text a payload cannot carry whole, first at 'An opening line\.'"):
+        payload_of(text, source_path="note.md", spec=spec)

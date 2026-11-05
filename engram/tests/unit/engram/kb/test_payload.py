@@ -144,6 +144,27 @@ class TestSectionLevel:
 
         assert section.level == 3
 
+    def test_a_level_one_section_first_is_accepted(self) -> None:
+        payload = AuthoringPayload(
+            frontmatter=_paper_frontmatter(),
+            sections=(AuthoringSection(heading="Sample", body="", level=1), AuthoringSection(heading="TL;DR", body="short")),
+            knowledge_base_schema=research_spec(),
+        )
+
+        assert [section.level for section in payload.sections] == [1, 2]
+
+    def test_a_level_one_section_after_another_section_is_refused(self) -> None:
+        sections = (AuthoringSection(heading="TL;DR", body="short"), AuthoringSection(heading="Sample", body="", level=1))
+
+        with pytest.raises(pydantic.ValidationError, match="level 1"):
+            AuthoringPayload(frontmatter=_paper_frontmatter(), sections=sections, knowledge_base_schema=research_spec())
+
+    def test_two_level_one_sections_are_refused(self) -> None:
+        sections = (AuthoringSection(heading="Sample", body="", level=1), AuthoringSection(heading="Again", body="", level=1))
+
+        with pytest.raises(pydantic.ValidationError, match="level 1"):
+            AuthoringPayload(frontmatter=_paper_frontmatter(), sections=sections, knowledge_base_schema=research_spec())
+
 
 class TestSectionCanonAlias:
     """`canon` (a canonical section slug) is an alternative to `heading`; both present must agree.
@@ -317,7 +338,8 @@ class TestSectionsItemSchema:
 
         assert props["heading"]["type"] == "string"
         assert props["body"]["type"] == "string"
-        assert props["level"] == {"type": "integer", "default": 2}
+        assert props["level"]["type"] == "integer"
+        assert props["level"]["default"] == 2
         assert item["required"] == ["body"]
 
     def test_heading_or_canon_one_required(self) -> None:

@@ -2,6 +2,7 @@
 
 `render` returns a string and writes no file.
 `parse` reads the output back into an equal `KnowledgeBaseNote`, and rendering that note again is byte-identical.
+A level-1 section, the page's title heading, comes first with its body under it.
 Sections come out in their page type's canonical H2 order, unknown H2s after them in input order, each H3 under its H2.
 Claims add their claims section when the writer lists none.
 A claim renders as `- {text} ^cN` with its fields as indented `key:: value` lines.
@@ -18,8 +19,8 @@ from typing import TYPE_CHECKING
 from core.markdown import heading_for_slug, heading_slug, render_frontmatter, split_frontmatter
 
 from engram.kb.domain.note import BaseFrontmatter, ClaimBlock, KnowledgeBaseNote, Section, UnitLink, parse_frontmatter
-from engram.kb.domain.parser import claim_value_read_back, heading_lines, parse
-from engram.kb.domain.payload import AuthoringPayload, assign_anchors
+from engram.kb.domain.parser import claim_value_read_back, heading_lines, parse, title_heading
+from engram.kb.domain.payload import TITLE_LEVEL, AuthoringPayload, assign_anchors
 from engram.kb.domain.quoting import quote
 from engram.kb.domain.schema import KnowledgeBaseSchema, resolve_schema
 
@@ -50,7 +51,7 @@ _FRONTMATTER_LEAD_KEYS: tuple[str, ...] = ("id", "type", "title")
 # H2 heading level: a section at this level opens a new canonical-ordering group.
 _H2_LEVEL = 2
 
-# One canonical-ordering group: an H2 `(heading, level)` paired with the H3 sections
+# One canonical-ordering group: an H2 or the title heading `(heading, level)` paired with the H3 sections
 # `(heading, level, body)` supplied under it, kept together so a group reorders atomically.
 type _H2Group = tuple[tuple[str, int], list[tuple[str, int, str]]]
 
@@ -102,11 +103,14 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
     frontmatter YAML may differ. A frontmatter date or datetime comes as its ISO text, which renders quoted and counts
     as the same value. Each claim keeps its anchor and names each declared field as a key of its own, a link
     as a `"[[…]]"` string. The claims section's body is empty when the page has claims, because the renderer writes them.
+    A page that opens with an H1 has it as its first section, at level 1, with the text under it up to the first H2 or
+    H3 as its body, as written.
     Each heading is a section of its own while that renders the page back. When it does not, a section the page type
     does not declare is carried, heading included and as written, in the body of the section before it, but only when
     the renderer would move it (it sits before a declared section) or change it (such as a heading with no blank line
     under it). Every other section stays a section of its own. Such a section is still refused when nothing before it
-    can carry it: it sits before the first declared section, or right after a claims section that holds claims.
+    can carry it: it sits before the first declared section on a page with no H1, or right after a claims section that
+    holds claims.
 
     Args:
         text: The page's whole markdown, frontmatter fence included.
@@ -118,8 +122,8 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
 
     Raises:
         NoteGrammarError: `text` does not parse under `spec`.
-        ValueError: The payload would not carry the page whole, such as text before the first heading or a claim the
-            grammar does not read back. The message names the first line that would change.
+        ValueError: The payload would not carry the page whole, such as text before the H1 (before the first heading on
+            a page with no H1) or a claim the grammar does not read back. The message names the first line that would change.
     """
     note = parse(text, source_path=source_path, spec=spec)
     claim_section = spec.claims.section if spec.claims is not None else None
@@ -127,16 +131,19 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
     frontmatter = _with_iso_dates(_frontmatter_dict(note.frontmatter, spec))
     scalar_links = spec.claims.link_scalar_names if spec.claims is not None else frozenset[str]()
     claims: list[JsonValue] = [_claim_payload(claim, scalar_links) for claim in note.claims]
+    written_values, written_body = split_frontmatter(text)
     sections: list[JsonValue] = [
-        {
-            "heading": section.heading,
-            "body": "" if note.claims and _slug(section.heading) == claim_section else section.body,
-            "level": section.level,
-        }
-        for section in headed
+        *_title_section(written_body),
+        *(
+            {
+                "heading": section.heading,
+                "body": "" if note.claims and _slug(section.heading) == claim_section else section.body,
+                "level": section.level,
+            }
+            for section in headed
+        ),
     ]
     payload: dict[str, JsonValue] = {"frontmatter": frontmatter, "sections": sections, "claims": claims}
-    written_values, written_body = split_frontmatter(text)
     rendered_values, rendered_body = _rendered_parts(payload, spec)
     written_values, rendered_values = _with_iso_dates(written_values), _with_iso_dates(rendered_values)
     if rendered_values != written_values:
@@ -176,11 +183,36 @@ def _iso_text(value: JsonValue | date) -> JsonValue:
     return value
 
 
-def _carried_sections(sections: Sequence[Section], body: str, *, has_claims: bool, claim_section: str | None) -> list[JsonValue]:
-    """The sections with each undeclared one that would move or change carried as written in the section before it, or empty."""
-    spans = heading_lines(body)
-    if len(spans) != len(sections):
+def _title_section(body: str) -> list[JsonValue]:
+    """The H1 a page body opens with as a level-1 section, its body the text up to the first H2 or H3, or empty."""
+    title = title_heading(body)
+    if title is None:
         return []
+    heading, _line, after = title
+    spans = heading_lines(body)
+    lines = body.splitlines()
+    end = spans[0][0] if spans else len(lines)
+    return [{"heading": heading, "body": "\n".join(lines[after:end]).strip(), "level": TITLE_LEVEL}]
+
+
+@dataclass(frozen=True)
+class _Heading:
+    """One heading of a page body as a payload places it: its text, its level and its canonical slug."""
+
+    heading: str
+    level: int
+    canon: str | None
+
+
+def _carried_sections(headed: Sequence[Section], body: str, *, has_claims: bool, claim_section: str | None) -> list[JsonValue]:
+    """The sections, the H1 first, with each undeclared one that would move or change carried in the one before it, or empty."""
+    spans = list(heading_lines(body))
+    if len(spans) != len(headed):
+        return []
+    sections = [_Heading(heading=section.heading, level=section.level, canon=section.canon) for section in headed]
+    if (title := title_heading(body)) is not None:
+        sections.insert(0, _Heading(heading=title[0], level=TITLE_LEVEL, canon=None))
+        spans.insert(0, (title[1], title[2]))
     lines = body.splitlines()
     last_declared = max((index for index, section in enumerate(sections) if section.canon is not None), default=-1)
     kept: list[int] = []
@@ -201,7 +233,7 @@ def _carried_sections(sections: Sequence[Section], body: str, *, has_claims: boo
     return carried
 
 
-def _renders_as_written(section: Section, lines: Sequence[str], spans: Sequence[tuple[int, int]], index: int) -> bool:
+def _renders_as_written(section: _Heading, lines: Sequence[str], spans: Sequence[tuple[int, int]], index: int) -> bool:
     """Whether the section, as a section of its own, renders to its own lines and the one blank line after them."""
     start, after = spans[index]
     end = spans[index + 1][0] if index + 1 < len(spans) else len(lines)
@@ -377,8 +409,10 @@ def _order_sections(
     canon_index = {slug: i for i, slug in enumerate(canon_order)}
 
     def _sort_key(indexed_group: tuple[int, _H2Group]) -> tuple[int, int]:
-        # Canonical sections first in canon order, unknown H2s after them, ties kept in input order.
-        original_index, ((heading, _level), _children) = indexed_group
+        # The title heading first, then canonical sections in canon order, unknown H2s after them, ties kept in input order.
+        original_index, ((heading, level), _children) = indexed_group
+        if level == TITLE_LEVEL:
+            return -1, original_index
         return canon_index.get(_slug(heading), len(canon_order)), original_index
 
     ordered_groups = sorted(enumerate(groups), key=_sort_key)
@@ -393,10 +427,10 @@ def _order_sections(
 
 
 def _group_by_h2(sections: Sequence[tuple[str, int, str]]) -> list[_H2Group]:
-    """Group sections so each H2 carries its following H3s in input order, for atomic reordering."""
+    """Group sections so each H2, and the title heading, carries its following H3s in input order, for atomic reordering."""
     groups: list[_H2Group] = []
     for heading, level, body in sections:
-        if level == _H2_LEVEL or not groups:
+        if level in {TITLE_LEVEL, _H2_LEVEL} or not groups:
             groups.append(((heading, level), []))
         else:
             groups[-1][1].append((heading, level, body))

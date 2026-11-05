@@ -165,13 +165,14 @@ and status, at one status when given, only the pages with no outgoing link of th
 given, an unknown page type refused naming the page types. `read_page(knowledge_base, page_id)` answers one indexed
 page's knowledge-base-relative `path` (the one the index last read it from) and its file parsed by `kb.parse` into a
 ready `write_note` `payload` (`kb.payload_of`), which written back with that path keeps every frontmatter value and
-the body byte for byte. A frontmatter date or datetime comes as its ISO text and writes back quoted. In the payload each heading is a section of its own while that renders the page back. When it
+the body byte for byte. A frontmatter date or datetime comes as its ISO text and writes back quoted. A page that opens with an H1 has it as the payload's first section, at level 1, with the text under it up to the first H2 or H3 as its body. `write_note` writes a level-1 section first, and only a payload's first section may take level 1. In the payload each heading is a section of its own while that renders the page back. When it
 does not, a section the page type does not declare comes inside the body of the section before it, heading included
 and as written, but only when the renderer would move it (it sits before a declared section) or change it (such as a
 heading with no blank line under it). Every other section stays a section of its own. It refuses an id no indexed
-page carries and a file a payload cannot carry whole, such as text before the first heading, a claim the grammar does
-not read back, or a section that would move or change with nothing before it to carry it (it sits before the first
-declared section, or right after a claims section that holds claims).
+page carries and a file a payload cannot carry whole, such as text before the H1 (before the first heading on a page
+with no H1), a claim the grammar does not read back, or a section that would move or change with nothing before it to
+carry it (it sits before the first declared section on a page with no H1, or right after a claims section that holds
+claims).
 `request_source(knowledge_base, url, found_via="", reason="")` queues a URL onto the knowledge base's source
 queue (`_meta/source-queue.yaml`) under its ingestion policy, idempotently: a URL already on the source queue
 answers with its own status, not a duplicate row. A request with no `found_via` is the owner's own.

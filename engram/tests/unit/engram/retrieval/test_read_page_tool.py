@@ -185,6 +185,17 @@ async def test_a_page_with_a_section_its_page_type_does_not_declare_in_the_middl
     assert (tmp_path / _TALK_PATH).read_text(encoding="utf-8") == before
 
 
+async def test_a_page_that_opens_with_an_h1_and_text_under_it_rewrites_byte_for_byte(tmp_path: Path) -> None:
+    doors, written = await _written_talk(tmp_path)
+    before = written.replace("\n## TL;DR", "\n# Agents that plan\n\n**Status:** Recorded at a meetup.\n\n## TL;DR", 1)
+    (tmp_path / _TALK_PATH).write_text(before, encoding="utf-8")
+    payload = await _payload_of_talk(doors)
+
+    await doors.write_note("research", payload, _TALK_PATH)
+
+    assert (tmp_path / _TALK_PATH).read_text(encoding="utf-8") == before
+
+
 async def test_read_page_refuses_an_id_no_indexed_page_carries_naming_where_ids_come_from(tmp_path: Path) -> None:
     doors, _, _ = _doors(tmp_path, FakeAdminGateway(rows=[]))
 
