@@ -8,6 +8,7 @@ import { studioApi } from "@/api/studio";
 import type { WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 import { WorkflowHeader } from "./workflow-header";
 
@@ -80,35 +81,7 @@ function detailFixture(overrides: Partial<WorkflowDetail> = {}): WorkflowDetail 
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      level: "machine-confirmed",
-      runs_with_evidence: 2,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      total: {
-        runs_with_evidence: 2,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      versions: [
-        {
-          version: 5,
-          level: "machine-confirmed",
-          runs_with_evidence: 2,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
-      ],
-    },
+    trust: singleVersionTrust(5, { level: "machine-confirmed", runs_with_evidence: 2 }),
     archived_at: null,
     ...overrides,
   };
@@ -243,35 +216,11 @@ describe("WorkflowHeader", () => {
         posted = await request.json();
         return HttpResponse.json({
           ok: true,
-          trust: {
+          trust: singleVersionTrust(5, {
             level: "approved",
             runs_with_evidence: 2,
-            failed_runs: 0,
             approved_by: ["owner"],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 2,
-              failed_runs: 0,
-              approved_by: ["owner"],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 5,
-                level: "approved",
-                runs_with_evidence: 2,
-                failed_runs: 0,
-                approved_by: ["owner"],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          }),
         });
       }),
     );

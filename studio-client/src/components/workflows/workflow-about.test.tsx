@@ -6,6 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GraphNode, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import {
+  singleVersionTrust,
+  trust,
+  trustCounts,
+  versionTrust,
+} from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -130,35 +136,7 @@ function detailFixture(overrides: Partial<WorkflowDetail> = {}): WorkflowDetail 
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      level: "machine-confirmed",
-      runs_with_evidence: 4,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      total: {
-        runs_with_evidence: 4,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      versions: [
-        {
-          version: 1,
-          level: "machine-confirmed",
-          runs_with_evidence: 4,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
-      ],
-    },
+    trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 4 }),
     archived_at: null,
     spend: { cost_usd: "0", unpriced: 0, runs: 0 },
     ...overrides,
@@ -300,55 +278,18 @@ describe("WorkflowAbout", () => {
         detail={detailFixture({
           id: "wf.research-digest.v3",
           version: 3,
-          trust: {
-            level: "unverified",
-            runs_with_evidence: 0,
-            failed_runs: 0,
-            approved_by: [],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 35,
-              failed_runs: 3,
-              approved_by: ["owner"],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
+          trust: trust({
+            total: trustCounts({ runs_with_evidence: 35, failed_runs: 3, approved_by: ["owner"] }),
             versions: [
-              {
-                version: 1,
-                level: "approved",
+              versionTrust(1, "approved", {
                 runs_with_evidence: 20,
                 failed_runs: 1,
                 approved_by: ["owner"],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-              {
-                version: 2,
-                level: "machine-confirmed",
-                runs_with_evidence: 15,
-                failed_runs: 2,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-              {
-                version: 3,
-                level: "unverified",
-                runs_with_evidence: 0,
-                failed_runs: 0,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
+              }),
+              versionTrust(2, "machine-confirmed", { runs_with_evidence: 15, failed_runs: 2 }),
+              versionTrust(3, "unverified"),
             ],
-          },
+          }),
         })}
       />,
     );

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryEntry } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -29,35 +30,7 @@ function cardFixture(overrides: Partial<LibraryEntry> = {}): LibraryEntry {
     summary: "Pull last quarter's sales into one report.",
     provisional: false,
     score: 0.9,
-    trust: {
-      level: "machine-confirmed",
-      runs_with_evidence: 3,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      total: {
-        runs_with_evidence: 3,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      versions: [
-        {
-          version: 1,
-          level: "machine-confirmed",
-          runs_with_evidence: 3,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
-      ],
-    },
+    trust: singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 3 }),
     needs: [],
     missing: [],
     brings: [],
@@ -373,101 +346,25 @@ describe("WorkflowLibrary", () => {
         cardFixture({
           id: "wf.unverified.v1",
           title: "Never run",
-          trust: {
-            level: "unverified",
-            runs_with_evidence: 0,
-            failed_runs: 0,
-            approved_by: [],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 0,
-              failed_runs: 0,
-              approved_by: [],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "unverified",
-                runs_with_evidence: 0,
-                failed_runs: 0,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          trust: singleVersionTrust(1),
         }),
         cardFixture({
           id: "wf.confirmed.v1",
           title: "Ran fine",
-          trust: {
+          trust: singleVersionTrust(1, {
             level: "machine-confirmed",
             runs_with_evidence: 5,
             failed_runs: 2,
-            approved_by: [],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 5,
-              failed_runs: 2,
-              approved_by: [],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "machine-confirmed",
-                runs_with_evidence: 5,
-                failed_runs: 2,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          }),
         }),
         cardFixture({
           id: "wf.approved.v1",
           title: "Approved",
-          trust: {
+          trust: singleVersionTrust(1, {
             level: "approved",
             runs_with_evidence: 1,
-            failed_runs: 0,
             approved_by: ["alex"],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 1,
-              failed_runs: 0,
-              approved_by: ["alex"],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "approved",
-                runs_with_evidence: 1,
-                failed_runs: 0,
-                approved_by: ["alex"],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          }),
         }),
       ],
     });
@@ -521,35 +418,11 @@ describe("WorkflowLibrary", () => {
         posted = await request.json();
         return HttpResponse.json({
           ok: true,
-          trust: {
+          trust: singleVersionTrust(1, {
             level: "approved",
             runs_with_evidence: 3,
-            failed_runs: 0,
             approved_by: ["owner"],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 3,
-              failed_runs: 0,
-              approved_by: ["owner"],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "approved",
-                runs_with_evidence: 3,
-                failed_runs: 0,
-                approved_by: ["owner"],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          }),
         });
       }),
     );
@@ -618,35 +491,11 @@ describe("WorkflowLibrary", () => {
       http.post(`${BASE}/api/workflows/wf.retired.v1/approve`, () =>
         HttpResponse.json({
           ok: true,
-          trust: {
+          trust: singleVersionTrust(1, {
             level: "approved",
             runs_with_evidence: 3,
-            failed_runs: 0,
             approved_by: ["owner"],
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 3,
-              failed_runs: 0,
-              approved_by: ["owner"],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "approved",
-                runs_with_evidence: 3,
-                failed_runs: 0,
-                approved_by: ["owner"],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          }),
         }),
       ),
     );

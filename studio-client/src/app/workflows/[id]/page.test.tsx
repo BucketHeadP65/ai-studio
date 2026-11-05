@@ -7,6 +7,7 @@ import type { SessionSummary } from "@/api/sessions-types";
 import type { RunHistoryRecord, RunState, RunValues, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { trust, trustCounts, versionTrust } from "@/test-support/factories/trust";
 
 // The page owns four things a run's history changes: what the outcome strip and the gate
 // trail report, what the canvas draws, what the timeline shows below it, and what a clicked
@@ -87,45 +88,15 @@ const DETAIL: WorkflowDetail = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
+  trust: trust({
     level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    total: {
-      runs_with_evidence: 9,
-      failed_runs: 1,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
+    ...trustCounts({ runs_with_evidence: 2 }),
+    total: trustCounts({ runs_with_evidence: 9, failed_runs: 1 }),
     versions: [
-      {
-        version: 4,
-        level: "machine-confirmed",
-        runs_with_evidence: 7,
-        failed_runs: 1,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      {
-        version: 5,
-        level: "machine-confirmed",
-        runs_with_evidence: 2,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
+      versionTrust(4, "machine-confirmed", { runs_with_evidence: 7, failed_runs: 1 }),
+      versionTrust(5, "machine-confirmed", { runs_with_evidence: 2 }),
     ],
-  },
+  }),
 };
 
 const IDLE: RunState = {

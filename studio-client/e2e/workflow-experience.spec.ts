@@ -12,6 +12,7 @@ import type {
 } from "@/api/studio-types";
 
 import { DEFAULT_PORT, resolvePort } from "./port";
+import { singleVersionTrust } from "./trust";
 
 // The automation journey end to end, at a desktop width and at 390 px, with no backend: every
 // request is answered here from one mutable journey, so the same spec can move a run from launched
@@ -50,35 +51,7 @@ const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
     title: "Weekly sweep",
     summary: "Checks the queue every week and writes up what changed.",
     provisional: false,
-    trust: {
-      approved_by: [],
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      total: {
-        runs_with_evidence: 0,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      versions: [
-        {
-          version: 2,
-          level: "unverified",
-          runs_with_evidence: 0,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
-      ],
-    },
+    trust: singleVersionTrust(2),
     needs: [],
     missing: [],
     brings: [],
@@ -161,35 +134,7 @@ const WORKFLOW_DETAIL: Wire<typeof WorkflowDetailSchema> = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
-    approved_by: [],
-    level: "unverified",
-    runs_with_evidence: 0,
-    failed_runs: 0,
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    total: {
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
-    versions: [
-      {
-        version: 2,
-        level: "unverified",
-        runs_with_evidence: 0,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-    ],
-  },
+  trust: singleVersionTrust(2),
   presentation: {
     purpose: "Keeps the queue moving.",
     produces: "A short write up of what changed.",

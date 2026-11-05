@@ -11,6 +11,8 @@ import type {
   WorkflowGraphSchema,
 } from "@/api/studio-types";
 
+import { singleVersionTrust } from "./trust";
+
 // One automation from asked for to reused, with no backend: request it, read the proposal and the
 // assumption made on your behalf, save it, fill its typed inputs, launch it deliberately, read the
 // artifact the run left, run it again on those values with one of them changed, and make the next
@@ -148,35 +150,7 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
-    approved_by: [],
-    level: "unverified",
-    runs_with_evidence: 0,
-    failed_runs: 0,
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    total: {
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
-    versions: [
-      {
-        version: 1,
-        level: "unverified",
-        runs_with_evidence: 0,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-    ],
-  },
+  trust: singleVersionTrust(1),
   presentation: {
     purpose: "Keeps the queue moving.",
     produces: "A short write up of what changed.",

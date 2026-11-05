@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
 import { server } from "@/shared/test-support/msw/server";
+import {
+  singleVersionTrust,
+  trust,
+  trustCounts,
+  versionTrust,
+} from "@/test-support/factories/trust";
 
 import { refusedReadiness, studioApi, studioErrorMessage } from "./studio";
 
@@ -23,35 +29,7 @@ const CARD = {
   summary: "Search the knowledge base for prior art, rank the risks, write a dated ADR.",
   provisional: false,
   score: 3.0,
-  trust: {
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    approved_by: [],
-    level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    total: {
-      runs_with_evidence: 2,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
-    versions: [
-      {
-        version: 5,
-        level: "machine-confirmed",
-        runs_with_evidence: 2,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-    ],
-  },
+  trust: singleVersionTrust(5, { level: "machine-confirmed", runs_with_evidence: 2 }),
   needs: [],
   missing: [],
   brings: ["find_prior_art", "rank_risks"],
@@ -124,45 +102,32 @@ const WORKFLOW = {
   },
   birth: null,
   carried: ["counter", "per_risk"],
-  trust: {
-    approved_by: [],
+  trust: trust({
     level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    structural_grades: 3,
-    structural_mean: 0.75,
-    structural_last: 0.9,
-    total: {
+    ...trustCounts({
+      runs_with_evidence: 2,
+      structural_grades: 3,
+      structural_mean: 0.75,
+      structural_last: 0.9,
+    }),
+    total: trustCounts({
       runs_with_evidence: 9,
       failed_runs: 1,
       approved_by: ["owner"],
       structural_grades: 3,
       structural_mean: 0.75,
       structural_last: 0.9,
-    },
+    }),
     versions: [
-      {
-        version: 4,
-        level: "approved",
-        runs_with_evidence: 7,
-        failed_runs: 1,
-        approved_by: ["owner"],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      {
-        version: 5,
-        level: "machine-confirmed",
+      versionTrust(4, "approved", { runs_with_evidence: 7, failed_runs: 1, approved_by: ["owner"] }),
+      versionTrust(5, "machine-confirmed", {
         runs_with_evidence: 2,
-        failed_runs: 0,
-        approved_by: [],
         structural_grades: 3,
         structural_mean: 0.75,
         structural_last: 0.9,
-      },
+      }),
     ],
-  },
+  }),
   predictions: [
     {
       claim: "produces",

@@ -8,6 +8,7 @@ import type { RunView, SessionSummary } from "@/api/sessions-types";
 import type { RunEnvelope, RunLimits, RunState, WorkflowDetail } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -116,35 +117,7 @@ const DETAIL: WorkflowDetail = {
   carried: null,
   predictions: null,
   prediction_record: null,
-  trust: {
-    level: "machine-confirmed",
-    runs_with_evidence: 2,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    total: {
-      runs_with_evidence: 2,
-      failed_runs: 0,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
-    versions: [
-      {
-        version: 5,
-        level: "machine-confirmed",
-        runs_with_evidence: 2,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-    ],
-  },
+  trust: singleVersionTrust(5, { level: "machine-confirmed", runs_with_evidence: 2 }),
 };
 
 // The same workflow with the author's own presentation. A setup composes a run's name out of the

@@ -3,9 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Trust, TrustCounts, VersionTrust } from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import {
+  singleVersionTrust,
+  trust,
+  trustCounts,
+  versionTrust,
+} from "@/test-support/factories/trust";
 
 import { TrustChip } from "./trust-chip";
 
@@ -15,36 +20,6 @@ import { TrustChip } from "./trust-chip";
 // panel this chip opens and posts.
 
 const BASE = "http://studio.test";
-
-function counts(overrides: Partial<TrustCounts> = {}): TrustCounts {
-  return {
-    runs_with_evidence: 0,
-    failed_runs: 0,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    ...overrides,
-  };
-}
-
-function versionTrust(
-  version: number,
-  level: string,
-  overrides: Partial<TrustCounts> = {},
-): VersionTrust {
-  return { version, level, ...counts(overrides) };
-}
-
-function trust(overrides: Partial<Trust> = {}): Trust {
-  return {
-    level: "unverified",
-    ...counts(),
-    total: counts(),
-    versions: [versionTrust(1, "unverified")],
-    ...overrides,
-  };
-}
 
 // Finds the one element whose whole text reads `text`, its mono numbers included.
 function wholeText(text: string): (content: string, element: Element | null) => boolean {
@@ -96,8 +71,8 @@ describe("TrustChip", () => {
         workflowId="wf.sales.v4"
         trust={trust({
           level: "machine-confirmed",
-          ...counts({ runs_with_evidence: 2 }),
-          total: counts({ runs_with_evidence: 37, failed_runs: 3, approved_by: ["owner"] }),
+          ...trustCounts({ runs_with_evidence: 2 }),
+          total: trustCounts({ runs_with_evidence: 37, failed_runs: 3, approved_by: ["owner"] }),
           versions: [
             versionTrust(1, "approved", { runs_with_evidence: 20, approved_by: ["owner"] }),
             versionTrust(2, "machine-confirmed", { runs_with_evidence: 9, failed_runs: 2 }),
@@ -121,7 +96,7 @@ describe("TrustChip", () => {
         workflowId="wf.sales.v2"
         trust={trust({
           level: "unverified",
-          total: counts({ runs_with_evidence: 37, approved_by: ["owner"] }),
+          total: trustCounts({ runs_with_evidence: 37, approved_by: ["owner"] }),
           versions: [
             versionTrust(1, "approved", { runs_with_evidence: 37, approved_by: ["owner"] }),
             versionTrust(2, "unverified"),
@@ -142,12 +117,7 @@ describe("TrustChip", () => {
     render(
       <TrustChip
         workflowId="wf.sales.v1"
-        trust={trust({
-          level: "machine-confirmed",
-          ...counts({ runs_with_evidence: 7 }),
-          total: counts({ runs_with_evidence: 7 }),
-          versions: [versionTrust(1, "machine-confirmed", { runs_with_evidence: 7 })],
-        })}
+        trust={singleVersionTrust(1, { level: "machine-confirmed", runs_with_evidence: 7 })}
         onApproved={vi.fn()}
       />,
     );

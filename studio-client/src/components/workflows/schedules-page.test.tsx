@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Schedule } from "@/api/schedules";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -74,35 +75,7 @@ function mountApi(
           summary: "",
           provisional: false,
           score: null,
-          trust: {
-            approved_by: [],
-            level: "unverified",
-            runs_with_evidence: 0,
-            failed_runs: 0,
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 0,
-              failed_runs: 0,
-              approved_by: [],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "unverified",
-                runs_with_evidence: 0,
-                failed_runs: 0,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          trust: singleVersionTrust(1),
           needs: [],
           missing: [],
           brings: [],
@@ -138,35 +111,7 @@ function workflowDetail(id: string) {
     carried: null,
     predictions: null,
     prediction_record: null,
-    trust: {
-      approved_by: [],
-      level: "unverified",
-      runs_with_evidence: 0,
-      failed_runs: 0,
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-      total: {
-        runs_with_evidence: 0,
-        failed_runs: 0,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-      versions: [
-        {
-          version: 1,
-          level: "unverified",
-          runs_with_evidence: 0,
-          failed_runs: 0,
-          approved_by: [],
-          structural_grades: 0,
-          structural_mean: null,
-          structural_last: null,
-        },
-      ],
-    },
+    trust: singleVersionTrust(1),
   };
 }
 
@@ -302,35 +247,7 @@ describe("SchedulesPage", () => {
           carried: null,
           predictions: null,
           prediction_record: null,
-          trust: {
-            approved_by: [],
-            level: "unverified",
-            runs_with_evidence: 0,
-            failed_runs: 0,
-            structural_grades: 0,
-            structural_mean: null,
-            structural_last: null,
-            total: {
-              runs_with_evidence: 0,
-              failed_runs: 0,
-              approved_by: [],
-              structural_grades: 0,
-              structural_mean: null,
-              structural_last: null,
-            },
-            versions: [
-              {
-                version: 1,
-                level: "unverified",
-                runs_with_evidence: 0,
-                failed_runs: 0,
-                approved_by: [],
-                structural_grades: 0,
-                structural_mean: null,
-                structural_last: null,
-              },
-            ],
-          },
+          trust: singleVersionTrust(1),
         }),
       ),
       http.post(`${BASE}/api/schedules`, async ({ request }) => {

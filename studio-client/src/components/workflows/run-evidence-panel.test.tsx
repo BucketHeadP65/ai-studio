@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/dom";
 import { describe, expect, it } from "vitest";
 
-import type { ArtifactRef, OwnerReview, WorkflowDetail } from "@/api/studio-types";
+import type { ArtifactRef, OwnerReview, Trust } from "@/api/studio-types";
 import { provenance } from "@/components/marks/provenance-chip";
 import { render } from "@/shared/test-support/render";
+import { type CurrentTrust, singleVersionTrust } from "@/test-support/factories/trust";
 
 import { RunEvidencePanel } from "./run-evidence-panel";
 
@@ -32,37 +33,13 @@ function review(overrides: Partial<OwnerReview> = {}): OwnerReview {
   };
 }
 
-function trust(overrides: Partial<WorkflowDetail["trust"]> = {}): WorkflowDetail["trust"] {
-  return {
+function trust(overrides: CurrentTrust = {}): Trust {
+  return singleVersionTrust(1, {
     level: "machine-confirmed",
     runs_with_evidence: 3,
     failed_runs: 1,
-    approved_by: [],
-    structural_grades: 0,
-    structural_mean: null,
-    structural_last: null,
-    total: {
-      runs_with_evidence: 3,
-      failed_runs: 1,
-      approved_by: [],
-      structural_grades: 0,
-      structural_mean: null,
-      structural_last: null,
-    },
-    versions: [
-      {
-        version: 1,
-        level: "machine-confirmed",
-        runs_with_evidence: 3,
-        failed_runs: 1,
-        approved_by: [],
-        structural_grades: 0,
-        structural_mean: null,
-        structural_last: null,
-      },
-    ],
     ...overrides,
-  };
+  });
 }
 
 describe("RunEvidencePanel", () => {
