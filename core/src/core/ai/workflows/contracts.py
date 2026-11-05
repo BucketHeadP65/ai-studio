@@ -22,7 +22,7 @@ from core.ai.workflows.domain.fingerprint import (
     spec_identity,
     step_content_address,
 )
-from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, FlagKind, MaintenanceFlag, flag_id, flag_to_write
+from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, STEP_MAINTENANCE_AGENT, FlagKind, MaintenanceFlag, flag_id, flag_to_write
 from core.ai.workflows.domain.identity import (
     CURRENT_STEP,
     ReviewedArtifacts,
@@ -156,6 +156,7 @@ __all__ = [
     "JUDGE_NOTE_FALLBACK",
     "KNOWLEDGE_BASE_CONTROL",
     "NO_REUSABLE_STEPS",
+    "STEP_MAINTENANCE_AGENT",
     "AdaptationRefusedError",
     "AgentResolver",
     "AgentStep",

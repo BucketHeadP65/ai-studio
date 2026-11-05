@@ -38,7 +38,10 @@ _SHORT_KINDS: Mapping[FlagKind, str] = {
     "repository_change": "change",
 }
 
-AUTOMATIC_RESOLVERS = frozenset({"library", "agent:step-maintenance"})
+STEP_MAINTENANCE_AGENT = "agent:step-maintenance"
+"""Who a write by step maintenance, or by a live trial it started, is recorded as."""
+
+AUTOMATIC_RESOLVERS = frozenset({"library", STEP_MAINTENANCE_AGENT})
 """Who resolves a flag on their own when its condition clears: a save, and a step maintenance run.
 
 Their resolution is no decision, so the next flag for the same step version opens the page again."""

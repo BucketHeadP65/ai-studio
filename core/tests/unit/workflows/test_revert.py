@@ -182,8 +182,11 @@ async def test_a_failed_archive_leaves_the_parent_live_and_the_version_newest_so
 
     library = LibraryCollection(store, ingest, collection=store.collection)
 
-    with pytest.raises(LibraryError, match="read-only"):
+    with pytest.raises(LibraryError, match="read-only") as refused:
         await library.revert("wf.digest-sources.v2")
+
+    assert "wf.digest-sources.v1 is live again" in str(refused.value)
+    assert "Revert wf.digest-sources.v2 again" in str(refused.value)
 
     assert not store.pages["wf.digest-sources.v1"]["superseded"]
     assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v2", "the version that was not archived is still the newest"

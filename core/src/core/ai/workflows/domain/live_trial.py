@@ -83,7 +83,7 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
         workflow: The version on live trial.
         touched: The node ids its adaptation touched, from its lineage.
         run: The run that ended.
-        run_grades: The grades about that run.
+        run_grades: The grades about that run on record when it is read. A grade written later is not read.
         baseline: The newest three completed runs of the previous version, or fewer when it has fewer.
         baseline_grades: The grades about those runs.
         previous: The previous version, which says which gates both versions hold.

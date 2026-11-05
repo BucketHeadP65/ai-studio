@@ -972,7 +972,7 @@ class LibraryCollection:
         Raises:
             LibraryError: If `workflow_id` is not a workflow version id or not the newest live version of its name, it
                 carries no lineage parent of the same name, the parent is not there, holds no workflow or is archived,
-                or the ingest refuses a write.
+                or the ingest refuses a write. A refused archive says the parent is live again and to revert again.
         """
         match = _VERSIONED_ID.match(workflow_id)
         if match is None:
@@ -1013,7 +1013,14 @@ class LibraryCollection:
         except Exception as exc:
             msg = f"the collection refused to make {parent_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
             raise LibraryError(msg) from exc
-        await self.set_archived(workflow_id, archived=True)
+        try:
+            await self.set_archived(workflow_id, archived=True)
+        except LibraryError as exc:
+            msg = (
+                f"{parent_id} is live again, and archiving {workflow_id} failed, so both are live and {workflow_id} is still "
+                f"the newest. Revert {workflow_id} again to finish: {exc}"
+            )
+            raise LibraryError(msg) from exc
         return parent_id
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:

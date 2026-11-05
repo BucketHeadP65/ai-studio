@@ -40,7 +40,7 @@ FETCH = RunNode(id="fetch", work="fetch", inputs={"source": FromParameter(parame
 DIGEST = RunNode(id="digest", work="digest", inputs={"text": FromNode(node="fetch")})
 CHECK = JudgeGate(id="check", work="check", reviews=FromNode(node="digest"), rejected_to="digest")
 PUBLISH = RunNode(id="publish", work="publish", inputs={"page": FromNode(node="check")})
-TRIAL = _workflow(FETCH, DIGEST, CHECK, PUBLISH)
+LIVE_TRIAL = _workflow(FETCH, DIGEST, CHECK, PUBLISH)
 """The live trial version: `digest` runs the adopted step and wires from `fetch`, a judge checks it."""
 PREVIOUS = _workflow(FETCH, DIGEST, CHECK, PUBLISH, version=1)
 """The version the adoption replaced, holding the same gate."""
@@ -94,7 +94,7 @@ def _verdict(
     baseline: Sequence[RunEvidence] = (),
     run_grades: Sequence[Grade] = (),
     baseline_grades: Sequence[Grade] = (),
-    workflow: Workflow = TRIAL,
+    workflow: Workflow = LIVE_TRIAL,
     touched: Sequence[str] = TOUCHED,
 ) -> LiveTrialVerdict:
     return live_trial_verdict(workflow, touched, run, run_grades=run_grades, baseline=baseline, baseline_grades=baseline_grades, previous=PREVIOUS)
@@ -187,7 +187,7 @@ def test_a_gate_the_previous_version_did_not_hold_is_not_compared() -> None:
     assert verdict.kind == "counts"
 
 
-@pytest.mark.parametrize(("score", "kind"), [(0.6, "worse"), (0.65, "worse"), (0.75, "counts")])
+@pytest.mark.parametrize(("score", "kind"), [(0.6, "worse"), (0.65, "worse"), (0.7, "counts"), (0.75, "counts")])
 def test_a_structural_grade_more_than_a_tenth_below_the_baselines_mean_is_worse(score: float, kind: str) -> None:
     run = _run()
     baseline = _baseline("succeeded", "succeeded")
