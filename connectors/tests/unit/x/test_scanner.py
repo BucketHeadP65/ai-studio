@@ -12,7 +12,7 @@ from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import ScanError, SourceType, WatchEntry, claimants_for, url_key
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
-from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -264,6 +264,69 @@ def test_the_scan_agent_answers_as_native_structured_output() -> None:
     agent = x_scan_agent(XaiResource(api_key="test"), handles=["someone"], since=None)
 
     assert isinstance(agent.output_type, NativeOutput)
+
+
+_EMPTY_SCAN = '{"posts": []}'
+
+
+def _requests_answered_empty(seen: list[ModelRequest]) -> FunctionModel:
+    """A model that records each request it receives and answers an empty scan as native output text."""
+
+    def answer(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        seen.extend(message for message in messages if isinstance(message, ModelRequest))
+        return ModelResponse(parts=[TextPart(_EMPTY_SCAN)])
+
+    return FunctionModel(answer)
+
+
+async def test_the_scan_agent_tells_the_model_how_to_search_and_what_to_return() -> None:
+    agent = x_scan_agent(XaiResource(api_key="test"), handles=["someone"], since=_NOW - timedelta(days=21))
+    seen: list[ModelRequest] = []
+
+    with agent.override(model=_requests_answered_empty(seen)):
+        await agent.run("List every post by @someone.")
+
+    assert seen[0].instructions == (
+        "You list what an X account posted. Use X search over the allowed handles. "
+        "Search with the query `from:<handle>` alone. Never put a date operator such as `since:` or `until:` in the query, "
+        "because X search already keeps to the date window you were given. "
+        "Search more than once before you answer that there are no posts: search in Latest mode and in Top mode, "
+        "and never repeat a search that found nothing. "
+        "Return every post with substance in the window (a claim, a link, a thread), up to the number of posts the request asks for. "
+        "Keep searching while a search still finds posts you do not hold yet. "
+        "Give each post's URL, the handle, the date, the full text, and every link it carries. Newest first. "
+        "Do not summarize. Copy the text."
+    )
+
+
+async def _scan_prompt(tmp_path: Path, entry: WatchEntry, *, since: datetime | None, max_posts: int = 50) -> str:
+    """The user prompt one scan of `entry` sends its agent."""
+    seen: list[ModelRequest] = []
+    model = _requests_answered_empty(seen)
+    scanner = _scanner(lambda _handles, _since: Agent(model, output_type=NativeOutput(XScan)), cache_dir=tmp_path, max_posts=max_posts)
+
+    await scanner.scan(entry, since=since)
+
+    prompts = [part.content for part in seen[0].parts if isinstance(part, UserPromptPart)]
+    assert len(prompts) == 1
+    assert isinstance(prompts[0], str)
+    return prompts[0]
+
+
+async def test_a_scan_asks_for_the_posts_since_the_stamp_up_to_the_scans_cap(tmp_path: Path) -> None:
+    entry = WatchEntry(scanner="x", ref="someone", max_items=150)
+
+    prompt = await _scan_prompt(tmp_path, entry, since=datetime(2026, 10, 15, 19, 37, 9, tzinfo=UTC), max_posts=50)
+
+    assert prompt == "List every post by @someone since 2026-10-15T19:37:09+00:00, up to 50 posts."
+
+
+async def test_a_first_scan_asks_for_the_last_seven_days_up_to_the_entrys_cap(tmp_path: Path) -> None:
+    entry = WatchEntry(scanner="x", ref="someone", max_items=12)
+
+    prompt = await _scan_prompt(tmp_path, entry, since=None, max_posts=50)
+
+    assert prompt == "List every post by @someone over the last seven days, up to 12 posts."
 
 
 def test_building_without_the_xai_settings_block_refuses_naming_it(tmp_path: Path) -> None:

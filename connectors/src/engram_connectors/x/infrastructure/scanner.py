@@ -33,9 +33,15 @@ type ClaimantResolver = Callable[[Sequence[str]], Sequence[UrlClaimant]]
 """A function from declared connector names to the claimants that key a post's URL."""
 
 _INSTRUCTIONS = (
-    "You list what an X account posted. Use X search over the allowed handles and any date window you were given. "
-    "Return every post with substance: a claim, a link, a thread. Give each post's URL, the handle, the date, the "
-    "full text, and every link it carries. Newest first. Do not summarize. Copy the text."
+    "You list what an X account posted. Use X search over the allowed handles. "
+    "Search with the query `from:<handle>` alone. Never put a date operator such as `since:` or `until:` in the query, "
+    "because X search already keeps to the date window you were given. "
+    "Search more than once before you answer that there are no posts: search in Latest mode and in Top mode, "
+    "and never repeat a search that found nothing. "
+    "Return every post with substance in the window (a claim, a link, a thread), up to the number of posts the request asks for. "
+    "Keep searching while a search still finds posts you do not hold yet. "
+    "Give each post's URL, the handle, the date, the full text, and every link it carries. Newest first. "
+    "Do not summarize. Copy the text."
 )
 
 
@@ -196,6 +202,7 @@ class XScanner:
     async def scan(self, entry: WatchEntry, *, since: datetime | None) -> list[FoundSource]:
         """List the posts by `entry.ref` since `since`, newest first, rendering each one to the cache.
 
+        The model is asked for at most the scan's cap, the smaller of `max_posts` and `entry.max_items`.
         A post dated at or before `since` is dropped after the cap, so a scan reports only what is new.
         A post carrying no date is kept, since nothing says it is old.
 
@@ -211,12 +218,12 @@ class XScanner:
             ScanError: The agent could not be built or its run failed, with one line saying why.
         """
         window = f" since {since.isoformat()}" if since is not None else " over the last seven days"
+        cap = min(self._max_posts, entry.max_items)
         try:
             agent = self._agent_factory([entry.ref], since)
-            result = await agent.run(f"List every post by @{entry.ref}{window}.")
+            result = await agent.run(f"List every post by @{entry.ref}{window}, up to {cap} posts.")
         except Exception as error:
             raise ScanError(_scan_failure(error)) from error
-        cap = min(self._max_posts, entry.max_items)
         newest_first = sorted(result.output.posts, key=_by_date_descending)
         entries: list[FoundSource] = []
         for post in newest_first[:cap]:
