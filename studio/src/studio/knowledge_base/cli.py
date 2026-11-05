@@ -290,10 +290,12 @@ async def _scan_watch_list(bus: MessageBus) -> ScanReport:
 
 
 def _print_scan_report(report: ScanReport) -> None:
-    """Echo the human-readable scan summary, printed before the sync summary, each failed entry's label without URL secrets."""
+    """Echo the human-readable scan summary, printed before the sync summary, then each failure and note by label without URL secrets."""
     typer.echo(f"Scanned the watch list: {report.found} found, {report.requested} requested, {len(report.failed)} failed")
     for label, reason in report.failed:
         typer.echo(f"  FAILED {without_url_secrets(label)}: {reason}")
+    for label, note in report.notes:
+        typer.echo(f"  NOTE {without_url_secrets(label)}: {note}")
 
 
 def _print_watch_list_rows(plan: _WatchListPlan) -> None:

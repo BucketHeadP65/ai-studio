@@ -396,6 +396,18 @@ class TestWatchListOnDryRun:
         assert "s3cr3t" not in result.stdout
         assert "pw@" not in result.stdout
 
+    def test_a_rows_note_is_printed_beside_the_failures(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        note = "the day from 2026-10-22T09:02:00+00:00 answered 23 posts, X search may have held more"
+        container = self._container(root, FakeScanner(notes={"@someone": [note]}, errors={"https://example.org/feed.xml": "503"}))
+
+        result = runner.invoke(app, ["sync"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert "  FAILED xml:https://example.org/feed.xml: 503\n" in result.stdout
+        assert f"  NOTE x:@someone: {note}\n" in result.stdout
+
 
 class TestDispatch:
     def test_flags_are_plumbed_to_the_command(self):

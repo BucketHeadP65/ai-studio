@@ -239,7 +239,8 @@ that knowledge base's `path`, and runs the same steps the CLI runs. A schema pre
 `sources.enabled` and the knowledge base has a `_meta/watch-list.yaml` to scan, and a failed scan never fails the pass, its counts ride into the
 recorded detail as a fact, and whatever it queues onto the source queue is what the sync that follows picks up). Each watch-list entry the
 scan could not read is a scan failure: its label and a one-line reason, logged as one warning per entry when the scan reports it and recorded
-on the run (below). A note a scan makes that is not a failure is logged as one info line per note and not recorded on the run. The `x`
+on the run (below). A note a scan makes that is not a failure is logged as one info line per note and not recorded on the run, and `studio sync`
+prints each one as a `NOTE` line after its `FAILED` lines. The `x`
 scanner notes a day whose search answered 18 posts or more, since one X search answers about 20 posts at most and that day may have held
 more. An `x` entry costs at most fourteen one-day searches per refresh, each at most eight model responses. Then `sync` (only
 when the schema's `sources.enabled`, dispatching every declared connector through `MultiConnectorSync` from one call), then the
