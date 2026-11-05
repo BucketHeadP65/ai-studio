@@ -146,7 +146,7 @@ service_pids() {
     local service="$1" dir pattern pid cmd cwd
     case "$service" in
     harness) dir="$REPO_ROOT/harness" pattern="harness serve|monty subprocess" ;;
-    studio-api) dir="$REPO_ROOT/studio" pattern="studio serve-http|studio[._]corpus[._]cli worker|studio worker" ;;
+    studio-api) dir="$REPO_ROOT/studio" pattern="studio serve-http|studio[._]knowledge_base[._]cli worker|studio worker" ;;
     studio-client) dir="$REPO_ROOT/studio-client" pattern="next dev|next-server|pool_entry" ;;
     *) return 0 ;;
     esac
