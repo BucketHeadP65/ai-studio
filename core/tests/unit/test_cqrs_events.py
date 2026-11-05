@@ -163,6 +163,16 @@ class TestLifecycle:
         assert listener.closed
         assert notifier.closed
 
+    async def test_a_listener_that_fails_to_close_still_lets_the_notifier_close_and_the_error_reaches_the_caller(self):
+        broadcaster, notifier, listener = _broadcaster()
+        await broadcaster.start()
+        listener.close_error = ConnectionResetError("reset while closing")
+
+        with pytest.raises(ConnectionResetError, match="reset while closing"):
+            await broadcaster.stop()
+
+        assert notifier.closed
+
     async def test_the_publisher_task_sends_what_was_queued(self):
         broadcaster, notifier, _ = _broadcaster(coalesce_seconds=0.01)
         await broadcaster.start()

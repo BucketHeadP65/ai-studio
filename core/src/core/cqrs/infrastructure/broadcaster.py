@@ -253,7 +253,11 @@ class Broadcaster:
     async def stop(self) -> None:
         """Stop both tasks and close both connections, however each task ended. Calling it twice is harmless.
 
-        A task that already ended on an error was logged when it ended, so stopping raises nothing for it.
+        A task that already ended on an error was logged when it ended, so stopping raises nothing for it. An error closing
+        the listening connection is raised once the sending connection is closed.
+
+        Raises:
+            Exception: Whatever closing the listening connection raised.
         """
         for task in self._tasks:
             task.cancel()

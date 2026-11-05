@@ -39,6 +39,8 @@ class FakeListener:
         self.opened = False
         self.closed = False
         self.open_count = 0
+        self.close_error: Exception | None = None
+        """Raised by `close` when set, after nothing is closed: a connection that fails to close."""
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._failures: list[Exception] = []
         self._open_failures: list[Exception] = []
@@ -69,7 +71,9 @@ class FakeListener:
         return await self._queue.get()
 
     async def close(self) -> None:
-        """Mark it closed."""
+        """Mark it closed, or raise `close_error` when it is set."""
+        if self.close_error is not None:
+            raise self.close_error
         self.closed = True
 
 
