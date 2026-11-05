@@ -1,0 +1,40 @@
+{
+  "steps": {
+    "check_excision": {
+      "step_hash": "91ecf69ac9eea702f2956e6209d80e86b06e298c8c14a73763add1aa6287cffa",
+      "version": 1
+    },
+    "digest_source": {
+      "step_hash": "04c8e338a8f41c5dcffcc7693500eb469add2c6360f98429416245c0bca9061e",
+      "version": 11
+    },
+    "excise_source": {
+      "step_hash": "628b0946e4aa706cecad30aecf7ed425c5730daffa1d6a0f89e17641281e4a9d",
+      "version": 2
+    },
+    "find_undigested": {
+      "step_hash": "6db0f01c2545a5be11aaea623ff7a1afd8db0f57a8931b48abff77c770162615",
+      "version": 4
+    },
+    "finish": {
+      "step_hash": "3e7c22c24c0127415002dc8a12057b796c442c066f183e23c897b800ccfae74d",
+      "version": 2
+    },
+    "link_entities": {
+      "step_hash": "71d75bb40902a140896a09df7609d1ec664ca63689f2a0c670a94cfa269350ed",
+      "version": 2
+    },
+    "relate_digest": {
+      "step_hash": "02f9b8c088328b9d849d2286fd601d9e0c35aafb64f2381abd171ec78164c19d",
+      "version": 2
+    },
+    "removal_report": {
+      "step_hash": "6aaf346fbe1a23c1726e6196f982b5f205f6b77b4247caedeea75a7c1d7d62cf",
+      "version": 2
+    },
+    "trace_removal": {
+      "step_hash": "2fb1a9205e5b54bb98aab91134dcea50cf1bcc0b215bcd184155052088bb0328",
+      "version": 1
+    }
+  }
+}

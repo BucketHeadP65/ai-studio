@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, get_type_hints
 
 from core.ai.workflows.contracts import AgentStep, Briefing, Program, Shape, StepIdentity, build_type, performing_step, step_content_address
 from core.connection_failures import connection_failure_message
+from pydantic import ValidationError
 from pydantic_ai.exceptions import (
     ModelAuthenticationError,
     ModelConnectionError,
@@ -143,6 +144,32 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
     if not any(result.errored for result in report.results):
         reports.put(report)
     return report
+
+
+def check_step_cases(step_id: str, cases: Mapping[str, JsonValue]) -> None:
+    """Refuse a step's cases that `perform_step_cases` would refuse before running any of them.
+
+    The cases must load as a `pydantic_evals` dataset with `OutcomeMatches` registered, with no two cases sharing a
+    name, no report evaluators and no `LLMJudge` without a model. Nothing runs.
+
+    Args:
+        step_id: The step's id in the library, which a refusal names.
+        cases: The step's dataset in `pydantic_evals` form.
+
+    Raises:
+        CaseRunRefusedError: The cases would not run. The message says what to change.
+    """
+    try:
+        dataset = CaseDataset.from_dict(_named(cases, step_id), custom_evaluator_types=[OutcomeMatches], default_name=step_id)
+    except ValidationError as error:
+        problems = ", ".join(f"{'.'.join(str(part) for part in problem['loc']) or 'the dataset'}: {problem['msg']}" for problem in error.errors())
+        msg = f"the cases of {step_id} do not load as a dataset ({problems}). Fix the case file."
+        raise CaseRunRefusedError(msg) from error
+    except ExceptionGroup as error:
+        problems = ", ".join(str(problem) for problem in error.exceptions)
+        msg = f"the cases of {step_id} name an evaluator that does not load ({problems}). Fix the case file."
+        raise CaseRunRefusedError(msg) from error
+    _refuse_unjudgeable(dataset, step_id)
 
 
 def _named(cases: Mapping[str, JsonValue], step_id: str) -> dict[str, JsonValue]:

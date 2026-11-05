@@ -1,0 +1,36 @@
+{
+  "steps": {
+    "check_adrs": {
+      "step_hash": "09509a6e55b9e2f4a8dac42d711d6a97107484e6a08189a188c7343ffdd36553",
+      "version": 1
+    },
+    "draft_adr": {
+      "step_hash": "d33411120b8ddba0e3943e1ecf280f45bd9e8a28482e94fe073491eb56383874",
+      "version": 3
+    },
+    "fold_notes": {
+      "step_hash": "2b7eb896d5e9cc4569c7eee3a1567ae7510b5fc8a1b5ba92147684241df76799",
+      "version": 1
+    },
+    "fold_report": {
+      "step_hash": "8a4549326a4f8305f8c317dc348522f85a8a4db425097131f68a8501a0157e6d",
+      "version": 1
+    },
+    "initiative_threads": {
+      "step_hash": "df0f41cf1d48b35e88b414bd0fbdd2991a9b2c08d6ea4dabd323c08b1519cb84",
+      "version": 1
+    },
+    "pending_designs": {
+      "step_hash": "d5e2eed9cf4d3488365f8f64e6cf0b4e58707922f066fdef33e072f5279f1034",
+      "version": 1
+    },
+    "write_adrs": {
+      "step_hash": "636f1af8b49056a800491a6f4d2a1002264750b5faae8b10c9094887f3a87d35",
+      "version": 3
+    },
+    "write_analyses": {
+      "step_hash": "16d3e83b6dc06e7289838bf9ebfff3fe630a59147b8540069d625cb45b7e4ad9",
+      "version": 1
+    }
+  }
+}

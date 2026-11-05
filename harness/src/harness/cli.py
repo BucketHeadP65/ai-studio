@@ -3,6 +3,7 @@
 The review verbs (`list`, `activate`, `disable`, `delete`, `plugins`, `profile`, `promote`, `demote`)
 live in `harness.features.selfauthoring.routes_cli`. This module is the entry point that owns the
 wiring and adds `serve`, `import` (load a folder of workflow and step files into the library),
+the `steps` group (`lock`, which records a folder's step files in its step lock file),
 `inspect` (issue `InspectRun` by hand, for one run or for every run that ended in a window), the
 `evals` group, and the `sessions` group (`list`, `rebuild`, `import`, `tail`, `search`, `friction`)
 over the session log.
@@ -46,6 +47,9 @@ app.info.name = "harness"
 
 sessions_app = typer.Typer(name="sessions", help="The session log: what this app did, in order.", no_args_is_help=True)
 app.add_typer(sessions_app)
+
+steps_app = typer.Typer(name="steps", help="The reusable step files of a workflows folder.", no_args_is_help=True)
+app.add_typer(steps_app)
 
 evals_app = typer.Typer(
     name="evals", help="A step's own dataset, performed through the same executor a workflow run uses.", no_args_is_help=True
@@ -238,7 +242,8 @@ async def import_path_in_session(path: Path, *, by: str) -> tuple[str, ...]:
     """Open the library and the registry once and import the folder at `path` into the library.
 
     Each workflow is stamped with this host's environment and the registry it was checked against.
-    One refused file refuses the whole folder, and nothing is written.
+    Each step's case file is checked as its case run would check it. One refused file refuses the whole folder, and
+    nothing is written.
 
     Args:
         path: A folder holding `steps/` and `workflows/` files.
@@ -251,20 +256,25 @@ async def import_path_in_session(path: Path, *, by: str) -> tuple[str, ...]:
         SaveRefusedError: A workflow would not run on this registry.
         PresentationRefusedError: A workflow's `presentation` names an input or an artifact the
             workflow does not declare.
-        DocumentError: A step or a workflow document does not parse. The message names its file.
+        StepVersionChangedError: The library holds a step file's version with other content.
+        DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
+            file is refused. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
     """
     from contextlib import AsyncExitStack  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
     from harness.adapters.contracts import environment_stamps  # noqa: PLC0415 (same)
     from harness.features.browsing.contracts import import_path  # noqa: PLC0415 (same)
+    from harness.features.evals.contracts import check_step_cases  # noqa: PLC0415 (same)
     from harness.settings import HarnessSettings, custom_root  # noqa: PLC0415 (same)
 
     settings = HarnessSettings()
     async with AsyncExitStack() as stack:
         library, registry = await _library_session(stack, settings)
         custom = custom_root(settings.self_authoring)
-        return await import_path(path, library=library, registry=registry, by=by, environment=environment_stamps(custom))
+        return await import_path(
+            path, library=library, registry=registry, by=by, check_cases=check_step_cases, environment=environment_stamps(custom)
+        )
 
 
 @app.command(name="import")
@@ -277,6 +287,28 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
     ids = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
     for written in ids:
         typer.echo(written)
+
+
+@steps_app.command(name="lock")
+def lock_steps(folder: str = typer.Argument(..., help="A workflows folder holding steps/, such as ../templates/research/workflows.")) -> None:
+    """Record every step file's version and content address in the folder's steps.lock, and print each one.
+
+    Run it after every edit to a step file. It refuses a step whose content changed while its version did not rise,
+    writes nothing and exits 1. Raise `version` in that step file and run it again.
+    """
+    from pathlib import Path  # noqa: PLC0415 (what this verb needs loads only when it runs, off the other verbs' import path)
+
+    from harness.features.browsing.contracts import StepLockRefusedError, write_lock  # noqa: PLC0415 (same)
+
+    where = Path(folder)
+    if not (where / "steps").is_dir():
+        fail(f"{where} holds no steps/ folder, so it has no step lock file. Name a workflows folder that holds steps/.")
+    try:
+        lock = write_lock(where)
+    except StepLockRefusedError as error:
+        fail(str(error))
+    for name, entry in lock.steps.items():
+        typer.echo(f"{name} v{entry.version} {entry.step_hash}")
 
 
 def _dataset_path(step_name: str, *, artifacts: str) -> Path:

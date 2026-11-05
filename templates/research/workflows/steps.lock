@@ -1,0 +1,80 @@
+{
+  "steps": {
+    "back_proposal": {
+      "step_hash": "3e4f05f144d1444cb0e5ff134107a31ad32c817e89a2dcfcbca1d14387d483c7",
+      "version": 5
+    },
+    "check_stances": {
+      "step_hash": "f754c0282cd191cf94eef3bf9ba3917798070bc5d2adfc0f249998998175d3ea",
+      "version": 4
+    },
+    "draft_decision_brief": {
+      "step_hash": "def006bdc4abf861c5c4bbce938c8a2c23683a8c396d4b56854e8c359e8861fb",
+      "version": 1
+    },
+    "extract_references": {
+      "step_hash": "b5db173b3badd39dfec8eb3a19ed29f9cf2b2b0d68d0c527d04a885d4730afd8",
+      "version": 5
+    },
+    "flag_ideas": {
+      "step_hash": "13ae15d2678bc1d5d7ee5216023da0121e449796ca5477ee48e6cb21fe7027ec",
+      "version": 6
+    },
+    "judge_proposal": {
+      "step_hash": "2642bf27882ad45cf97886509e8f13a77c854bad6e251fde4527325f7951b88e",
+      "version": 4
+    },
+    "list_stance_changes": {
+      "step_hash": "b1a6c8cad906c0cfedd3d4ce7fa63231715617b28cbc73a587d42ed8005ea186",
+      "version": 2
+    },
+    "merge_flags": {
+      "step_hash": "8c560bd69571f04bdcdc212ca74c69a4bad9d93235dd15f22abd3df477754136",
+      "version": 2
+    },
+    "place_stance_pages": {
+      "step_hash": "69761c11efb534b86c82995d1394814ae53335229cca415a68c6d962e3b00ee8",
+      "version": 6
+    },
+    "recent_digests": {
+      "step_hash": "2cc827885d04b51e54f148d1ac20c85a4e04b66dae2bbe29b430fa2433e9ee2e",
+      "version": 5
+    },
+    "refresh_stance": {
+      "step_hash": "66f8601b8ddf2aa6f8ede2772feb71283f85697c5c6af8bf3b11e023938d8516",
+      "version": 4
+    },
+    "relate": {
+      "step_hash": "1153a679935da6f62fce588332528887003b8bf54d3f8cc839c28b174dc6081a",
+      "version": 5
+    },
+    "render_decision_brief": {
+      "step_hash": "ae1bacfbafcd6e05f9a951ed01b728bb9d1e45eb3a3d02a0328b48dd808a45ad",
+      "version": 1
+    },
+    "repair_digest": {
+      "step_hash": "c14297cb4a2db7dc1f51d656e1e17ebd799b60ef64cbe54022c160bb08312fdf",
+      "version": 1
+    },
+    "report": {
+      "step_hash": "d7f9c229c4b20b35a668ba72915ff197cbef10804edfe19b254f1cb7d167cdd9",
+      "version": 3
+    },
+    "review_decision_brief": {
+      "step_hash": "08a1a75472feb528a1db21bb7d66726355c8187f823a740dcfabd18187d41490",
+      "version": 1
+    },
+    "write_flags": {
+      "step_hash": "d78da894a94c507ba37c99ebf13e55ed865c20db068fc9c10fc3514f26f0f057",
+      "version": 4
+    },
+    "write_stance_flags": {
+      "step_hash": "40c1d72cdce27e55f688d99bfe4fa56559c416f2ba1f2a8e8befd4cccc64a131",
+      "version": 8
+    },
+    "write_stances": {
+      "step_hash": "b69a58192f6a82b7677cb56579e93913c67a87929a50d9cc061680e2afa2f61c",
+      "version": 6
+    }
+  }
+}

@@ -8,29 +8,39 @@ test_proof_reuse.py`'s `_FakeRows`/`_FakeIngest`, which mirror core's own).
 
 from __future__ import annotations
 
+import json
+
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import yaml
 
 from core.ai.workflows.contracts import (
     DocumentError,
+    InlineStep,
     LibraryCollection,
     PresentationRefusedError,
     Program,
     ReusableStepSaved,
     SaveRefusedError,
     StepRegistry,
+    StepVersionChangedError,
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
     load_step_document,
+    step_content_address,
+    step_page_id,
 )
+from pydantic import TypeAdapter
 
 from harness.features.browsing.importing import import_path
+from harness.features.evals.contracts import check_step_cases
+from tests.support.fakes.library_collection import FakeCollection, pruned
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from pathlib import Path
 
     from core.cqrs.contracts import Event
 
@@ -165,7 +175,7 @@ async def test_save_path_writes_steps_before_the_workflow_that_uses_them(tmp_pat
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    written = await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+    written = await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert written == ("st.step_a.v1", "st.step_b.v1", "wf.two-step.v1")
     assert len(ingest.payloads) == 3
@@ -184,7 +194,7 @@ async def test_an_import_of_new_step_versions_hands_one_event_per_step_and_none_
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert [page for page, _ in ingest.events] == ["st.step_a.v1", "st.step_b.v1"], "the workflow's page carries no event"
     assert [(page, event.step_id, event.version, event.saved_by) for page, event in ingest.events if isinstance(event, ReusableStepSaved)] == [
@@ -199,7 +209,7 @@ async def test_a_workflow_that_fails_validation_writes_nothing(tmp_path: Path) -
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(SaveRefusedError):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert ingest.payloads == []
 
@@ -210,7 +220,7 @@ async def test_a_second_broken_step_file_means_nothing_is_written(tmp_path: Path
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(DocumentError, match=r"step-broken\.md"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert ingest.payloads == []
 
@@ -221,7 +231,7 @@ async def test_a_broken_workflow_file_is_refused_by_name(tmp_path: Path) -> None
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(DocumentError, match=r"no-frontmatter\.md"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert ingest.payloads == []
 
@@ -233,7 +243,7 @@ async def test_a_saved_workflow_carries_the_fingerprint_the_contract_port_would_
     registry = _registry()
     environment = {"model": "some-model", "promoted_capabilities": "abc123"}
 
-    await import_path(tmp_path, library=store, registry=registry, by="test:save", environment=environment)
+    await import_path(tmp_path, library=store, registry=registry, by="test:save", check_cases=check_step_cases, environment=environment)
 
     saved = ingest.payloads[2][0]["frontmatter"]["fingerprint"]
     # The port stamps `fingerprint(spec, registry, environment=...)` over the spec it is about to write:
@@ -249,7 +259,7 @@ async def test_an_import_with_no_environment_still_stamps_the_registry(tmp_path:
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     stamp = ingest.payloads[2][0]["frontmatter"]["fingerprint"]
     assert stamp["environment"] == {}
@@ -307,7 +317,7 @@ async def test_an_imported_workflow_carries_the_presentation_its_file_declared(t
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     saved = ingest.payloads[2][0]["frontmatter"]["presentation"]
     declared = WorkflowPresentation.model_validate(load_spec_document(PRESENTED_WORKFLOW).frontmatter["presentation"])
@@ -320,7 +330,7 @@ async def test_a_workflow_file_with_no_presentation_writes_none(tmp_path: Path) 
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert "presentation" not in ingest.payloads[2][0]["frontmatter"]
 
@@ -332,6 +342,136 @@ async def test_a_presentation_naming_an_undeclared_input_refuses_the_whole_folde
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(PresentationRefusedError, match="quarter"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert ingest.payloads == []
+
+
+REPO = Path(__file__).resolve().parents[3]
+
+CHANGED_STEP_B = STEP_B.replace('prefix + "b"', 'prefix + "bb"')
+
+STEP_A_WITH_TOOLS = STEP_A.replace("  name: step_a\n", "  name: step_a\n  tools: []\n")
+
+STEP_B_WITH_NULL_DEFAULT = STEP_B.replace("prefix: {json_schema: {type: string}}", "prefix: {json_schema: {type: string, default: null}}")
+
+CASES = {"cases": [{"name": "says a", "inputs": {}, "expected_output": "a"}], "evaluators": ["EqualsExpected"]}
+
+
+async def _holding(*texts: str) -> tuple[FakeCollection, LibraryCollection]:
+    """A library over one fake collection that stores pages as engram does, holding each step file's version."""
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for text in texts:
+        document = load_step_document(text)
+        await library.put_step(
+            document.step,
+            version=document.version,
+            title=document.title,
+            summary=document.summary,
+            applicability=document.applicability,
+            provenance={"saved_by": "test:seed"},
+            cases=CASES if document.step.name == "step_a" else None,
+        )
+    return store, library
+
+
+def _write_cases(path: Path, name: str, cases: object) -> None:
+    (path / "evals").mkdir(exist_ok=True)
+    (path / "evals" / name).write_text(yaml.safe_dump(cases, sort_keys=False), encoding="utf-8")
+
+
+async def test_a_step_changed_at_an_unchanged_version_refuses_the_folder_before_its_first_write(tmp_path: Path) -> None:
+    """step-b.md sorts after step-a.md, so only a check of every step before the first write keeps step_a unwritten."""
+    store, library = await _holding(STEP_B)
+    written = len(store.payloads)
+    _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": CHANGED_STEP_B}, workflows={})
+
+    with pytest.raises(StepVersionChangedError, match=r"st\.step_b\.v1") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert refused.value.step_id == "st.step_b.v1"
+    assert len(store.payloads) == written, "nothing is written"
+
+
+async def test_a_step_whose_only_change_writes_a_field_at_its_default_imports_as_unchanged(tmp_path: Path) -> None:
+    store, library = await _holding(STEP_A)
+    written = len(store.payloads)
+    _write(tmp_path, steps={"step-a.md": STEP_A_WITH_TOOLS}, workflows={})
+    _write_cases(tmp_path, "step-a.yaml", CASES)
+
+    assert await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases) == ("st.step_a.v1",)
+
+    assert len(store.payloads) == written, "the same version with the same content writes nothing"
+
+
+async def test_a_step_the_library_would_read_back_different_is_refused_by_its_field(tmp_path: Path) -> None:
+    step = load_step_document(STEP_B_WITH_NULL_DEFAULT).step
+    stored = TypeAdapter(InlineStep).validate_python(pruned(step.model_dump(mode="json")))
+    assert step_content_address(stored) != step_content_address(step), "engram's ingest would store this step without its null default"
+    store, library = await _holding()
+    _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B_WITH_NULL_DEFAULT}, workflows={})
+
+    with pytest.raises(DocumentError, match=r"step-b\.md.*inputs\.prefix\.json_schema\.default"):
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert store.payloads == []
+
+
+async def test_a_step_s_case_file_is_carried_to_the_cases_of_its_page(tmp_path: Path) -> None:
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B}, workflows={})
+    _write_cases(tmp_path, "step-a.yaml", CASES)
+
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert json.loads(store.written("st.step_a.v1")["cases"]) == CASES
+    assert await library.fetch_step_cases("st.step_a.v1") == CASES
+    assert "cases" not in store.written("st.step_b.v1"), "a step with no case file carries none"
+
+
+async def test_a_step_with_no_case_file_removes_the_cases_its_version_held(tmp_path: Path) -> None:
+    _, library = await _holding(STEP_A)
+    assert await library.fetch_step_cases("st.step_a.v1") == CASES
+    _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
+
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert await library.fetch_step_cases("st.step_a.v1") is None
+
+
+@pytest.mark.parametrize(
+    "cases",
+    [
+        {"cases": [{"name": "no inputs"}]},
+        {"cases": [{"name": "says a", "inputs": {}}], "evaluators": ["NothingRegistersThis"]},
+        {"cases": [{"name": "twice", "inputs": {}}, {"name": "twice", "inputs": {}}]},
+        ["not", "a", "mapping"],
+    ],
+    ids=["a case without inputs", "an evaluator nothing registers", "two cases sharing a name", "not a mapping"],
+)
+async def test_a_case_file_its_case_run_would_refuse_refuses_the_folder_by_name(tmp_path: Path, cases: object) -> None:
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
+    _write_cases(tmp_path, "step-a.yaml", cases)
+
+    with pytest.raises(DocumentError, match=r"evals/step-a\.yaml"):
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert store.payloads == []
+
+
+def test_every_shipped_case_file_passes_the_check_the_import_runs() -> None:
+    checked: list[str] = []
+    for folder in (REPO / "harness" / "workflows", *sorted(REPO.glob("templates/*/workflows"))):
+        documents = [load_step_document(path.read_text(encoding="utf-8")) for path in (folder / "steps").glob("*.md")]
+        steps = {document.step.name.replace("_", "-"): document for document in documents}
+        for cases_file in sorted((folder / "evals").glob("*.yaml")):
+            assert cases_file.stem in steps, f"{cases_file} names no step in {folder / 'steps'}, so the import never reads it"
+            document = steps[cases_file.stem]
+            step_id = step_page_id(document.step.name, document.version)
+            check_step_cases(step_id, yaml.safe_load(cases_file.read_text(encoding="utf-8")))
+            checked.append(step_id)
+    assert checked, "no shipped case file was found, so this test would pass vacuously"
