@@ -1391,7 +1391,8 @@ def mcp_cmd(
     ),
     doc_authoring: bool = typer.Option(
         default=False,
-        help="Opt in to the documentation-authoring tools (knowledge_base_profile, skeleton, write_note, decide_page, resolve_entities, read_page) "
+        help="Opt in to the documentation-authoring tools (knowledge_base_profile, skeleton, write_note, decide_page, remove_undecided_page, "
+        "resolve_entities, read_page) "
         "for this knowledge base plus every other registered knowledge base that shares and opts in, even when this knowledge base's "
         "own knowledge-base-schema.json sets retrieval.doc_authoring to off. A knowledge base that always wants it sets that instead.",
     ),
@@ -1411,9 +1412,10 @@ def mcp_cmd(
     that a person approves. It is off by default.
 
     `--doc-authoring` also serves `knowledge_base_profile`, `skeleton`, `write_note`, `decide_page`,
-    `resolve_entities` and `read_page`, the tools a writing step uses to read a knowledge base's conventions, draft a blank
-    page of one page type, write and index it, move a page between its page type's statuses, turn the
-    names a page mentions into entity page ids, and read an indexed page back as a write_note payload before rewriting it. They reach this knowledge base and every other registered
+    `remove_undecided_page`, `resolve_entities` and `read_page`, the tools a writing step uses to read a knowledge base's
+    conventions, draft a blank page of one page type, write and index it, move a page between its page type's statuses,
+    delete a page nobody has decided on yet, turn the names a page mentions into entity page ids, and read an indexed page
+    back as a write_note payload before rewriting it. They reach this knowledge base and every other registered
     one that is shared and sets `retrieval.doc_authoring`. Each tool's `knowledge_base` argument picks one,
     and `api.about` lists them. A knowledge base whose schema sets
     `retrieval.doc_authoring` gets these tools without the flag.

@@ -1700,6 +1700,7 @@ def test_the_doors_mount_every_authoring_tool_in_order(tmp_path: Path) -> None:
         "source_queue_rows",
         "source_queue_decide",
         "decide_page",
+        "remove_undecided_page",
         "resolve_entities",
     ]
 
@@ -1906,6 +1907,123 @@ Mount the planning capability.
 
 talk.agents-that-plan#findings
 """
+
+
+_CONCEPT_PAGE = """---
+id: con.memory
+type: concept
+title: Memory
+summary: Memory comes in kinds.
+status: pending
+---
+
+## Overview
+
+Memory comes in episodic and semantic kinds.
+"""
+
+
+def _flag_file(tmp_path: Path, text: str = _FLAG_PAGE, folder: str = "Wiki/Flags") -> Path:
+    """`text` written as the flag page try-planning-reminders under `folder` of the knowledge base at `tmp_path`."""
+    home = tmp_path / folder
+    home.mkdir(parents=True)
+    page = home / "try-planning-reminders.md"
+    page.write_text(text, encoding="utf-8")
+    return page
+
+
+async def test_remove_undecided_page_deletes_the_file_reindexes_and_names_the_page(tmp_path: Path) -> None:
+    page = _flag_file(tmp_path)
+    doors, reindex, _ = _doors(tmp_path)
+
+    said = await doors.remove_undecided_page("research", "flag.try-planning-reminders", "  The judge found it weak.  ")
+
+    assert said == {
+        "page_id": "flag.try-planning-reminders",
+        "page_type": "flag",
+        "title": "Try planning reminders",
+        "path": "Wiki/Flags/try-planning-reminders.md",
+        "reason": "The judge found it weak.",
+        "indexed": "indexed clean",
+    }
+    assert not page.exists()
+    assert [knowledge_base.name for knowledge_base in reindex.knowledge_bases] == ["research"]
+
+
+async def test_remove_undecided_page_finds_a_page_the_owner_moved_where_it_now_sits(tmp_path: Path) -> None:
+    page = _flag_file(tmp_path, folder="Wiki/Flags/Later")
+    doors, _, _ = _doors(tmp_path)
+
+    said = await doors.remove_undecided_page("research", "flag.try-planning-reminders", "It repeats another flag.")
+
+    assert said["path"] == "Wiki/Flags/Later/try-planning-reminders.md"
+    assert not page.exists()
+
+
+async def test_remove_undecided_page_says_a_deferred_index_runs_when_the_run_ends(tmp_path: Path) -> None:
+    _flag_file(tmp_path)
+    doors, reindex, _ = _doors(tmp_path)
+    reindex.outcome = "deferred"
+
+    said = await doors.remove_undecided_page("research", "flag.try-planning-reminders", "It repeats another flag.")
+
+    assert said["indexed"] == "indexed once this run ends, so search does not find it yet"
+
+
+@pytest.mark.parametrize("status", ["accepted", "dismissed", "completed"])
+async def test_remove_undecided_page_refuses_a_page_its_file_holds_decided_whatever_the_index_says(tmp_path: Path, status: str) -> None:
+    page = _flag_file(tmp_path, _FLAG_PAGE.replace("status: pending", f"status: {status}", 1))
+    indexed_pending = FakeAdminGateway(rows=[{"page_id": "flag.try-planning-reminders", "status": "pending"}])
+    doors, reindex, _ = _doors(tmp_path, indexed_pending)
+
+    with pytest.raises(ModelRetry, match=re.escape(f"flag.try-planning-reminders is {status} in its file, not pending, so it was decided. Nothing was removed")):
+        await doors.remove_undecided_page("research", "flag.try-planning-reminders", "The judge found it weak.")
+
+    assert page.exists()
+    assert reindex.knowledge_bases == []
+
+
+async def test_remove_undecided_page_refuses_a_page_whose_page_type_declares_no_decision(tmp_path: Path) -> None:
+    concepts = tmp_path / "Wiki" / "Concepts"
+    concepts.mkdir(parents=True)
+    page = concepts / "memory.md"
+    page.write_text(_CONCEPT_PAGE, encoding="utf-8")
+    doors, reindex, _ = _doors(tmp_path)
+
+    with pytest.raises(ModelRetry, match=re.escape("page_type 'concept' declares no decision. Nothing was removed")):
+        await doors.remove_undecided_page("research", "con.memory", "It is pending.")
+
+    assert page.exists(), "a pending page of a page type with no decision stays"
+    assert reindex.knowledge_bases == []
+
+
+async def test_remove_undecided_page_refuses_an_id_no_page_carries(tmp_path: Path) -> None:
+    page = _flag_file(tmp_path)
+    doors, reindex, _ = _doors(tmp_path)
+
+    with pytest.raises(ModelRetry, match=re.escape("no page 'flag.nope'")):
+        await doors.remove_undecided_page("research", "flag.nope", "It repeats another flag.")
+
+    assert page.exists()
+    assert reindex.knowledge_bases == []
+
+
+async def test_remove_undecided_page_refuses_an_empty_reason_and_deletes_nothing(tmp_path: Path) -> None:
+    page = _flag_file(tmp_path)
+    doors, reindex, _ = _doors(tmp_path)
+
+    with pytest.raises(ModelRetry, match="give a one-sentence reason"):
+        await doors.remove_undecided_page("research", "flag.try-planning-reminders", "  ")
+
+    assert page.exists()
+    assert reindex.knowledge_bases == []
+
+
+async def test_remove_undecided_page_of_an_unknown_knowledge_base_names_the_known_ones(tmp_path: Path) -> None:
+    doors, _, _ = _doors(tmp_path)
+
+    with pytest.raises(ModelRetry, match=re.escape("no knowledge base named 'nope'. The ones you can write into: research")):
+        await doors.remove_undecided_page("nope", "flag.try-planning-reminders", "It repeats another flag.")
 
 
 async def test_decide_page_moves_the_page_and_reindexs_so_searches_see_it(tmp_path: Path) -> None:

@@ -1695,7 +1695,7 @@ class _RecordingWriteNoteDoor(AuthoringTools):
 
 
 class TestDocAuthoringMount:
-    """`create_mcp_server(doc_authoring_tools=..., collection=_COLLECTION)` mounts the six documentation-authoring tools."""
+    """`create_mcp_server(doc_authoring_tools=..., collection=_COLLECTION)` mounts the seven documentation-authoring tools."""
 
     async def test_write_note_forwards_path_to_the_door(self):
         door = _RecordingWriteNoteDoor()
@@ -1709,14 +1709,40 @@ class TestDocAuthoringMount:
         assert result.is_error is False
         assert door.write_note_calls == [("research", {"id": "x"}, "docs/initiatives/2026-09-01-x/design.md")]
 
-    async def test_the_six_tools_are_mounted(self, tmp_path: Path):
+    async def test_the_seven_tools_are_mounted(self, tmp_path: Path):
         server, _ = _doc_authoring_server(tmp_path)
 
         async with Client(server) as client:
             listing = await client.list_tools()
 
-        expected = {"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"}
+        expected = {"knowledge_base_profile", "skeleton", "write_note", "decide_page", "remove_undecided_page", "resolve_entities", "read_page"}
         assert expected <= {tool.name for tool in listing.tools}
+
+    async def test_remove_undecided_page_forwards_the_call_and_answers_the_refusal(self, tmp_path: Path):
+        server, reindex = _doc_authoring_server(tmp_path)
+        page = tmp_path / "Wiki" / "Flags" / "try-planning-reminders.md"
+
+        async with Client(server) as client:
+            removed = await client.call_tool(
+                "remove_undecided_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "reason": "It repeats another flag."}
+            )
+            again = await client.call_tool(
+                "remove_undecided_page", {"knowledge_base": "research", "page_id": "flag.try-planning-reminders", "reason": "It repeats another flag."}
+            )
+
+        assert removed.is_error is False
+        assert removed.structured_content == {
+            "page_id": "flag.try-planning-reminders",
+            "page_type": "flag",
+            "title": "Try planning reminders",
+            "path": "Wiki/Flags/try-planning-reminders.md",
+            "reason": "It repeats another flag.",
+            "indexed": "indexed clean",
+        }
+        assert not page.exists()
+        assert [knowledge_base.name for knowledge_base in reindex.knowledge_bases] == ["research"]
+        assert again.is_error
+        assert "no page 'flag.try-planning-reminders'" in _text(again)
 
     async def test_read_page_forwards_the_call_and_answers_the_refusal(self, tmp_path: Path):
         server, reindex = _doc_authoring_server(tmp_path)

@@ -98,8 +98,8 @@ async def test_a_page_type_with_no_skipped_status_changes_nothing(tmp_path: Path
     assert reindex.knowledge_bases == []
 
 
-def test_skip_digest_stays_out_of_the_twenty(tmp_path: Path) -> None:
+def test_skip_digest_stays_out_of_the_twenty_one(tmp_path: Path) -> None:
     doors, _, _ = _doors(tmp_path)
     names = [name for _call, name, _description in doors.tools()]
-    assert len(names) == 20
+    assert len(names) == 21
     assert "skip_digest" not in names

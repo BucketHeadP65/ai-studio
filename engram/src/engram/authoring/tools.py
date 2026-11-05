@@ -681,15 +681,15 @@ def _claim_link_fields(claims: ClaimGrammarSpec | None) -> list[dict[str, str]]:
 
 
 class AuthoringTools:
-    """Tools over every knowledge base: `tools()`'s twenty, plus grounding tools a caller mounts individually.
+    """Tools over every knowledge base: `tools()`'s twenty-one, plus grounding tools a caller mounts individually.
 
     `tools()` carries `write_note`, `check_note`, `read_notes`, `resolve_note`, `list_pages`, `read_page`,
     `request_source`, `list_undigested`, `read_source`, `trace_source`, `remove_source_artifacts`,
     `list_recent_digests`, `compounding_work`, `digest_skeleton`, `source_queue_policy`, `write_policy`,
-    `source_queue_rows`, `source_queue_decide`, `decide_page`, and `resolve_entities`. Every step that acts on a knowledge
-    base gets all twenty. `knowledge_base_profile`, `skeleton`, `recall_beliefs`, `remember_belief`, and `skip_digest`
-    are not in that set. A step mounts them one at a time when it needs grounding or, for `skip_digest`, when it is
-    granted the right to skip a digest, and most steps do not.
+    `source_queue_rows`, `source_queue_decide`, `decide_page`, `remove_undecided_page`, and `resolve_entities`. Every
+    step that acts on a knowledge base gets all twenty-one. `knowledge_base_profile`, `skeleton`, `recall_beliefs`,
+    `remember_belief`, and `skip_digest` are not in that set. A step mounts them one at a time when it needs grounding
+    or, for `skip_digest`, when it is granted the right to skip a digest, and most steps do not.
     """
 
     def __init__(
@@ -1246,6 +1246,47 @@ class AuthoringTools:
         )
         moved = f"is now {row.status}" if status else f"stays {row.status}"
         return f"{row.id} ({row.page_type}) {moved} in {knowledge_base}, {_reindex_clause(result)}{noted}{written}"
+
+    async def remove_undecided_page(self, knowledge_base: str, page_id: str, reason: str) -> dict[str, str]:
+        """Delete one undecided page's file, then reindex so searches no longer find it.
+
+        An undecided page is a page of a page type that declares a decision, at that decision's open status. The status
+        is read from the page's own file, never from the index, so a page its owner decided since the last index stays.
+        The file is deleted, not moved, so the answer is the only record left of the page.
+
+        Args:
+            knowledge_base: The knowledge base the page belongs to.
+            page_id: The page to remove.
+            reason: One sentence saying why, answered back beside the removed page.
+
+        Returns:
+            The removed page's `page_id`, `page_type`, `title`, its `path` relative to the knowledge base root and the
+            `reason`, with `indexed` saying whether the knowledge base indexed clean.
+
+        Raises:
+            ModelRetry: `reason` is empty, no page carries `page_id`, its page type declares no decision, or its file
+                holds a status other than the open one. Nothing is deleted then. Also raised when `knowledge_base` names
+                no knowledge base these tools write into.
+        """
+        kb = self._knowledge_base(knowledge_base)
+        said = reason.strip()
+        if not said:
+            msg = "give a one-sentence reason, it is answered back beside the removed page"
+            raise ModelRetry(msg)
+        try:
+            row = retrieval.remove_undecided_page(kb.path, kb.schema, page_id)
+        except (LookupError, ValueError) as error:
+            msg = f"{error}. Nothing was removed"
+            raise ModelRetry(msg) from error
+        result = await self._reindex(kb)
+        return {
+            "page_id": row.id,
+            "page_type": row.page_type,
+            "title": row.title,
+            "path": _knowledge_base_relative(Path(row.path), kb.path),
+            "reason": said,
+            "indexed": _reindex_clause(result),
+        }
 
     async def resolve_entities(self, knowledge_base: str, entities: list[EntityName]) -> str:
         """Resolve each name to the id of its one entity page, creating a page for each name that matches none (entity resolution).
@@ -2280,6 +2321,17 @@ class AuthoringTools:
                     "the link fields an outcome asks for. An empty status keeps the page's current status, so a step whose instructions "
                     "ask for it can write only link fields and a reason. With add true, the ids join what each named field holds "
                     "instead of replacing it."
+                ),
+            ),
+            (
+                self.remove_undecided_page,
+                "remove_undecided_page",
+                (
+                    "Delete one page nobody has decided on yet: a page of a page_type that declares a decision, still at its open "
+                    "status in its own file, which the index may not show yet. Give a one-sentence reason. The file is deleted, not "
+                    "moved, so keep the answer: it names the page's id, title, path and your reason. A page at any other status, "
+                    "one whose page_type declares no decision, or an id no page carries is refused and nothing is deleted. Use "
+                    "decide_page instead to record a decision on a page."
                 ),
             ),
             (

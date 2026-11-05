@@ -1,4 +1,4 @@
-"""Decisions on disk: list a knowledge base's open decisions, and move a page between its page_type's declared statuses.
+"""Decisions on disk: list a knowledge base's open decisions, move a page between its page_type's declared statuses, and remove an undecided page.
 
 `list_decisions` reads every page type whose spec declares a `DecisionSpec`.
 """
@@ -195,6 +195,41 @@ def _with_status_and_reason(head: str, status: str, reason: str) -> str:
         else:
             head = _STATUS_LINE.sub(lambda m: f"{m.group(0)}\n{line}", head, count=1)
     return head
+
+
+def remove_undecided_page(knowledge_base_path: Path, spec: KnowledgeBaseSchema, page_id: str) -> DecidedPage:
+    """Delete the file of one undecided page and return the page as it read before.
+
+    An undecided page is one of a page type that declares a decision, at that decision's open status. The status is
+    read from the file itself, never from an index. `page_id` is searched for across every page type's folders.
+
+    Args:
+        knowledge_base_path: The knowledge base root.
+        spec: The knowledge base's schema.
+        page_id: The id of the page to remove.
+
+    Returns:
+        The page as it read before its file was deleted, its `path` absolute.
+
+    Raises:
+        LookupError: No page under any of `spec`'s page types' folders carries `page_id` (absent, or present but
+            unparseable). Nothing is deleted.
+        ValueError: The page's page type declares no decision, or the page is at a status other than its open one.
+            Nothing is deleted.
+    """
+    found = _find_page(knowledge_base_path, spec, page_id)
+    if found is None:
+        msg = f"no page {page_id!r} under {knowledge_base_path}"
+        raise LookupError(msg)
+    row, page_type = found
+    if page_type.decision is None:
+        msg = f"{page_id} is a {page_type.page_type} page, and page_type {page_type.page_type!r} declares no decision"
+        raise ValueError(msg)
+    if row.status != page_type.decision.open:
+        msg = f"{page_id} is {row.status} in its file, not {page_type.decision.open}, so it was decided"
+        raise ValueError(msg)
+    Path(row.path).unlink()
+    return row
 
 
 def decide_page(  # noqa: PLR0913 (status, links, reason and add are the parts of one decision, bundling them would hide the call contract)

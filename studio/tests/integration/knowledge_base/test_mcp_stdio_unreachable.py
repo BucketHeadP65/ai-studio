@@ -65,7 +65,7 @@ _UNCALLED_EMBEDDING_ENDPOINT = "https://embeddings.example.invalid"
 
 _INIT_TIMEOUT_SECONDS = 120
 
-_WRITE_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"})
+_WRITE_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "remove_undecided_page", "resolve_entities", "read_page"})
 
 
 def _knowledge_base(root: Path) -> KnowledgeBaseSchema:

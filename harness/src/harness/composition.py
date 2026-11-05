@@ -223,8 +223,8 @@ CHAT_KNOWLEDGE_BASE_PLUGINS = frozenset(
 )
 """The chat agent's knowledge base surface: the two read tools, `request_source`, and the owner's plugins over the
 source-queue policy, the source queue and its decisions. `write_note`, `list_undigested`, `read_source`,
-`list_recent_digests`, `digest_skeleton`, `trace_source`, `remove_source_artifacts` and `skip_digest` stay
-step-only. A workflow step reaches them by name through `build_environment`'s own grant, never through
+`list_recent_digests`, `digest_skeleton`, `trace_source`, `remove_source_artifacts`, `remove_undecided_page` and
+`skip_digest` stay step-only. A workflow step reaches them by name through `build_environment`'s own grant, never through
 chat, so a source's removal always goes through the gated `wf.source-remove` workflow."""
 
 TURN_SEQUENCE_INSTRUCTIONS = """You are one worker holding one item through an ordered sequence of tasks.

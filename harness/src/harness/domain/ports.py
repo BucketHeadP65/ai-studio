@@ -150,6 +150,7 @@ CASE_RUN_TOOLS: Mapping[str, CaseRunTreatment] = MappingProxyType(
         "write_note": "checked_write",
         "request_source": "recorded_write",
         "decide_page": "recorded_write",
+        "remove_undecided_page": "recorded_write",
         "skip_digest": "recorded_write",
         "resolve_note": "recorded_write",
         "remember_belief": "recorded_write",

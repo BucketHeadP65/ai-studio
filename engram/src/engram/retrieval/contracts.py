@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from engram.retrieval.capability import ReadSurface, RetrievalKnowledgeBase, SqlKnowledgeBase
-from engram.retrieval.decisions import DecidedPage, decide_page, list_decisions, page_type_paths
+from engram.retrieval.decisions import DecidedPage, decide_page, list_decisions, page_type_paths, remove_undecided_page
 from engram.retrieval.dials import ReadDials
 from engram.retrieval.domain import Graph, Search
 from engram.retrieval.earned import Earned
@@ -109,6 +109,7 @@ __all__ = [
     "private_reader_url",
     "qualify_ref",
     "read_hits_per_document",
+    "remove_undecided_page",
     "reranking",
     "search_next_steps",
     "search_result_status",

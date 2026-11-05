@@ -281,6 +281,15 @@ _DECIDE_PAGE_DESCRIPTION = (
     "join what each named field already holds, each id once, instead of replacing it, so the call never removes a link."
 )
 
+_REMOVE_UNDECIDED_PAGE_DESCRIPTION = (
+    "Delete one page nobody has decided on yet, then reindex so searches no longer find it: a page of a page_type that "
+    "declares a decision, still at its open status in its own file, which the index may not show yet. "
+    f"{_KNOWLEDGE_BASE_CLAUSE} page_id is the page's id and reason is one sentence saying why. The file is deleted, not moved, "
+    "so the answer, which names the page's id, title, path and the reason, is the only record left of it. A page at any "
+    "other status, one whose page_type declares no decision, or an id no page carries is refused and nothing is deleted. "
+    "Use decide_page instead to record a decision on a page."
+)
+
 _RESOLVE_ENTITIES_DESCRIPTION = (
     "Resolve the names a page mentions to one entity page id each, creating a page for each name that matches none, and "
     "reindex once when anything was written. A name matches an entity page when it equals the page's title or one of its "
@@ -421,7 +430,7 @@ def create_mcp_server(
         stamp: Names the knowledge base that answered and how fresh its index is, on every `search`
             and `fetch` answer as `knowledge_base`, read on every call. `None` leaves it unset.
         doc_authoring_tools: When given, registers `knowledge_base_profile`, `skeleton`, `write_note`,
-            `decide_page`, `resolve_entities` and `read_page`, each forwarding to it.
+            `decide_page`, `remove_undecided_page`, `resolve_entities` and `read_page`, each forwarding to it.
         read_surfaces: When given, `search` and `fetch` route over these knowledge bases, each through
             its own handlers, envelope, stamp and facet keys, inside `run_code` too. One must serve
             `collection`, which an omitted `collection` and an unqualified id read. `search_handler`,
@@ -718,6 +727,10 @@ def _add_doc_authoring(server: MCPServer, doc_authoring_tools: AuthoringTools) -
         with _refusal_as_tool_error():
             return await doc_authoring_tools.decide_page(knowledge_base, page_id, status, links, reason, add=add)
 
+    async def remove_undecided_page(knowledge_base: str, page_id: str, reason: str) -> dict[str, str]:
+        with _refusal_as_tool_error():
+            return await doc_authoring_tools.remove_undecided_page(knowledge_base, page_id, reason)
+
     async def resolve_entities(knowledge_base: str, entities: list[EntityName]) -> str:
         with _refusal_as_tool_error():
             return await doc_authoring_tools.resolve_entities(knowledge_base, entities)
@@ -730,6 +743,7 @@ def _add_doc_authoring(server: MCPServer, doc_authoring_tools: AuthoringTools) -
     server.add_tool(skeleton, name="skeleton", description=_SKELETON_DESCRIPTION)
     server.add_tool(write_note, name="write_note", description=_WRITE_NOTE_DESCRIPTION)
     server.add_tool(decide_page, name="decide_page", description=_DECIDE_PAGE_DESCRIPTION)
+    server.add_tool(remove_undecided_page, name="remove_undecided_page", description=_REMOVE_UNDECIDED_PAGE_DESCRIPTION)
     server.add_tool(resolve_entities, name="resolve_entities", description=_RESOLVE_ENTITIES_DESCRIPTION)
     server.add_tool(read_page, name="read_page", description=_READ_PAGE_DESCRIPTION)
 

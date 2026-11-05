@@ -7,7 +7,7 @@ import pytest
 from engram.kb import contracts as kb
 from engram.kb.contracts import KnowledgeBaseSchema, PageTypeSpec
 from engram.kb.domain.schema import DecisionSpec, Outcome
-from engram.retrieval.decisions import _decision_reason_line, decide_page, list_decisions
+from engram.retrieval.decisions import _decision_reason_line, decide_page, list_decisions, remove_undecided_page
 from engram.testing.specs import research_spec
 
 FLAG = """---
@@ -141,6 +141,55 @@ def test_list_decisions_only_lists_declared_decision_page_types(tmp_path: Path) 
     listing = list_decisions(knowledge_base, spec)
 
     assert [row.id for row in listing.rows] == ["flag.minimal"]
+
+
+def test_remove_undecided_page_deletes_the_file_of_a_page_at_its_open_status(tmp_path: Path) -> None:
+    knowledge_base = _knowledge_base(tmp_path)
+    path = knowledge_base / "Wiki" / "Flags" / "flag.try-planning-reminders.md"
+
+    row = remove_undecided_page(knowledge_base, research_spec(), "flag.try-planning-reminders")
+
+    assert (row.id, row.page_type, row.title, row.status, row.path) == (
+        "flag.try-planning-reminders",
+        "flag",
+        "Try planning reminders",
+        "pending",
+        str(path),
+    )
+    assert not path.exists()
+
+
+@pytest.mark.parametrize("status", ["accepted", "dismissed", "completed"])
+def test_remove_undecided_page_refuses_a_page_its_file_holds_at_a_decided_status(tmp_path: Path, status: str) -> None:
+    knowledge_base = _knowledge_base(tmp_path)
+    path = knowledge_base / "Wiki" / "Flags" / "flag.try-planning-reminders.md"
+    path.write_text(FLAG.replace("status: pending", f"status: {status}", 1), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=re.escape(f"flag.try-planning-reminders is {status} in its file, not pending")):
+        remove_undecided_page(knowledge_base, research_spec(), "flag.try-planning-reminders")
+
+    assert path.exists()
+
+
+def test_remove_undecided_page_refuses_a_page_whose_page_type_declares_no_decision(tmp_path: Path) -> None:
+    notes = tmp_path / "Wiki" / "Notes"
+    notes.mkdir(parents=True)
+    path = notes / "note.draft-idea.md"
+    path.write_text(_MINIMAL_NOTE, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=re.escape("page_type 'note' declares no decision")):
+        remove_undecided_page(tmp_path, _two_page_type_spec(), "note.draft-idea")
+
+    assert path.exists()
+
+
+def test_remove_undecided_page_refuses_an_id_no_page_carries(tmp_path: Path) -> None:
+    knowledge_base = _knowledge_base(tmp_path)
+
+    with pytest.raises(LookupError, match=re.escape("no page 'flag.missing'")):
+        remove_undecided_page(knowledge_base, research_spec(), "flag.missing")
+
+    assert (knowledge_base / "Wiki" / "Flags" / "flag.try-planning-reminders.md").exists()
 
 
 def test_decide_page_moves_a_page_of_a_kind_with_no_decision_block(tmp_path: Path) -> None:

@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
     from mcp.server.mcpserver import MCPServer
 
-_DOC_AUTHORING_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "resolve_entities", "read_page"})
+_DOC_AUTHORING_TOOLS = frozenset({"knowledge_base_profile", "skeleton", "write_note", "decide_page", "remove_undecided_page", "resolve_entities", "read_page"})
 
 
 def _make_knowledge_base(tmp_path: Path, *, doc_authoring_in_spec: bool = False) -> KnowledgeBaseSettings:

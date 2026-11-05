@@ -36,10 +36,10 @@ async def test_the_narrowed_toolset_offers_exactly_that_and_nothing_else() -> No
     assert names == {"search", "fetch", "request_source"} | OWNER_PLUGINS
 
 
-async def test_write_note_list_undigested_and_read_source_stay_off_the_chat_surface() -> None:
+async def test_write_note_list_undigested_read_source_and_remove_undecided_page_stay_off_the_chat_surface() -> None:
     knowledge_base = KnowledgeBase[None](knowledge_base=app_knowledge_base_surface(), only=CHAT_KNOWLEDGE_BASE_PLUGINS)
     toolset = knowledge_base.get_toolset()
 
     names = set(await toolset.get_tools(_ctx()))
 
-    assert {"write_note", "list_undigested", "read_source"}.isdisjoint(names)
+    assert {"write_note", "list_undigested", "read_source", "remove_undecided_page"}.isdisjoint(names)

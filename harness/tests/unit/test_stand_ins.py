@@ -152,6 +152,7 @@ class TestStandInToolset:
             "write_note",
             "request_source",
             "decide_page",
+            "remove_undecided_page",
             "skip_digest",
             "resolve_note",
             "remember_belief",

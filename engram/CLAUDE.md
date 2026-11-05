@@ -144,7 +144,7 @@ the answer, with the team id cut.
 
 ## Authoring tools
 
-`engram.authoring.tools.AuthoringTools` is the write side of a knowledge base: twenty tools a
+`engram.authoring.tools.AuthoringTools` is the write side of a knowledge base: twenty-one tools a
 host mounts on `embedded_read_tools` via `authoring=`, alongside the standing `search`/`fetch` pair
 (`None`, the default, keeps a knowledge base read-only). `write_note(knowledge_base, payload, path="")` validates an
 authoring payload against the knowledge base's own grammar (render, parse, validate), writes it under the page
@@ -208,6 +208,10 @@ fresh `trace_source` recomputes, all or nothing, refusing on any disagreement wi
 `expected_paths` passed in, then blocks the source's source-queue row and indexes again. `decide_page(knowledge_base,
 page_id, status, links, reason="")` moves one page to one of its page type's declared statuses, writes
 the link fields an outcome asks for, an optional reason noted on the page, and indexes again.
+`remove_undecided_page(knowledge_base, page_id, reason)` deletes the file of one page of a page type that declares a
+decision while the file itself, never the index, holds it at that decision's open status, then indexes again. It
+refuses an empty reason, an id no page carries, a page type with no decision and any other status, deleting nothing,
+and answers the page's id, page type, title, path and the reason, the only record left once the file is gone.
 `resolve_entities(knowledge_base, entities)` is entity resolution: each name answers the id of its one entity
 page, matching a page's title or alias once case, punctuation and a leading "the" are set aside. A name that
 matches none resolves through its first alias that does, joining that page as an alias. Otherwise it gets a new
@@ -218,7 +222,7 @@ base indexes again once when anything was written, and every alias merge holds t
 Calls on one knowledge base through one `AuthoringTools` instance on one event loop resolve one at a time, from
 the scan to the last write, under an `asyncio.Lock`, so calls at once never make two pages for one entity.
 
-Beyond that twenty-tool set (`AuthoringTools.tools()` stays exactly those twenty), the class
+Beyond that twenty-one-tool set (`AuthoringTools.tools()` stays exactly those twenty-one), the class
 carries grounding and memory tools a host mounts deliberately per step rather than surface-wide:
 `knowledge_base_profile(knowledge_base)` (the base's `_meta/purpose.md` text, its facet/relation/claim-type
 vocabulary, every page type with its authoring guidance and canonical sections, each declared
