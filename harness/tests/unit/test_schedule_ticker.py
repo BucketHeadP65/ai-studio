@@ -1102,7 +1102,8 @@ async def test_an_on_step_change_schedule_over_a_workflow_without_the_parameter_
         )
 
     assert str(refusal.value) == (
-        "an on-step-change schedule passes the changed steps to changed_step_ids, and wf-sales declares no such parameter"
+        "an on-step-change schedule passes the changed steps to changed_step_ids, and wf-sales declares no such parameter. "
+        "Pick a workflow that declares changed_step_ids, or add that parameter to this one."
     )
     assert await schedules.list_all() == [], "a refused schedule is never stored"
 

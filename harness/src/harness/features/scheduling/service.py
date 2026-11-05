@@ -229,7 +229,10 @@ def _refuse_cadence_without_its_parameter(workflow_id: str, spec: Workflow, cade
         msg = f"an on-index schedule passes the changed pages to {CHANGED_PAGES_PARAMETER}, and {workflow_id} declares no such parameter"
         raise ScheduleSettingInvalidError(msg)
     if isinstance(cadence, OnStepChangeCadence) and CHANGED_STEPS_PARAMETER not in spec.parameters:
-        msg = f"an on-step-change schedule passes the changed steps to {CHANGED_STEPS_PARAMETER}, and {workflow_id} declares no such parameter"
+        msg = (
+            f"an on-step-change schedule passes the changed steps to {CHANGED_STEPS_PARAMETER}, and {workflow_id} declares no such parameter. "
+            f"Pick a workflow that declares {CHANGED_STEPS_PARAMETER}, or add that parameter to this one."
+        )
         raise ScheduleSettingInvalidError(msg)
 
 
