@@ -21,6 +21,7 @@ silence. A future docs indexer walks this file as its root.
 |---|---|
 | [docs/README.md](docs/README.md) | Docs charter: taxonomy, frontmatter schema, split-doc workflow, graduation rule |
 | [docs/knowledge-base-schema.json](docs/knowledge-base-schema.json) | The `repo-docs` estate schema: the 12 governed page types, their required frontmatter, and the relations `validate_docs.py` and `studio index` both read as their one contract |
+| [harness/library/knowledge-base-schema.json](harness/library/knowledge-base-schema.json) | The workflow library's own schema: the `workflow`, `step` and `maintenance-flag` page types the library's write path validates every page against, the flag type declaring its decision block (open at `open`, resolved to `resolved`) |
 | [docs/architecture/index.md](docs/architecture/index.md) | Architecture retrieval map: load matching `sections/`, not the whole master |
 | [docs/architecture/architecture.md](docs/architecture/architecture.md) | The arc42-lite master (edit here, sections are generated) |
 | [docs/explanation/tech-stack.md](docs/explanation/tech-stack.md) | Tech choices: why, alternatives, trade-offs, revisit-when |

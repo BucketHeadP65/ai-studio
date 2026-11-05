@@ -75,8 +75,9 @@ ENGRAM_SETTINGS_EXAMPLE = ENGRAM_REPO / "config" / "application_settings.example
 STUDIO_REPO = repo_path("APP_STUDIO_REPO", CHECKOUT.parent / "studio")
 WORKSPACE = repo_path("APP_WORKSPACE", CHECKOUT.parent)
 """The directory the agent's shell and files plugins work in."""
-WORKFLOW_KNOWLEDGE_BASE = repo_path("APP_WORKFLOW_KNOWLEDGE_BASE", CHECKOUT / ".state" / "workflow-knowledge-base")
-"""The knowledge base whose schema validates a saved workflow. It sits under the default state home unless the export names one."""
+WORKFLOW_KNOWLEDGE_BASE = repo_path("APP_WORKFLOW_KNOWLEDGE_BASE", CHECKOUT / "library")
+"""The library's own knowledge base, whose schema validates every page the library writes: a workflow, a reusable step
+and a maintenance flag. It is this checkout's `library/` folder unless the export names another."""
 REPO_DOCS_SCHEMA = CHECKOUT.parent / "docs" / "knowledge-base-schema.json"
 """The schema of this repository's own `repo-docs` knowledge base: its slug, its disclosure declarations and its purpose."""
 SPILL_DIR = CHECKOUT / ".state" / "tool-output"

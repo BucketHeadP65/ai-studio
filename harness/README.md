@@ -43,9 +43,10 @@ overrides one field: `APP_<SECTION>__<FIELD>`, such as `APP_RUN__RUN_ENGINE`, `A
   the workspace's files, skills, recall over past conversations, web search, delegation to worker agents, and the
   workflow tools. `harness plugins` lists them all. The agent and every workflow step run on three model tiers,
   `orchestrator`, `worker` and `helper`, which you set on the Studio's Harness page.
-- **The workflow library.** Workflows and reusable steps, stored as an indexed collection in the `engram_workflows`
-  database. The steps the templates share are in [`workflows/`](workflows/), and each template's own workflows
-  are in [`../templates/`](../templates/).
+- **The workflow library.** Workflows, reusable steps and maintenance flags, stored as an indexed collection in the
+  `engram_workflows` database. The schema every library page is validated against is
+  [`library/knowledge-base-schema.json`](library/knowledge-base-schema.json). The steps the templates share are in
+  [`workflows/`](workflows/), and each template's own workflows are in [`../templates/`](../templates/).
 - **Runs.** A run's live state, its gates, its values, its artifacts and its spend, plus schedules and the run archive.
 - **Inspection.** Rules read each finished run's recorded conversation and raise leads, and an inspector model turns a
   lead into a finding or dismisses it. The jobs run in the background of `harness serve`.

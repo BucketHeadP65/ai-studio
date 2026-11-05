@@ -155,6 +155,38 @@ class WorkflowUnknownError(LibraryError, KeyError):
         return str(self.args[0]) if self.args else ""
 
 
+class FlagIdTakenError(LibraryError):
+    """A maintenance flag's id already holds a page of another type, so the flag was not written there."""
+
+    def __init__(self, flag_id: str, *, page_type: str) -> None:
+        """Name the id and the type of the page that holds it.
+
+        Args:
+            flag_id: The flag's page id.
+            page_type: The type of the page already under that id.
+        """
+        self.flag_id = flag_id
+        """The id the flag would have been written under."""
+        self.page_type = page_type
+        """The type of the page that holds it."""
+        super().__init__(
+            f"{flag_id} already holds a {page_type} page, so no maintenance flag is written there. "
+            f"Move or remove that page, then raise the flag again."
+        )
+
+
+class FlagUnknownError(LibraryError, KeyError):
+    """The library holds no maintenance flag under that id.
+
+    It is both a `LibraryError` and a `KeyError`, so a caller may catch either. Its text is the message alone, without
+    the quotes a `KeyError` adds.
+    """
+
+    def __str__(self) -> str:
+        """The message, unquoted."""
+        return str(self.args[0]) if self.args else ""
+
+
 class SaveRefusedError(RuntimeError):
     """The workflow was not saved, and the report says exactly why."""
 

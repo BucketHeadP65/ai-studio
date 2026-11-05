@@ -22,6 +22,7 @@ from core.ai.workflows.domain.fingerprint import (
     spec_identity,
     step_content_address,
 )
+from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, FlagKind, MaintenanceFlag, flag_id, flag_to_write
 from core.ai.workflows.domain.identity import (
     CURRENT_STEP,
     ReviewedArtifacts,
@@ -98,6 +99,8 @@ from core.ai.workflows.exceptions import (
     AdaptationRefusedError,
     ArgumentRefusedError,
     DocumentError,
+    FlagIdTakenError,
+    FlagUnknownError,
     LibraryError,
     ParameterSchemaError,
     PresentationRefusedError,
@@ -117,6 +120,7 @@ from core.ai.workflows.internal_contracts import (
     ConsumerRecords,
     EvidenceLog,
     Ingest,
+    MaintenanceFlags,
     OrchestratorDecider,
     PerformStep,
     ReusableStepQueries,
@@ -126,7 +130,7 @@ from core.ai.workflows.internal_contracts import (
     StepVersionQueries,
     WorkflowLibrary,
 )
-from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
+from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
 from core.ai.workflows.service import save, verify_savable
@@ -144,6 +148,7 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "AUTOMATIC_RESOLVERS",
     "CURRENT_STEP",
     "DEFAULT_TASK_QUEUE",
     "JUDGE_NOTE_FALLBACK",
@@ -166,6 +171,10 @@ __all__ = [
     "DurableWorkflowRun",
     "EvidenceLog",
     "FileEvidenceLog",
+    "FlagCard",
+    "FlagIdTakenError",
+    "FlagKind",
+    "FlagUnknownError",
     "FromNode",
     "FromParameter",
     "GateDecided",
@@ -182,6 +191,8 @@ __all__ = [
     "LibraryCollection",
     "LibraryError",
     "Lineage",
+    "MaintenanceFlag",
+    "MaintenanceFlags",
     "MapBatch",
     "MapNode",
     "Node",
@@ -266,6 +277,8 @@ __all__ = [
     "drift",
     "encode_run_event",
     "fingerprint",
+    "flag_id",
+    "flag_to_write",
     "grade",
     "intent_issues",
     "load_spec_document",

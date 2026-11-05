@@ -16,13 +16,14 @@ if TYPE_CHECKING:
     from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion
     from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence
     from core.ai.workflows.domain.fingerprint import WorkflowFingerprint
+    from core.ai.workflows.domain.flags import FlagKind, MaintenanceFlag
     from core.ai.workflows.domain.intent import WorkflowIntent
     from core.ai.workflows.domain.lineage import Lineage
     from core.ai.workflows.domain.presentation import WorkflowPresentation
     from core.ai.workflows.domain.run_events import ReviewedArtifactRef
     from core.ai.workflows.domain.vocabulary import AgentStep, Briefing, InlineStep, Program, Workflow
     from core.ai.workflows.graph_builder import GateDecision
-    from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
+    from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
     from core.ai.workflows.registry import StepImplementation
     from core.cqrs.contracts import Event
 
@@ -387,6 +388,77 @@ class ConsumerRecords(Protocol):
         Raises:
             LibraryError: No page has that id, it is superseded, its record holds no copy of `step`, or the write fails.
                 Nothing is written in each case.
+        """
+        ...
+
+
+@runtime_checkable
+class MaintenanceFlags(Protocol):
+    """The library's maintenance flags: write one by the one write rule, list them, read one, and resolve one.
+
+    A library that keeps reusable steps answers it. A caller narrows a library with `isinstance`.
+    """
+
+    async def put_flag(self, flag: MaintenanceFlag) -> str | None:
+        """Write a flag under its stable id by the rule every writer follows, read from the page under that id first.
+
+        No page writes the flag open. An open page takes the new flag, and one that already holds it writes nothing.
+        A resolved page keeps its decision while the flag's `step_hash` is the same, and opens again for another.
+
+        Args:
+            flag: The flag to raise. A flag about one consumer names its workflow version id, `wf.<name>.v<version>`.
+
+        Returns:
+            The id written, or None when the page was left as it is.
+
+        Raises:
+            FlagIdTakenError: The id holds a page of another type. Nothing is written.
+            LibraryError: The flag's workflow is not a workflow version id, the page under the id does not parse, or
+                the write fails.
+        """
+        ...
+
+    async def flags(self, *, status: Literal["open", "resolved"] | None = None, kind: FlagKind | None = None) -> tuple[FlagCard, ...]:
+        """Every maintenance flag with that status and kind, newest first.
+
+        Args:
+            status: Only flags with this status. None lists both.
+            kind: Only flags of this kind. None lists every kind.
+
+        Returns:
+            The cards, newest raised first.
+
+        Raises:
+            LibraryError: A flag page does not parse.
+        """
+        ...
+
+    async def fetch_flag(self, flag_id: str) -> MaintenanceFlag | None:
+        """The flag a page holds.
+
+        Args:
+            flag_id: The flag's page id.
+
+        Returns:
+            The flag, or None when no maintenance flag has that id.
+
+        Raises:
+            LibraryError: The flag page does not parse.
+        """
+        ...
+
+    async def resolve_flag(self, flag_id: str, *, by: str, reason: str) -> None:
+        """Resolve a flag: write `status: resolved`, who resolved it and why, and keep every other field.
+
+        Args:
+            flag_id: The flag's page id.
+            by: Who resolved it. Must not be empty.
+            reason: Why. Must not be empty.
+
+        Raises:
+            ValueError: `by` or `reason` is empty. Nothing is written.
+            FlagUnknownError: No maintenance flag has that id. Nothing is written.
+            LibraryError: The flag page does not parse, or the write fails.
         """
         ...
 

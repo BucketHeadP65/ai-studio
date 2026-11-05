@@ -1,0 +1,182 @@
+{
+  "version": "1",
+  "slug": "workflows",
+  "purpose": "A store of workflow artifacts: procedures that have been run, checked, and kept. One page per versioned artifact, written as data through `engram ingest` (no vault compile) -- applicability prose in its own section so it is searchable, the executable spec carried in frontmatter as a document, trust earned rather than asserted. The store answers one question well: given this task, which stored procedure fits, and how far do we trust it?",
+  "slug_conventions": "One page per artifact, kebab-case, unversioned in the slug (`quarterly-report`, not `quarterly-report-v3`); the version lives in frontmatter and supersession links the lineage.",
+  "page_types": [
+    {
+      "id_prefix": "wf.",
+      "folder": "workflows",
+      "frontmatter_fields": [
+        {
+          "name": "workflow_version",
+          "type": "int",
+          "required": true
+        },
+        {
+          "name": "requires",
+          "type": "scalar-list"
+        },
+        {
+          "name": "composes",
+          "type": "link-list"
+        }
+      ],
+      "canonical_sections": [
+        "tl_dr",
+        "applicability",
+        "provenance",
+        "notes"
+      ],
+      "edge_fields": [
+        "composes"
+      ],
+      "claims_enabled": false,
+      "page_type": "workflow"
+    },
+    {
+      "id_prefix": "st.",
+      "folder": "steps",
+      "frontmatter_fields": [
+        {
+          "name": "step_version",
+          "type": "int",
+          "required": true
+        }
+      ],
+      "canonical_sections": [
+        "tl_dr",
+        "applicability"
+      ],
+      "claims_enabled": false,
+      "page_type": "step"
+    },
+    {
+      "page_type": "maintenance-flag",
+      "id_prefix": "mf.",
+      "folder": "flags",
+      "status_values": [
+        "open",
+        "resolved"
+      ],
+      "decision": {
+        "open": "open",
+        "outcomes": [
+          {
+            "status": "resolved"
+          }
+        ]
+      },
+      "frontmatter_fields": [
+        {
+          "name": "flag_kind",
+          "type": "scalar",
+          "required": true,
+          "choices": [
+            "diverged_copy",
+            "consumer_flag",
+            "live_trial_reverted",
+            "plan_rejected",
+            "repository_change"
+          ]
+        },
+        {
+          "name": "step",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "step_id",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "step_hash",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "workflow",
+          "type": "scalar"
+        },
+        {
+          "name": "raised_by",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "raised_at",
+          "type": "scalar",
+          "required": true
+        },
+        {
+          "name": "resolved_by",
+          "type": "scalar"
+        },
+        {
+          "name": "decision_reason",
+          "type": "scalar"
+        }
+      ],
+      "canonical_sections": [
+        "evidence",
+        "proposed_change"
+      ],
+      "claims_enabled": false
+    }
+  ],
+  "relations": [
+    {
+      "slug": "composes",
+      "domain": "workflow",
+      "range": "workflow",
+      "description": "This artifact invokes the target artifact as a sub-workflow -- the lineage of composition, not supersession."
+    }
+  ],
+  "facets": [
+    {
+      "key": "tasks",
+      "scope": [
+        "workflow"
+      ],
+      "seed": [
+        "reporting",
+        "research",
+        "review",
+        "migration",
+        "ingest"
+      ]
+    },
+    {
+      "key": "stages",
+      "scope": [
+        "workflow"
+      ],
+      "seed": [
+        "draft",
+        "attested",
+        "superseded"
+      ]
+    },
+    {
+      "key": "domains",
+      "scope": [
+        "workflow"
+      ],
+      "seed": [
+        "finance",
+        "knowledge",
+        "engineering",
+        "governance"
+      ]
+    }
+  ],
+  "sources": {
+    "enabled": false,
+    "quote_verify": false
+  },
+  "retrieval": {
+    "profile": "full",
+    "collection": "workflows"
+  }
+}

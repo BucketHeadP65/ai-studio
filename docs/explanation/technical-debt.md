@@ -232,3 +232,20 @@ TD-46 onward came from the close of the code standard refactor on
   row holds one `embedding` and its id is `<page-id>#<section-path>`, so the parts need rows of their own or a table of section
   part vectors, and search has to fold a part's hit back onto its section.
 - **Found:** 2026-09-30, in the review of the change that splits a raw mirror's long section within the embed budget.
+
+## TD-82. A section body loses everything between two double percent signs, fenced text included
+
+- **Where:** `engram/src/engram/kb/domain/parser.py`, `_strip_obsidian_comments` (its regex `_OBSIDIAN_INLINE_COMMENT_RE`
+  matches from one double percent sign to the next across lines), applied to every section body by `_section_body`.
+- **What is wrong:** the strip is blind to code fences and inline code. Text from one double percent sign to the next is
+  dropped from a section body wherever it sits, inside a fenced block too, so a page whose body quotes code or a template
+  holding two of them is stored without that span and with no report.
+- **Why it is debt:** a fence promises its text is kept as written, and the same parser keeps a heading or a `---` rule
+  inside a fence as text.
+- **Cost while it stands:** an authored page loses text silently. The workflow library's maintenance flags refuse evidence or
+  a proposed change holding two of them, so a writer must rewrite such text (a single `%`, or a space between the two signs),
+  and the diverged-copy diff writes each double percent sign with a space inside it, so its diff is not the step's text
+  byte for byte.
+- **Paying it off:** strip comments only outside fenced blocks and inline code, from the markdown-it tokens the parser already
+  builds, and keep the trailing whitespace strip apart from it.
+- **Found:** 2026-11-05, in the review of the change that writes maintenance flags into the library.
