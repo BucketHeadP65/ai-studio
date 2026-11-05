@@ -468,9 +468,10 @@ run is still going.
 
 **The spend record.** `FileSpendLog` (`features/running/infrastructure/spend_log.py`) keeps one JSONL file per run at
 `.state/runs/spend/<workflow_id>/<run_id>.jsonl`: a `RunSpendHeader` first line naming who ran what, for whom, and from
-when, then one `SpendRow` per model response a step produced, appended as the run goes. A turn that fails files the
-responses it produced too, whether it lost its model connection, was cut by a content filter or ran out of its
-budget, because each was billed. A turn the run's stop cancelled files none. Every read prices each row
+when, then one `SpendRow` per model response a step produced, appended as the run goes. A turn that does not settle
+files the responses it produced too, because each was billed: one that lost its model connection, was cut by a content
+filter or ran out of its budget, and one a pause, a stop or a harness boot cancelled. A turn resumed after a pause
+starts from the history the cancelled one left and files only the responses it adds. Every read prices each row
 through `response_cost`, so nothing on disk stores a price a catalog or pricing fix could not recompute on the next
 read. The fold is total: a torn row costs that one row, an unreadable file reads as nothing, and a header whose
 `started_at` will not parse belongs to no time window, so a damaged spend record degrades what a page shows rather

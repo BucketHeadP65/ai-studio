@@ -9,18 +9,23 @@ taken in reaches the next attempt. Every test drives one map item through `build
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+import pytest
+
 from core.ai.workflows.contracts import (
+    AgentStep,
     Briefing,
     FromNode,
     FromParameter,
     MapNode,
     Outcome,
     ParameterSpec,
+    RunNode,
     Shape,
     StepRegistry,
     Workflow,
@@ -30,6 +35,7 @@ from core.ai.workflows.contracts import (
 from pydantic_ai.exceptions import ContentFilterError, ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+from pydantic_core import to_jsonable_python
 
 from harness.composition import build_environment
 from harness.features.running.contracts import DroppedAttempt, StepConversation
@@ -270,6 +276,60 @@ async def test_a_turn_a_content_filter_ended_files_its_responses_in_the_spend_ro
     assert len(calls) == 2, "a content filter ends the turn at once"
     assert [row.step for row in ledger.rows] == ["digest"] * 2, "the answer refused as text, then the answer the filter cut"
     assert all(row.output_tokens > 0 for row in ledger.rows)
+
+
+WORKER = AgentStep(
+    name="digest",
+    agent={"instructions": "Read the item and answer with its title, exactly as the item gives it."},
+    inputs={"item": Shape(json_schema=ITEM_SCHEMA)},
+    output=Shape(json_schema=ITEM_SCHEMA),
+)
+WORKER_SPEC = Workflow(
+    name="digest-one",
+    version=1,
+    description="One worker step answers with the item's title.",
+    parameters={"item": ParameterSpec(description="the item", json_schema=ITEM_SCHEMA)},
+    inline=(WORKER,),
+    nodes=(RunNode(id="digest", work="digest", inputs={"item": FromParameter(parameter="item")}),),
+    output=FromNode(node="digest"),
+)
+
+
+async def test_a_turn_stopped_mid_answer_files_what_it_was_billed_and_its_resume_files_only_its_own(tmp_path: Path) -> None:
+    """A stop cancels the turn after one finished answer. The resumed turn starts from that history and files only its own."""
+    calls: list[list[ModelMessage]] = []
+    stopping = asyncio.Event()
+
+    async def stream(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
+        calls.append(list(messages))
+        if len(calls) == 1:
+            yield WORKING
+            return
+        if len(calls) == 2:
+            stopping.set()
+            await asyncio.Event().wait()
+        yield _answer(info)
+
+    active = _active_run()
+    ledger = FiledRows()
+    records = replace(records_under(tmp_path), spend=ledger)
+    environment = await _environment(FunctionModel(stream_function=stream), active, tmp_path, records)
+
+    running = asyncio.create_task(run_workflow(WORKER_SPEC, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=_no_wait))
+    await asyncio.wait_for(stopping.wait(), timeout=10)
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    assert [row.step for row in ledger.rows] == ["digest", "digest"], "the answer the turn finished, then the one the stop cut"
+    assert ledger.rows[0].output_tokens > 0, "the finished answer was billed, so it is filed"
+    stopped = len(ledger.rows)
+
+    result = await run_workflow(WORKER_SPEC, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=_no_wait)
+
+    assert to_jsonable_python(result) == {"title": "quantum computing"}
+    assert any(isinstance(part, TextPart) and part.content == WORKING for message in calls[2] for part in message.parts), "the resume starts from the stopped turn's history"
+    assert [row.step for row in ledger.rows[stopped:]] == ["digest"], "the resumed turn files only its own answer"
 
 
 def _asked(prompt: str) -> ModelRequest:

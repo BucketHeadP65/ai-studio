@@ -280,7 +280,7 @@ def _keeping_a_stopped_turn(
     steering: StepSteerDelivery,
     billed: Callable[[Sequence[ModelMessage]], None],
 ) -> Generator[None]:
-    """Write a failed or cut-off turn onto `line`, a broken attempt apart from its history with its steers put back, billing every failed one."""
+    """Write a failed or cut-off turn onto `line` and bill what it produced, a broken attempt apart from its history with its steers put back."""
     with capture_run_messages() as messages:
         try:
             yield
@@ -290,12 +290,9 @@ def _keeping_a_stopped_turn(
             line.steer_inbox[:0] = steering.delivered
             billed(added)
             raise
-        except Exception:
-            line.messages = list(messages)
-            billed(tuple(messages[_given_length(history) :]))
-            raise
         except BaseException:
             line.messages = list(messages)
+            billed(tuple(messages[_given_length(history) :]))
             raise
 
 
