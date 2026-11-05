@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 
@@ -150,6 +151,23 @@ async def test_a_step_carries_the_tools_recorded_for_its_request() -> None:
     assert first.parameters is not None
     assert [tool.name for tool in first.parameters.function_tools] == ["lookup_city"]
     assert second.parameters is None
+
+
+async def test_the_messages_an_earlier_run_of_the_conversation_recorded_first_are_named() -> None:
+    database = FakeDatabase([[RUN_ROW], STEP_ROWS, FIRST_STEP_PIECES, SECOND_STEP_PIECES, EVENT_ROWS, PARAMETER_ROWS, [{"ordinal": 0}]])
+
+    transcript = await RecordTranscriptLoader(database)("run-a")
+
+    assert transcript.from_earlier_runs == frozenset({0})
+    query, arguments = database.opened.executed[-1]
+    assert "first_run_id" in query
+    assert arguments == (UUID(CONVERSATION), [0, 1, 2, 3], "run-a")
+
+
+async def test_a_run_that_added_every_message_names_none_from_an_earlier_run() -> None:
+    transcript = await RecordTranscriptLoader(a_recorded_run())("run-a")
+
+    assert transcript.from_earlier_runs == frozenset()
 
 
 async def test_an_unknown_run_is_refused() -> None:

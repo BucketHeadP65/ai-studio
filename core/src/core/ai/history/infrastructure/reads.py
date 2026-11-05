@@ -24,6 +24,7 @@ from core.ai.history.infrastructure.queries import (
     SELECT_LATEST_COMPLETE_STEP,
     SELECT_LATEST_STEP,
     SELECT_LATEST_STEP_OF_CONVERSATION,
+    SELECT_ORDINALS_FIRST_RECORDED_ELSEWHERE,
     SELECT_RUN,
     SELECT_RUNS,
     SELECT_RUNS_ENDED_SINCE,
@@ -42,6 +43,7 @@ from core.ai.history.infrastructure.rows import (
     InstructionRow,
     MessageDigestsRow,
     MessagePiecesRow,
+    OrdinalRow,
     PositionRow,
     StepEntriesRow,
     StepMessagePieceRow,
@@ -257,6 +259,21 @@ async def step_parameters(connection: Connection, run_id: str) -> dict[int, dict
     """
     rows = await connection.fetch(SELECT_STEP_PARAMETERS, run_id)
     return {row.step_index: row.parameters for row in rows_as(StepParametersRow, rows)}
+
+
+async def ordinals_from_earlier_runs(connection: Connection, found: RunRow, ordinals: Sequence[int]) -> frozenset[int]:
+    """Read which of the run's messages an earlier run of its conversation recorded first.
+
+    Args:
+        connection: The connection the caller holds.
+        found: The run's row.
+        ordinals: The ordinals of the messages the run's steps hold.
+
+    Returns:
+        The ordinals among `ordinals` another run recorded first.
+    """
+    rows = await connection.fetch(SELECT_ORDINALS_FIRST_RECORDED_ELSEWHERE, found.conversation_id, list(ordinals), found.run_id)
+    return frozenset(row.ordinal for row in rows_as(OrdinalRow, rows))
 
 
 async def conversation_messages(connection: Connection, conversation_id: UUID) -> list[ModelMessage]:

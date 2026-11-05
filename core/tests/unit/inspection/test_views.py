@@ -57,7 +57,7 @@ from core.ai.inspection.views import (
     with_refusal,
 )
 from core.ai.transcripts.contracts import RunSummary, Span, Step, Transcript
-from tests.support.fakes.inspection import AT, answer, call, question, result, retried, transcript
+from tests.support.fakes.inspection import AT, answer, call, question, result, retried, transcript, two_turns
 
 if TYPE_CHECKING:
     from pydantic_ai.messages import ToolRetryCause
@@ -693,3 +693,36 @@ def test_read_marks_each_part_an_earlier_step_first_recorded_with_the_span_it_wa
         "1.3.0 [text] done",
     ]
     assert "first recorded at" not in read(given, 0), "a part read at the step that first recorded it carries no mark"
+
+
+def test_read_marks_each_part_an_earlier_run_of_the_conversation_recorded_first() -> None:
+    _first, second = two_turns()
+
+    lines = read(second, 0).splitlines()
+
+    assert lines[0] == "0.0.0 [user-prompt, from an earlier run] What is the weather in Paris?"
+    assert lines[2] == "0.2.0 [tool-return, asked for a change, from an earlier run] name must be a string"
+    assert lines[4] == "0.4.0 [user-prompt] And tomorrow?"
+
+
+def test_read_gives_a_part_an_earlier_run_recorded_both_marks_at_a_later_step() -> None:
+    _first, second = two_turns()
+    held = second.steps[0]
+    given = Transcript(
+        source="record:turn-2",
+        steps=(held, Step(messages=(*held.messages, answer("Try again later.")), ordinals=(*held.ordinals, len(held.ordinals)))),
+        from_earlier_runs=second.from_earlier_runs,
+    )
+
+    assert read(given, 1).splitlines()[0] == (
+        "1.0.0 [user-prompt, first recorded at 0.0.0, from an earlier run] What is the weather in Paris?"
+    )
+
+
+def test_the_outline_says_how_many_messages_came_from_earlier_runs() -> None:
+    first, second = two_turns()
+
+    assert outline(second).splitlines()[0] == (
+        "This run holds 4 messages from earlier runs of this conversation. A read marks their parts `from an earlier run`."
+    )
+    assert outline(first).splitlines()[0].startswith("step 0: ")

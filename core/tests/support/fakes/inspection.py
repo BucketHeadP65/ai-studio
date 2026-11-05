@@ -106,6 +106,24 @@ def transcript(*messages: ModelMessage, source: str = "test:run", durations_ms: 
     )
 
 
+def two_turns() -> tuple[Transcript, Transcript]:
+    """Two runs of one conversation, each with a refused call: the second holds the first turn again, then its own turn."""
+    first_turn = (question(), call("c1"), retried("c1", cause="model_retry"), answer("I could not look it up."))
+    second_turn = (
+        question("And tomorrow?"),
+        call("c2", args={"name": "Paris", "day": "tomorrow"}),
+        retried("c2", cause="model_retry"),
+        answer("I could not look that up either."),
+    )
+    held = (*first_turn, *second_turn)
+    second = Transcript(
+        source="record:turn-2",
+        steps=(Step(messages=held, ordinals=tuple(range(len(held)))),),
+        from_earlier_runs=frozenset(range(len(first_turn))),
+    )
+    return transcript(*first_turn, source="record:turn-1"), second
+
+
 class Opens:
     """A loader that answers with the transcripts it was given, by locator."""
 
@@ -123,7 +141,11 @@ class Opens:
 
 
 async def leads_of(rule: Evaluator[str, Inspected, None], given: Transcript) -> list[Lead]:
-    """Run one rule over one transcript the way an inspection does, holding every lead to its symptom's part kind."""
+    """Run one rule over one transcript the way an inspection does, holding each lead's first span to its symptom's part kind.
+
+    A lead's first span is the part the symptom shows in. A later span may point at what made it one, such as the compaction
+    after an oversized return.
+    """
 
     async def load(source: str) -> Inspected:
         return Inspected(transcript=given)
@@ -135,9 +157,9 @@ async def leads_of(rule: Evaluator[str, Inspected, None], given: Transcript) -> 
     assert case.output is not None
     for found in case.output.leads:
         shows_in = TAXONOMY.symptom(found.symptom).shows_in
-        for span in found.spans:
-            kind = given.part_at(span).part_kind
-            assert kind == shows_in, f"{found.found_by} led at {span} on a {kind} part, but {found.symptom} shows in a {shows_in}"
+        span = found.spans[0]
+        kind = given.part_at(span).part_kind
+        assert kind == shows_in, f"{found.found_by} led at {span} on a {kind} part, but {found.symptom} shows in a {shows_in}"
     return case.output.leads
 
 

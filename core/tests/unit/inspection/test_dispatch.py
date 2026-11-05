@@ -11,7 +11,7 @@ from core.ai.inspection.domain.watches import Watch
 from core.ai.inspection.lanes import INSPECT_RUN_KIND, INSPECTOR_AGENT_NAME, JobLanes
 from core.ai.inspection.sweep import Sweep
 from core.cqrs.contracts import MemoryJobs
-from tests.support.fakes.inspection import FakeCursors, FakeRecordEvents
+from tests.support.fakes.inspection import FakeCursors, FakeLeadsAndFindings, FakeRecordEvents
 
 AT = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 CONVERSATION = UUID("00000000-0000-0000-0000-000000000001")
@@ -83,7 +83,7 @@ async def test_a_terminal_commit_behind_the_dispatch_cursor_is_reconciled_for_a_
     events.events.append(event(8, "run_completed", run_id="late"))
 
     assert (await Dispatch(watches=(EVERY_RUN,), events=events, cursors=cursors, lanes=lanes).tick()).read == 0
-    await Sweep(watches=(EVERY_RUN,), events=events, lanes=lanes, clock=lambda: AT).tick()
+    await Sweep(watches=(EVERY_RUN,), events=events, lanes=lanes, leads=FakeLeadsAndFindings(), clock=lambda: AT).tick()
 
     late = [job for job in jobs.jobs.values() if job.key == "every-run:record:late"]
     assert len(late) == 1

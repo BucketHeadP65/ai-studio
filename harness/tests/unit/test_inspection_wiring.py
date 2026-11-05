@@ -128,13 +128,14 @@ def test_the_dispatch_and_the_sweep_read_the_same_events_and_fill_the_same_lane(
     lanes = job_lanes(MemoryJobs())
 
     built_dispatch = dispatch(settings, events, store, lanes)
-    built_sweep = sweep(settings, events, lanes)
+    built_sweep = sweep(settings, events, store, lanes)
 
     assert isinstance(built_dispatch, Dispatch)
     assert built_dispatch.batch == 50
     assert built_dispatch.cursors is store
     assert isinstance(built_sweep, Sweep)
     assert built_sweep.lanes is lanes
+    assert built_sweep.leads is store
     assert built_sweep.watches == WATCHES
 
 

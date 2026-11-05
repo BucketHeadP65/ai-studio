@@ -9,7 +9,7 @@ from core.cqrs.contracts import MemoryJobs
 
 from harness.features.inspection.domain import Issued
 from harness.features.inspection.service import issue_for_run, issue_since
-from tests.support.fakes.inspection import FakeRecordEvents
+from tests.support.fakes.inspection import FakeInspectionStore, FakeRecordEvents
 
 T0 = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 WATCHES = (Watch(name="every-run", rules=("duplicate_call",)), Watch(name="agent-b", agent="agent-b", rules=("duplicate_call",)))
@@ -52,8 +52,8 @@ async def test_a_window_runs_every_watch_over_it() -> None:
         ]
     )
     lanes = JobLanes(MemoryJobs())
-    sweep = Sweep(watches=WATCHES, events=events, lanes=lanes, clock=lambda: T0)
+    sweep = Sweep(watches=WATCHES, events=events, lanes=lanes, leads=FakeInspectionStore(), clock=lambda: T0)
 
     passes = await issue_since(24, sweep=sweep)
 
-    assert [(name, passed.considered, passed.enqueued) for name, passed in passes] == [("every-run", 1, 1), ("agent-b", 1, 1)]
+    assert [(name, passed.considered, passed.enqueued, passed.retried) for name, passed in passes] == [("every-run", 1, 1, 0), ("agent-b", 1, 1, 0)]

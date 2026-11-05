@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from core.ai.history.contracts import EventAtPositionRow
     from core.ai.inspection.domain.leads import Lead
     from core.ai.inspection.domain.taxonomy import Finding
+    from core.ai.inspection.lanes import AttributionRetry
     from core.ai.inspection.read_models import AttemptResolution, QuestionType, StoredFinding, StoredLead, StoredQuestion
     from core.ai.workflows.contracts import Tier
     from core.cqrs.contracts import Enqueued
@@ -282,8 +283,45 @@ class InspectRuns(Protocol):
         ...
 
 
+class LeadQueries(Protocol):
+    """The leads one run left and which of them a finding or a dismissal settled, as the sweep reads them."""
+
+    async def leads_of(self, source: str) -> list[StoredLead]:
+        """Every lead seen in `source`, oldest first.
+
+        Args:
+            source: The transcript source.
+
+        Returns:
+            The leads.
+        """
+        ...
+
+    async def settled(self, lead_ids: Sequence[int]) -> set[int]:
+        """The ids among these that have a finding or an explicit dismissal.
+
+        Args:
+            lead_ids: The lead ids to check.
+
+        Returns:
+            The settled ids.
+        """
+        ...
+
+
 class SweptLanes(InspectRuns, Protocol):
-    """The rules lane, as the sweep fills it and asks it."""
+    """The rules lane and the inspector's lane, as the sweep fills them and asks them."""
+
+    async def retry_abandoned_attribution(self, lead_id: int) -> AttributionRetry:
+        """Issue `AttributeLead` again when the lead's newest attribution job was abandoned, at most once per lead.
+
+        Args:
+            lead_id: The lead id.
+
+        Returns:
+            `issued` when a new job was issued, `left` when the retries are spent, `not_abandoned` otherwise.
+        """
+        ...
 
     async def inspected(self, watch: str, source: str, *, terminal_event: int | None = None) -> bool:
         """Whether a successful command under this watch processed the requested terminal event.

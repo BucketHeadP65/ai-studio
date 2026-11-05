@@ -45,8 +45,9 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
   step entries), its Postgres store over asyncpg, the request-parameters recorder and the DDL it ships, the per-step
   usage tap (`StepUsageTap`) and `recording_capabilities`
 - `core.ai.transcripts`: a conversation as a detector reads it (`Transcript`, `Step`, `Span`, `Call`), the loader registry by
-  source scheme, and the two loaders: the record (`record:<run id>`) and a Claude Code session file (`claude-code:<id>`),
-  plus `RunsOfConversation`, the port for a conversation's earlier runs, and the record's adapter behind it
+  source scheme, and the two loaders: the record (`record:<run id>`, which also names the messages an earlier run of the
+  conversation recorded first) and a Claude Code session file (`claude-code:<id>`), plus `RunsOfConversation`, the port
+  for a conversation's earlier runs, and the record's adapter behind it
 - `core.ai.inspection`: the taxonomy of symptoms, root causes and surfaces with the horizon each symptom is read at, the
   rules (pydantic-evals evaluators that turn a transcript into leads), the views the inspector reads, the inspector
   (a model with four reading tools that attributes a lead and scans a whole run), watches, the leads and findings store

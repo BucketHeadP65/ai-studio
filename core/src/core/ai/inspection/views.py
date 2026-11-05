@@ -81,6 +81,8 @@ _RETRIED_UNKNOWN: Final = "asked again"
 """How a retried return reads when it does not say why."""
 _WITHDRAWN: Final = "This instruction was withdrawn."
 """How an instruction change that withdraws its block reads."""
+_FROM_EARLIER_RUN: Final = "from an earlier run"
+"""The mark a read gives a part an earlier run of the conversation recorded first."""
 
 
 def text_of(part: ModelRequestPart | ModelResponsePart) -> str:
@@ -371,6 +373,8 @@ def outline_steps(transcript: Transcript) -> list[StepOutline]:
 def outline(transcript: Transcript, *, offset: int = 0) -> str:
     """One bounded page of the run's outline, with a next call when more steps or events remain.
 
+    A run that holds messages from earlier runs of its conversation opens with a line saying how many.
+
     Args:
         transcript: The run to outline.
         offset: The character the page starts at.
@@ -381,8 +385,13 @@ def outline(transcript: Transcript, *, offset: int = 0) -> str:
     Raises:
         ValueError: when offset is outside the outline.
     """
-    body = "\n".join(f"step {line.step}: {', '.join(line.pieces) or '(nothing new)'}" for line in outline_steps(transcript))
-    return _page(body, offset, EVIDENCE_CHARS, f"outline(run={transcript.source!r}, offset={offset + EVIDENCE_CHARS})")
+    lines = [f"step {line.step}: {', '.join(line.pieces) or '(nothing new)'}" for line in outline_steps(transcript)]
+    earlier = sum(1 for span, _ in transcript.recorded() if transcript.is_from_earlier_run(span))
+    if earlier:
+        lines.insert(
+            0, f"This run holds {earlier} messages from earlier runs of this conversation. A read marks their parts `{_FROM_EARLIER_RUN}`."
+        )
+    return _page("\n".join(lines), offset, EVIDENCE_CHARS, f"outline(run={transcript.source!r}, offset={offset + EVIDENCE_CHARS})")
 
 
 def step_at(transcript: Transcript, step: int) -> Turn:
@@ -461,7 +470,7 @@ def _read_call(arguments: str, offset: int, source: str) -> str:
 
 
 def _read_content(transcript: Transcript, index: int, start: int, end: int, resource: ReadResource) -> str:
-    """The complete selected content, before paging, with stable coordinates and the first span of every part an earlier step recorded."""
+    """The complete selected content, before paging, with stable coordinates and the marks of parts recorded before this step or run."""
     step = transcript.steps[index]
     if resource == "tools":
         if step.parameters is None:
@@ -479,9 +488,12 @@ def _read_content(transcript: Transcript, index: int, start: int, end: int, reso
                 elif isinstance(part, InstructionDeltaPart):
                     lines.append(f"{index}.{message_index}.{part_index} [instruction-delta {part.id}] {text_of(part)}")
         else:
-            first = transcript.first_recorded(Span(step=index, message=message_index, part=0))
+            at = Span(step=index, message=message_index, part=0)
+            first = transcript.first_recorded(at)
+            earlier = _earlier_run_mark(transcript, at)
             lines.extend(
-                f"{index}.{message_index}.{part_index} [{kind_of(part)}{_first_recorded_mark(first, index, part_index)}] {text_of(part)}"
+                f"{index}.{message_index}.{part_index} "
+                f"[{kind_of(part)}{_first_recorded_mark(first, index, part_index)}{earlier}] {text_of(part)}"
                 for part_index, part in enumerate(message.parts)
             )
     empty = (
@@ -495,6 +507,11 @@ def _read_content(transcript: Transcript, index: int, start: int, end: int, reso
 def _first_recorded_mark(first: Span, step: int, part: int) -> str:
     """Where an earlier step first recorded a part read at `step`, as its kind's suffix, or nothing when `step` recorded it first."""
     return "" if first.step == step else f", first recorded at {first.step}.{first.message}.{part}"
+
+
+def _earlier_run_mark(transcript: Transcript, at: Span) -> str:
+    """The kind's suffix of a message an earlier run of the conversation recorded first, or nothing for one this run added."""
+    return f", {_FROM_EARLIER_RUN}" if transcript.is_from_earlier_run(at) else ""
 
 
 def _tool_sections(parameters: ModelRequestParameters) -> Iterator[tuple[str, str]]:

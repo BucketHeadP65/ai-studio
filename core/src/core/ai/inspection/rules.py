@@ -221,13 +221,17 @@ class DuplicateCall(Evaluator[str, Inspected, None]):
 
 @dataclass
 class ResultOverflowedContext(Evaluator[str, Inspected, None]):
-    """A return over the cap, followed by a compaction or by a step that holds less than the one before."""
+    """A return over the cap, followed by a compaction or by a step that holds less than the one before.
+
+    The lead cites the return, then whichever came first: the compaction part, or the first message the first shrunk step
+    added. A run read again after more steps cites the same spans.
+    """
 
     cap_chars: int | None = None
     """The return size in characters past which a return is oversized. None keeps the rule silent."""
 
     def evaluate(self, ctx: InspectionContext) -> dict[str, int]:
-        """One lead per oversized return followed by a compaction or a step that shrank.
+        """One lead per oversized return followed by a compaction or a step that shrank, at the return and where it shrank.
 
         Args:
             ctx: The rule's context, whose output receives the leads.
@@ -239,7 +243,7 @@ class ResultOverflowedContext(Evaluator[str, Inspected, None]):
         if self.cap_chars is None:
             return {RESULT_OVERFLOWED_CONTEXT.name: 0}
         hits = [
-            (call.answered_at,)
+            (call.answered_at, *_where_it_shrank(transcript, call.answered_at))
             for call in transcript.calls()
             if call.answered_at is not None
             and call.answer is not None
@@ -286,6 +290,27 @@ def _last_response(messages: Sequence[ModelMessage]) -> tuple[int, ModelResponse
 
 def _compaction_after(transcript: Transcript, span: Span) -> bool:
     return any(isinstance(part, CompactionPart) for at, message in transcript.recorded() for part in message.parts if _before(span, at))
+
+
+def _where_it_shrank(transcript: Transcript, span: Span) -> tuple[Span, ...]:
+    """Where the history first shrank after `span`: an earlier compaction part, else the first shrunk step's first new message."""
+    compaction = next(
+        (
+            Span(step=at.step, message=at.message, part=index)
+            for at, message in transcript.recorded()
+            for index, part in enumerate(message.parts)
+            if isinstance(part, CompactionPart) and _before(span, Span(step=at.step, message=at.message, part=index))
+        ),
+        None,
+    )
+    steps = transcript.steps
+    shrunk = next(
+        (index for index in range(span.step + 1, len(steps)) if len(steps[index].messages) < len(steps[index - 1].messages)), None
+    )
+    if shrunk is None or (compaction is not None and compaction.step < shrunk):
+        return () if compaction is None else (compaction,)
+    added = next((at for at, _ in transcript.recorded() if at.step == shrunk), None)
+    return () if added is None else (added,)
 
 
 def _a_step_shrank(transcript: Transcript, span: Span) -> bool:

@@ -39,6 +39,8 @@ Five independent background loops serve scheduling and dispatch, reconciliation,
 
 `InspectRun` and `ScanRun` carry an optional positive `terminal_event` identifying the completed transcript they must process. Existing persisted payloads without this field still load. A successful earlier inspection is not proof that the final transcript was inspected. A final scan coalesced behind an earlier scan remains retryable.
 
+A chat session records one run per turn, and each later run holds every earlier turn again in its first step. Each event is filed once, by the run that added it. The record's loader names the messages an earlier run of the conversation recorded first (the record keeps the run that first recorded each message). A lead whose spans all point at such messages is that earlier run's event, so neither lane stores it and it does not count as a lead that asks for a scan. A lead that cites at least one part the run added is stored, even when its other spans point at earlier turns. The handler's one-line report ends with how many leads came from earlier runs. Two failures in an earlier turn are therefore not repaired by a later turn. An abandoned `inspect_run` (or a turn that predates the watch) means that turn's events were never filed, and no later turn files them. An abandoned `attribute_lead` means the lead exists without a finding: the sweep asks about it once more (below). The result-overflow rule cites the oversized return and then whichever came first, the compaction part or the first message of the first step that shrank, so a turn that compacts an earlier turn's return files that lead, and a run read again after more steps cites the same spans.
+
 `every_run` scans text-only runs too. `when_a_rule_led` scans runs with leads and a deterministic sample of runs without leads. The selection hashes the watch and source, so retries do not resample. `never` runs only the declared rules. A failed job retries under its policy and becomes visibly abandoned after its attempts run out.
 
 ## The dispatch and the sweep
@@ -48,6 +50,8 @@ Dispatch advances `inspection.dispatch` through the record's events: `model_requ
 Event positions are assigned before commit. Reconciliation therefore covers live watches as well as explicit sweep watches. Each pass freezes an upper event position and pages through terminal events within the watch's time window. The next pass starts its window scan again, so a late commit behind an earlier cursor is still eligible. Keyset pagination prevents a 1,000-row read limit from starving later runs.
 
 A run is current only when its successful final rules command matches its terminal marker and any matching final scan is complete. Pending, failed or abandoned final scans are not mistaken for completed inspection. An explicitly undecided scan is a completed attempt with an unresolved verdict, not a clean run, and is not resubmitted forever.
+
+In a run already current, the sweep looks at each lead still `open` (no finding, no dismissal, no recorded attempt) under the watch. When the lead's newest `attribute_lead` job is abandoned and it is the lead's only abandoned one, the sweep issues `AttributeLead` once more. A lead whose retry is abandoned too is left open and logged once as a warning by each running harness, so a stuck lead never loops. A lead whose attempt ended `undecided` or `invalid` is not asked again.
 
 The separate reconciliation loop uses `sweep_seconds`. Live watches use `reconcile_hours`. Explicit sweep watches retain `sweep_hours`. These windows bound automatic recovery. The CLI can request a larger historical window.
 
@@ -85,7 +89,20 @@ The symptom's horizon chooses the initial view: `moment`, `run`, or `conversatio
 
 Every truncation names the next call and offset. The instructions resource includes `ModelRequest.instructions` as well as system-prompt parts and instruction changes (`instruction-delta` parts). The tools resource includes recorded function and output tool definitions, JSON schemas and other recorded request output/native-tool metadata. Missing recordings are marked unknown rather than interpreted as missing instructions or capabilities.
 
-Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. Both sets of inspector instructions say what that mark means.
+Each step's history shows every message before it again. A `messages` read marks a part an earlier step first recorded with the span it was first recorded at, as `[tool-call, first recorded at 2.5.1]`, so the same call shown at a later step never reads as a new one. A part an earlier run of the conversation recorded first is marked `[tool-call, from an earlier run]`, and the outline of such a run opens with how many of its messages came from earlier runs. Both sets of inspector instructions say what each mark means, and the scan names only symptoms that cite at least one part its run added.
+
+Before blaming `tool_description`, `tool_schema`, `instructions_say_nothing` or `instructions_say_wrong`, both sets of instructions have the inspector read what the agent was given for that call, and blame the surface that should have given a missing or wrong fact: `instructions_say_nothing` or `instructions_say_wrong` on the skill or on the `system_prompt`, or the root cause `user_prompt`, on the skill or the `system_prompt`, when the symptom lists it. What it reads, and where:
+
+| What the agent was given | Where the inspector reads it |
+|---|---|
+| The prompt | `read(step)`, the `user-prompt` part. |
+| The run's arguments | Only as text the prompt states (the orchestrator's gate prompt names them). The record keeps no separate copy, so the inspector cannot read them on their own. |
+| Instructions and system prompts | `read(step, resource="instructions")`. |
+| Loaded skills | `read(step, resource="instructions")` as an `instruction-delta` for `capability:<skill name>`. When no such `instruction-delta` is recorded, the skill's text is in the `load_capability` tool return, read with `read(step)`. |
+| Tool definitions | `read(step, resource="tools")`. |
+| Skills it could have loaded | `read(step, resource="tools")`, the `deferred_capability_ids` list. |
+
+`find(text)` searches all of these.
 
 Part citations use `step.message.part`. Tool schemas and instruction resources are read as recorded metadata rather than invented message positions. A requested other run must belong to the same conversation. Reading does not run a counterfactual experiment or test a stronger model.
 
@@ -131,7 +148,7 @@ The SPA draws a findings list at `/inspection`, one finding with evidence and th
 `uv run harness inspect --run <id>` issues `InspectRun` under every watch that selects that run, whatever its `when`,
 and prints one line per watch: `queued  inspect_run <job id>  watch <name>` or `already live  inspect_run <job id>
 watch <name>`. `uv run harness inspect --since <hours>` runs the sweep's window for every watch over the last `<hours>` and
-prints, per watch, `watch <name>: <considered> run(s) in the last <hours>h, <enqueued> queued`. Both commands only
+prints, per watch, `watch <name>: <considered> run(s) in the last <hours>h, <enqueued> queued, <retried> abandoned attribution(s) asked again`. Both commands only
 enqueue. The running harness's worker serves the jobs.
 
 SQL against the sessions database:

@@ -460,3 +460,45 @@ def test_both_sets_of_instructions_say_what_a_first_recorded_mark_means() -> Non
 
     assert sentence in INSPECTOR_INSTRUCTIONS
     assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_both_sets_of_instructions_say_what_an_earlier_run_mark_means() -> None:
+    sentence = (
+        "A part marked `from an earlier run` is a message an earlier run of this conversation recorded, shown again "
+        "because each turn's run holds the turns before it."
+    )
+
+    assert sentence in INSPECTOR_INSTRUCTIONS
+    assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_a_scan_names_only_symptoms_that_cite_a_part_its_run_added() -> None:
+    sentence = (
+        "Name only symptoms that cite at least one part this run added, because a symptom of an earlier run belongs to that "
+        "run's own inspection."
+    )
+
+    assert sentence in SCAN_INSTRUCTIONS
+
+
+def test_both_sets_of_instructions_read_what_the_agent_was_given_before_blaming_a_tool() -> None:
+    for instructions in (INSPECTOR_INSTRUCTIONS, SCAN_INSTRUCTIONS):
+        assert (
+            "Before blaming tool_description, tool_schema, instructions_say_nothing or instructions_say_wrong, read what the agent "
+            "was given for that call"
+        ) in instructions
+        assert "read(step=N, resource='instructions')" in instructions
+        assert "the complete tool definitions through read(step=N, resource='tools')" in instructions
+        assert (
+            "`capability:<skill name>`, or, when no such instruction-delta is recorded, in the load_capability tool return, "
+            "read through read(step=N)."
+        ) in instructions
+        assert "in an older run" not in instructions
+        assert "instructions_say_nothing or instructions_say_wrong on that skill" in instructions
+        assert "or the root cause user_prompt, on the skill or the system_prompt, when the symptom lists it" in instructions
+        assert "Blame tool_description or tool_schema only for what the tool's own definition should have said." in instructions
+
+
+def test_neither_set_of_instructions_says_twice_to_read_the_instructions_and_tools_first() -> None:
+    assert "Read recorded instructions before assessing instructions" not in INSPECTOR_INSTRUCTIONS
+    assert "the recorded instructions before assessing instructions" not in SCAN_INSTRUCTIONS

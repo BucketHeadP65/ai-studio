@@ -179,6 +179,12 @@ SELECT_STEP_MESSAGES: Final[LiteralString] = """
 
 SELECT_INSTRUCTIONS: Final[LiteralString] = "SELECT digest, text FROM instructions WHERE digest = ANY($1::text[])"
 
+SELECT_ORDINALS_FIRST_RECORDED_ELSEWHERE: Final[LiteralString] = """
+    SELECT ordinal FROM messages
+    WHERE conversation_id = $1 AND ordinal = ANY($2::integer[]) AND first_run_id <> $3
+    ORDER BY ordinal
+"""
+
 DELETE_CONVERSATION_RUNS: Final[LiteralString] = "DELETE FROM runs WHERE conversation_id = $1"
 
 DELETE_CONVERSATION_MESSAGES: Final[LiteralString] = "DELETE FROM messages WHERE conversation_id = $1"
