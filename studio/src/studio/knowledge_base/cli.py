@@ -297,11 +297,11 @@ def _print_scan_report(report: ScanReport) -> None:
 
 
 def _print_watch_list_rows(plan: _WatchListPlan) -> None:
-    """Echo the watch-list rows a real sync would scan, each as its scanner and ref, marking a row no built scanner serves."""
+    """Echo the watch-list rows a real sync would scan, each as its scanner and its ref without URL secrets, marking an unserved row."""
     typer.echo(f"Would scan the watch list (dry run): {len(plan.rows)}")
     for row in plan.rows:
         unserved = "" if row.scanner in plan.served_scanners else " (no scanner)"
-        typer.echo(f"  {row.scanner} {row.ref}{unserved}")
+        typer.echo(f"  {row.scanner} {without_url_secrets(row.ref)}{unserved}")
 
 
 def _print_sync_report(report: SyncReport) -> None:

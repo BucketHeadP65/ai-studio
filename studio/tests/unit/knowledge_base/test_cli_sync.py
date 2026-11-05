@@ -357,6 +357,19 @@ class TestWatchListOnDryRun:
         assert (root / WATCH_LIST_PATH).read_text(encoding="utf-8") == watch_list_text
         assert not (root / "_meta" / "source-queue.yaml").exists()
 
+    def test_a_dry_run_lists_a_row_without_the_secrets_its_url_carries(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        container = self._container(root, FakeScanner())
+        WatchListFile(root / WATCH_LIST_PATH).add("xml", "https://user:pw@feeds.example.org/me.atom?token=s3cr3t&page=2")
+
+        result = runner.invoke(app, ["sync", "--dry-run"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert "  xml https://feeds.example.org/me.atom?token=***&page=2\n" in result.stdout
+        assert "s3cr3t" not in result.stdout
+        assert "pw@" not in result.stdout
+
     def test_a_real_sync_scans_each_row(self) -> None:
         root = Path.cwd()
         (root / "_meta").mkdir(exist_ok=True)
@@ -379,7 +392,7 @@ class TestWatchListOnDryRun:
         result = runner.invoke(app, ["sync"], obj=lambda: container)
 
         assert result.exit_code == 0, result.stdout
-        assert "  FAILED xml:https://feeds.example.org/me.atom: 503" in result.stdout
+        assert "  FAILED xml:https://feeds.example.org/me.atom?token=***: 503" in result.stdout
         assert "s3cr3t" not in result.stdout
         assert "pw@" not in result.stdout
 

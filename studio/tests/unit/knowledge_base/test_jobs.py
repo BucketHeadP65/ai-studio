@@ -525,9 +525,31 @@ class TestScanFailures:
         await HarnessRefreshForward("http://harness.test", transport=httpx.MockTransport(answer))(completed)
 
         result = RefreshResult.model_validate_json(returned)
-        assert result.scan_failures == (ScanFailure(entry="xml:https://feeds.example.org/me.atom", reason=reason),)
-        assert result.counts.requested_by_entry == {"xml:https://feeds.example.org/news.atom": 2}
+        assert result.scan_failures == (ScanFailure(entry="xml:https://feeds.example.org/me.atom?token=***", reason=reason),)
+        assert result.counts.requested_by_entry == {"xml:https://feeds.example.org/news.atom?token=***": 2}
         (request,) = posted
         for carrier in (returned, completed.model_dump_json(), caplog.text, request.content.decode()):
             assert "pw@" not in carrier
             assert "s3cr3t" not in carrier
+
+    async def test_two_channel_feeds_stay_apart_and_a_secret_parameter_is_masked(self, tmp_path: Path):
+        knowledge_base_path = _youtube_knowledge_base(tmp_path / "tube", "tube")
+        (knowledge_base_path / "_meta" / "watch-list.yaml").write_text("[]", encoding="utf-8")
+        settings_path = _register(tmp_path, "tube", knowledge_base_path)
+        channel = "xml:https://www.youtube.com/feeds/videos.xml?channel_id="
+        keyed = "xml:https://feeds.example.org/a.atom;jsessionid=s3ss?api_key=k3y&page=2"
+        report = ScanReport(
+            failed=((f"{channel}UC1", "503"), (f"{channel}UC2", "503"), (keyed, "401")),
+            requested_by_entry={f"{channel}UC3": 1, f"{channel}UC4": 2},
+        )
+        container = FakeRunContainer(bus=FakeMessageBus(scan_report=report))
+
+        returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+
+        result = RefreshResult.model_validate_json(returned)
+        assert [failure.entry for failure in result.scan_failures] == [
+            f"{channel}UC1",
+            f"{channel}UC2",
+            "xml:https://feeds.example.org/a.atom;jsessionid=***?api_key=***&page=2",
+        ]
+        assert result.counts.requested_by_entry == {f"{channel}UC3": 1, f"{channel}UC4": 2}

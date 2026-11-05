@@ -100,7 +100,7 @@ class ScanFailure(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entry: str
-    """The entry's label, `<scanner>:<ref>`, with no user part, query or fragment on a URL in it."""
+    """The entry's label, `<scanner>:<ref>`, with a URL's user part dropped and its secret-named parameter values masked."""
     reason: str
     """One line saying why the scan failed, as the scan recorded it."""
 
