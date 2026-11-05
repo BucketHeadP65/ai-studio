@@ -149,8 +149,12 @@ V2_INSTRUCTIONS = "Read the whole source and write one digest page that quotes e
 async def test_saving_the_newest_version_again_links_forward_a_lower_version_a_failed_link_left_live() -> None:
     store = FakeCollection()
     await _save(_library(store), _digest(), 1)
-    with pytest.warns(SupersessionIncompleteWarning):
+    with pytest.warns(SupersessionIncompleteWarning) as warned:
         await _save(_failing_links(store), _digest(V2_INSTRUCTIONS), 2)
+    assert str(warned[0].message) == (
+        "stored 'st.digest.v2', but could not link 'st.digest.v1' forward to it (connection reset). "
+        "Both versions will be offered until 'st.digest.v1' is linked forward. Saving it again writes the link."
+    )
     assert store.pages["st.digest.v1"]["superseded"] is False, "the failed link left v1 live beside v2"
     store.events.clear()
     written_so_far = len(store.payloads)

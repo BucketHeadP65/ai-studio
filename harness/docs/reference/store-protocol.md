@@ -603,9 +603,11 @@ this adapter reimplementing supersession. The child is written first because
 
 The two writes are not equal and are not treated as one: the child's write *is* the save,
 the link is bookkeeping. A bookkeeping failure raises a `SupersessionIncompleteWarning` warning
-and still returns the child's id, because losing the link degrades retrieval (both versions
-stay on the library until somebody re-saves) while losing the child loses the work. Both
-writes are upserts, so saving again redoes them.
+and still returns the child's id, because losing the link degrades retrieval while losing the
+child loses the work. Both versions are offered until the older one is linked forward. Saving
+the new version again writes the link, for a workflow and for a reusable step alike: a reusable
+step's equal re-save writes nothing else, and it links only when it is the newest live version
+of its name.
 
 `touched` may only widen. `moved_nodes(parent, child)` re-derives what actually differs, comparing each node's wiring **and** the step definition it binds to, because a workflow
 that brings its own steps can be changed completely by rewriting `tasks[x].instructions`

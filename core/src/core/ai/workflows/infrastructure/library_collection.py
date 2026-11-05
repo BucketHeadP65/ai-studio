@@ -57,7 +57,8 @@ _VERSIONED_STEP_ID = re.compile(rf"^{re.escape(STEP_ID_PREFIX)}(?P<name>[a-z][a-
 class SupersessionIncompleteWarning(UserWarning):
     """The new version was saved, but the link that retires an older version was not written.
 
-    Saving the new version again writes the missing link. Until then the library offers both versions.
+    The library offers both versions until the older one is linked forward. Saving the new version again writes the link,
+    for a workflow and for a reusable step alike.
     """
 
 
@@ -898,7 +899,7 @@ class LibraryCollection:
         except Exception as exc:
             warnings.warn(
                 f"stored {by!r}, but could not link {parent_id!r} forward to it ({exc}). "
-                f"Both versions will be offered until this is saved again.",
+                f"Both versions will be offered until {parent_id!r} is linked forward. Saving it again writes the link.",
                 SupersessionIncompleteWarning,
                 stacklevel=3,
             )
