@@ -93,7 +93,7 @@ async def test_the_same_refresh_run_reported_twice_arms_nothing_and_tells_nobody
     fired = await schedules.get(waiting.id)
     assert fired is not None
     await schedules.stamp(
-        waiting.id, last_run_at=fired.created_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=()
+        waiting.id, last_run_at=fired.created_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=()
     )
     again = _body(await controller.report_refresh_run(report, notifier))
 

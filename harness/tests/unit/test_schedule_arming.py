@@ -71,7 +71,7 @@ async def test_an_event_already_recorded_arms_nothing() -> None:
     event_id = uuid4()
 
     first = await schedules.arm([resting.id], at=T0, event_id=event_id)
-    await schedules.stamp(resting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=())
+    await schedules.stamp(resting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
     second = await schedules.arm([resting.id], at=T0 + timedelta(minutes=1), event_id=event_id)
 
     assert first.schedule_ids == (resting.id,)
@@ -115,7 +115,7 @@ async def test_the_fake_stamp_removes_only_the_page_ids_it_passed() -> None:
     waiting = _schedule(cadence="on index notes", next_run_at=T0, pending_page_ids=("a", "b", "c"))
     await schedules.insert(waiting)
 
-    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     stored = await schedules.get(waiting.id)
     assert stored is not None
@@ -129,7 +129,7 @@ async def test_the_fake_stamp_keeps_the_fire_an_index_set_while_ids_remain_pendi
     armed_fire = T0 + timedelta(minutes=30)
     await schedules.arm_with_pages({waiting.id: armed_fire}, event_id=uuid4(), page_ids=["c"])
 
-    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     stored = await schedules.get(waiting.id)
     assert stored is not None
@@ -141,7 +141,7 @@ async def test_the_fake_stamp_that_passed_no_pages_applies_its_next_fire() -> No
     waiting = _schedule(cadence="on index notes", next_run_at=T0, pending_page_ids=("a",))
     await schedules.insert(waiting)
 
-    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=())
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
 
     stored = await schedules.get(waiting.id)
     assert stored is not None
@@ -235,7 +235,7 @@ async def test_an_index_already_recorded_arms_nothing() -> None:
     event_id = uuid4()
 
     await scheduler.arm_after_index(event_id=event_id, knowledge_base="docs", page_ids=["note.a"], now=T0)
-    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["note.a"])
+    await schedules.stamp(waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["note.a"], cleared_step_ids=())
     again = await scheduler.arm_after_index(event_id=event_id, knowledge_base="docs", page_ids=["note.a"], now=T0 + timedelta(minutes=1))
 
     assert again == Armed(repeat=True)

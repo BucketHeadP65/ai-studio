@@ -117,7 +117,7 @@ class _Store:
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
-        cleared_step_ids: Sequence[str] = (),
+        cleared_step_ids: Sequence[str],
     ) -> bool:
         del schedule_id, last_run_at, last_outcome, next_run_at, session_id, cleared_page_ids, cleared_step_ids
         return False

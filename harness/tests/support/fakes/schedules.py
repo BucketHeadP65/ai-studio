@@ -99,7 +99,7 @@ class FakeSchedules:
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
-        cleared_step_ids: Sequence[str] = (),
+        cleared_step_ids: Sequence[str],
     ) -> bool:
         if self.stamp_error is not None:
             raise self.stamp_error

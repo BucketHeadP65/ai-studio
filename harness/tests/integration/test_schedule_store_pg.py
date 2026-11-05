@@ -130,7 +130,7 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
     next_at = ran_at + timedelta(hours=2)
 
     stamped = await store.stamp(
-        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=(), cleared_step_ids=()
     )
 
     assert stamped is True
@@ -143,7 +143,7 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
 
 
 async def test_stamp_of_an_unknown_id_is_false(store: PostgresSchedules) -> None:
-    stamped = await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=())
+    stamped = await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
 
     assert stamped is False
 
@@ -257,7 +257,7 @@ async def test_arm_with_an_event_id_seen_before_arms_nothing(store: PostgresSche
     event_id = uuid4()
 
     first = await store.arm([resting.id], at=at, event_id=event_id)
-    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=())
+    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
     second = await store.arm([resting.id], at=at + timedelta(minutes=1), event_id=event_id)
 
     assert first.schedule_ids == (resting.id,)
@@ -373,7 +373,7 @@ async def test_stamp_removes_only_the_page_ids_it_passed(store: PostgresSchedule
     waiting = _schedule(cadence="on index notes", next_run_at=at, pending_page_ids=("a", "b", "c"))
     await store.insert(waiting)
 
-    stamped = await store.stamp(waiting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    stamped = await store.stamp(waiting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     assert stamped is True
     fetched = await store.get(waiting.id)
@@ -388,7 +388,7 @@ async def test_stamp_keeps_the_fire_an_index_set_while_ids_remain_pending(store:
     await store.insert(waiting)
     await store.arm_with_pages({waiting.id: armed_fire}, event_id=uuid4(), page_ids=["c"])
 
-    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     fetched = await store.get(waiting.id)
     assert fetched is not None
@@ -400,7 +400,7 @@ async def test_stamp_that_passed_no_pages_applies_its_next_fire(store: PostgresS
     waiting = _schedule(cadence="on index notes", next_run_at=fired_at, pending_page_ids=("a",))
     await store.insert(waiting)
 
-    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=[])
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=[], cleared_step_ids=())
 
     fetched = await store.get(waiting.id)
     assert fetched is not None

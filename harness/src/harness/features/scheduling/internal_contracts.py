@@ -83,7 +83,7 @@ class Schedules(Protocol):
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
-        cleared_step_ids: Sequence[str] = (),
+        cleared_step_ids: Sequence[str],
     ) -> bool:
         """Record one fire in the tick log, with the runner session that made it, and remove the changed pages or steps it passed on.
 

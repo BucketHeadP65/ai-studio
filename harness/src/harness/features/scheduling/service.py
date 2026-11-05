@@ -86,18 +86,23 @@ _EVENT_CADENCES = (OnRefreshCadence, AfterRunCadence, OnIndexCadence, OnStepChan
 
 @dataclass(frozen=True)
 class _Collected:
-    """The ids an event cadence collected for one fire, and the workflow parameter the fire passes them to."""
+    """The ids an event cadence collected for one fire, the workflow parameter the fire passes them to, and the pending list a launch clears."""
 
     parameter: str
     ids: tuple[str, ...]
+    pending: Literal["pages", "steps"]
+
+    def cleared(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """The page ids and the step ids a launched fire clears, in that order."""
+        return (self.ids, ()) if self.pending == "pages" else ((), self.ids)
 
 
 def _collected(schedule: Schedule, cadence: Cadence) -> _Collected | None:
     """The ids a fire of this schedule passes on, sorted, or `None` for a cadence that collects none."""
     if isinstance(cadence, OnIndexCadence):
-        return _Collected(CHANGED_PAGES_PARAMETER, tuple(sorted(schedule.pending_page_ids)))
+        return _Collected(CHANGED_PAGES_PARAMETER, tuple(sorted(schedule.pending_page_ids)), "pages")
     if isinstance(cadence, OnStepChangeCadence):
-        return _Collected(CHANGED_STEPS_PARAMETER, tuple(sorted(schedule.pending_step_ids)))
+        return _Collected(CHANGED_STEPS_PARAMETER, tuple(sorted(schedule.pending_step_ids)), "steps")
     return None
 
 
@@ -704,6 +709,7 @@ class Scheduler:
                         next_run_at=None,
                         session_id=schedule.session_id,
                         cleared_page_ids=(),
+                        cleared_step_ids=(),
                     )
                 self._topics.publish("schedules")
 
@@ -747,8 +753,7 @@ class Scheduler:
             outcome = CAUGHT_UP_OUTCOME if schedule.catch_up and launched == "launched" and _held_before(schedule.last_outcome) else launched
             next_run_at = next_after(cadence, moment)
             if launched == "launched" and collected is not None:
-                cleared_page_ids = collected.ids if isinstance(cadence, OnIndexCadence) else ()
-                cleared_step_ids = collected.ids if isinstance(cadence, OnStepChangeCadence) else ()
+                cleared_page_ids, cleared_step_ids = collected.cleared()
 
         if keeps_next_fire:
             await self._schedules.stamp_held(schedule.id, last_run_at=moment, last_outcome=outcome, session_id=session.session_id or "")

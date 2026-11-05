@@ -337,7 +337,7 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
     next_at = ran_at + timedelta(hours=2)
 
     stamped = await store.stamp(
-        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=(), cleared_step_ids=()
     )
 
     assert stamped is True
@@ -352,7 +352,7 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
 async def test_stamp_of_an_unknown_id_is_false() -> None:
     assert (
         await FakeSchedules().stamp(
-            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=()
+            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=()
         )
         is False
     )

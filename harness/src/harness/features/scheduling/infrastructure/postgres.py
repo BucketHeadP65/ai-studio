@@ -234,7 +234,7 @@ class PostgresSchedules:
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
-        cleared_step_ids: Sequence[str] = (),
+        cleared_step_ids: Sequence[str],
     ) -> bool:
         """Update the tick log columns of one row and remove the ids it passed on from its pending ids, in one statement that reads the row it locks.
 
