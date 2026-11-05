@@ -540,7 +540,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         return earned
 
     async def _earned_line(self, ctx: RunContext[AgentDepsT], workflow: Workflow) -> str | None:
-        """One trust line for this workflow, by its content address, then the total over its saved versions, or None without an evidence log."""
+        """One trust line for this workflow, by its content address, then the total over its saved versions with each approval's version, or None without an evidence log."""
         if self.evidence_log is None:
             return None
 
@@ -555,7 +555,8 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         line = f"{trust.level}, {_counts_line(trust.current)}"
         if len(trust.versions) < _VERSIONS_FOR_A_TOTAL:
             return line
-        approved = f", approved by {', '.join(dict.fromkeys(trust.total.approved_by))}" if trust.total.approved_by else ""
+        approvals = dict.fromkeys(f"{name} (v{version})" for version, record in trust.versions for name in record.approved_by)
+        approved = f", approved by {', '.join(approvals)}" if approvals else ""
         return f"{line}. Total over {len(trust.versions)} versions: {_counts_line(trust.total)}{approved}"
 
     async def _search_steps(self, ctx: RunContext[AgentDepsT], task: str, limit: int = 5) -> str:

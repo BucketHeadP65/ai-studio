@@ -109,7 +109,8 @@ async def version_hashes(
     """The content address of every saved version of `workflow`'s name that reads, mapped to its version number.
 
     `workflow` stands for its own version under its own content address and is never read again. A version
-    `fetch_workflow` refuses with `LibraryError` or `ValidationError` is left out. The other versions are read at once.
+    `fetch_workflow` refuses with `LibraryError` or `ValidationError` is left out, and so is one whose workflow names a
+    version other than the one its id is listed under. The other versions are read at once.
 
     Args:
         workflow: The version asked about.
@@ -123,13 +124,14 @@ async def version_hashes(
     if versions is None:
         return hashes
 
-    async def address(workflow_id: str) -> str | None:
+    async def address(version: int, workflow_id: str) -> str | None:
         try:
-            return spec_identity(await fetch_workflow(workflow_id))
+            saved = await fetch_workflow(workflow_id)
         except (LibraryError, ValidationError):
             return None
+        return spec_identity(saved) if saved.version == version else None
 
     others = [(version, workflow_id) for version, workflow_id in await versions.versions(workflow.name) if version != workflow.version]
-    addresses = await asyncio.gather(*(address(workflow_id) for _, workflow_id in others))
+    addresses = await asyncio.gather(*(address(version, workflow_id) for version, workflow_id in others))
     hashes.update({spec_hash: version for (version, _), spec_hash in zip(others, addresses, strict=True) if spec_hash is not None})
     return hashes

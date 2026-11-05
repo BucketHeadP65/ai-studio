@@ -24,7 +24,7 @@ from core.ai.workflows.contracts import (
     version_hashes,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
-from core.ai.workflows.infrastructure.library_collection import ALL_VERSIONS_SQL
+from core.ai.workflows.infrastructure.library_collection import ALL_VERSIONS_SQL, FETCH_SQL
 from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
@@ -147,18 +147,33 @@ async def test_versions_of_an_unsaved_name_is_empty() -> None:
     assert await library.versions("unsaved") == ()
 
 
-async def test_version_hashes_maps_every_saved_version_s_content_address_to_its_version() -> None:
-    library = await _three_versions(FakeCollection(prune=True))
+async def test_version_hashes_maps_every_saved_version_s_content_address_to_its_version_the_archived_one_included() -> None:
+    """Asked about v2, it reads the superseded v1 and the archived v3 from the library."""
+    store = FakeCollection(prune=True)
+    library = await _three_versions(store)
+    store.sent.clear()
 
-    hashes = await version_hashes(_report(3), versions=library, fetch_workflow=library.fetch_workflow)
+    hashes = await version_hashes(_report(2), versions=library, fetch_workflow=library.fetch_workflow)
 
     assert hashes == {spec_identity(_report(version)): version for version in (1, 2, 3)}
+    assert sorted(str(args[0]) for sql, args in store.sent if sql == FETCH_SQL) == ["wf.report.v1", "wf.report.v3"]
 
 
 async def test_version_hashes_leaves_out_a_version_that_does_not_read() -> None:
     store = FakeCollection(prune=True)
     library = await _three_versions(store)
     store.pages["wf.report.v1"]["frontmatter"]["spec"] = {"name": "report"}
+
+    hashes = await version_hashes(_report(3), versions=library, fetch_workflow=library.fetch_workflow)
+
+    assert hashes == {spec_identity(_report(version)): version for version in (2, 3)}
+
+
+async def test_version_hashes_leaves_out_a_page_whose_workflow_names_another_version() -> None:
+    """A hand-edited v1 page holding v3's workflow would otherwise file the current version's record under v1."""
+    store = FakeCollection(prune=True)
+    library = await _three_versions(store)
+    store.pages["wf.report.v1"]["frontmatter"]["spec"] = _report(3).model_dump(mode="json")
 
     hashes = await version_hashes(_report(3), versions=library, fetch_workflow=library.fetch_workflow)
 

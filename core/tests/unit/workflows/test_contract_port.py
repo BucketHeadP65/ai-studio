@@ -481,7 +481,9 @@ async def test_a_card_and_its_fetch_add_the_total_over_every_saved_version_besid
 
     lines = await _earned_by_tool(port, "wf-quarterly-report")
 
-    assert lines["search_workflows"] == "machine-confirmed, 1 runs with evidence. Total over 3 versions: 3 runs with evidence, 1 failed, approved by owner"
+    assert lines["search_workflows"] == (
+        "machine-confirmed, 1 runs with evidence. Total over 3 versions: 3 runs with evidence, 1 failed, approved by owner (v1)"
+    ), "an approval names its version, so the current one never reads as approved"
     assert lines["fetch_workflow"] == lines["search_workflows"], "one workflow, one trust"
 
 

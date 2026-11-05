@@ -550,7 +550,8 @@ never sets it.
 ```
 
 A library that cannot list its versions answers the version itself as the only one, so `total` equals its counts and
-`versions` holds one entry. A saved version that no longer reads is left out of both. A workflow that cannot be read
+`versions` holds one entry. A saved version that no longer reads, or whose workflow names another version than its id,
+is left out of both. A workflow that cannot be read
 answers zero counts, a zero `total` and an empty `versions` list.
 
 **`recent_runs`** (the chat read) says both halves per line, `ran <outcome>, checked outcome <status> (n/m succeeded,
