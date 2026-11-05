@@ -22,14 +22,19 @@ lazily at wiring time.
   account's posts one day of the scan's window at a time, oldest day first, each day asked for up to the
   entry's `max_items`, for at most fourteen days or until the day that brings it to `max_items`, and answers
   how far it covered. The next scan continues from there. A scan of the whole window that found nothing
-  covers up to a day before now, so only the last day stays open. One scan costs at most fourteen agent
-  runs, each held to eight model responses (`UsageLimits(request_limit=8)`). One X search answers about 20
-  posts at most, so a day that answers 18 or more gets a note (not a failure) that X search may have held
-  more. A fault of a day's content (`UnexpectedModelBehavior`, which covers a content filter,
-  `ModelContextWindowExceededError`, `UsageLimitExceeded`) skips that day and reports it. Any other fault
-  (a connection error, HTTP 401, 403, 429) stops the walk before that day, and raises `ScanError` when it
-  hits the first day. Each post is rendered straight into the source queue cache, so the refresh that
-  follows never re-fetches it. Extra: `x` (`pydantic-ai`, `pydantic-ai-slim[xai]`).
+  covers up to a day before now, so only the last day stays open. One X search answers about 20 posts at
+  most, so a day that answers 18 posts or the entry's `max_items`, whichever is fewer, gets a note (not a
+  failure) that X search may have held more. A day whose search meets a fault of its content
+  (`UnexpectedModelBehavior`, which covers a content filter, `ModelContextWindowExceededError`,
+  `UsageLimitExceeded`) is searched once more. When that fails too, the day is skipped and reported only
+  once a later day in the same walk succeeds. Faulted days with no later success, and any other fault (a
+  connection error, HTTP 401, 403, 429), stop the walk before their day, so a fault that hits every search
+  moves no stamp and shows as a failure on every refresh. A walk that stops before any day succeeded raises
+  `ScanError`. The failure is one line, cut to the usual length: the days skipped, then the days left
+  unsearched, then the fault that stopped the walk, each day named with each distinct reason. One scan costs
+  at most fourteen days of at most two agent runs each, each run held to eight model responses
+  (`UsageLimits(request_limit=8)`). Each post is rendered straight into the source queue cache, so the
+  refresh that follows never re-fetches it. Extra: `x` (`pydantic-ai`, `pydantic-ai-slim[xai]`).
 - `conversion/`: the `DocumentConverter` adapters a resolver or the sync slice hands a PDF or
   URL to: `ArticleConverter` (trafilatura), `ArxivHtmlConverter` (the ar5iv/arXiv HTML route),
   `AzureDocumentConverter` (Azure Document Intelligence, the PDF fallback), `HybridConverter`

@@ -10,6 +10,7 @@ import pytest
 
 from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import (
+    REASON_LIMIT,
     ScanError,
     ScanReport,
     ScanWatchList,
@@ -246,8 +247,8 @@ async def test_an_http_error_whose_body_is_longer_than_a_line_drops_the_body(tmp
     assert str(raised.value) == "xAI answered HTTP 502 for grok-4-fast-non-reasoning"
 
 
-_DAY_SKIPPED = "skipped the day from 2026-08-24T09:00:00+00:00: "
-"""How a one-day scan from `_NOW` less a day opens the failure line of a day it skipped."""
+_DAY_UNSEARCHED = "could not search the day from 2026-08-24T09:00:00+00:00 ("
+"""How a one-day scan from `_NOW` less a day opens the failure line of a day it could not search."""
 
 
 async def _scan_failure(error: Exception, tmp_path: Path) -> str:
@@ -263,17 +264,22 @@ async def _scan_failure(error: Exception, tmp_path: Path) -> str:
 async def test_an_unexpected_model_behavior_is_its_message_without_the_body(tmp_path: Path) -> None:
     error = UnexpectedModelBehavior("Received empty model response", body='{"choices": [], "id": "resp-1"}')
 
-    assert await _scan_failure(error, tmp_path) == _DAY_SKIPPED + "Received empty model response"
+    assert await _scan_failure(error, tmp_path) == _DAY_UNSEARCHED + "Received empty model response)"
+
+
+def _content_filtered() -> ContentFilterError:
+    """A content filter's cut, as the model raises it, with the categories it filtered."""
+    details = {"finish_reason": "content_filter", "content_filter_result": {"violence": {"filtered": True, "severity": "medium"}}}
+    response = ModelResponse(parts=[], model_name="grok-4-fast-non-reasoning", finish_reason="content_filter", provider_details=details)
+    return ContentFilterError("Content filter triggered.", body=ModelMessagesTypeAdapter.dump_json([response]).decode())
+
+
+_FILTERED = "Content filter triggered. Finish reason: 'content_filter'. Filter results: violence filtered at severity medium."
+"""The one line a content filter's cut reads as."""
 
 
 async def test_a_content_filter_is_the_sentence_naming_its_categories_without_the_body(tmp_path: Path) -> None:
-    details = {"finish_reason": "content_filter", "content_filter_result": {"violence": {"filtered": True, "severity": "medium"}}}
-    response = ModelResponse(parts=[], model_name="grok-4-fast-non-reasoning", finish_reason="content_filter", provider_details=details)
-    error = ContentFilterError("Content filter triggered.", body=ModelMessagesTypeAdapter.dump_json([response]).decode())
-
-    assert await _scan_failure(error, tmp_path) == (
-        _DAY_SKIPPED + "Content filter triggered. Finish reason: 'content_filter'. Filter results: violence filtered at severity medium."
-    )
+    assert await _scan_failure(_content_filtered(), tmp_path) == _DAY_UNSEARCHED + _FILTERED + ")"
 
 
 async def test_a_team_id_is_cut_from_any_failure(tmp_path: Path) -> None:
@@ -365,8 +371,9 @@ class _Timeline:
     """A scriptable `agent_factory` over one account's posts, as X search answers them.
 
     Each run answers the posts dated inside its slice, newest first, at most the number its prompt asks for and at
-    most `ceiling`. The run numbered in `failures` raises that error instead, and every run from number `fail_from`
-    on raises `failure`. `windows` records each run's slice.
+    most `ceiling`. The run numbered in `failures` raises that error instead, every run of a day that starts at a key
+    of `failing_days` raises that day's error, and every run from number `fail_from` on raises `failure`. `windows`
+    records each run's slice.
     """
 
     posts: list[XPost]
@@ -374,6 +381,7 @@ class _Timeline:
     fail_from: int | None = None
     failure: Exception = field(default_factory=lambda: _service_fault(503, "Service unavailable."))
     failures: dict[int, Exception] = field(default_factory=dict)
+    failing_days: dict[datetime, Exception] = field(default_factory=dict)
     windows: list[tuple[datetime, datetime]] = field(default_factory=list)
 
     def __call__(self, handles: Sequence[str], since: datetime, until: datetime) -> Agent[None, XScan]:
@@ -381,7 +389,9 @@ class _Timeline:
         del handles
         self.windows.append((since, until))
         run = len(self.windows)
-        error = self.failures.get(run, self.failure if self.fail_from is not None and run >= self.fail_from else None)
+        error = self.failures.get(run, self.failing_days.get(since))
+        if error is None and self.fail_from is not None and run >= self.fail_from:
+            error = self.failure
         if error is not None:
             return _failing_with(error)([], since, until)
         inside = sorted((post for post in self.posts if post.date is not None and since <= post.date <= until), key=_newest_first)
@@ -442,6 +452,16 @@ async def test_a_day_answering_eighteen_posts_or_more_is_searched_once_and_noted
     assert len(scan.sources) == 20, "the search's own ceiling"
     assert scan.notes == ["the day from 2026-08-24T09:00:00+00:00 answered 20 posts, X search may have held more"]
     assert scan.failure == ""
+
+
+async def test_a_day_answering_the_entrys_cap_below_eighteen_is_noted_as_maybe_holding_more(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=1)
+    timeline = _Timeline([_post_at(_NOW - timedelta(minutes=10 * (n + 1)), n) for n in range(16)])
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=15), since=since)
+
+    assert len(scan.sources) == 15
+    assert scan.notes == ["the day from 2026-08-24T09:00:00+00:00 answered 15 posts, X search may have held more"]
 
 
 async def test_a_day_answering_seventeen_posts_carries_no_note(tmp_path: Path) -> None:
@@ -558,40 +578,127 @@ async def test_a_window_shorter_than_a_day_with_a_post_covers_up_to_now(tmp_path
     assert scan.covered_until is None
 
 
-async def test_a_content_fault_skips_its_day_reports_it_and_the_walk_goes_on(tmp_path: Path) -> None:
-    since = _NOW - timedelta(days=3)
-    posts = [_post_at(since + timedelta(hours=2), 1), _post_at(since + timedelta(days=2, hours=2), 3)]
-    timeline = _Timeline(posts, failures={2: UnexpectedModelBehavior("Received empty model response")})
+_EMPTY = UnexpectedModelBehavior("Received empty model response")
+"""A fault of one day's content: the model answered nothing."""
+
+
+async def test_a_day_whose_first_search_meets_a_passing_fault_is_searched_again_and_keeps_its_posts(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=2)
+    timeline = _Timeline([_post_at(since + timedelta(hours=2), 1)], failures={1: _EMPTY})
 
     scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
 
-    assert timeline.windows == _days(since, 3)
+    assert timeline.windows == [*_days(since, 1), *_days(since, 2)], "the first day is searched twice"
+    assert [source.url for source in scan.sources] == ["https://x.com/someone/status/1"]
+    assert (scan.covered_until, scan.failure) == (None, "")
+
+
+async def test_a_day_faulted_on_both_searches_is_skipped_once_a_later_day_succeeds(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    posts = [_post_at(since + timedelta(hours=2), 1), _post_at(since + timedelta(days=2, hours=2), 3)]
+    timeline = _Timeline(posts, failing_days={since + timedelta(days=1): _EMPTY})
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
+
+    day_one, day_two, day_three = _days(since, 3)
+    assert timeline.windows == [day_one, day_two, day_two, day_three]
     assert [source.url for source in scan.sources] == ["https://x.com/someone/status/3", "https://x.com/someone/status/1"]
-    assert scan.covered_until is None, "the faulty day is covered, so the entry moves on"
-    assert scan.failure == "skipped the day from 2026-08-23T09:00:00+00:00: Received empty model response"
+    assert scan.covered_until is None, "a later day succeeded, so the faulted day is covered and the entry moves on"
+    assert scan.failure == "skipped the day from 2026-08-23T09:00:00+00:00 (Received empty model response)"
 
 
-async def test_a_context_window_overflow_on_the_first_day_skips_it_instead_of_raising(tmp_path: Path) -> None:
+async def test_a_context_window_overflow_on_the_first_day_is_skipped_once_the_next_day_succeeds(tmp_path: Path) -> None:
     since = _NOW - timedelta(days=2)
     overflow = ModelHTTPError.for_category(
         ModelContextWindowExceededError, status_code=400, model_name="grok-4-fast-non-reasoning", body="Maximum prompt length exceeded."
     )
-    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 2)], failures={1: overflow})
+    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 2)], failing_days={since: overflow})
 
     scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
 
     assert [source.url for source in scan.sources] == ["https://x.com/someone/status/2"]
-    assert scan.failure.startswith("skipped the day from 2026-08-23T09:00:00+00:00: xAI answered HTTP 400")
+    assert scan.failure.startswith("skipped the day from 2026-08-23T09:00:00+00:00 (xAI answered HTTP 400")
 
 
-async def test_several_skipped_days_are_one_line_naming_the_first(tmp_path: Path) -> None:
-    since = _NOW - timedelta(days=3)
-    empty = UnexpectedModelBehavior("Received empty model response")
-    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 3)], failures={1: empty, 2: empty})
+async def test_skipped_days_are_one_line_naming_each_day_and_each_distinct_reason(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=4)
+    other = UnexpectedModelBehavior("Received an answer that is not a scan")
+    day_one, day_two, day_three = (since + timedelta(days=day) for day in range(3))
+    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 4)], failing_days={day_one: _EMPTY, day_two: _EMPTY, day_three: other})
 
     scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
 
-    assert scan.failure == "skipped the day from 2026-08-22T09:00:00+00:00 and 1 more: Received empty model response"
+    assert scan.failure == (
+        "skipped the days from 2026-08-21T09:00:00+00:00 and 2026-08-22T09:00:00+00:00 (Received empty model response)"
+        " and the day from 2026-08-23T09:00:00+00:00 (Received an answer that is not a scan)"
+    )
+
+
+async def test_a_failure_line_longer_than_the_limit_is_cut_and_says_so(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=10)
+    failing_days: dict[datetime, Exception] = {
+        since + timedelta(days=day): UnexpectedModelBehavior(f"Received answer number {day} that is not a scan at all") for day in range(9)
+    }
+    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 10)], failing_days=failing_days)
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
+
+    assert len(scan.failure) == REASON_LIMIT
+    assert scan.failure.endswith("...")
+
+
+async def test_a_faulted_newest_day_stays_open_while_the_days_before_it_found_posts(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    posts = [_post_at(since + timedelta(hours=2), 1), _post_at(since + timedelta(days=1, hours=2), 2)]
+    timeline = _Timeline(posts, failing_days={since + timedelta(days=2): _EMPTY})
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
+
+    assert [source.url for source in scan.sources] == ["https://x.com/someone/status/2", "https://x.com/someone/status/1"]
+    assert scan.covered_until == since + timedelta(days=2), "no later day succeeded, so the faulted day is not covered"
+    assert scan.failure == "could not search the day from 2026-08-24T09:00:00+00:00 (Received empty model response)"
+
+
+async def test_when_every_day_faults_no_stamp_moves_and_the_failure_is_reported(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    watch_list = _watch_list_stamped(tmp_path, since)
+
+    report, queue = await _refresh(tmp_path, watch_list, _Timeline([], fail_from=1, failure=_EMPTY))
+
+    assert queue.entries() == []
+    assert watch_list.entries()[0].last_scanned == since
+    ((label, reason),) = report.failed
+    assert label == "x:someone"
+    assert reason == (
+        "could not search the days from 2026-08-22T09:00:00+00:00, 2026-08-23T09:00:00+00:00 and 2026-08-24T09:00:00+00:00"
+        " (Received empty model response)"
+    )
+
+
+async def test_a_service_fault_after_a_skipped_day_names_the_skipped_day_first(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    timeline = _Timeline(
+        [_post_at(since + timedelta(days=1, hours=2), 2)], failing_days={since: _content_filtered()}, failures={4: _service_fault(503, "Service unavailable.")}
+    )
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
+
+    assert scan.covered_until == since + timedelta(days=2)
+    assert scan.failure == (
+        f"skipped the day from 2026-08-22T09:00:00+00:00 ({_FILTERED}), then xAI answered HTTP 503 for grok-4-fast-non-reasoning: Service unavailable."
+    )
+
+
+async def test_a_service_fault_right_after_a_faulted_first_day_raises_naming_both(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=2)
+    timeline = _Timeline([], failing_days={since: _content_filtered()}, failures={3: _service_fault(503, "Service unavailable.")})
+
+    with pytest.raises(ScanError) as raised:
+        await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
+
+    assert str(raised.value) == (
+        f"could not search the day from 2026-08-23T09:00:00+00:00 ({_FILTERED}), then xAI answered HTTP 503 for grok-4-fast-non-reasoning: Service unavailable."
+    )
 
 
 async def test_a_service_fault_after_a_day_keeps_its_own_day_open(tmp_path: Path) -> None:
@@ -624,7 +731,7 @@ async def test_a_service_fault_on_the_first_day_raises(tmp_path: Path) -> None:
         await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=_NOW - timedelta(days=2))
 
 
-async def test_a_day_whose_run_passes_eight_model_responses_is_skipped_as_a_content_fault(tmp_path: Path) -> None:
+async def test_a_day_whose_runs_pass_eight_model_responses_is_a_content_fault_searched_twice(tmp_path: Path) -> None:
     responses: list[int] = []
 
     def answer(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
@@ -634,11 +741,12 @@ async def test_a_day_whose_run_passes_eight_model_responses_is_skipped_as_a_cont
     def factory(_handles: Sequence[str], _since: datetime, _until: datetime) -> Agent[None, XScan]:
         return Agent(FunctionModel(answer), output_type=NativeOutput(XScan), retries=50)
 
-    scan = await _scanner(factory, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=_NOW - timedelta(days=1))
+    with pytest.raises(ScanError) as raised:
+        await _scanner(factory, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=_NOW - timedelta(days=1))
 
-    assert len(responses) == 8
-    assert scan.failure.startswith(_DAY_SKIPPED)
-    assert "request_limit of 8" in scan.failure
+    assert len(responses) == 16, "eight on each of the day's two searches"
+    assert str(raised.value).startswith(_DAY_UNSEARCHED)
+    assert "request_limit of 8" in str(raised.value)
 
 
 async def test_a_budget_stopped_scan_that_finds_nothing_still_moves_the_stamp(tmp_path: Path) -> None:

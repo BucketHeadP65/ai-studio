@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from core.ai.content_filter import content_filter_message
 from core.cqrs.contracts import utcnow
 from core.files import atomic_write
-from engram.sources.contracts import EntryScan, FoundSource, ScanError, claimants_for, classify_url
+from engram.sources.contracts import EntryScan, FoundSource, ScanError, claimants_for, classify_url, scan_failure_reason
 from pydantic_ai import Agent, NativeOutput, UsageLimits
 from pydantic_ai.capabilities import XSearch
 from pydantic_ai.exceptions import (
@@ -70,7 +70,7 @@ _RESPONSES_PER_DAY = 8
 _MAY_HOLD_MORE_AT = 18
 """A day whose search answers this many posts or more is noted as one X search may have held more of."""
 _CONTENT_FAULTS = (UnexpectedModelBehavior, ModelContextWindowExceededError, UsageLimitExceeded)
-"""The errors that come from one day's content, so the scan skips that day and goes on. Any other error stops it."""
+"""The errors that come from one day's content: the day is searched once more, and skipped when a later day succeeds."""
 
 
 def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: datetime, until: datetime) -> Agent[None, XScan]:
@@ -154,13 +154,46 @@ def _day_slices(start: datetime, end: datetime) -> Iterator[tuple[datetime, date
         slice_start = slice_end
 
 
-def _skipped_line(skipped: Sequence[tuple[datetime, str]]) -> str:
-    """One line naming the first day a content fault skipped, how many more there were, and the first fault, or empty."""
-    if not skipped:
-        return ""
-    first_day, reason = skipped[0]
-    more = f" and {len(skipped) - 1} more" if len(skipped) > 1 else ""
-    return f"skipped the day from {first_day.isoformat()}{more}: {reason}"
+def _days_named(days: Sequence[datetime]) -> str:
+    """The days by their start: "the day from A", or "the days from A, B and C"."""
+    named = [day.isoformat() for day in days]
+    if len(named) == 1:
+        return f"the day from {named[0]}"
+    return f"the days from {', '.join(named[:-1])} and {named[-1]}"
+
+
+def _days_and_reasons(faults: Sequence[tuple[datetime, str]]) -> str:
+    """Each distinct reason in `faults` after the days it hit, in the order the walk met them."""
+    days_by_reason: dict[str, list[datetime]] = {}
+    for day, reason in faults:
+        days_by_reason.setdefault(reason, []).append(day)
+    return " and ".join(f"{_days_named(days)} ({reason})" for reason, days in days_by_reason.items())
+
+
+def _failure_line(skipped: Sequence[tuple[datetime, str]], unsearched: Sequence[tuple[datetime, str]], stop: str) -> str:
+    """One line, cut to the usual length: the days skipped, then the days left unsearched, then the fault that stopped the walk."""
+    parts: list[str] = []
+    if skipped:
+        parts.append(f"skipped {_days_and_reasons(skipped)}")
+    if unsearched:
+        parts.append(f"could not search {_days_and_reasons(unsearched)}")
+    if stop:
+        parts.append(stop)
+    return scan_failure_reason(", then ".join(parts))
+
+
+def _add_new(posts: dict[str, XPost], found: Sequence[XPost], *, since: datetime | None) -> None:
+    """Add to `posts`, by URL, each post in `found` that is dated after `since` or carries no date, keeping the first seen."""
+    for post in found:
+        if since is None or post.date is None or post.date > since:
+            posts.setdefault(post.url, post)
+
+
+def _covered_until(covered: datetime, *, start: datetime, end: datetime, found_any: bool) -> datetime | None:
+    """How far a walk that met no unsearched day covered: up to `covered` before `end`, else all of it, or a day short when it found nothing."""
+    if covered < end:
+        return covered
+    return None if found_any else max(start, end - _SLICE)
 
 
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
@@ -252,10 +285,11 @@ class XScanner:
         The window runs from `since`, or from seven days back on a first scan, to now. It is searched one day at a time,
         oldest day first, for at most fourteen days, each day asked for up to `entry.max_items` posts. The walk stops
         after the day that brings it to `entry.max_items` posts and keeps every post that day answered. A day whose
-        search answers 18 posts or more is noted, since X search may have held more. A fault of a day's content (an
-        unexpected answer, a filtered answer, a prompt too long, a run past eight model responses) skips that day and
-        reports it, and any other fault stops the walk before that day. A post dated at or before `since` is dropped,
-        and a post carrying no date is kept.
+        search answers 18 posts or `entry.max_items`, whichever is fewer, is noted, since X search may have held more.
+        A day whose search meets a fault of its content (an unexpected or filtered answer, a prompt too long, a run past
+        eight model responses) is searched once more, and when that fails too it is skipped only once a later day
+        succeeds. Faulted days with no later success, and any other fault, stop the walk before their day. A post dated
+        at or before `since` is dropped, and a post carrying no date is kept.
 
         Args:
             entry: The watch-list entry whose `ref` is the handle and whose `max_items` stops the walk.
@@ -263,42 +297,54 @@ class XScanner:
 
         Returns:
             One source per post, newest first, each followed by one source per link it carries. The scan covers up to the
-            end of the last day it walked when that is before now, or up to a day before now when it found no post at
-            all. Its failure line names the fault that stopped it, else the days it skipped.
+            end of the last day that succeeded when the walk stopped before now, or up to a day before now when it found
+            no post at all. Its failure line names the days skipped, the days left unsearched and the fault that stopped
+            it, cut to the usual length.
 
         Raises:
-            ScanError: A fault other than a day's content stopped the walk on its first day, with one line saying why.
+            ScanError: The walk stopped before any day succeeded, with that failure line.
         """
         end = self._clock()
         start = since if since is not None else end - _FIRST_SCAN_WINDOW
         posts: dict[str, XPost] = {}
         notes: list[str] = []
         skipped: list[tuple[datetime, str]] = []
+        unsearched: list[tuple[datetime, str]] = []
         covered = start
+        noted_at = min(_MAY_HOLD_MORE_AT, entry.max_items)
         for slice_start, slice_end in islice(_day_slices(start, end), _SLICES_PER_SCAN):
             try:
-                found = await self._search(entry, slice_start, slice_end)
+                found = await self._search_twice(entry, slice_start, slice_end)
             except _CONTENT_FAULTS as error:
-                skipped.append((slice_start, _scan_failure(error)))
-                covered = slice_end
+                unsearched.append((slice_start, _scan_failure(error)))
                 continue
             except Exception as error:
+                line = _failure_line(skipped, unsearched, _scan_failure(error))
                 if covered == start:
-                    raise ScanError(_scan_failure(error)) from error
-                return EntryScan(sources=self._sources(posts), covered_until=covered, failure=_scan_failure(error), notes=notes)
-            if len(found) >= _MAY_HOLD_MORE_AT:
+                    raise ScanError(line) from error
+                return EntryScan(sources=self._sources(posts), covered_until=covered, failure=line, notes=notes)
+            skipped.extend(unsearched)
+            unsearched.clear()
+            if len(found) >= noted_at:
                 notes.append(f"the day from {slice_start.isoformat()} answered {len(found)} posts, X search may have held more")
-            for post in found:
-                if since is None or post.date is None or post.date > since:
-                    posts.setdefault(post.url, post)
+            _add_new(posts, found, since=since)
             covered = slice_end
             if len(posts) >= entry.max_items:
                 break
-        if covered < end:
-            covered_until: datetime | None = covered
-        else:
-            covered_until = None if posts else max(start, end - _SLICE)
-        return EntryScan(sources=self._sources(posts), covered_until=covered_until, failure=_skipped_line(skipped), notes=notes)
+        line = _failure_line(skipped, unsearched, "")
+        if unsearched:
+            if covered == start:
+                raise ScanError(line)
+            return EntryScan(sources=self._sources(posts), covered_until=covered, failure=line, notes=notes)
+        covered_until = _covered_until(covered, start=start, end=end, found_any=bool(posts))
+        return EntryScan(sources=self._sources(posts), covered_until=covered_until, failure=line, notes=notes)
+
+    async def _search_twice(self, entry: WatchEntry, start: datetime, end: datetime) -> list[XPost]:
+        """The posts one day's search answers, searched once more when the first search meets a fault of the day's content."""
+        try:
+            return await self._search(entry, start, end)
+        except _CONTENT_FAULTS:
+            return await self._search(entry, start, end)
 
     async def _search(self, entry: WatchEntry, start: datetime, end: datetime) -> list[XPost]:
         """The posts one agent run answers for the window from `start` to `end`, asked for up to `entry.max_items` of them."""
