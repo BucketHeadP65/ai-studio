@@ -58,7 +58,8 @@ _SLICE = timedelta(days=1)
 """How much of a scan's window one search run covers."""
 _FIRST_SCAN_WINDOW = timedelta(days=7)
 """How far back a first scan reaches."""
-# one slice is one model call, so this bounds what one scan costs, and a stamp three weeks old catches up over two scans
+# one slice is one agent run, two after a fault of the day's content, so this bounds what one scan costs, and a stamp
+# three weeks old catches up over two scans
 _SLICES_PER_SCAN = 14
 """The most one-day slices one scan searches."""
 # X search runs on xAI's side inside one model response (one live run made twelve searches in one), so a day takes one
