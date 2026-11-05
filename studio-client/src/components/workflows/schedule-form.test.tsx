@@ -904,6 +904,38 @@ describe("ScheduleForm, editing a schedule", () => {
     expect(onSave).toHaveBeenCalledWith({ blackout: null });
   });
 
+  it("refuses a capacity limit that is not a whole number, saying so beside the field", async () => {
+    mountApi();
+    const { onSave } = renderEdit({ capacity_key: "gpu-pool", capacity_limit: 3 });
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.type(screen.getByLabelText("Capacity limit"), "x");
+
+    expect(screen.getByLabelText("Capacity limit")).toHaveValue("3x");
+    expect(screen.getByLabelText("Capacity limit")).toHaveAccessibleDescription(
+      "The capacity limit must be a whole number above zero.",
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("says an emptied limit clears the capacity key too, and sends both cleared", async () => {
+    mountApi();
+    const { onSave } = renderEdit({ capacity_key: "gpu-pool", capacity_limit: 3 });
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.clear(screen.getByLabelText("Capacity limit"));
+
+    expect(screen.getByLabelText("Capacity limit")).toHaveAccessibleDescription(
+      "With no limit, saving clears the capacity key too.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(onSave).toHaveBeenCalledWith({ capacity_key: null, capacity_limit: null });
+  });
+
   it("clears an emptied capacity key, and the limit that goes with it, by sending null", async () => {
     mountApi();
     const { onSave } = renderEdit({ capacity_key: "gpu-pool", capacity_limit: 3 });
@@ -911,6 +943,7 @@ describe("ScheduleForm, editing a schedule", () => {
     await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
     await userEvent.click(screen.getByText("Advanced"));
     await userEvent.clear(screen.getByLabelText("Capacity key"));
+    expect(screen.queryByText(/saving clears the capacity key too/)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(onSave).toHaveBeenCalledWith({ capacity_key: null, capacity_limit: null });

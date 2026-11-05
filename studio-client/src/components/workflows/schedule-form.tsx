@@ -173,10 +173,24 @@ function scheduleChanges(
   if (current.capacityKey !== opened.capacityKey) changes.capacity_key = current.capacityKey;
   if (current.capacityLimit !== opened.capacityLimit) {
     changes.capacity_limit = current.capacityLimit;
+    // The backend clears a capacity key with its limit, so an emptied limit clears the key here too,
+    // as the form says next to the field.
+    if (current.capacityLimit === null) changes.capacity_key = null;
   }
   if (current.blackout !== opened.blackout) changes.blackout = current.blackout;
   if (current.catchUp !== opened.catchUp) changes.catch_up = current.catchUp;
   return changes;
+}
+
+const WHOLE_NUMBER = /^\d+$/;
+
+// Why the capacity limit cannot be saved, or `null`. Only a limit beside a capacity key counts,
+// since the limit field is off without one.
+function capacityLimitError(capacityKey: string, capacityLimit: string): string | null {
+  const limit = capacityLimit.trim();
+  if (capacityKey.trim() === "" || limit === "") return null;
+  if (WHOLE_NUMBER.test(limit) && Number(limit) > 0) return null;
+  return "The capacity limit must be a whole number above zero.";
 }
 
 // A loose shape check for a nudge only. The backend's own refusal sentence (rendered through
@@ -282,6 +296,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
   const workflowSelectId = useId();
   const capacityKeyId = useId();
   const capacityLimitId = useId();
+  const capacityNoteId = useId();
   const blackoutId = useId();
   const standalone = workflowId === undefined;
 
@@ -450,6 +465,13 @@ export function ScheduleForm(props: ScheduleFormProps) {
         );
   const changes = opened === null ? null : scheduleChanges(opened, payload);
   const nothingChanged = changes !== null && Object.keys(changes).length === 0;
+  const limitError = capacityLimitError(capacityKey, capacityLimit);
+  // A saved limit emptied while the key stays, which clears the key as well on save.
+  const limitClearsKey =
+    opened !== null &&
+    opened.capacityLimit !== null &&
+    capacityKey.trim() !== "" &&
+    capacityLimit.trim() === "";
   // An on refresh or after cadence fires only over a knowledge base the schedule's arguments choose,
   // so on a workflow that asks for none it would never fire.
   const firesNever =
@@ -460,7 +482,12 @@ export function ScheduleForm(props: ScheduleFormProps) {
 
   if (!open) return null;
 
-  const canSubmit = effectiveWorkflowId !== "" && cadence !== "" && !submitting && !nothingChanged;
+  const canSubmit =
+    effectiveWorkflowId !== "" &&
+    cadence !== "" &&
+    !submitting &&
+    !nothingChanged &&
+    limitError === null;
 
   function submit() {
     if (!canSubmit) return;
@@ -753,10 +780,23 @@ export function ScheduleForm(props: ScheduleFormProps) {
                   value={capacityLimit}
                   onChange={(event) => setCapacityLimit(event.target.value)}
                   disabled={capacityKey.trim() === ""}
+                  aria-invalid={limitError !== null}
+                  aria-describedby={
+                    limitError !== null || limitClearsKey ? capacityNoteId : undefined
+                  }
                   className="w-20"
                 />
               </label>
             </div>
+            {limitError !== null ? (
+              <p id={capacityNoteId} className="text-danger-ink text-micro">
+                {limitError}
+              </p>
+            ) : limitClearsKey ? (
+              <p id={capacityNoteId} className="text-micro text-warn-ink">
+                With no limit, saving clears the capacity key too.
+              </p>
+            ) : null}
             <label htmlFor={blackoutId} className="flex flex-col gap-0.5">
               <span className={FIELD_LABEL}>Blackout windows</span>
               <Input
