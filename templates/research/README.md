@@ -47,6 +47,8 @@ from this template can register its own vocabulary for any research domain.
   ends. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes
   after each write.
 - `workflows/steps/`, the steps only these workflows use.
+- `workflows/steps.lock`, each step file's version and content address. Every edit to a step file raises its
+  `version` and runs `uv run harness steps lock ../templates/research/workflows` from `harness/`.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.
 

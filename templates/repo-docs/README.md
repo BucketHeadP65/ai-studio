@@ -15,7 +15,10 @@ reusable template for any repository that wants the same compounding passes over
 - `workflows/workflows/docs-promote-initiative.md`, "Promote executed designs": turns each executed design that no
   ADR absorbs yet into a proposed root ADR for the owner to accept.
 - `workflows/steps/`, the steps only these two workflows use.
-- `workflows/evals/`, datasets for the steps that ship one (`check-adrs.yaml`), and `workflows/evals/examples/`, a
+- `workflows/steps.lock`, each step file's version and content address. Every edit to a step file raises its
+  `version` and runs `uv run harness steps lock ../templates/repo-docs/workflows` from `harness/`.
+- `workflows/evals/`, datasets for the steps that ship one (`check-adrs.yaml`), which the import carries into the
+  library with their step, and `workflows/evals/examples/`, a
   worked example of "Fold notes into analyses": an authored analysis draft in the shape the steps return, beside the
   real output of the workflow's own deterministic programs over it, which is the write payload, the thread replies
   and the counts. Nothing there is a record that the workflow was run. That workflow is one of the two reference

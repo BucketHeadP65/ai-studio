@@ -14,7 +14,7 @@ from harness.features.evals.domain.step_evaluation import bind_collection, case_
 from harness.features.evals.exceptions import CaseRunRefusedError
 from harness.features.evals.internal_contracts import BenchmarkArms, BenchmarkRecord, CaseReports, ComposedBenchmark
 from harness.features.evals.service.benchmark import BenchmarkMount, budgeted, run_outcome_benchmark
-from harness.features.evals.service.case_runs import perform_step_cases
+from harness.features.evals.service.case_runs import check_step_cases, perform_step_cases
 from harness.features.evals.service.pilot import WorkflowAutomationTaskRunner
 from harness.features.evals.service.step_evaluation import resolve_step, run_step_evals
 
@@ -37,6 +37,7 @@ __all__ = [
     "bind_collection",
     "budgeted",
     "case_result",
+    "check_step_cases",
     "perform_step_cases",
     "report_failed",
     "resolve_step",

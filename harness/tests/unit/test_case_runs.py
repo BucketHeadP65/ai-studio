@@ -313,6 +313,24 @@ class TestPerformStepCases:
         assert perform.performed == []
         assert _files(tmp_path) == []
 
+    @pytest.mark.parametrize(
+        "cases",
+        [
+            {"cases": [{"name": "no inputs"}], "evaluators": ["OutcomeMatches"]},
+            {"cases": [{"name": "a sound draft", "inputs": {"drafts": []}}], "evaluators": ["NothingRegistersThis"]},
+        ],
+        ids=["a case without inputs", "an evaluator nothing registers"],
+    )
+    async def test_a_dataset_that_does_not_load_is_refused_before_any_case_runs(self, tmp_path: Path, cases: dict[str, JsonValue]) -> None:
+        calls: StandInCalls = []
+        perform = ScriptedPerform(calls)
+
+        with pytest.raises(CaseRunRefusedError, match=r"st\.check_drafts\.v3.*Fix the case file\.$"):
+            await perform_step_cases(_briefing(), "st.check_drafts.v3", cases, _granting(perform=perform), FileCaseReports(tmp_path), calls)
+
+        assert perform.performed == []
+        assert _files(tmp_path) == []
+
     async def test_unnamed_cases_are_named_by_position_and_none_is_dropped(self, tmp_path: Path) -> None:
         calls: StandInCalls = []
         cases: dict[str, JsonValue] = {

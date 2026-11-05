@@ -136,6 +136,33 @@ spec declares no parameter for, or names an artifact the spec's `result` does no
 before anything is written, the same rule an unrunnable workflow already follows. The action vocabulary is closed
 (`save_note`, `record_owner_review`): a file cannot supply an endpoint, a method, a path, or a request body.
 
+### What the import checks in a step file, and the step lock file
+
+`harness import <dir>` is the one way a reusable step reaches the library, and it checks every step file before it
+writes anything. One refused step file refuses the whole folder.
+
+- **A changed step at an unchanged version.** When the library already holds the file's `st.<name>.v<n>` with a
+  different content address, the import raises `StepVersionChangedError`, which names the step and says to raise
+  `version` in the step file. A change that only writes a field at its default, such as `tools: []`, keeps the
+  content address and imports as unchanged.
+- **A step the library would read back different.** The library drops null values and empty lists and mappings at
+  every depth when it stores a page, so a step holding one (a `json_schema` with `default: null`, say) would read back
+  with another content address. The import refuses that file and names each such value, and so do
+  `harness steps lock` and the lock test.
+- **The step's cases.** A step's case file is `evals/<step name with hyphens>.yaml` beside the `steps/` folder, the
+  dataset `harness evals run` reads. The import checks it as the step's case run would (it loads as a
+  `pydantic_evals` dataset with `OutcomeMatches` registered, no two cases share a name, no report evaluators, every
+  `LLMJudge` names a model) and saves it with the step. When the folder has an `evals/` folder, a step with no case
+  file there is saved with none, which removes the cases its version held. A folder with no `evals/` folder keeps
+  every version's cases, so a partial import never strips them.
+
+Each folder with a `steps/` folder keeps a step lock file, `steps.lock`, beside it: JSON naming each step file's
+version and content address. `harness steps lock <folder>` writes it and prints each step it recorded, and refuses,
+writing nothing, a step whose content changed while its version did not rise, a step file the import would refuse,
+and a lock file that does not parse. `tests/unit/test_step_locks.py` fails
+when a step file in the repository no longer matches its folder's lock, so every edit to a step file raises its
+`version` and runs `harness steps lock <folder>`.
+
 ### A turn that only designs starts nothing
 
 A request carrying `design_only: true` (the Studio's guided authoring route sends it) has

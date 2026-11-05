@@ -34,6 +34,7 @@ from pydantic_ai.usage import RunUsage
 from harness.features.authoring.domain import Draft
 from harness.features.authoring.service import save_draft
 from harness.features.browsing.importing import import_path
+from harness.features.evals.contracts import check_step_cases
 from harness.settings import SelfAuthoringSettings
 from tests.support.fakes.library_collection import FakeCollection
 
@@ -168,7 +169,7 @@ async def _through_the_import(tmp_path: Path) -> list[object]:
     folder = tmp_path / "import"
     (folder / "workflows").mkdir(parents=True)
     (folder / "workflows" / "digest-sources.md").write_text(WORKFLOW_FILE, encoding="utf-8")
-    written = await import_path(folder, library=library, registry=_registry(), by="test:import")
+    written = await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases)
     assert written == ("wf.digest-sources.v1",)
     return store.written("wf.digest-sources.v1")["reusable_steps"]
 
@@ -191,7 +192,7 @@ async def test_no_save_path_writes_uses(tmp_path: Path) -> None:
     folder = tmp_path / "import"
     (folder / "workflows").mkdir(parents=True)
     (folder / "workflows" / "digest-sources.md").write_text(WORKFLOW_FILE.replace("version: 1", "version: 2"), encoding="utf-8")
-    await import_path(folder, library=LibraryCollection(store, store.ingest, collection=store.collection), registry=_registry(), by="test:import")
+    await import_path(folder, library=LibraryCollection(store, store.ingest, collection=store.collection), registry=_registry(), by="test:import", check_cases=check_step_cases)
 
     assert [("uses" in payload["frontmatter"]) for payload in store.payloads if payload["frontmatter"]["type"] == "workflow"] == [False, False, False]
 
@@ -226,6 +227,6 @@ async def test_importing_an_unchanged_version_again_keeps_its_decline_and_its_di
     document = {"title": "Digest sources", "description": "Digest one source.", "workflow": (await library.fetch_workflow("wf.digest-sources.v2")).model_dump(mode="json")}
     (folder / "workflows" / "digest-sources.md").write_text(f"---\n{yaml.safe_dump(document, sort_keys=False)}---\n\nUse per source. Not for a batch.\n", encoding="utf-8")
 
-    assert await import_path(folder, library=library, registry=_registry(), by="test:import") == ("wf.digest-sources.v2",)
+    assert await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases) == ("wf.digest-sources.v2",)
 
     assert await library.fetch_consumer_record("wf.digest-sources.v2") == kept

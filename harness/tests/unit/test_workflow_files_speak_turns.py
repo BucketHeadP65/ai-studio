@@ -36,6 +36,7 @@ from pydantic import TypeAdapter
 from harness.domain.ports import JUDGE_TOOLS
 from harness.domain.readiness import card_readiness
 from harness.features.browsing.importing import import_path
+from harness.features.evals.contracts import check_step_cases
 from tests.support.grants import app_grants
 
 if TYPE_CHECKING:
@@ -348,7 +349,7 @@ async def test_importing_every_template_folder_writes_every_step_then_every_work
         ingest = _FakeIngest()
         store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-        ids = await import_path(folder, library=store, registry=registry, by="test:import")
+        ids = await import_path(folder, library=store, registry=registry, by="test:import", check_cases=check_step_cases)
 
         types = [str(payload["frontmatter"]["type"]) for payload, _ in ingest.payloads]
         assert types == sorted(types, key=lambda kind: kind != "step"), f"{source.name} wrote a workflow before a step it uses"
@@ -373,7 +374,7 @@ async def test_an_imported_template_workflow_carries_the_words_its_file_declared
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(folder, library=store, registry=await _registry(_run_code), by="test:import")
+    await import_path(folder, library=store, registry=await _registry(_run_code), by="test:import", check_cases=check_step_cases)
 
     cards = {str(payload["frontmatter"]["id"]): payload["frontmatter"] for payload, _ in ingest.payloads}
     digest = cards["wf.research-digest.v16"]
