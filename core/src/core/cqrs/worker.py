@@ -206,8 +206,8 @@ class Worker:
 
         A tick or a wait that loses its database connection, such as to a database still starting up, makes the loop
         wait `poll_seconds`, or until `stop` is set, and go on. That is one of `LOST_CONNECTION_ERRORS`, or such an error
-        SQLAlchemy wraps. The first such failure is logged as a warning and the next good tick as restored, with none
-        logged between. Any other error a tick or a wait raises ends the loop.
+        SQLAlchemy wraps. The first such failure is logged as a warning, and the next pass whose tick and wait both
+        succeed as restored, with none logged between. Any other error a tick or a wait raises ends the loop.
 
         Args:
             stop: Set to end the loop after the current tick or wait.
@@ -221,13 +221,14 @@ class Worker:
                     raise
                 await self._pause(stop)
                 continue
-            outage.recovered()
             try:
                 await self._wait(stop)
             except Exception as exc:
                 if not outage.lost(exc, "wake wait failed, skipping this wait"):
                     raise
                 await self._pause(stop)
+                continue
+            outage.recovered()
 
     async def _wait(self, stop: asyncio.Event) -> None:
         """Wait for a wake-up, the next due periodic or `stop`, raising what the wake wait raised."""

@@ -181,6 +181,22 @@ def _starting_up() -> DBAPIError:
     return wrapped
 
 
+class _WakeFailingFirst:
+    """A wake-up whose first waits raise `errors` in turn, and whose first good wait sets `answered` and returns."""
+
+    def __init__(self, *errors: Exception) -> None:
+        self.errors = list(errors)
+        self.calls = 0
+        self.answered = asyncio.Event()
+
+    async def wait(self, seconds: float) -> None:
+        del seconds
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+        self.answered.set()
+
+
 @pytest.fixture
 def clock() -> _Clock:
     return _Clock()
@@ -496,6 +512,21 @@ class TestRunForever:
         assert outbox.reads == 4
         assert [level for level, _ in said] == [logging.WARNING, logging.INFO], said
         assert "tick lost its database connection" in said[0][1]
+        assert "restored after 3 failed attempts" in said[1][1]
+
+    async def test_a_wake_that_fails_while_ticks_succeed_is_logged_once_and_restored_once_it_answers(
+        self, clock: _Clock, caplog: pytest.LogCaptureFixture
+    ):
+        wake = _WakeFailingFirst(*(TooManyConnectionsError("sorry, too many clients already") for _ in range(3)))
+        worker = Worker(jobs=MemoryJobs(clock=clock), outbox=MemoryOutbox(), bus=MessageBus({}, {}), wake=wake, name="w1", clock=clock, poll_seconds=0.01)
+
+        with caplog.at_level(logging.INFO, logger="core.cqrs.worker"):
+            await asyncio.wait_for(worker.run_forever(stop=wake.answered), timeout=2)
+
+        said = [(record.levelno, record.getMessage()) for record in caplog.records if record.name == "core.cqrs.worker"]
+        assert wake.calls == 4
+        assert [level for level, _ in said] == [logging.WARNING, logging.INFO], said
+        assert "wake wait failed" in said[0][1]
         assert "restored after 3 failed attempts" in said[1][1]
 
     async def test_a_tick_that_fails_any_other_way_ends_the_loop(self, clock: _Clock):
