@@ -129,6 +129,20 @@ class LibraryError(RuntimeError):
     """
 
 
+class StepVersionChangedError(LibraryError):
+    """A reusable step version already holds different content, so the step was not saved under it."""
+
+    def __init__(self, step_id: str) -> None:
+        """Name the step version and say how to save the new content.
+
+        Args:
+            step_id: The step version's id, `st.<name>.v<version>`.
+        """
+        self.step_id = step_id
+        """The step version that already holds different content."""
+        super().__init__(f"{step_id} already holds different content. Raise version in the step file and import again.")
+
+
 class WorkflowUnknownError(LibraryError, KeyError):
     """The library holds no workflow under that id.
 
