@@ -98,6 +98,17 @@ def _scan_failures_of(scan: ScanReport, knowledge_base: str) -> tuple[ScanFailur
     return failures
 
 
+def _log_scan_notes(scan: ScanReport, knowledge_base: str) -> None:
+    """Log each note `scan` made as one info line naming its entry, the label without URL secrets."""
+    for label, note in scan.notes:
+        _logger.info(
+            "watch entry {entry} of knowledge base {knowledge_base!r} noted: {note}",
+            entry=without_url_secrets(label),
+            knowledge_base=knowledge_base,
+            note=note,
+        )
+
+
 def _counts_of(scan: ScanReport | None, sync: SyncReport) -> RefreshCounts:
     """What one attempt's scan and sync brought in, each entry's label without URL secrets and labels that then match summed."""
     requested_by_entry: dict[str, int] = {}
@@ -134,6 +145,7 @@ async def _perform_refresh(
             raise TypeError(msg)
         scan_result = scanned
         scan_failures = _scan_failures_of(scanned, name)
+        _log_scan_notes(scanned, name)
         sync_detail = f"scanned {scan_result.found} entries/{scan_result.requested} requested/{len(scan_result.failed)} entries failed, "
     if schema.sources.enabled:
         sources_dir: Path | None = None

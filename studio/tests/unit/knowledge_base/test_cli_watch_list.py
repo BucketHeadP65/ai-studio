@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from engram.sources.contracts import WatchListFile
@@ -19,6 +20,16 @@ def test_watch_list_add_list_remove(tmp_path: Path) -> None:
     removed = runner.invoke(app, ["watch-list", "remove", "xml", "https://blog.example.org/feed.xml", "--knowledge-base", str(tmp_path)])
     assert removed.exit_code == 0
     assert WatchListFile(tmp_path / "_meta" / "watch-list.yaml").entries() == []
+
+
+def test_a_stamped_entry_lists_the_time_its_scans_covered_to(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "_meta" / "watch-list.yaml")
+    watch_list.add("x", "someone")
+    watch_list.stamp("x", "someone", datetime(2026, 10, 15, 19, 37, 9, tzinfo=UTC))
+
+    listed = CliRunner().invoke(app, ["watch-list", "list", "--knowledge-base", str(tmp_path)])
+
+    assert "x  someone  covered to 2026-10-15T19:37:09+00:00" in listed.output
 
 
 def test_an_unknown_scanner_is_refused_in_words(tmp_path: Path) -> None:

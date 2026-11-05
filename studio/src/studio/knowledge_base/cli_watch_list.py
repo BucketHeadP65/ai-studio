@@ -37,8 +37,8 @@ def _checked_scanner(raw: str) -> str:
 
 
 def _entry_line(entry: WatchEntry) -> str:
-    scanned = entry.last_scanned.isoformat() if entry.last_scanned is not None else "never scanned"
-    return f"{entry.scanner}  {entry.ref}  last scanned {scanned}"
+    covered = f"covered to {entry.last_scanned.isoformat()}" if entry.last_scanned is not None else "never scanned"
+    return f"{entry.scanner}  {entry.ref}  {covered}"
 
 
 @watch_list_app.command(name="add")
@@ -48,7 +48,7 @@ def watch_list_add_cmd(
     max_items: int = typer.Option(default=15, help="Cap on items pulled from this entry per scan."),
     knowledge_base: str = typer.Option(default=".", help="Knowledge base root whose watch list to append to."),
 ) -> None:
-    """Append an entry to the knowledge base's watch list, reporting its scanner, ref and last scan.
+    """Append an entry to the knowledge base's watch list, reporting its scanner, ref and the time its scans covered to.
 
     Idempotent on `(scanner, ref)`: an entry already on the list is reported as-is, never duplicated.
     """

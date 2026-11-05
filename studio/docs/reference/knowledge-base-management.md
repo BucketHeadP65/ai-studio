@@ -239,7 +239,9 @@ that knowledge base's `path`, and runs the same steps the CLI runs. A schema pre
 `sources.enabled` and the knowledge base has a `_meta/watch-list.yaml` to scan, and a failed scan never fails the pass, its counts ride into the
 recorded detail as a fact, and whatever it queues onto the source queue is what the sync that follows picks up). Each watch-list entry the
 scan could not read is a scan failure: its label and a one-line reason, logged as one warning per entry when the scan reports it and recorded
-on the run (below). Then `sync` (only
+on the run (below). A note a scan makes that is not a failure is logged as one info line per note and not recorded on the run. The `x`
+scanner notes a day whose search answered 18 posts or more, since one X search answers about 20 posts at most and that day may have held
+more. An `x` entry costs at most fourteen one-day searches per refresh, each at most eight model responses. Then `sync` (only
 when the schema's `sources.enabled`, dispatching every declared connector through `MultiConnectorSync` from one call), then the
 librarian placement pass when the schema declares `sources.librarian`, then `index` with embeddings unconditionally on (there is no
 flag to turn them off, matching the standing embed-always rule everywhere else in this app). The preflight
@@ -265,14 +267,14 @@ read, the Studio shows the refresh history only. `GET /api/knowledge-bases/{name
 for that key off the jobs table and projects the finished ones onto `RefreshRun` (`studio/src/studio/knowledge_base/refresh/domain.py`),
 answering the last 20 as `{refresh_runs}`, newest first. A record carries `started_at`, `finished_at`, `outcome`, `detail`, `trigger`, `counts` and `scan_failures`, timestamps RFC 3339 UTC. A `done` job reads as
 `outcome` `ok` carrying the handler's one-sentence detail (what the scan and the sync did, then pages indexed and embedded), or as
-`outcome` `partial` when its scan could not read a watch-list entry, or stopped partway through one on a failure. An `abandoned` job reads as `outcome` `failed` carrying its last error
+`outcome` `partial` when its scan could not read a watch-list entry, or met a failure partway through one. An `abandoned` job reads as `outcome` `failed` carrying its last error
 verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it is over.
-`scan_failures` lists each watch-list entry the run could not scan, or whose scan stopped partway on a failure, as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
+`scan_failures` lists each watch-list entry the run could not scan, or whose scan met a failure partway (a fault that stopped it, or a day it skipped), as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
 `reason` is one line, the scanner's message cut to its first line and to at most 300 characters, with every URL in it cut the way a label
 is (below). The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
 cut, so an account out of credits reads `xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits
 or reached its monthly spending limit.` It is empty for a run whose scan read every entry or that scanned nothing, and for an abandoned run.
-Every label a refresh records, logs, forwards or prints (`entry`, the keys of `counts.requested_by_entry`, the warning, and the
+Every label a refresh records, logs, forwards or prints (`entry`, the keys of `counts.requested_by_entry`, the warning, the note line, and the
 `studio sync` print and its dry-run list) goes through `without_url_secrets`: a URL's user part is dropped and the value of every query,
 fragment or `;` path parameter whose name holds a secret word (`token`, `key`, `auth`, `password`, `passwd`, `pwd`, `secret`, `sig`,
 `signature`, `session`, `sessionid`, `code`, `credential`, in any case) reads `***`. The rest of the URL stays, so two channel feeds that

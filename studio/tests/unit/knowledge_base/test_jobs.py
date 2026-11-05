@@ -488,6 +488,22 @@ class TestScanFailures:
             f"watch entry x:someone of knowledge base 'tube' could not be scanned: {reason}"
         ]
 
+    async def test_a_pass_whose_scan_made_a_note_logs_it_and_records_no_failure(self, tmp_path: Path, caplog: pytest.LogCaptureFixture):
+        knowledge_base_path = _youtube_knowledge_base(tmp_path / "tube", "tube")
+        (knowledge_base_path / "_meta" / "watch-list.yaml").write_text("[]", encoding="utf-8")
+        settings_path = _register(tmp_path, "tube", knowledge_base_path)
+        note = "the day from 2026-10-22T09:02:00+00:00 answered 23 posts, X search may have held more"
+        container = FakeRunContainer(bus=FakeMessageBus(scan_report=ScanReport(found=23, requested=23, notes=(("x:someone", note),))))
+
+        with caplog.at_level(logging.INFO, logger="studio.knowledge_base.refresh.service"):
+            returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+
+        assert RefreshResult.model_validate_json(returned).scan_failures == ()
+        noted = [record for record in caplog.records if "noted" in record.getMessage()]
+        assert [(record.levelno, record.getMessage()) for record in noted] == [
+            (logging.INFO, f"watch entry x:someone of knowledge base 'tube' noted: {note}")
+        ]
+
     async def test_a_pass_whose_scan_read_every_entry_names_no_failure_and_logs_no_warning(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture
     ):
