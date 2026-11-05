@@ -584,34 +584,44 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   iterator`. `session.feed_run('type((x for x in [1, 2])).__name__')` returns `'list'`, and `next(iter(x for x in [1, 2, 3]
   if x > 1))` returns `2`.
 
-## UB-21. Monty's `hasattr` and `getattr` cannot see a builtin's methods
+## UB-21. Monty's type checker refuses `hasattr` and `getattr`, and its runtime cannot see a builtin's methods
 
-- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`).
-- **Symptom:** `hasattr([1], 'append')` is `False`, and so is `hasattr` for a method of a `str` or a `dict`.
-  `getattr([1], 'append')` raises `AttributeError: 'list' object has no attribute 'append'`, while `[1].append(2)` works.
-  A model that checks for a method before it calls one decides the method is missing and writes around it. `dir`, `vars`
-  and `callable` do not exist (`NameError`). On an instance of a class the program defines, `hasattr` and `getattr` answer
-  correctly, and `type()` and `isinstance()` work on every value.
-- **Cause:** Monty resolves a builtin's method only as part of a call. A builtin method cannot be read as a value, so the
-  attribute lookup that `getattr` and `hasattr` make finds nothing.
+- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`,
+  `pydantic_ai_harness/code_mode/_toolset.py`, line 1214, where a session's first program is type-checked when the
+  sandbox has functions).
+- **Symptom:** two halves. First, a turn's first program that names `hasattr`, `getattr`, `setattr`, `open`, `dir`, `vars`
+  or `callable` is refused before it runs with ``Type error in code: error[unresolved-reference]: Name `hasattr` used when
+  not defined``. Second, a later program skips the type check, and there `hasattr([1], 'append')` is `False`, as is
+  `hasattr` for a method of a `str` or a `dict`, `getattr([1], 'append')` raises `AttributeError: 'list' object has no
+  attribute 'append'` while `[1].append(2)` works, and `dir`, `vars` and `callable` raise `NameError: Unknown function`.
+  A model that checks for a method before it calls one decides the method is missing and writes around it. On an
+  instance of a class the program defines, `hasattr` and `getattr` answer correctly, and `type()`, `isinstance()` and
+  `in` work on every value, in the first program and in later ones.
+- **Cause:** Monty's type checker does not know those builtins, so it refuses any name among them. At run time Monty
+  resolves a builtin's method only as part of a call. A builtin method cannot be read as a value, so the attribute lookup
+  that `getattr` and `hasattr` make finds nothing.
 - **Grade:** cheap. It costs a retry or a detour, and a tool's return is a JSON value whose methods a program rarely needs
-  to look up.
+  to look up. Before the fix below, the type checker's refusal also drew `SandboxDiscipline`'s way out, which told the
+  model that `hasattr` was not a function inside the sandbox and sent it to its tool list and `load_capability`.
 - **Found:** 2026-11-05, checking the dialect's introspection sentence on Monty 1.4.0, which said there was no
-  `dir`/`hasattr`/`type` introspection at all.
-- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says that `type()` and
-  `isinstance()` work, that `dir`, `vars` and `callable` do not exist, and that `hasattr` and `getattr` cannot see a method
-  of a list, dict or string. Nothing in the runtime. That part of the sentence and this entry go once a Monty release reads
-  a builtin's method as a value.
-- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repro below (2026-11-05). pydantic/monty#1060
+  `dir`/`hasattr`/`type` introspection at all, and then in review, through `CodeMode`'s type check.
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says not to use `dir`, `vars`,
+  `callable`, `hasattr` or `getattr`, says what each program finds, and says to test a key with `in` and a value's kind
+  with `type()` or `isinstance()`. `SandboxDiscipline` adds no way out to a refusal that names a Python builtin. Nothing in
+  the runtime. That part of the sentence and this entry go once a Monty release type-checks and reads these builtins.
+- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repros below (2026-11-05). pydantic/monty#1060
   lists `dir`, `vars` and `callable` among the missing builtins, and says a bound method of a builtin cannot be used as a
   value (`f = [1].append` raises `AttributeError`). pydantic/monty#721 reports the same misleading `hasattr` and
-  `getattr` for the methods of a host dataclass. Both are open, and no pull request fixes builtins.
+  `getattr` for the methods of a host dataclass. Both are open, no pull request fixes builtins, and neither names the
+  type checker's refusal.
 - **Issue:** pydantic/monty#1060 and pydantic/monty#721, filed by others, open. Nothing to file.
-- **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then `session.feed_run("hasattr([1],
-  'append')")` returns `False` and `session.feed_run("getattr([1], 'append')")` raises `MontyRuntimeError:
-  AttributeError: 'list' object has no attribute 'append'`. `session.feed_run('dir([1])')` raises `NameError: name 'dir'
-  is not defined`. A class with a field `x` and a method `norm`, defined in the program, answers `hasattr(p, 'x')` and
-  `hasattr(p, 'norm')` with `True`.
+- **Repro:** through `CodeMode`, an agent over a `FunctionModel` with one plain tool and `capabilities=[CodeMode()]`,
+  whose first call is `run_code` with `hasattr([1], 'append')`, reads back ``Type error in code: error[unresolved-reference]:
+  Name `hasattr` used when not defined``. The same call after a `run_code` of `1 + 1` reads back `false`. Directly, `with
+  pydantic_monty.Monty() as monty, monty.checkout() as session:` then `session.feed_run("hasattr([1], 'append')")` returns
+  `False` and `session.feed_run("getattr([1], 'append')")` raises `MontyRuntimeError: AttributeError: 'list' object has
+  no attribute 'append'`. `session.feed_run('dir([1])')` raises `NameError: name 'dir' is not defined`. A class with a
+  field `x` and a method `norm`, defined in the program, answers `hasattr(p, 'x')` and `hasattr(p, 'norm')` with `True`.
 
 ## Upstream changes that required adaptation (not bugs)
 
