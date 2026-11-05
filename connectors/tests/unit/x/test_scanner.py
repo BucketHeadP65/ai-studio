@@ -12,6 +12,7 @@ from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import ScanError, SourceType, WatchEntry, claimants_for, url_key
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from engram.sources.contracts import Connector, ItemPreview, SourceItem, UrlClaimant
-    from pydantic_ai.messages import ModelMessage, ModelResponse
+    from pydantic_ai.messages import ModelMessage
     from pydantic_ai.models.function import AgentInfo
 
     from engram_connectors.x.infrastructure.scanner import AgentFactory
@@ -243,10 +244,14 @@ async def test_an_unexpected_model_behavior_is_its_message_without_the_body(tmp_
     assert await _scan_failure(error, tmp_path) == "Received empty model response"
 
 
-async def test_a_content_filter_is_its_message_without_the_body(tmp_path: Path) -> None:
-    error = ContentFilterError("Content filter triggered. Finish reason: 'content_filter'.", body='{"finish_reason": "content_filter"}')
+async def test_a_content_filter_is_the_sentence_naming_its_categories_without_the_body(tmp_path: Path) -> None:
+    details = {"finish_reason": "content_filter", "content_filter_result": {"violence": {"filtered": True, "severity": "medium"}}}
+    response = ModelResponse(parts=[], model_name="grok-4-fast-non-reasoning", finish_reason="content_filter", provider_details=details)
+    error = ContentFilterError("Content filter triggered.", body=ModelMessagesTypeAdapter.dump_json([response]).decode())
 
-    assert await _scan_failure(error, tmp_path) == "Content filter triggered. Finish reason: 'content_filter'."
+    assert await _scan_failure(error, tmp_path) == (
+        "Content filter triggered. Finish reason: 'content_filter'. Filter results: violence filtered at severity medium."
+    )
 
 
 async def test_a_team_id_is_cut_from_any_failure(tmp_path: Path) -> None:
