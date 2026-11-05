@@ -58,6 +58,7 @@ if TYPE_CHECKING:
 
     from core.ai.embedding import BatchEmbedder, QueryEmbedder
     from core.ai.retrieval.contracts import StampSource
+    from core.cqrs.contracts import Event
     from core.settings import InfrastructureSettings
 
     from engram.authoring.contracts import AuthoringTools
@@ -417,13 +418,17 @@ def document_embedder(
 class IngestDocument(Protocol):
     """The write callable `embedded_authoring` yields: one authoring payload in, the ingest's counts out."""
 
-    async def __call__(self, payload: Mapping[str, object], *, collection: str, embed: bool = True) -> IngestResult:
+    async def __call__(
+        self, payload: Mapping[str, object], *, collection: str, embed: bool = True, events: Sequence[Event] = ()
+    ) -> IngestResult:
         """Validate `payload` against the knowledge base's spec and land it as rows.
 
         Args:
             payload: The authoring payload.
             collection: The collection the page is written into.
             embed: Whether to embed the rows as they land.
+            events: Events written to the outbox in the transaction that writes the page, so they land with the page
+                or not at all.
 
         Returns:
             The ingest's counts.
@@ -472,9 +477,11 @@ async def embedded_authoring(
             lambda: SqlAlchemyKnowledgeBaseUnitOfWork(engine), embedder, spec=knowledge_base_spec, vocabulary=vocabulary
         )
 
-        async def ingest(payload: Mapping[str, object], *, collection: str, embed: bool = True) -> IngestResult:
+        async def ingest(
+            payload: Mapping[str, object], *, collection: str, embed: bool = True, events: Sequence[Event] = ()
+        ) -> IngestResult:
             authored = AuthoringPayload.model_validate({**payload, "knowledge_base_schema": knowledge_base_spec})
-            result = await handler.handle(IngestPage(collection=collection, payload=authored, embed=embed))
+            result = await handler.handle(IngestPage(collection=collection, payload=authored, embed=embed), events=events)
             # No bus drains the handler's events here, so clear them after each ingest.
             handler.events.clear()
             return result

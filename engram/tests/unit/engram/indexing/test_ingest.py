@@ -27,6 +27,8 @@ from typing import TYPE_CHECKING, Literal
 
 import pytest
 
+from core.cqrs.contracts import Event
+
 from engram.indexing.contracts import (
     CollectionIsIndexedError,
     IngestPage,
@@ -543,6 +545,60 @@ class TestTheBusContract:
 
         with pytest.raises(TypeError, match="handles IngestPage"):
             await handler(IndexKnowledgeBase(collection="research"))
+
+
+class _Noted(Event):
+    """A fact a caller hands the write, standing in for any event a host records with its page."""
+
+    note: str
+
+
+class _CommitWatchingUnitOfWork(FakeKnowledgeBaseUnitOfWork):
+    """Keeps what its buffer held when the load committed: the events a real unit of work flushes to the outbox."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.flushed: list[Event] | None = None
+
+    async def commit(self) -> None:
+        if self.flushed is None:
+            self.flushed = list(self.coordination.events)
+        await super().commit()
+
+
+class TestTheCallersEvents:
+    async def test_the_callers_events_are_recorded_on_the_load_before_it_commits(self):
+        uow = _CommitWatchingUnitOfWork()
+        marker = _Noted(note="saved")
+
+        await _handler(uow).handle(IngestPage(collection=WRITTEN, payload=_payload()), events=(marker,))
+
+        assert uow.flushed == [marker]
+
+    async def test_a_refused_write_records_none_of_the_callers_events(self):
+        uow = _CommitWatchingUnitOfWork()
+        uow.manifest.stored = _indexed_manifest()
+
+        with pytest.raises(CollectionIsIndexedError):
+            await _handler(uow).handle(IngestPage(collection="research", payload=_payload()), events=(_Noted(note="saved"),))
+
+        assert uow.flushed is None
+        assert uow.coordination.events == []
+
+    async def test_the_callers_events_never_join_the_handlers_own(self):
+        uow = _CommitWatchingUnitOfWork()
+        handler = _handler(uow)
+
+        await handler.handle(IngestPage(collection=WRITTEN, payload=_payload()), events=(_Noted(note="saved"),))
+
+        assert [type(event) for event in handler.events] == [PageIngested]
+
+    async def test_a_write_given_no_events_records_none(self):
+        uow = _CommitWatchingUnitOfWork()
+
+        await _handler(uow).handle(IngestPage(collection=WRITTEN, payload=_payload()))
+
+        assert uow.flushed == []
 
 
 class TestThePayloadIsTheGrammarGate:

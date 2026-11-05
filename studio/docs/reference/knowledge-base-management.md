@@ -429,6 +429,11 @@ database, not even a read. This is the check `studio ingest` runs. `embedded_aut
 pages through the workflow knowledge base's own registry of steps, runs it too, against the `_meta/vocabulary/` pages beside the schema file it is
 given. A schema passed as an object has no vocabulary pages, so its pages are checked against an empty vocabulary.
 
+A caller may hand the write events of its own: `IngestPageHandler.handle(command, events=...)` records them on the load's
+unit of work right before it commits, so they reach `coordination.outbox` with the page or not at all, and a refused write
+records none. They are not added to the handler's own `PageIngested` list. The ingest `embedded_authoring` yields takes the
+same `events` argument and passes it through. The workflow library hands `ReusableStepSaved` this way.
+
 `IngestPageHandler(..., registry: VocabularyIndex | None = None)` (`engram/src/engram/index/ingest.py`) runs
 `validator.validation_vocabulary(note, registry, spec=spec)` (`engram/src/engram/index/validator.py`) when a registry is configured,
 the page-local half of the indexer's Vocabulary rules: `unknown-entity-type`, `unknown-relation`, `unknown-facet-value`,

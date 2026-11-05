@@ -9,21 +9,30 @@ from engram.indexing.contracts import IngestResult
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from core.cqrs.contracts import Event
+
 
 class FakeIngest:
-    """Records every projection payload. Set `fail_next` to make the next call raise `RuntimeError`."""
+    """Records every projection payload in `calls` and the events handed with them in `events`.
+
+    Set `fail_next` to make the next call raise `RuntimeError`.
+    """
 
     def __init__(self) -> None:
         self.calls: list[tuple[Mapping[str, object], str, bool]] = []
+        self.events: list[Event] = []
         self.fail_next = False
 
-    async def __call__(self, payload: Mapping[str, object], *, collection: str, embed: bool = True) -> IngestResult:
+    async def __call__(
+        self, payload: Mapping[str, object], *, collection: str, embed: bool = True, events: Sequence[Event] = ()
+    ) -> IngestResult:
         """Record the ingest, or raise once when `fail_next` is set.
 
         Args:
             payload: The page payload.
             collection: The collection to ingest into.
             embed: Whether the ingest embeds the page.
+            events: The events handed with the page.
 
         Returns:
             A result for a page named `fake`.
@@ -36,6 +45,7 @@ class FakeIngest:
             msg = "projection unavailable"
             raise RuntimeError(msg)
         self.calls.append((payload, collection, embed))
+        self.events.extend(events)
         return IngestResult(page_id="fake", collection=collection)
 
 
