@@ -1,8 +1,8 @@
 """A schedule: a standing intent to run one workflow on a cadence, and the rules its settings follow.
 
 A cadence is an interval such as "every 30m", a 5-field cron expression, "on refresh", "after <workflow name>",
-or "on index <knowledge base>" with an optional quiet period such as "quiet 10m".
-The last three wait for an event: the clock never brings them due, an arm does, and the fire leaves the schedule resting.
+"on index <knowledge base>" or "on step change", the last two with an optional quiet period such as "quiet 10m".
+The last four wait for an event: the clock never brings them due, an arm does, and the fire leaves the schedule resting.
 `next_after` is the one place a cadence becomes a next fire time.
 A blackout is one or more daily "HH:MM-HH:MM" windows, and each may wrap past midnight.
 """
@@ -35,11 +35,14 @@ _AFTER_RUN = re.compile(r"^(?i:after)\s+([a-z0-9]+(?:-[a-z0-9]+)*)$")
 """`after` in any case, then a workflow name in a workflow's own grammar: lowercase words joined by single hyphens."""
 _ON_INDEX = re.compile(r"^(?i:on\s+index)\s+([a-z0-9]+(?:-[a-z0-9]+)*)(?:\s+(?i:quiet)\s+(\d+)\s*([smhSMH]))?$")
 """`on index` and `quiet` in any case, a knowledge base name in lowercase words joined by single hyphens, and a quiet period in seconds, minutes or hours."""
+_ON_STEP_CHANGE = re.compile(r"^(?i:on\s+step\s+change)(?:\s+(?i:quiet)\s+(\d+)\s*([smhSMH]))?$")
+"""`on step change` and `quiet` in any case, and a quiet period in seconds, minutes or hours."""
 
 _CADENCE_SHAPE = (
     "'every <N><s|m|h|d>' (e.g. 'every 30m'), a 5-field cron expression (e.g. '0 9 * * 1'), "
     "'on refresh', 'after <workflow name>' (e.g. 'after nightly-report'), "
-    "or 'on index <knowledge base>' with an optional 'quiet <N><s|m|h>' (e.g. 'on index team-notes quiet 10m')"
+    "'on index <knowledge base>' with an optional 'quiet <N><s|m|h>' (e.g. 'on index team-notes quiet 10m'), "
+    "or 'on step change' with an optional 'quiet <N><s|m|h>' (e.g. 'on step change quiet 10m')"
 )
 
 _WINDOW = re.compile(r"^([0-2]\d):([0-5]\d)-([0-2]\d):([0-5]\d)$")
@@ -87,7 +90,15 @@ class OnIndexCadence(BaseModel, frozen=True):
     """The quiet period: how long the schedule waits after the latest index before it fires."""
 
 
-Cadence = IntervalCadence | CronCadence | OnRefreshCadence | AfterRunCadence | OnIndexCadence
+class OnStepChangeCadence(BaseModel, frozen=True):
+    """A cadence that fires once after new reusable step versions are saved and its quiet period passes with no further one."""
+
+    kind: Literal["on_step_change"] = "on_step_change"
+    quiet_seconds: int
+    """The quiet period: how long the schedule waits after the latest reusable step change before it fires."""
+
+
+Cadence = IntervalCadence | CronCadence | OnRefreshCadence | AfterRunCadence | OnIndexCadence | OnStepChangeCadence
 """A parsed cadence, as `parse_cadence` returns it."""
 
 
@@ -120,10 +131,24 @@ def gate_wait_seconds(policy: str) -> float | None:
     raise ValueError(msg)
 
 
-def parse_cadence(text: str) -> Cadence:
-    """Parse `text` as an interval, a 5-field cron expression, "on refresh", "after <workflow name>" or "on index <knowledge base>".
+def _quiet_seconds(text: str, count: str | None, unit: str | None) -> int:
+    """The quiet period a cadence names, `INDEX_QUIET_SECONDS` when it names none, or the refusal of a period out of bounds."""
+    if count is None or unit is None:
+        return INDEX_QUIET_SECONDS
+    quiet_seconds = int(count) * _UNIT_SECONDS[unit.lower()]
+    if quiet_seconds == 0:
+        msg = f"{text!r} is not a cadence. A quiet period must be longer than zero"
+        raise ValueError(msg)
+    if quiet_seconds > INDEX_QUIET_CEILING_SECONDS:
+        msg = f"{text!r} is not a cadence. A quiet period must be at most 24 hours ({INDEX_QUIET_CEILING_SECONDS} seconds)"
+        raise ValueError(msg)
+    return quiet_seconds
 
-    An on-index cadence without "quiet <N><s|m|h>" takes a quiet period of `INDEX_QUIET_SECONDS`.
+
+def parse_cadence(text: str) -> Cadence:
+    """Parse `text` as an interval, a 5-field cron expression, "on refresh", "after <workflow name>", "on index <knowledge base>" or "on step change".
+
+    An on-index or on-step-change cadence without "quiet <N><s|m|h>" takes a quiet period of `INDEX_QUIET_SECONDS`.
 
     Args:
         text: The cadence text.
@@ -145,16 +170,10 @@ def parse_cadence(text: str) -> Cadence:
         return AfterRunCadence(workflow_name=match.group(1))
     if (match := _ON_INDEX.match(stripped)) is not None:
         knowledge_base, count, unit = match.groups()
-        if count is None or unit is None:
-            return OnIndexCadence(knowledge_base=knowledge_base, quiet_seconds=INDEX_QUIET_SECONDS)
-        quiet_seconds = int(count) * _UNIT_SECONDS[unit.lower()]
-        if quiet_seconds == 0:
-            msg = f"{text!r} is not a cadence. A quiet period must be longer than zero"
-            raise ValueError(msg)
-        if quiet_seconds > INDEX_QUIET_CEILING_SECONDS:
-            msg = f"{text!r} is not a cadence. A quiet period must be at most 24 hours ({INDEX_QUIET_CEILING_SECONDS} seconds)"
-            raise ValueError(msg)
-        return OnIndexCadence(knowledge_base=knowledge_base, quiet_seconds=quiet_seconds)
+        return OnIndexCadence(knowledge_base=knowledge_base, quiet_seconds=_quiet_seconds(text, count, unit))
+    if (match := _ON_STEP_CHANGE.match(stripped)) is not None:
+        count, unit = match.groups()
+        return OnStepChangeCadence(quiet_seconds=_quiet_seconds(text, count, unit))
     if len(stripped.split()) == 5 and croniter.is_valid(stripped):  # noqa: PLR2004 (a cron expression has 5 fields)
         return CronCadence(expression=stripped)
     msg = f"{text!r} is not a cadence. A cadence looks like {_CADENCE_SHAPE}"
@@ -169,15 +188,15 @@ def next_after(cadence: Cadence, now: datetime) -> datetime | None:
         now: The moment to advance from.
 
     Returns:
-        The next fire time, or `None` for "on refresh", "after <workflow name>" and "on index <knowledge base>", which the clock
-        never brings due.
+        The next fire time, or `None` for "on refresh", "after <workflow name>", "on index <knowledge base>" and "on step change",
+        which the clock never brings due.
     """
     match cadence:
         case IntervalCadence(seconds=seconds):
             return now + timedelta(seconds=seconds)
         case CronCadence(expression=expression):
             return croniter(expression, now).get_next(datetime)
-        case OnRefreshCadence() | AfterRunCadence() | OnIndexCadence():
+        case OnRefreshCadence() | AfterRunCadence() | OnIndexCadence() | OnStepChangeCadence():
             return None
 
 
@@ -292,7 +311,8 @@ def preview_fires(cadence: Cadence, *, count: int = 3, since: datetime | None = 
 class Schedule(BaseModel):
     """A standing intent to run one workflow on a cadence, with its settings and its tick log.
 
-    A schedule whose cadence waits for an event rests with no next fire until a refresh run, a workflow run or an index arms it, and rests again after the fire.
+    A schedule whose cadence waits for an event rests with no next fire until a refresh run, a workflow run, an index or a new
+    reusable step version arms it, and rests again after the fire.
 
     A schedule with no `next_run_at` never comes due.
     `capacity_key` shares a limit of `capacity_limit` live runs across every schedule that names it.
@@ -324,6 +344,8 @@ class Schedule(BaseModel):
     paused_at: datetime | None = None
     pending_page_ids: tuple[str, ...] = ()
     """The changed pages the on-index arms collected that no launched fire has passed on yet, sorted, each id once."""
+    pending_step_ids: tuple[str, ...] = ()
+    """The changed steps the on-step-change arms collected that no launched fire has passed on yet, sorted, each id once."""
 
     @model_validator(mode="after")
     def _stamp_paused_at_when_minted_disabled(self) -> Schedule:
@@ -378,6 +400,9 @@ class ScheduleUpdate(BaseModel):
     clears_pending_page_ids: bool = False
     """Set when the change gives the schedule another cadence, unless both are on index over the same knowledge base: its pending
     changed pages are cleared in the same write."""
+    clears_pending_step_ids: bool = False
+    """Set when the change gives the schedule another cadence, unless both are on step change: its pending changed steps are
+    cleared in the same write."""
     clears_capacity: bool = False
     """Set to clear `capacity_key` and `capacity_limit` together, since one without the other caps nothing. Their values here are
     then ignored."""
@@ -389,16 +414,23 @@ ON_REFRESH_SUBSCRIBER = "schedules.on_refresh"
 """The subscriber name a refresh run's event id is recorded under in `coordination.event_deliveries` once the scheduler armed for it."""
 
 INDEX_QUIET_SECONDS = 1800
-"""The quiet period of an on-index cadence that names none, in seconds."""
+"""The quiet period of an on-index or on-step-change cadence that names none, in seconds."""
 
 INDEX_QUIET_CEILING_SECONDS = 86400
-"""The longest quiet period an on-index cadence may name, in seconds."""
+"""The longest quiet period an on-index or on-step-change cadence may name, in seconds."""
 
 ON_INDEX_SUBSCRIBER = "schedules.on_index"
 """The subscriber name an index's event id is recorded under in `coordination.event_deliveries` once the scheduler armed for it."""
 
 CHANGED_PAGES_PARAMETER = "changed_page_ids"
 """The workflow parameter an on-index schedule's fire passes its changed pages to, sorted and comma separated."""
+
+ON_STEP_CHANGE_SUBSCRIBER = "schedules.on_step_change"
+"""The subscriber name a new reusable step version's event id is recorded under in `coordination.event_deliveries` once the
+scheduler armed for it."""
+
+CHANGED_STEPS_PARAMETER = "changed_step_ids"
+"""The workflow parameter an on-step-change schedule's fire passes its changed steps to, sorted and comma separated."""
 
 
 class Armed(BaseModel, frozen=True):
@@ -407,7 +439,8 @@ class Armed(BaseModel, frozen=True):
     repeat: bool = False
     """True when the event id was recorded before, so this arming changed nothing."""
     schedule_ids: tuple[UUID, ...] = ()
-    """Every schedule this arming armed. An on-index arm moves each one's fire, and any other arm keeps a fire it already held."""
+    """Every schedule this arming armed. An on-index or on-step-change arm moves each one's fire, and any other arm keeps a fire it
+    already held."""
 
 
 NEW_SOURCES_TITLE = "New sources"

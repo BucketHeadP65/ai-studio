@@ -10,7 +10,11 @@ from uuid import uuid4
 
 import pytest
 
+from core.ai.workflows.contracts import ReusableStepSaved
+from core.cqrs.contracts import Event
+
 from harness.features.running.records import RunCollaborators
+from harness.features.scheduling.contracts import StepChangeArming
 from harness.features.scheduling.domain import Armed
 from harness.features.scheduling.service import MISSED_OUTCOME, Scheduler
 from harness.session import SessionPool
@@ -367,3 +371,176 @@ async def test_a_held_fire_keeps_the_fire_an_index_set_while_it_was_held(hold_ki
             task = (await pool.get(row.session_id)).active.task
             if task is not None:
                 await task
+
+
+# --- on-step-change arms ------------------------------------------------------------------------
+
+
+def _step_saved(step_id: str = "st.digest_source.v12") -> ReusableStepSaved:
+    """The event a new reusable step version raises, naming `step_id`."""
+    name, _, version = step_id.removeprefix("st.").rpartition(".v")
+    return ReusableStepSaved(step=name, version=int(version), step_id=step_id, step_hash="sha256:0", saved_by="import")
+
+
+async def test_the_fake_arms_with_steps_as_the_store_does() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change", next_run_at=None)
+    armed_before = _schedule(cadence="on step change", next_run_at=T0, pending_step_ids=("st.a.v2",))
+    paused = _schedule(cadence="on step change", next_run_at=None, enabled=False)
+    for row in (waiting, armed_before, paused):
+        await schedules.insert(row)
+    later = T0 + timedelta(minutes=30)
+    event_id = uuid4()
+
+    armed = await schedules.arm_with_steps(
+        {waiting.id: later, armed_before.id: later, paused.id: later, uuid4(): later}, event_id=event_id, step_ids=["st.c.v1", "st.a.v2"]
+    )
+    repeat = await schedules.arm_with_steps({waiting.id: later + timedelta(minutes=5)}, event_id=event_id, step_ids=["st.z.v1"])
+
+    assert armed == Armed(schedule_ids=(waiting.id, armed_before.id))
+    assert repeat == Armed(repeat=True)
+    assert schedules.received_steps == {event_id}
+    assert schedules.received_index == set(), "a step change is recorded under its own subscriber"
+    first = await schedules.get(waiting.id)
+    second = await schedules.get(armed_before.id)
+    third = await schedules.get(paused.id)
+    assert first is not None
+    assert second is not None
+    assert third is not None
+    assert (first.next_run_at, first.pending_step_ids) == (later, ("st.a.v2", "st.c.v1")), "the repeat changed nothing"
+    assert (second.next_run_at, second.pending_step_ids) == (later, ("st.a.v2", "st.c.v1")), "the earlier fire is moved and the ids are a union"
+    assert (third.next_run_at, third.pending_step_ids) == (None, ()), "a paused schedule is never armed"
+    assert first.pending_page_ids == (), "step ids never land among the changed pages"
+
+
+async def test_the_fake_stamp_removes_only_the_step_ids_it_passed_and_keeps_the_fire_an_arm_set() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change", next_run_at=T0, pending_step_ids=("st.a.v1", "st.b.v1"))
+    await schedules.insert(waiting)
+    armed_fire = T0 + timedelta(minutes=10)
+    await schedules.arm_with_steps({waiting.id: armed_fire}, event_id=uuid4(), step_ids=["st.c.v1"])
+
+    await schedules.stamp(
+        waiting.id, last_run_at=T0, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=["st.a.v1", "st.b.v1"]
+    )
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_step_ids) == (armed_fire, ("st.c.v1",)), "the step the arm added fires on the arm's fire"
+
+
+async def test_a_step_change_moves_each_on_step_change_fire_and_collects_the_step() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change quiet 10m", next_run_at=None)
+    await schedules.insert(waiting)
+    scheduler = Scheduler(schedules=schedules, queries=schedules, topics=FakeBroadcaster())
+    event_id = uuid4()
+
+    armed = await scheduler.arm_after_step_change(event_id=event_id, step_ids=("st.digest_source.v12",), now=T0)
+
+    assert armed.schedule_ids == (waiting.id,)
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert stored.next_run_at == T0 + timedelta(minutes=10)
+    assert stored.pending_step_ids == ("st.digest_source.v12",)
+    again = await scheduler.arm_after_step_change(event_id=event_id, step_ids=("st.digest_source.v12",), now=T0)
+    assert again.repeat is True
+
+
+async def test_two_step_changes_naming_one_step_in_the_quiet_period_leave_one_id_and_one_fire() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change quiet 10m", next_run_at=None)
+    await schedules.insert(waiting)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    later = T0 + timedelta(minutes=3)
+
+    await scheduler.arm_after_step_change(event_id=uuid4(), step_ids=("st.digest_source.v12",), now=T0)
+    await scheduler.arm_after_step_change(event_id=uuid4(), step_ids=("st.digest_source.v12",), now=later)
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert stored.pending_step_ids == ("st.digest_source.v12",), "the step is collected once"
+    assert stored.next_run_at == later + timedelta(minutes=10), "the later event moved the one fire"
+
+
+async def test_an_on_step_change_cadence_without_a_quiet_period_waits_the_default() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change", next_run_at=None)
+    await schedules.insert(waiting)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).arm_after_step_change(event_id=uuid4(), step_ids=("st.a.v1",), now=T0)
+
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert stored.next_run_at == T0 + timedelta(seconds=1800)
+
+
+async def test_a_paused_on_step_change_schedule_is_not_armed() -> None:
+    schedules = FakeSchedules()
+    paused = _schedule(cadence="on step change", next_run_at=None, enabled=False)
+    await schedules.insert(paused)
+    topics = FakeBroadcaster()
+
+    armed = await Scheduler(schedules, schedules, topics).arm_after_step_change(event_id=uuid4(), step_ids=("st.a.v1",), now=T0)
+
+    assert armed == Armed()
+    assert topics.published == [], "a step change that armed nothing announces nothing"
+    stored = await schedules.get(paused.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_step_ids) == (None, ())
+
+
+async def test_a_step_change_arms_no_schedule_of_another_cadence() -> None:
+    schedules = FakeSchedules()
+    on_index = _schedule(cadence="on index docs", next_run_at=None)
+    on_refresh = _schedule(cadence="on refresh", next_run_at=None)
+    clock = _schedule(cadence="every 30m", next_run_at=T0 + timedelta(minutes=30))
+    for row in (on_index, on_refresh, clock):
+        await schedules.insert(row)
+
+    armed = await Scheduler(schedules, schedules, FakeBroadcaster()).arm_after_step_change(event_id=uuid4(), step_ids=("st.a.v1",), now=T0)
+
+    assert armed == Armed()
+    for row in (on_index, on_refresh, clock):
+        left = await schedules.get(row.id)
+        assert left is not None
+        assert (left.next_run_at, left.pending_step_ids, left.pending_page_ids) == (row.next_run_at, (), ())
+
+
+async def test_a_step_change_with_no_on_step_change_schedule_is_recorded_and_arms_nothing() -> None:
+    schedules = FakeSchedules()
+    event_id = uuid4()
+
+    armed = await Scheduler(schedules, schedules, FakeBroadcaster()).arm_after_step_change(event_id=event_id, step_ids=("st.a.v1",), now=T0)
+
+    assert armed == Armed()
+    assert schedules.received_steps == {event_id}, "the event is consumed even when no schedule waits for it"
+
+
+async def test_the_arming_arms_with_the_saved_step_at_its_own_clock() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change quiet 10m", next_run_at=None)
+    await schedules.insert(waiting)
+    arming = StepChangeArming(Scheduler(schedules, schedules, FakeBroadcaster()), clock=lambda: T0)
+    event = _step_saved("st.digest_source.v12")
+
+    await arming(event)
+
+    assert schedules.received_steps == {event.event_id}
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert (stored.next_run_at, stored.pending_step_ids) == (T0 + timedelta(minutes=10), ("st.digest_source.v12",))
+
+
+async def test_the_arming_ignores_an_event_that_is_not_a_step_save() -> None:
+    schedules = FakeSchedules()
+    waiting = _schedule(cadence="on step change", next_run_at=None)
+    await schedules.insert(waiting)
+    arming = StepChangeArming(Scheduler(schedules, schedules, FakeBroadcaster()), clock=lambda: T0)
+
+    await arming(Event())
+
+    assert schedules.received_steps == set()
+    stored = await schedules.get(waiting.id)
+    assert stored is not None
+    assert stored.next_run_at is None

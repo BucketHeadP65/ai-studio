@@ -41,15 +41,19 @@ from core.cqrs.contracts import (
     Clock,
     JobHandler,
     JobsAndQueries,
+    MemoryJobs,
     MemoryOutbox,
     MessageBus,
+    Outbox,
     PollingWake,
+    PostgresOutbox,
     TopicSink,
     Wake,
     Worker,
     change_frames,
     utcnow,
 )
+from core.db import build_engine
 from core.observability import PriceUpdater, Tracing, get_logger, start_price_updates, stop_tracing
 from core.wiring.contracts import ContainerResolver, resolver_of
 from fastapi import FastAPI, Request
@@ -59,7 +63,16 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from wireup.integration import fastapi as wireup_fastapi
 
 from harness import session as session_state
-from harness.adapters.contracts import DEFAULT_TIERS, ModelList, ModelTiers, TierSetting, prune_ended_spill_folders, set_tier, stored_tiers
+from harness.adapters.contracts import (
+    DEFAULT_TIERS,
+    ModelList,
+    ModelTiers,
+    TierSetting,
+    prune_ended_spill_folders,
+    set_tier,
+    store_writer_dsn,
+    stored_tiers,
+)
 from harness.composition import ensure_run_engine, restore_waiting_run, restore_waiting_runs, run_log_folders, serve_durable_runs
 from harness.container import create_container
 from harness.domain.contracts import Booted, SessionEvents, SessionTranscript, last_forgotten_at, live_session, logged_run_ids
@@ -69,7 +82,7 @@ from harness.features.inspection.controller import InspectionController
 from harness.features.projects.controller import ProjectsController
 from harness.features.running.contracts import RunCollaborators, RunRecords
 from harness.features.running.controller import RunningController
-from harness.features.scheduling.contracts import Scheduler
+from harness.features.scheduling.contracts import Scheduler, StepChangeArming
 from harness.features.scheduling.controller import SchedulingController
 from harness.features.selfauthoring.contracts import SelectionError, select_profile, selected_profile_name
 from harness.features.selfauthoring.controller import SelfAuthoringController
@@ -261,6 +274,47 @@ def coordination_worker(pool: SessionPool, scheduler: Scheduler, run: RunCollabo
     return worker
 
 
+LIBRARY_EVENT_POLL_SECONDS = 30.0
+"""How often, in seconds, the library's outbox is read for new reusable step versions. Nothing wakes its worker sooner, and a
+quiet period is minutes long."""
+
+
+def library_event_worker(arming: StepChangeArming, outbox: Outbox, driving: Driving) -> Worker:
+    """Build the worker that delivers the workflow library's outbox to the on-step-change arming.
+
+    It serves no job and runs no periodic. It reads `outbox` every `LIBRARY_EVENT_POLL_SECONDS`, since the wake in `driving`
+    listens on the sessions database. Every row is closed once the arming took it, an event no schedule waits for included.
+    A row whose arming fails stays in the outbox for the next pass, and any event type other than `ReusableStepSaved` is
+    closed undelivered, so this must be the only worker over that outbox.
+
+    Args:
+        arming: What arms the on-step-change schedules.
+        outbox: The outbox of the workflow library's database.
+        driving: The name and clock the worker runs with.
+
+    Returns:
+        The worker, with the arming subscribed to `ReusableStepSaved`.
+    """
+    bus = MessageBus({}, {})
+    arming.subscribe(bus)
+    return Worker(
+        jobs=MemoryJobs(),
+        outbox=outbox,
+        bus=bus,
+        wake=PollingWake(),
+        name=f"{driving.name}:library-events",
+        clock=driving.clock,
+        poll_seconds=LIBRARY_EVENT_POLL_SECONDS,
+    )
+
+
+def _library_events(stack: AsyncExitStack, scheduler: Scheduler, driving: Driving) -> Worker:
+    """The library event worker over an engine on the library's database, which `stack` disposes once the loops pushed after it stopped."""
+    engine = build_engine(store_writer_dsn())
+    stack.push_async_callback(engine.dispose)
+    return library_event_worker(StepChangeArming(scheduler, clock=driving.clock), PostgresOutbox(engine), driving)
+
+
 def _report_loop_exit(task: asyncio.Task[None]) -> None:
     """Log a background worker that stopped before the process did, which nothing restarts."""
     if task.cancelled():
@@ -446,8 +500,13 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:
             )
             driving = Driving(wake=await container.get(Wake), name=f"harness:{os.getpid()}")
             timers = coordination_worker(pool, scheduler, await container.get(RunCollaborators), driving, inspecting)
-            names = ("timers", INSPECT_RUN_KIND, ATTRIBUTE_LEAD_KIND, SCAN_RUN_KIND, "reconciliation")
-            workers = (timers, *inspection_workers(inspecting, driving), reconciliation_worker(inspecting, driving))
+            names = ("timers", INSPECT_RUN_KIND, ATTRIBUTE_LEAD_KIND, SCAN_RUN_KIND, "reconciliation", "library-events")
+            workers = (
+                timers,
+                *inspection_workers(inspecting, driving),
+                reconciliation_worker(inspecting, driving),
+                _library_events(stack, scheduler, driving),
+            )
             for name, worker in zip(names, workers, strict=True):
                 loop_task = asyncio.create_task(worker.run_forever(stop=stopping), name=f"{driving.name}:{name}")
                 loop_task.add_done_callback(_report_loop_exit)

@@ -22,7 +22,7 @@ live in the apps' `docs/reference/` docs. Decision rationale lives in the ADRs
 and [explanation docs](../explanation/tech-stack.md). The entry point to
 everything is [CONTEXT-MAP.md](../../CONTEXT-MAP.md).
 
-Sections: 7 · whole document ≈ 6,667 tokens.
+Sections: 7 · whole document ≈ 6,766 tokens.
 
 ### 01 — System context
 [sections/01-system-context.md](sections/01-system-context.md) · ~444 tokens
@@ -30,12 +30,12 @@ Sections: 7 · whole document ≈ 6,667 tokens.
 - **Load when:** system context, what is this repo, external systems, integrations, personas, C4 L1
 
 ### 02 — Containers & data flow
-[sections/02-containers-data-flow.md](sections/02-containers-data-flow.md) · ~1,330 tokens
+[sections/02-containers-data-flow.md](sections/02-containers-data-flow.md) · ~1,396 tokens
 - **TL;DR:** Two Python apps (studio on :8100, harness on :8770) + one TS app (studio-client) over three libraries (engram, core, engram-connectors), with `templates/` as data beside them. Two Postgres databases of the same shape on one server, the knowledge base DB (the disposable local Postgres on :5434 by default, ParadeDB on :5433 opt-in) and the workflow library `engram_workflows`, migrated by one alembic chain.
 - **Load when:** containers, deployment, databases, local Postgres, ParadeDB, ports, data flow, C4 L2, connectors, templates
 
 ### 03 — Cross-cutting concepts
-[sections/03-cross-cutting-concepts.md](sections/03-cross-cutting-concepts.md) · ~3,883 tokens
+[sections/03-cross-cutting-concepts.md](sections/03-cross-cutting-concepts.md) · ~3,916 tokens
 - **TL;DR:** Vertical slices in the engram library. CQRS bus from core.cqrs, used by the knowledge base half only. Five records about one workflow run (graph, presentation, intent, checked outcome, graded usefulness and owner acceptance), each answering one question. A governed outcome benchmark refuses before it measures, and names its own model paths by reading them. zod-parse every TS boundary. Both backends local-only with no auth. Path-source (not workspace) dependency strategy. Two composition styles inside studio (wireup DI in the knowledge base half, plain composition in the agent half). One alembic chain, in engram, for both databases.
 - **Load when:** conventions, patterns, adding a new app, adding a slice, dependency strategy, DI, migrations, testing discipline, presentation, intent, checked outcome, usefulness, owner acceptance, artifact action, run arguments, outcome benchmark, case custody, metered model path, blocked report
 

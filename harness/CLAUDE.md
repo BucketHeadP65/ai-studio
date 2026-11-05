@@ -45,7 +45,8 @@ only shrink. The tiers, inward first:
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database
-  and runs its dispatch and sweep. `harness inspect` issues commands by hand.
+  and runs its dispatch and sweep. `harness inspect` issues commands by hand. One more worker reads the outbox of the
+  library's database (`engram_workflows`) and arms the on-step-change schedules with each new reusable step version.
 
 `harness/skills/` (the app root, beside `workflows/`) is the registry of skills: every skill a model tier here may
 name and the files this repository's `.claude/skills` and `.agents/skills` symlinks point at, data not code. `harness/library/`

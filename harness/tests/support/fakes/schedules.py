@@ -27,6 +27,8 @@ class FakeSchedules:
     """Every event id `arm` recorded, standing in for `coordination.event_deliveries`."""
     received_index: set[UUID] = field(default_factory=set)
     """Every event id `arm_with_pages` recorded, standing in for `coordination.event_deliveries` under the on-index subscriber."""
+    received_steps: set[UUID] = field(default_factory=set)
+    """Every event id `arm_with_steps` recorded, standing in for `coordination.event_deliveries` under the on-step-change subscriber."""
     index_after_due: tuple[UUID, datetime, tuple[str, ...]] | None = None
     """An index the next `due` lands once it has read the due rows, the way one arrives while a fire is held: the schedule it
     arms, the fire it gives and its changed pages. Cleared once landed."""
@@ -64,6 +66,8 @@ class FakeSchedules:
             updates["next_run_at"] = None
         if changes.clears_pending_page_ids:
             updates["pending_page_ids"] = ()
+        if changes.clears_pending_step_ids:
+            updates["pending_step_ids"] = ()
         if changes.clears_capacity:
             updates["capacity_key"] = None
             updates["capacity_limit"] = None
@@ -95,22 +99,25 @@ class FakeSchedules:
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
+        cleared_step_ids: Sequence[str] = (),
     ) -> bool:
         if self.stamp_error is not None:
             raise self.stamp_error
         current = self.rows.get(schedule_id)
         if current is None:
             return False
-        cleared = set(cleared_page_ids)
-        pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
-        keeps_fire = bool(cleared) and bool(pending)
+        cleared_pages, cleared_steps = set(cleared_page_ids), set(cleared_step_ids)
+        pages = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared_pages)
+        steps = tuple(step_id for step_id in current.pending_step_ids if step_id not in cleared_steps)
+        keeps_fire = (bool(cleared_pages) and bool(pages)) or (bool(cleared_steps) and bool(steps))
         self.rows[schedule_id] = current.model_copy(
             update={
                 "last_run_at": last_run_at,
                 "last_outcome": last_outcome,
                 "next_run_at": current.next_run_at if keeps_fire else next_run_at,
                 "session_id": session_id,
-                "pending_page_ids": pending,
+                "pending_page_ids": pages,
+                "pending_step_ids": steps,
             }
         )
         return True
@@ -150,5 +157,19 @@ class FakeSchedules:
                 continue
             pending = tuple(sorted({*row.pending_page_ids, *page_ids}))
             self.rows[schedule_id] = row.model_copy(update={"next_run_at": at, "pending_page_ids": pending})
+            armed.append(schedule_id)
+        return Armed(schedule_ids=tuple(armed))
+
+    async def arm_with_steps(self, fires: Mapping[UUID, datetime], *, event_id: UUID, step_ids: Sequence[str]) -> Armed:
+        if event_id in self.received_steps:
+            return Armed(repeat=True)
+        self.received_steps.add(event_id)
+        armed: list[UUID] = []
+        for schedule_id, at in fires.items():
+            row = self.rows.get(schedule_id)
+            if row is None or not row.enabled:
+                continue
+            pending = tuple(sorted({*row.pending_step_ids, *step_ids}))
+            self.rows[schedule_id] = row.model_copy(update={"next_run_at": at, "pending_step_ids": pending})
             armed.append(schedule_id)
         return Armed(schedule_ids=tuple(armed))

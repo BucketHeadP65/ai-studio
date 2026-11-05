@@ -1,8 +1,8 @@
 """Independent background loops for timers, rules, attribution and scans.
 
 The jobs live in the coordination schema of the sessions database in the real deployment; here a
-`MemoryJobs` stands in for it. The outbox and bus stay in memory in both: this app owns no bus
-and nothing subscribes. The timer loop runs dispatch, reconciliation and scheduling while each
+`MemoryJobs` stands in for it. The outbox and bus of these loops stay in memory in both, and
+nothing subscribes to them. The timer loop runs dispatch, reconciliation and scheduling while each
 inspection kind owns a separate worker. Tests drive single passes or hold model work on events.
 """
 
@@ -117,8 +117,9 @@ class _Store:
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
+        cleared_step_ids: Sequence[str] = (),
     ) -> bool:
-        del schedule_id, last_run_at, last_outcome, next_run_at, session_id, cleared_page_ids
+        del schedule_id, last_run_at, last_outcome, next_run_at, session_id, cleared_page_ids, cleared_step_ids
         return False
 
     async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
@@ -131,6 +132,10 @@ class _Store:
 
     async def arm_with_pages(self, fires: Mapping[UUID, datetime], *, event_id: UUID, page_ids: Sequence[str]) -> Armed:
         del fires, event_id, page_ids
+        return Armed()
+
+    async def arm_with_steps(self, fires: Mapping[UUID, datetime], *, event_id: UUID, step_ids: Sequence[str]) -> Armed:
+        del fires, event_id, step_ids
         return Armed()
 
 
