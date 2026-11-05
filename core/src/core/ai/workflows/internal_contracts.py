@@ -359,7 +359,7 @@ class ConsumerRecords(Protocol):
         """The consumer record one workflow version was saved with, one entry per copy of a reusable step, by step name.
 
         Args:
-            workflow_id: A workflow's id, or a bare name for its newest live version.
+            workflow_id: A workflow version's id, or `wf.<name>` or a bare name for its newest live version.
 
         Returns:
             The entries. Empty for a workflow that holds no copy of a reusable step.
@@ -371,9 +371,11 @@ class ConsumerRecords(Protocol):
         ...
 
     async def record_decline(self, workflow_id: str, *, step: str, step_hash: str, because: Literal["kept", "reverted"]) -> None:
-        """Record on a live workflow version that it keeps its copy of a step instead of one step version.
+        """Record on a workflow version nothing has superseded that it keeps its copy of a step instead of one step version.
 
-        The page keeps every other key and entry. The decline carries over to a later version while its copy is unchanged.
+        An archived version takes a decline too. The page keeps every other key and entry, and a decline already recorded
+        writes nothing. The decline carries over to a later version, and to a save of the same version, while its copy is
+        unchanged.
 
         Args:
             workflow_id: The workflow version's id.

@@ -82,7 +82,7 @@ class ConsumerEntry(BaseModel):
 
 
 def consumer_record(
-    workflow: Workflow, versions: Mapping[str, Sequence[StepVersion]], *, parent: Sequence[ConsumerEntry] = ()
+    workflow: Workflow, versions: Mapping[str, Sequence[StepVersion]], *, prior: Sequence[ConsumerEntry] = ()
 ) -> tuple[ConsumerEntry, ...]:
     """The consumer record of `workflow`: one entry per inline step whose name a reusable step has saved versions of.
 
@@ -96,21 +96,21 @@ def consumer_record(
         workflow: The workflow being saved.
         versions: Every saved version of each reusable step, by step name. A name absent or mapped to an empty
             sequence has no saved versions.
-        parent: The prior consumer record: the one this same version already holds when it is saved again, else the
+        prior: The prior consumer record: the one this same version already holds when it is saved again, else the
             record of the version `workflow` derives from. Empty for a first save.
 
     Returns:
         The entries, sorted by step name.
     """
-    earlier = {entry.step: entry for entry in parent}
+    earlier = {entry.step: entry for entry in prior}
     entries: list[ConsumerEntry] = []
     for copy in workflow.inline:
         saved = versions.get(copy.name, ())
         if not saved:
             continue
         address = step_content_address(copy)
-        prior = earlier.get(copy.name)
-        same_copy = prior if prior is not None and prior.step_hash == address else None
+        before = earlier.get(copy.name)
+        same_copy = before if before is not None and before.step_hash == address else None
         declined = same_copy.declined if same_copy is not None else None
         declined_because = same_copy.declined_because if same_copy is not None else None
         matching = [saved_version.version for saved_version in saved if saved_version.step_hash == address]
@@ -121,7 +121,7 @@ def consumer_record(
                 )
             )
             continue
-        diverged_from, basis = _diverged_from(copy, saved, prior)
+        diverged_from, basis = _diverged_from(copy, saved, before)
         entries.append(
             ConsumerEntry(
                 step=copy.name,

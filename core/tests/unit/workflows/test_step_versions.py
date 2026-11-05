@@ -1,16 +1,11 @@
 """One reusable step version holds one content, a new version supersedes the lower ones, and the step version reads.
 
-The fake below is a whole small collection: the ingest writes into the same pages the rows read from, shaped the way
-`api.cards` answers (the modelled keys lifted into columns, the rest left in `frontmatter`). With `prune` on, the
-ingest drops `None` and empty containers at every depth before it stores, as engram's ingest does.
+`FakeCollection` is a whole small collection: the ingest writes into the same pages the rows read from. With `prune`
+on, it drops `None` and empty containers at every depth before it stores, as engram's ingest does.
 """
 
 from __future__ import annotations
 
-import json
-import re
-
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -31,93 +26,14 @@ from core.ai.workflows.contracts import (
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
-from core.ai.workflows.infrastructure.library_collection import (
-    FETCH_SQL,
-    LIVE_STEP_VERSIONS_SQL,
-    PAGE_SQL,
-    STEP_PAGES_SQL,
-    SUPERSEDED_SQL,
-    collection_toolset,
-)
+from core.ai.workflows.infrastructure.library_collection import STEP_PAGES_SQL, collection_toolset
+from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping
     from pathlib import Path
 
     from pydantic import JsonValue
-
-_COLUMNS = ("id", "type", "title", "summary", "status")
-
-
-def _pruned(value: object) -> object:
-    """What engram stores for one frontmatter value: `None` and empty containers dropped at every depth."""
-    if isinstance(value, bool | int | float | str):
-        return value
-    if isinstance(value, list | tuple):
-        items = [kept for kept in (_pruned(item) for item in value) if kept is not None]
-        return items or None
-    if isinstance(value, Mapping):
-        nested = {str(key): kept for key, kept in ((key, _pruned(item)) for key, item in value.items()) if kept is not None}
-        return nested or None
-    return None
-
-
-class FakeCollection:
-    """The rows and the ingest of one collection over one dict of pages, so a save is read back by the next call."""
-
-    def __init__(self, *, prune: bool = False) -> None:
-        self.prune = prune
-        self.pages: dict[str, dict[str, Any]] = {}
-        self.payloads: list[Mapping[str, Any]] = []
-        self.sent: list[tuple[str, tuple[object, ...]]] = []
-
-    async def ingest(self, payload: Mapping[str, Any], *, collection: str) -> None:
-        assert collection == "workflows"
-        self.payloads.append(payload)
-        authored = dict(payload["frontmatter"])
-        long_tail = {key: value for key, value in authored.items() if key not in (*_COLUMNS, "superseded_by")}
-        if self.prune:
-            long_tail = {key: kept for key, kept in ((key, _pruned(value)) for key, value in long_tail.items()) if kept is not None}
-        self.pages[str(authored["id"])] = {
-            **{key: authored[key] for key in _COLUMNS},
-            "superseded": authored.get("superseded_by") is not None,
-            "frontmatter": long_tail,
-            "applicability": payload["sections"][0]["body"],
-        }
-
-    async def fetch(self, sql: str, /, *args: object) -> Sequence[Mapping[str, Any]]:
-        self.sent.append((sql, args))
-        if sql == STEP_PAGES_SQL:
-            names = args[1]
-            assert isinstance(names, list)
-            return [
-                {"id": page["id"], "step": json.dumps(page["frontmatter"]["step"])}
-                for page in self.pages.values()
-                if page["type"] == "step" and page["frontmatter"]["step"]["name"] in names
-            ]
-        if sql == LIVE_STEP_VERSIONS_SQL:
-            # SQL `like`: `%` is any run of characters and `_` is any one character.
-            like = re.compile("".join(".*" if char == "%" else "." if char == "_" else re.escape(char) for char in str(args[1])))
-            return [
-                {"id": page["id"]}
-                for page in self.pages.values()
-                if page["type"] == "step"
-                and like.fullmatch(str(page["id"]))
-                and "archived_at" not in page["frontmatter"]
-                and not page["superseded"]
-            ]
-        page = self.pages.get(str(args[0]))
-        if sql == SUPERSEDED_SQL:
-            return [{"superseded": page["superseded"]}] if page is not None else []
-        assert sql == PAGE_SQL, sql
-        return [page] if page is not None else []
-
-    async def fetchval(self, sql: str, /, *args: object) -> str | Mapping[str, Any] | None:
-        self.sent.append((sql, args))
-        assert sql == FETCH_SQL, sql
-        page = self.pages.get(str(args[0]))
-        return page["frontmatter"] if page is not None else None
-
 
 def _library(store: FakeCollection) -> LibraryCollection:
     return LibraryCollection(store, store.ingest)

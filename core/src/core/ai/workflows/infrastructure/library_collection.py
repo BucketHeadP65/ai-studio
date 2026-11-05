@@ -611,20 +611,7 @@ class LibraryCollection:
         if presentation is not None:
             long_tail["presentation"] = presentation.model_dump(mode="json")
         try:
-            await self._ingest(
-                {
-                    "frontmatter": {
-                        **long_tail,
-                        "id": str(page["id"]),
-                        "type": str(page["type"]),
-                        "title": title,
-                        "summary": summary,
-                        "status": str(page["status"]),
-                    },
-                    "sections": [{"heading": "Applicability", "body": applicability}],
-                },
-                collection=self._collection,
-            )
+            await self._rewrite(page, long_tail, title=title, summary=summary, applicability=applicability)
         except Exception as exc:
             msg = f"the collection refused to redescribe {workflow_id!r}: {exc}"
             raise LibraryError(msg) from exc
@@ -657,20 +644,7 @@ class LibraryCollection:
         else:
             long_tail.pop("archived_at", None)
         try:
-            await self._ingest(
-                {
-                    "frontmatter": {
-                        **long_tail,
-                        "id": str(page["id"]),
-                        "type": str(page["type"]),
-                        "title": str(page["title"]),
-                        "summary": str(page["summary"] or ""),
-                        "status": str(page["status"]),
-                    },
-                    "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
-                },
-                collection=self._collection,
-            )
+            await self._rewrite(page, long_tail)
         except Exception as exc:
             msg = f"the collection refused to update the archive state of {workflow_id!r}: {exc}"
             raise LibraryError(msg) from exc
@@ -718,10 +692,10 @@ class LibraryCollection:
         The page records under `reusable_steps` the consumer record of every inline step whose name a reusable step
         has saved versions of, read against those versions and the prior record. The prior record is the one the page
         already holds when this version is saved again, else the lineage parent's, so a decline and a diverged copy's
-        version carry over while the copy is unchanged. After the page is written, the lineage's parent and every live lower version of the same name are linked forward to it with
-        `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
-        page saved and warns with `SupersessionIncompleteWarning`. A presentation and an intent are written only
-        when given.
+        version carry over while the copy is unchanged. After the page is written, the lineage's parent and every
+        live lower version of the same name are linked forward to it with `superseded_by`, and a lower version saved
+        after a higher one stays live. A link that fails leaves the new page saved and warns with
+        `SupersessionIncompleteWarning`. A presentation and an intent are written only when given.
 
         Args:
             workflow: The workflow to save. Its name and version choose the page.
@@ -810,7 +784,7 @@ class LibraryCollection:
         if stored is not None:
             document = stored if isinstance(stored, Mapping) else json.loads(stored)
             prior = _consumer_entries(document.get("reusable_steps"), workflow_id=prior_id)
-        return consumer_record(workflow, versions, parent=prior)
+        return consumer_record(workflow, versions, prior=prior)
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.
@@ -831,7 +805,8 @@ class LibraryCollection:
         for row in found:
             workflow_id = str(row["id"])
             match = _VERSIONED_ID.match(workflow_id)
-            entry = next((held for held in _consumer_entries(row["reusable_steps"], workflow_id=workflow_id) if held.step == step_name), None)
+            record = _consumer_entries(row["reusable_steps"], workflow_id=workflow_id)
+            entry = next((held for held in record if held.step == step_name), None)
             if match is None or entry is None:
                 continue
             cards.append(ConsumerCard(workflow_id=workflow_id, name=match["name"], version=int(match["version"]), entry=entry))
@@ -855,10 +830,10 @@ class LibraryCollection:
         return _consumer_entries(document.get("reusable_steps"), workflow_id=resolved)
 
     async def record_decline(self, workflow_id: str, *, step: str, step_hash: str, because: Literal["kept", "reverted"]) -> None:
-        """Record on a live workflow version that it keeps its copy of a step instead of one step version.
+        """Record on a workflow version nothing has superseded that it keeps its copy of a step instead of one step version.
 
-        The page is written back with that entry declined and every other key and entry as stored. A decline already
-        recorded writes nothing.
+        An archived version takes a decline too. The page is written back with that entry declined and every other key
+        and entry as stored. A decline already recorded writes nothing.
 
         Args:
             workflow_id: The page id.
@@ -868,7 +843,7 @@ class LibraryCollection:
 
         Raises:
             LibraryError: If no page has that id, it is superseded, its record holds no copy of `step`, or the ingest
-                refuses the write. Nothing is written in each case but the last.
+                refuses the write. Nothing is written in each case.
         """
         superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
@@ -900,20 +875,7 @@ class LibraryCollection:
         if record:
             kept["reusable_steps"] = [entry.model_dump(mode="json") for entry in record]
         try:
-            await self._ingest(
-                {
-                    "frontmatter": {
-                        **kept,
-                        "id": str(page["id"]),
-                        "type": str(page["type"]),
-                        "title": str(page["title"]),
-                        "summary": str(page["summary"] or ""),
-                        "status": str(page["status"]),
-                    },
-                    "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
-                },
-                collection=self._collection,
-            )
+            await self._rewrite(page, kept)
         except LibraryError:
             raise
         except Exception as exc:
@@ -931,7 +893,7 @@ class LibraryCollection:
         if "spec" not in long_tail and "step" not in long_tail:
             return False
         try:
-            await self._link_forward(page, long_tail, by=by)
+            await self._rewrite(page, long_tail, superseded_by=by)
         except Exception as exc:
             warnings.warn(
                 f"stored {by!r}, but could not link {parent_id!r} forward to it ({exc}). "
@@ -942,25 +904,32 @@ class LibraryCollection:
             return False
         return True
 
-    async def _link_forward(self, page: Mapping[str, Any], long_tail: Mapping[str, Any], *, by: str) -> None:
-        """Write the parent back with `superseded_by` set, rebuilt from what the library gave us."""
-        await self._ingest(
-            {
-                # The long tail is spread FIRST so the modelled keys always win: a stored jsonb
-                # that somehow carried one would otherwise stomp the link this write exists to make.
-                "frontmatter": {
-                    **long_tail,
-                    "id": str(page["id"]),
-                    "type": str(page["type"]),
-                    "title": str(page["title"]),
-                    "summary": str(page["summary"] or ""),
-                    "status": str(page["status"]),
-                    "superseded_by": f"[[{by}]]",
-                },
-                "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
-            },
-            collection=self._collection,
-        )
+    async def _rewrite(
+        self,
+        page: Mapping[str, Any],
+        long_tail: Mapping[str, Any],
+        *,
+        title: str | None = None,
+        summary: str | None = None,
+        applicability: str | None = None,
+        superseded_by: str | None = None,
+    ) -> None:
+        """Ingest a page read with `PAGE_SQL` again: `long_tail` as its kept keys, and each modelled key as stored unless given."""
+        frontmatter: dict[str, Any] = {
+            # The long tail is spread FIRST so the modelled keys always win: a stored jsonb that
+            # somehow carried one would otherwise stomp them, the supersession link included.
+            **long_tail,
+            "id": str(page["id"]),
+            "type": str(page["type"]),
+            "title": str(page["title"]) if title is None else title,
+            "summary": str(page["summary"] or "") if summary is None else summary,
+            "status": str(page["status"]),
+        }
+        if superseded_by is not None:
+            frontmatter["superseded_by"] = f"[[{superseded_by}]]"
+        body = str(page["applicability"] or "") if applicability is None else applicability
+        payload = {"frontmatter": frontmatter, "sections": [{"heading": "Applicability", "body": body}]}
+        await self._ingest(payload, collection=self._collection)
 
     async def put_step(
         self,
@@ -1049,20 +1018,7 @@ class LibraryCollection:
         if cases:
             long_tail["cases"] = _cases_text(cases)
         try:
-            await self._ingest(
-                {
-                    "frontmatter": {
-                        **long_tail,
-                        "id": step_id,
-                        "type": str(page["type"]),
-                        "title": str(page["title"]),
-                        "summary": str(page["summary"] or ""),
-                        "status": str(page["status"]),
-                    },
-                    "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
-                },
-                collection=self._collection,
-            )
+            await self._rewrite(page, long_tail)
         except LibraryError:
             raise
         except Exception as exc:

@@ -1,18 +1,13 @@
 """Every save path records the same consumer record: the Save button, `save_workflow`, `adapt_workflow` and `harness import`.
 
 Each path saves the same workflow, holding a copy of the reusable step `digest` at v3, into its own library over one
-small collection. The fake below is that collection: the ingest writes into the same pages the rows read from, shaped
-the way `api.cards` answers (the modelled keys lifted into columns, the rest left in `frontmatter`), and it drops
-`None` and empty containers at every depth before it stores, as engram's ingest does.
+small collection, `FakeCollection` with `prune` on, which drops `None` and empty containers at every depth before it
+stores, as engram's ingest does.
 """
 
 from __future__ import annotations
 
-import json
-import re
-
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import yaml
 
@@ -31,16 +26,7 @@ from core.ai.workflows.contracts import (
     WorkflowPresentation,
     step_content_address,
 )
-from core.ai.workflows.infrastructure.library_collection import (
-    FETCH_SQL,
-    LIVE_STEP_VERSIONS_SQL,
-    LIVE_VERSIONS_SQL,
-    PAGE_SQL,
-    STEP_PAGES_SQL,
-    SUPERSEDED_SQL,
-    WORKFLOW_COLLECTION,
-    collection_toolset,
-)
+from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION, collection_toolset
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
 from pydantic_ai.usage import RunUsage
@@ -49,80 +35,10 @@ from harness.features.authoring.domain import Draft
 from harness.features.authoring.service import save_draft
 from harness.features.browsing.importing import import_path
 from harness.settings import SelfAuthoringSettings
+from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from pathlib import Path
-
-_COLUMNS = ("id", "type", "title", "summary", "status")
-
-
-def _pruned(value: object) -> object:
-    """What engram stores for one frontmatter value: `None` and empty containers dropped at every depth."""
-    if isinstance(value, bool | int | float | str):
-        return value
-    if isinstance(value, list | tuple):
-        items = [kept for kept in (_pruned(item) for item in value) if kept is not None]
-        return items or None
-    if isinstance(value, Mapping):
-        nested = {str(key): kept for key, kept in ((key, _pruned(item)) for key, item in value.items()) if kept is not None}
-        return nested or None
-    return None
-
-
-class FakeCollection:
-    """The rows and the ingest of one collection over one dict of pages, so a save is read back by the next call."""
-
-    def __init__(self, *, collection: str = "test-knowledge-base") -> None:
-        self.collection = collection
-        self.pages: dict[str, dict[str, Any]] = {}
-        self.payloads: list[Mapping[str, Any]] = []
-
-    async def ingest(self, payload: Mapping[str, Any], *, collection: str) -> None:
-        assert collection == self.collection
-        self.payloads.append(payload)
-        authored = dict(payload["frontmatter"])
-        long_tail = {key: value for key, value in authored.items() if key not in (*_COLUMNS, "superseded_by")}
-        self.pages[str(authored["id"])] = {
-            **{key: authored[key] for key in _COLUMNS},
-            "superseded": authored.get("superseded_by") is not None,
-            "frontmatter": {key: kept for key, kept in ((key, _pruned(value)) for key, value in long_tail.items()) if kept is not None},
-            "applicability": payload["sections"][0]["body"],
-        }
-
-    async def fetch(self, sql: str, /, *args: object) -> Sequence[Mapping[str, Any]]:
-        if sql == STEP_PAGES_SQL:
-            names = args[1]
-            assert isinstance(names, list)
-            return [
-                {"id": page["id"], "step": json.dumps(page["frontmatter"]["step"])}
-                for page in self.pages.values()
-                if page["type"] == "step" and page["frontmatter"]["step"]["name"] in names
-            ]
-        if sql in (LIVE_STEP_VERSIONS_SQL, LIVE_VERSIONS_SQL):
-            page_type = "step" if sql == LIVE_STEP_VERSIONS_SQL else "workflow"
-            # SQL `like`: `%` is any run of characters and `_` is any one character.
-            like = re.compile("".join(".*" if char == "%" else "." if char == "_" else re.escape(char) for char in str(args[1])))
-            return [
-                {"id": page["id"]}
-                for page in self.pages.values()
-                if page["type"] == page_type and like.fullmatch(str(page["id"])) and "archived_at" not in page["frontmatter"] and not page["superseded"]
-            ]
-        page = self.pages.get(str(args[0]))
-        if sql == SUPERSEDED_SQL:
-            return [{"superseded": page["superseded"]}] if page is not None else []
-        assert sql == PAGE_SQL, sql
-        return [page] if page is not None else []
-
-    async def fetchval(self, sql: str, /, *args: object) -> str | Mapping[str, Any] | None:
-        assert sql == FETCH_SQL, sql
-        page = self.pages.get(str(args[0]))
-        return page["frontmatter"] if page is not None else None
-
-    def written(self, workflow_id: str) -> Mapping[str, Any]:
-        """The frontmatter the last write of `workflow_id` handed the ingest."""
-        return next(payload["frontmatter"] for payload in reversed(self.payloads) if payload["frontmatter"]["id"] == workflow_id)
-
 
 TEXT = Shape(json_schema={"type": "string"})
 
@@ -213,7 +129,7 @@ def _spec_yaml(workflow: Workflow) -> str:
 
 
 async def _through_the_save_button(tmp_path: Path) -> list[object]:
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     library = await _library(store)
     draft = Draft(
         spec_yaml=_spec_yaml(_workflow(DIGEST[3])),
@@ -229,14 +145,14 @@ async def _through_the_save_button(tmp_path: Path) -> list[object]:
 
 
 async def _through_save_workflow() -> list[object]:
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     said = await _port(await _library(store))._save(_ctx(), _spec_yaml(_workflow()), applicability="Use per source. Not for a batch.", uses=["st.digest.v3"])
     assert said.startswith("saved as wf.digest-sources.v1"), said
     return store.written("wf.digest-sources.v1")["reusable_steps"]
 
 
 async def _through_adapt_workflow() -> list[object]:
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     port = _port(await _library(store))
     await port._save(_ctx(), _spec_yaml(_workflow()), applicability="Use per source. Not for a batch.", uses=["st.digest.v3"])
     said = await port._adapt(
@@ -247,7 +163,7 @@ async def _through_adapt_workflow() -> list[object]:
 
 
 async def _through_the_import(tmp_path: Path) -> list[object]:
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     library = await _library(store)
     folder = tmp_path / "import"
     (folder / "workflows").mkdir(parents=True)
@@ -269,7 +185,7 @@ async def test_every_save_path_records_the_same_reusable_steps(tmp_path: Path) -
 
 
 async def test_no_save_path_writes_uses(tmp_path: Path) -> None:
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     port = _port(await _library(store))
     await port._save(_ctx(), _spec_yaml(_workflow()), applicability="Use per source. Not for a batch.", uses=["st.digest.v3"])
     folder = tmp_path / "import"
@@ -282,7 +198,7 @@ async def test_no_save_path_writes_uses(tmp_path: Path) -> None:
 
 async def test_importing_an_unchanged_version_again_keeps_its_decline_and_its_diverged_entry(tmp_path: Path) -> None:
     """`harness import` saves every workflow file on every run, with no lineage, and must not forget what the page recorded."""
-    store = FakeCollection()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
     library = await _library(store)
     port = _port(library)
     await port._save(_ctx(), _spec_yaml(_workflow()), applicability="Use per source. Not for a batch.", uses=["st.digest.v3"])
