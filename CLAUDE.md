@@ -48,7 +48,8 @@ applications are kept clean of:
   Data, not code. `studio init --template <slug>` starts a knowledge base from one and `harness import
   templates/<slug>/workflows` imports its workflows. Nothing outside `templates/` imports or reads a
   template except the `studio init --template` resolver and `engram.testing.specs`, held by an
-  import-boundary test in each Python project.
+  import-boundary test in each Python project. A change to a template's workflows also runs engram's
+  `tests/unit/engram/init` tier, which checks every shipped workflow's node names and run card.
 - **`vendor/pydantic-graph/`**: pydantic-graph 2.66.0 with the unreleased fix for UB-17 and UB-22 applied. core
   declares it with a path source, so every Python project resolves to it, and its README says when to delete it.
 - **`pydantic-ai-harness`** comes from PyPI (`>=0.66.0`), released from the pydantic-ai repository
