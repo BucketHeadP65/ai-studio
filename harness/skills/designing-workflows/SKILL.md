@@ -125,6 +125,9 @@ says why.
 - **A run that skipped most of its work did not complete.** `abort_after_repeats` catches a systemic fault
   repeating identically. It does not catch a majority of items failing for varied reasons. An outcome that says
   `completed` over a majority of skips still teaches the owner to trust a run that failed.
+- **A part that failed is named, with its reason, where a person reads the run.** A run that records "ok" and a
+  count of failed parts teaches the owner nothing until someone reruns it by hand. Carry each failed part's reason
+  on the run's record and on the screen that shows the run, in one readable line.
 - **A per-worker request limit is a backstop, not a budget.** A limit of 24 model calls for one document is a
   design that expects a loop. Ask why a worker needs 24 turns before raising it.
 - **A step that runs programs spends a tool call for every call its programs make.** Size its tool-call budget
@@ -153,6 +156,11 @@ nothing costs no model call, and the judge then spends its whole budget on judgm
 **One judge per concern.** A judge's rejection sends everything it reviewed back for another round. Put each
 independent concern behind its own judge, wired to send back only the step that concern is about, so a weak item of
 one kind never costs a full round of another.
+
+**A judge over a list of items that stand alone decides per item.** A gate that approves or rejects the whole list
+sends every item back for one weak one, and when its last round still finds a weak one the run keeps none of them.
+Let the judge mark each item, keep what passes and drop what fails with its reason. Use a redo round only when an item
+cannot be dropped.
 
 **The model cites, code copies.** When an answer must carry text that already exists (a quoted finding, a clause, a
 section kept as it was), the model names it by its handle (an id, an anchor) and a program copies the words from the
@@ -206,6 +214,8 @@ turn. Then check it against the spend rows after the first real run.
       judgment at the judge, and does the landing step catch refusals per item?
 - [ ] Does the essential write land before any optional branch starts, and never wait on one?
 - [ ] Does each judge review one concern, so a rejection reruns only that concern's work?
+- [ ] Does a judge over a list of independent items keep what passes and drop what fails, rather than lose them all?
+- [ ] Does each failed part show its reason on the run's record and screen, not only a count?
 - [ ] Is text that must be reproduced copied by a program from its source, the model naming it only by its handle?
 - [ ] Does a result that waits for a person land as a page with a status and a stable id?
 - [ ] Does the next run read the person's decision from the page itself, and write over only its own pending page,
