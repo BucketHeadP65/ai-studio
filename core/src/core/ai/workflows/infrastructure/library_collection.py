@@ -6,7 +6,8 @@ and writes through the ingest callable the library is given, so this module neve
 holds no writer credential. Each version is its own page, `wf.<name>.v<n>` for a workflow and `st.<name>.v<n>` for
 a reusable step. Saving a version links every live lower version of the name forward to it, and `search`, `catalog`
 and `current` read only pages nothing has superseded. A reusable step version holds one content: it is never saved
-again with different content.
+again with different content. A saved workflow version records, under `reusable_steps`, which saved version of each
+reusable step its copies match.
 """
 
 from __future__ import annotations
@@ -17,26 +18,24 @@ import warnings
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.toolsets import FunctionToolset
 
 from core.ai.workflows.contract_port import LibraryVocabulary
-from core.ai.workflows.domain.consumers import StepVersion
+from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, step_content_address
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage
 from core.ai.workflows.domain.presentation import WorkflowPresentation, verify_presentation
 from core.ai.workflows.domain.vocabulary import InlineStep, Workflow
 from core.ai.workflows.exceptions import LibraryError, StepVersionChangedError, WorkflowUnknownError
-from core.ai.workflows.read_models import SavedWorkflow
+from core.ai.workflows.read_models import ConsumerCard, SavedWorkflow
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-    from pydantic import JsonValue
 
     from core.ai.embedding import QueryEmbedder
     from core.ai.workflows.internal_contracts import Ingest, Rows
@@ -139,6 +138,18 @@ where c.type = 'step' and c.src_collection = $1 and c.id like $2
 The pattern is not escaped, and `_` is a wildcard in it, so a caller must take each id apart with `_VERSIONED_STEP_ID`
 and keep only ids of the exact name."""
 
+CONSUMERS_SQL = """
+select c.id, c.frontmatter -> 'reusable_steps' as reusable_steps
+from api.cards c
+where c.type = 'workflow' and c.src_collection = $1
+  and c.frontmatter -> 'reusable_steps' @> $2::jsonb
+  and not (c.frontmatter ? 'archived_at') and not c.superseded
+"""
+"""The id and the consumer record of every live workflow page in collection `$1` whose record holds an entry like `$2`.
+
+Bind `$2` as the JSON text of a list holding one object, `[{"step": "<name>"}]`, so jsonb containment matches the
+pages whose record has an entry for that step. The rows come in no particular order."""
+
 ARCHIVED_SQL = """
 select c.id, c.title, c.summary, c.status, c.frontmatter,
        coalesce((select s.body from api.sections s
@@ -236,6 +247,23 @@ def _parse_archived_at(frontmatter: Mapping[str, JsonValue] | str | None, *, wor
             return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
     warnings.warn(f"{workflow_id!r} has an archived_at that will not parse ({recorded!r}). Treating it as archived at the epoch.", stacklevel=2)
     return _EPOCH
+
+
+_RECORD = TypeAdapter(list[dict[str, JsonValue]])
+"""Validates a stored consumer record into its entries as mappings, before each is read as a `ConsumerEntry`."""
+
+
+def _consumer_entries(stored: JsonValue, *, workflow_id: str) -> tuple[ConsumerEntry, ...]:
+    """The consumer record a page keeps under `reusable_steps`, a list or its JSON text, refused naming the page when it does not parse."""
+    if stored is None:
+        return ()
+    try:
+        entries = _RECORD.validate_python(json.loads(stored) if isinstance(stored, str) else stored)
+        # The ingest drops a null at every depth, so the entry of a diverged copy comes back without `version`.
+        return tuple(ConsumerEntry.model_validate({"version": None, **entry}) for entry in entries)
+    except (ValidationError, json.JSONDecodeError) as exc:
+        msg = f"the consumer record on {workflow_id!r} does not parse: {exc}"
+        raise LibraryError(msg) from exc
 
 
 def _cases_text(cases: Mapping[str, JsonValue]) -> str:
@@ -687,20 +715,22 @@ class LibraryCollection:
     ) -> str:
         """Save the workflow as its own page, `wf.<name>.v<version>`, with status `draft`, and return the page id.
 
-        After the page is written, the lineage's parent and every live lower version of the same name are
-        linked forward to it with `superseded_by`, and a lower version saved after a higher one stays live.
-        A link that fails leaves the new page saved and warns with `SupersessionIncompleteWarning`.
-        A presentation and an intent are written only when given.
+        The page records under `reusable_steps` the consumer record of every inline step whose name a reusable step
+        has saved versions of, read against those versions and the lineage parent's record. After the page is
+        written, the lineage's parent and every live lower version of the same name are linked forward to it with
+        `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
+        page saved and warns with `SupersessionIncompleteWarning`. A presentation and an intent are written only
+        when given.
 
         Args:
             workflow: The workflow to save. Its name and version choose the page.
             title: The card's title.
             summary: The card's summary.
             applicability: When to use the workflow, written as the page's Applicability section.
-            provenance: `saved_by` names who saved it, and `uses` lists the reusable step ids it was
-                assembled from, comma separated. It is saved as the frontmatter list `uses`.
+            provenance: `saved_by` names who saved it.
             fingerprint: The environment stamp to keep, or None.
-            lineage: The adaptation that produced this workflow, or None. Its parent is linked forward.
+            lineage: The adaptation that produced this workflow, or None. Its parent is linked forward, and its
+                parent's consumer record is read for the copies this version keeps or changed.
             presentation: The author's words about the workflow, or None.
             intent: What the person who wanted the workflow asked for, or None.
 
@@ -708,8 +738,9 @@ class LibraryCollection:
             The page id the workflow lives under.
 
         Raises:
-            LibraryError: If this exact version already exists and is superseded, or the ingest refuses
-                the page. The current version of anything still saves again freely.
+            LibraryError: If this exact version already exists and is superseded, the parent's consumer record
+                does not parse, or the ingest refuses the page. The current version of anything still saves again
+                freely.
             PresentationRefusedError: If the presentation names an input or an artifact the
                 workflow does not declare. Nothing is read or written in that case.
         """
@@ -724,6 +755,7 @@ class LibraryCollection:
                 f"{workflow.name!r} and adapt that instead."
             )
             raise LibraryError(msg)
+        record = await self._consumer_record(workflow, lineage)
         frontmatter: dict[str, Any] = {
             "id": workflow_id,
             "type": PAGE_TYPE,
@@ -741,8 +773,8 @@ class LibraryCollection:
             ("intent", intent),
         )
         frontmatter.update({key: document.model_dump(mode="json") for key, document in optional if document is not None})
-        if "uses" in provenance:
-            frontmatter["uses"] = [item for item in provenance["uses"].split(",") if item]
+        if record:
+            frontmatter["reusable_steps"] = [entry.model_dump(mode="json") for entry in record]
         try:
             await self._ingest(
                 {"frontmatter": frontmatter, "sections": [{"heading": "Applicability", "body": applicability}]},
@@ -762,6 +794,128 @@ class LibraryCollection:
         for stale_id in retired:
             await self._supersede(stale_id, by=workflow_id)
         return workflow_id
+
+    async def _consumer_record(self, workflow: Workflow, lineage: Lineage | None) -> tuple[ConsumerEntry, ...]:
+        """The consumer record a save of `workflow` writes, read against every saved version of its inline steps and its parent's record."""
+        if not workflow.inline:
+            return ()
+        versions = await self.step_versions_of([step.name for step in workflow.inline])
+        parent: tuple[ConsumerEntry, ...] = ()
+        if lineage is not None:
+            parent_id = page_id(lineage.parent_name, lineage.parent_version)
+            stored = await self._rows.fetchval(FETCH_SQL, parent_id)
+            if stored is not None:
+                document = stored if isinstance(stored, Mapping) else json.loads(stored)
+                parent = _consumer_entries(document.get("reusable_steps"), workflow_id=parent_id)
+        return consumer_record(workflow, versions, parent=parent)
+
+    async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
+        """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.
+
+        Live means neither archived nor superseded.
+
+        Args:
+            step_name: The reusable step's name.
+
+        Returns:
+            One card per workflow version, carrying its record's entry for the step. Empty when no live version holds a copy.
+
+        Raises:
+            LibraryError: The record on one of those pages does not parse.
+        """
+        found = await self._rows.fetch(CONSUMERS_SQL, self._collection, json.dumps([{"step": step_name}]))
+        cards: list[ConsumerCard] = []
+        for row in found:
+            workflow_id = str(row["id"])
+            match = _VERSIONED_ID.match(workflow_id)
+            entry = next((held for held in _consumer_entries(row["reusable_steps"], workflow_id=workflow_id) if held.step == step_name), None)
+            if match is None or entry is None:
+                continue
+            cards.append(ConsumerCard(workflow_id=workflow_id, name=match["name"], version=int(match["version"]), entry=entry))
+        return tuple(sorted(cards, key=lambda card: (card.name, card.version)))
+
+    async def fetch_consumer_record(self, workflow_id: str) -> tuple[ConsumerEntry, ...]:
+        """The consumer record one workflow version was saved with, one entry per copy of a reusable step, by step name.
+
+        Args:
+            workflow_id: A page id, `wf.<name>`, or a bare name for its newest live version.
+
+        Returns:
+            The entries. Empty for a workflow that holds no copy of a reusable step.
+
+        Raises:
+            WorkflowUnknownError: If no page has that id.
+            LibraryError: If the record on the page does not parse.
+        """
+        resolved = await self._resolved(workflow_id)
+        document = await self._frontmatter(resolved, unknown=WorkflowUnknownError)
+        return _consumer_entries(document.get("reusable_steps"), workflow_id=resolved)
+
+    async def record_decline(self, workflow_id: str, *, step: str, step_hash: str, because: Literal["kept", "reverted"]) -> None:
+        """Record on a live workflow version that it keeps its copy of a step instead of one step version.
+
+        The page is written back with that entry declined and every other key and entry as stored. A decline already
+        recorded writes nothing.
+
+        Args:
+            workflow_id: The page id.
+            step: The reusable step's name.
+            step_hash: The content address of the step version declined.
+            because: `kept` when step maintenance kept the copy, `reverted` when a live trial of that version reverted.
+
+        Raises:
+            LibraryError: If no page has that id, it is superseded, its record holds no copy of `step`, or the ingest
+                refuses the write. Nothing is written in each case but the last.
+        """
+        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        if superseded and bool(superseded[0].get("superseded")):
+            msg = (
+                f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link. "
+                f"Record the decline on the newest live version of the workflow."
+            )
+            raise LibraryError(msg)
+        found = await self._rows.fetch(PAGE_SQL, workflow_id)
+        if not found:
+            msg = f"no workflow {workflow_id!r} in collection {self._collection!r}"
+            raise LibraryError(msg)
+        page = found[0]
+        stored = page["frontmatter"]
+        long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
+        record = _consumer_entries(long_tail.get("reusable_steps"), workflow_id=workflow_id)
+        held = next((entry for entry in record if entry.step == step), None)
+        if held is None:
+            msg = f"{workflow_id!r} holds no copy of the reusable step {step!r}, so it has no copy to keep."
+            raise LibraryError(msg)
+        declined = held.model_copy(update={"declined": step_hash, "declined_because": because})
+        if declined == held:
+            return
+        await self._write_record(page, long_tail, tuple(declined if entry is held else entry for entry in record))
+
+    async def _write_record(self, page: Mapping[str, Any], long_tail: Mapping[str, Any], record: Sequence[ConsumerEntry]) -> None:
+        """Write a live page back with `record` as its consumer record, every other kept key as `long_tail` holds it."""
+        kept = {key: value for key, value in long_tail.items() if key != "reusable_steps"}
+        if record:
+            kept["reusable_steps"] = [entry.model_dump(mode="json") for entry in record]
+        try:
+            await self._ingest(
+                {
+                    "frontmatter": {
+                        **kept,
+                        "id": str(page["id"]),
+                        "type": str(page["type"]),
+                        "title": str(page["title"]),
+                        "summary": str(page["summary"] or ""),
+                        "status": str(page["status"]),
+                    },
+                    "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
+                },
+                collection=self._collection,
+            )
+        except LibraryError:
+            raise
+        except Exception as exc:
+            msg = f"the collection refused the consumer record of {page['id']!r}: {exc}"
+            raise LibraryError(msg) from exc
 
     async def _supersede(self, parent_id: str, *, by: str) -> bool:
         """Link `parent_id` forward to `by`. False when there is no such page, it holds no workflow or step, or the write fails (warned)."""
@@ -1042,7 +1196,6 @@ def collection_toolset(library: LibraryCollection) -> FunctionToolset[object]:
         by: str,
         stamp: dict[str, object] | None = None,
         parent: dict[str, object] | None = None,
-        uses: list[str] | None = None,
         words: dict[str, object] | None = None,
         asked_for: dict[str, object] | None = None,
     ) -> dict[str, object]:
@@ -1052,7 +1205,7 @@ def collection_toolset(library: LibraryCollection) -> FunctionToolset[object]:
             title=title,
             summary=summary,
             applicability=when,
-            provenance={"saved_by": by, "uses": ",".join(uses or [])},
+            provenance={"saved_by": by},
             fingerprint=WorkflowFingerprint.model_validate(stamp) if stamp is not None else None,
             lineage=Lineage.model_validate(parent) if parent is not None else None,
             presentation=WorkflowPresentation.model_validate(words) if words is not None else None,
@@ -1135,7 +1288,6 @@ WORKFLOW_COLLECTION = LibraryVocabulary(
         "by": write.saved_by,
         "stamp": write.fingerprint.model_dump(mode="json") if write.fingerprint is not None else None,
         "parent": write.lineage.model_dump(mode="json") if write.lineage is not None else None,
-        "uses": list(write.uses) if write.uses is not None else None,
         "words": write.presentation.model_dump(mode="json") if write.presentation is not None else None,
         "asked_for": write.intent.model_dump(mode="json") if write.intent is not None else None,
     },

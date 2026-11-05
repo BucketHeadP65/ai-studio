@@ -75,8 +75,6 @@ class WorkflowWrite:
     """The typed diff that produced this workflow, when it is an adaptation. Always derived by
     `adapt` from the ops it applied itself, so a model's own claim about parentage never reaches
     this."""
-    uses: Sequence[str] | None = None
-    """Reusable step ids this version was assembled from, for a host that keeps such a list."""
     presentation: WorkflowPresentation | None = None
     """The author's own words about this workflow, for the surfaces a person meets it on. `None`
     is a workflow nobody described, which is never words this code composed."""
@@ -676,7 +674,6 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
                 summary=self._card_field(summary, workflow.description),
                 applicability=applicability,
                 called=SAVE_TOOL,
-                uses=uses,
                 presentation=_words(purpose, produces, owner_participation, not_for),
                 intent=intent,
             )
@@ -778,7 +775,6 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         applicability: str,
         called: str,
         lineage: Lineage | None = None,
-        uses: Sequence[str] | None = None,
         presentation: WorkflowPresentation | None = None,
         intent: WorkflowIntent | None = None,
     ) -> str:
@@ -809,7 +805,6 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             saved_by=self.saved_by,
             fingerprint=fingerprint(workflow, registry, environment=dict(self.environment)),
             lineage=lineage,
-            uses=uses,
             presentation=presentation,
             intent=intent,
         )

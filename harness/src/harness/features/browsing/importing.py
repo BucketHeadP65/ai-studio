@@ -38,7 +38,6 @@ class _ReadyWorkflow:
     title: str
     summary: str
     applicability: str
-    uses: tuple[str, ...]
     presentation: WorkflowPresentation | None
 
 
@@ -95,7 +94,6 @@ async def import_path(
                 title=str(document.frontmatter.get("title") or workflow.name),
                 summary=str(document.frontmatter.get("description") or workflow.description),
                 applicability=document.body.strip(),
-                uses=uses,
                 presentation=presentation,
             )
         )
@@ -118,7 +116,7 @@ async def import_path(
                 title=ready_workflow.title,
                 summary=ready_workflow.summary,
                 applicability=ready_workflow.applicability,
-                provenance={"saved_by": by, "uses": ",".join(ready_workflow.uses)},
+                provenance={"saved_by": by},
                 fingerprint=fingerprint(ready_workflow.workflow, registry, environment=dict(environment or {})),
                 presentation=ready_workflow.presentation,
             )
