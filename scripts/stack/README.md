@@ -26,8 +26,10 @@ scripts/stack/stack.sh uninstall
 
 ## One-time prerequisites
 
-1. **Docker Desktop starts at login** (Docker Desktop settings, General). The `db` agent only runs
-   `docker compose up`. It cannot start Docker itself.
+1. **Docker Desktop starts at login** (Docker Desktop settings, General). When the Docker engine is not answering,
+   the `db` agent starts Docker Desktop itself (`open -a Docker`) and waits up to two minutes for it, so a Docker
+   Desktop that quits while the stack runs comes back on the agent's next start. To keep Docker down, stop the agent
+   first (`stack.sh stop db`).
 2. **Grant `/bin/bash` Full Disk Access when the checkout sits in a folder macOS protects**, such as
    `~/Desktop` or `~/Documents`. A process launchd spawns gets "Operation not permitted" there until the shell that runs
    the wrappers is allowed in. `/bin` is hidden in the file picker, so open both sides from a
