@@ -237,8 +237,10 @@ directory), naming the fix (re-register at the current path, or remove the stale
 re-reads the registry (so a knowledge base registered or moved since the worker started is seen), builds a short-lived container scoped to
 that knowledge base's `path`, and runs the same steps the CLI runs. A schema preflight first, then a watch-list scan (only when the schema's
 `sources.enabled` and the knowledge base has a `_meta/watch-list.yaml` to scan, and a failed scan never fails the pass, its counts ride into the
-recorded detail as a fact, and whatever it queues onto the source queue is what the sync that follows picks up), then `sync` (only
-when the schema's `sources.enabled`, dispatching every declared connector through `MultiProviderSync` from one call), then the
+recorded detail as a fact, and whatever it queues onto the source queue is what the sync that follows picks up). Each watch-list entry the
+scan could not read is a scan failure: its label and a one-line reason, logged as one warning per entry when the scan reports it and recorded
+on the run (below). Then `sync` (only
+when the schema's `sources.enabled`, dispatching every declared connector through `MultiConnectorSync` from one call), then the
 librarian placement pass when the schema declares `sources.librarian`, then `index` with embeddings unconditionally on (there is no
 flag to turn them off, matching the standing embed-always rule everywhere else in this app). The preflight
 (`engram.init.contracts.assert_schema_at_head`, the same one `studio index` runs before touching a row) checks the database is at the
@@ -259,14 +261,19 @@ embedding failure, since rows already written keep their vectors and the next at
 run it just started. `404 unknown_job` names an id no job carries.
 
 **The refresh history** is a projection of those jobs, not a file of its own. The old `_meta/runs.jsonl` history is no longer
-read, the Studio shows the refresh history only. `GET /api/knowledge-bases/{name}/runs` reads the newest 60
-`kb.refresh` jobs for that key off the jobs table and projects the finished ones onto `RefreshRun`
-(`studio/src/studio/knowledge_base/runs.py`), answering the last 20 as `{runs}`, newest first. A record carries `started_at`,
-`finished_at`, `outcome`, `detail` and `trigger`, timestamps RFC 3339 UTC. A `done` job reads as `outcome` `ok` carrying the
-handler's one-sentence detail (what sync did, then pages indexed and embedded), a `abandoned` job as `outcome` `failed` carrying its
-last error verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it
-is over. `trigger` is `manual` for a run this route enqueued and `schedule` for one the ticker enqueued. `GET /api/knowledge-bases/{name}`
-surfaces only the newest record, as `last_run`, so the detail page can show it without a second fetch.
+read, the Studio shows the refresh history only. `GET /api/knowledge-bases/{name}/refresh-runs` reads the newest 60 `kb.refresh` jobs
+for that key off the jobs table and projects the finished ones onto `RefreshRun` (`studio/src/studio/knowledge_base/refresh/domain.py`),
+answering the last 20 as `{refresh_runs}`, newest first. A record carries `started_at`, `finished_at`, `outcome`, `detail`, `trigger`, `counts` and `scan_failures`, timestamps RFC 3339 UTC. A `done` job reads as
+`outcome` `ok` carrying the handler's one-sentence detail (what the scan and the sync did, then pages indexed and embedded), or as
+`outcome` `partial` when its scan could not read a watch-list entry. An `abandoned` job reads as `outcome` `failed` carrying its last error
+verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it is over.
+`scan_failures` lists each watch-list entry the run could not scan as `{entry, reason}`: `entry` is the entry's label (`x:omarsar0`) and
+`reason` is one line, the scanner's message cut to its first line, with no user part, query or fragment on any URL in it, and at most 300
+characters. The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
+cut, so an account out of credits reads `xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits
+or reached its monthly spending limit.` It is empty for a run whose scan read every entry or that scanned nothing, and for an abandoned run.
+`trigger` is `manual` for a run this route enqueued and `schedule` for one the ticker enqueued. `GET /api/knowledge-bases/{name}` surfaces
+only the newest record, as `last_refresh_run`, so the detail page can show it without a second fetch.
 
 **`PUT`/`DELETE /api/knowledge-bases/{name}/schedule`** set or clear one registered knowledge base's `schedule` sub-key directly on the raw JSON,
 not through a validated `KnowledgeBaseEntry`, so every other key on that row, every other row, and the rest of the settings file stay
@@ -309,7 +316,9 @@ never stops the rest of that tick or any later one.
 - **The detail page** (`/knowledge-bases/{name}`, `src/app/knowledge-bases/[name]/page.tsx` over `src/components/knowledge-bases/detail.tsx`): one knowledge base's
   whole Studio-visible state from `GET /api/knowledge-bases/{name}`: vitals, the registration switch (`PUT`/`DELETE
   .../registration`), the source queue with its add-URL form (`POST .../source-queue`) for a knowledge base declaring the `intake`
-  connector, and the standing validation list.
+  connector, and the standing validation list. Its refresh card (`src/components/knowledge-bases/refresh.tsx`) starts a refresh, sets
+  the schedule and shows the last run and the earlier ones, each with its outcome (`partial` in the warning tone), and under a run one
+  line for each scan failure: `Watch entry <entry> could not be scanned: <reason>`, the label and the reason as recorded.
 
 **"Design it with AI" creates the knowledge base first, then opens the terminal there.** It builds the same payload the "Create" button
 would from the dialog's current fields and submits it exactly the same way. Only on that request's success does it open the
