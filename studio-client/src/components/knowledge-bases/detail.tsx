@@ -108,7 +108,12 @@ export function KnowledgeBaseDetailView({
         </p>
       </header>
 
-      <div role="tablist" aria-label="Knowledge base sections" className="flex gap-1" ref={tablistRef}>
+      <div
+        role="tablist"
+        aria-label="Knowledge base sections"
+        className="flex gap-1"
+        ref={tablistRef}
+      >
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -291,7 +296,9 @@ export function KnowledgeBaseDetailView({
                           {entry.ref}
                         </span>
                         <span className="text-caption text-label-3 tabular-nums">
-                          {entry.last_scanned ? formatRelative(entry.last_scanned) : "never scanned"}
+                          {entry.last_scanned
+                            ? `covered to ${formatRelative(entry.last_scanned)}`
+                            : "never scanned"}
                         </span>
                       </li>
                     ))}
@@ -305,7 +312,8 @@ export function KnowledgeBaseDetailView({
 
           <Card className="px-4 py-3">
             <h2 className="font-medium text-sm text-label-1">
-              Standing validation{detail.validation.length > 0 ? `, ${detail.validation.length}` : ""}
+              Standing validation
+              {detail.validation.length > 0 ? `, ${detail.validation.length}` : ""}
             </h2>
             {detail.validation.length === 0 ? (
               <p className="mt-1 text-caption text-label-3">

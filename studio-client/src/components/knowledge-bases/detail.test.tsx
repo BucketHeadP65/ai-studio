@@ -33,7 +33,9 @@ afterEach(cleanup);
 // a plain empty answer here keeps those fetches out of every other test's way.
 beforeEach(() => {
   server.use(
-    http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () => HttpResponse.json({ refresh_runs: [] })),
+    http.get("http://api.test/api/knowledge-bases/:name/refresh-runs", () =>
+      HttpResponse.json({ refresh_runs: [] }),
+    ),
     http.get("http://api.test/api/knowledge-bases/:name/decisions", () =>
       HttpResponse.json({ rows: [], skipped: [], outcomes_by_page_type: {} }),
     ),
@@ -274,7 +276,14 @@ describe("KnowledgeBaseDetailView", () => {
     render(
       <KnowledgeBaseDetailView
         detail={detail({
-          watch_list: [{ scanner: "xml", ref: "https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123", max_items: 15, last_scanned: null }],
+          watch_list: [
+            {
+              scanner: "xml",
+              ref: "https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123",
+              max_items: 15,
+              last_scanned: null,
+            },
+          ],
         })}
         onAddUrl={vi.fn()}
         adding={false}
@@ -288,8 +297,37 @@ describe("KnowledgeBaseDetailView", () => {
 
     expect(screen.getByRole("heading", { name: "Decisions" })).toBeInTheDocument();
     expect(await screen.findByText("Try planning reminders")).toBeInTheDocument();
-    expect(screen.getByText("https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123")).toBeInTheDocument();
+    expect(
+      screen.getByText("https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123"),
+    ).toBeInTheDocument();
     expect(screen.getByText("never scanned")).toBeInTheDocument();
+  });
+
+  it("labels a watch-list entry's stamp as the time its scans covered to", () => {
+    render(
+      <KnowledgeBaseDetailView
+        detail={detail({
+          watch_list: [
+            {
+              scanner: "x",
+              ref: "someone",
+              max_items: 150,
+              last_scanned: "2026-10-15T19:37:09+00:00",
+            },
+          ],
+        })}
+        onAddUrl={vi.fn()}
+        adding={false}
+        addError={null}
+        onRegister={vi.fn()}
+        onUnregister={vi.fn()}
+        registering={false}
+        registerError={null}
+      />,
+    );
+
+    expect(screen.getByText(/^covered to /)).toBeInTheDocument();
+    expect(screen.queryByText("never scanned")).not.toBeInTheDocument();
   });
 
   it("names the decision pages that failed to parse", async () => {
@@ -419,7 +457,10 @@ describe("KnowledgeBaseDetailView registration", () => {
       />,
     );
 
-    await userEvent.type(screen.getByRole("textbox", { name: "Knowledge base directory" }), "/kb/tube");
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Knowledge base directory" }),
+      "/kb/tube",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Register" }));
     expect(onRegister).toHaveBeenCalledWith("/kb/tube");
   });
