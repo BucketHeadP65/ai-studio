@@ -55,30 +55,60 @@ class FoundSource(BaseModel):
 REASON_LIMIT = 300
 """The most characters a scan failure's reason keeps. A longer one is cut and ends in `...`."""
 
-_URL = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*://)(?:[^\s/'\"]*@)?(?P<rest>[^\s?#'\"]*)(?:[?#][^\s'\"]*)?")
-"""A URL with a scheme. Its user part runs to the last `@` before the first `/`, and its query and fragment follow its path."""
-_HOST_PATH = re.compile(
-    r"(?<![^\s'\"(<\[=:])(?:[^\s/'\"]*@)?"
-    r"(?P<rest>[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?(?:/[^\s?#'\"]*|(?=[?#][^\s'\"])))"
-    r"(?:[?#][^\s'\"]*)?"
+SECRET_NAMES = (
+    "token",
+    "key",
+    "auth",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "sig",
+    "signature",
+    "session",
+    "sessionid",
+    "code",
+    "credential",
 )
-"""A URL with no scheme: a dotted host starting a word or following a `:`, with a path or a query after it, and a user part before it."""
+"""The words that make a URL parameter secret when its name holds one of them, in any case."""
+
+_SCHEME_USER = re.compile(r"(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*:(?:\\?/){2})[^\s/\\?#'\"<>]*@")
+"""A URL's scheme and its `//`, JSON-escaped or not, then its user part, which runs to the last `@` before the host."""
+_HOST = r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?"
+_BARE_USER = re.compile(
+    rf"(?<![^\s'\"(<\[=:])(?P<user>[^\s/\\?#'\":@]+(?P<password>:[^\s/\\?#'\":]*)?@)"
+    rf"(?={_HOST}(?P<path>[/\\;]|[?#][^\s'\"])?)"
+)
+"""A user part in front of a dotted host with no scheme, with the password and the path or query after the host, if any."""
+_PARAMETER_NAME = r"[^=&;#?\s'\"()<>\[\]/\\]"
+_SECRET_PARAMETER = re.compile(
+    rf"(?P<name>[?&;#]{_PARAMETER_NAME}*?(?:{'|'.join(SECRET_NAMES)}){_PARAMETER_NAME}*=)[^&;#?\s'\"()<>\[\]]+", re.IGNORECASE
+)
+"""A query, fragment or `;` path parameter whose name holds a secret word, and its value."""
+
+
+def _bare_user_kept(found: re.Match[str]) -> str:
+    """Nothing for a user part that carries a password or stands before a path or a query, else the user part as it was."""
+    return "" if found["password"] is not None or found["path"] is not None else found[0]
 
 
 def without_url_secrets(text: str) -> str:
-    """`text` with the user part, the query and the fragment of every URL in it dropped, where a credential would sit.
+    """`text` with the user part of every URL in it dropped and the value of every secret-named parameter masked as `***`.
 
-    A URL with a scheme loses them wherever it stands. A host with no scheme loses them when a path or a query
-    follows it, so a bare host or an email address is left as it is.
+    A parameter is secret when its name holds a word of `SECRET_NAMES`, in a query, a fragment or a `;` path parameter.
+    The rest of a URL stays as written, so two URLs that differ in an ordinary parameter stay apart. A URL with no scheme
+    loses its user part when the part carries a password or a path or a query follows the host, so an email address is
+    left as it is. A slash escaped for JSON, with a backslash before it, is read as a slash.
 
     Args:
         text: Any text, such as a failure's message or a watch entry's label.
 
     Returns:
-        The text with those parts dropped.
+        The text with those parts dropped or masked.
     """
-    text = _URL.sub(lambda found: found["scheme"] + found["rest"], text)
-    return _HOST_PATH.sub(lambda found: found["rest"], text)
+    text = _SCHEME_USER.sub(lambda found: found["scheme"], text)
+    text = _BARE_USER.sub(_bare_user_kept, text)
+    return _SECRET_PARAMETER.sub(lambda found: found["name"] + "***", text)
 
 
 def scan_failure_reason(message: str) -> str:

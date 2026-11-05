@@ -130,9 +130,10 @@ one `build(resources: SourceResources)` classmethod, refusing there when a resou
 absent. `scan_watch_list` resolves every watch-list row's `scanner` against the scanners the host built, drops what
 is new into the source queue, and stamps the row's last scan. A row whose scanner nothing serves,
 or whose scan fails, is reported against that one row and never fails the run. Its reason is one line
-(`scan_failure_reason`: the message's first line, with no user part, query or fragment on any URL, at most 300
-characters). `without_url_secrets` is that URL cut on its own, which a host applies to an entry's label before the label
-leaves the knowledge base. The `x` scanner words an HTTP error from xAI as its status, its model and the first sentence of
+(`scan_failure_reason`: the message's first line, at most 300 characters, through `without_url_secrets`, which drops the
+user part of any URL and masks as `***` the value of any query, fragment or `;` path parameter whose name holds a word of
+`SECRET_NAMES`, keeping the rest of the URL). A host applies `without_url_secrets` to an entry's label before a refresh
+records, logs, forwards or prints it. The `x` scanner words an HTTP error from xAI as its status, its model and the first sentence of
 the answer, with the team id cut.
 
 ## Authoring tools

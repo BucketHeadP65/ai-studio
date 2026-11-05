@@ -222,17 +222,55 @@ async def test_a_failure_spread_over_several_lines_is_recorded_as_its_first_line
 def test_a_reason_keeps_no_credential_a_url_in_the_message_carries() -> None:
     message = "Client error '401 Unauthorized' for url 'https://reader:hunter2@feeds.example.org/private.xml?token=s3cr3t&page=2#top'"
 
-    assert scan_failure_reason(message) == "Client error '401 Unauthorized' for url 'https://feeds.example.org/private.xml'"
+    reason = scan_failure_reason(message)
+
+    assert reason == "Client error '401 Unauthorized' for url 'https://feeds.example.org/private.xml?token=***&page=2#top'"
 
 
 def test_a_user_part_holding_an_at_sign_is_dropped_whole() -> None:
     assert scan_failure_reason("fetch https://a@b@feeds.example.org/x.xml failed") == "fetch https://feeds.example.org/x.xml failed"
 
 
-def test_a_host_path_with_no_scheme_loses_its_query_and_its_user_part() -> None:
-    assert scan_failure_reason("see feeds.example.org/a.xml?token=abc") == "see feeds.example.org/a.xml"
-    assert scan_failure_reason("see 'me:pw@feeds.example.org/a.xml#top'") == "see 'feeds.example.org/a.xml'"
-    assert scan_failure_reason("see www.example.org?token=abc now") == "see www.example.org now"
+def test_the_value_of_every_secret_named_parameter_is_masked_and_the_rest_of_the_query_kept() -> None:
+    url = "https://feeds.example.org/a.xml;jsessionid=AB12?api_key=k3y&channel_id=UC1&Auth_Token=t0k&page=2#access_token=f00&state=x"
+
+    assert without_url_secrets(url) == (
+        "https://feeds.example.org/a.xml;jsessionid=***?api_key=***&channel_id=UC1&Auth_Token=***&page=2#access_token=***&state=x"
+    )
+
+
+def test_two_channel_feeds_keep_labels_of_their_own() -> None:
+    first = "xml:https://www.youtube.com/feeds/videos.xml?channel_id=UC1"
+    second = "xml:https://www.youtube.com/feeds/videos.xml?channel_id=UC2"
+
+    assert (without_url_secrets(first), without_url_secrets(second)) == (first, second)
+
+
+def test_a_host_path_with_no_scheme_follows_the_same_rule() -> None:
+    assert scan_failure_reason("see feeds.example.org/a.xml?token=abc") == "see feeds.example.org/a.xml?token=***"
+    assert scan_failure_reason("see 'me:pw@feeds.example.org/a.xml#top'") == "see 'feeds.example.org/a.xml#top'"
+    assert scan_failure_reason("see www.example.org?token=abc now") == "see www.example.org?token=*** now"
+
+
+def test_a_user_part_with_no_path_after_it_is_dropped() -> None:
+    assert scan_failure_reason("user:pw@feeds.example.org failed") == "feeds.example.org failed"
+    assert scan_failure_reason("https://user:pw@feeds.example.org failed") == "https://feeds.example.org failed"
+
+
+def test_json_escaped_slashes_are_read_as_slashes() -> None:
+    assert without_url_secrets('{"url": "https:\\/\\/u:p@x.org\\/a?token=1"}') == '{"url": "https:\\/\\/x.org\\/a?token=***"}'
+
+
+def test_a_closing_bracket_after_a_url_stays() -> None:
+    assert without_url_secrets("(https://x.org/a?t=1) and [https://x.org/b?token=2] and <https://x.org/c#sig=3>") == (
+        "(https://x.org/a?t=1) and [https://x.org/b?token=***] and <https://x.org/c#sig=***>"
+    )
+
+
+def test_a_fragment_that_is_a_json_pointer_is_kept() -> None:
+    url = "https://x.org/schema.json#/definitions/token"
+
+    assert without_url_secrets(url) == url
 
 
 def test_text_with_no_url_secret_is_left_as_it_is() -> None:
@@ -244,8 +282,8 @@ def test_text_with_no_url_secret_is_left_as_it_is() -> None:
 def test_a_watch_entry_label_loses_the_secrets_its_url_carries() -> None:
     label = "xml:https://user:pw@feeds.example.org/me.atom?token=s3cr3t"
 
-    assert without_url_secrets(label) == "xml:https://feeds.example.org/me.atom"
-    assert without_url_secrets("xml:feeds.example.org/me.atom?token=s3cr3t") == "xml:feeds.example.org/me.atom"
+    assert without_url_secrets(label) == "xml:https://feeds.example.org/me.atom?token=***"
+    assert without_url_secrets("xml:feeds.example.org/me.atom?token=s3cr3t") == "xml:feeds.example.org/me.atom?token=***"
     assert without_url_secrets("x:someone") == "x:someone"
 
 
