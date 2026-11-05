@@ -57,8 +57,8 @@ before creating a new one, to see whether one already covers the same workflow.
   again after the fire. A schedule cannot fire after its own workflow. An `on index` fire passes the changed pages
   to the workflow's `changed_page_ids` parameter, so the schedule is refused over a workflow that does not declare it.
 - `gate_mode`: `wait` opens a gate decided by a person (the default). `orchestrate` hands it to
-  this schedule's own orchestrator instead. `auto` passes every gate with nobody asked, only on
-  the person's explicit instruction. `gate_policy` (`wait`, or `fail_after, <seconds>`) governs
+  this schedule's own orchestrator instead. `auto` passes every person gate with nobody asked, only on
+  the person's explicit instruction, and a judge that cannot decide sends the work back as a rejection. `gate_policy` (`wait`, or `fail_after, <seconds>`) governs
   how long a `wait` gate holds before failing the run.
 - `capacity_key`/`capacity_limit`: name a run budget shared across every schedule naming the same
   key, and how many of them may run at once.

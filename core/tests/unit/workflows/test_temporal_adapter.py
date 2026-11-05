@@ -11,7 +11,7 @@ from __future__ import annotations
 import inspect
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 import pytest
@@ -29,12 +29,14 @@ from core.ai.history.domain import CONTINUATION_REF_BYTES
 from core.ai.workflows.contracts import (
     CURRENT_STEP,
     DEFAULT_TASK_QUEUE,
+    JUDGE_NOTE_FALLBACK,
     Briefing,
     DurableWorkflowRun,
     FromNode,
     FromParameter,
     GateDecision,
     GateVerdict,
+    JudgeGate,
     ParameterSpec,
     PersonGate,
     RetryExhaustedError,
@@ -592,6 +594,95 @@ async def test_an_auto_approved_gate_answers_itself_and_is_recorded_apart() -> N
     evidence = run.evidence()
     assert evidence.gates_auto_approved == ["approve"]
     assert evidence.gates_approved == []
+
+
+class _Unsure(BaseModel):
+    """A judge's answer that decides nothing."""
+
+    outcome: Literal["approve", "reject", "cannot_judge"]
+    feedback: str = ""
+
+
+def _draft_then_judge() -> Workflow:
+    """One drafting step and a judge gate that reviews what it drafted."""
+    return Workflow(
+        name="judged-draft",
+        version=1,
+        description="One drafting step, and a judge gate that reviews what it drafted.",
+        nodes=(
+            RunNode(id="draft", work="draft"),
+            JudgeGate(id="check", work="check", reviews=FromNode(node="draft"), approved_when="outcome", rejected_to="draft"),
+        ),
+        output=FromNode(node="check"),
+    )
+
+
+def _automode_run_of(spec: Workflow) -> DurableWorkflowRun:
+    """A durable run of `spec` under gate mode `auto`, holding the workflow its `run` would have read off the request."""
+    run = DurableWorkflowRun()
+    run._workflow = spec
+    run.gate_mode = "auto"
+    return run
+
+
+async def test_under_automode_a_judge_that_cannot_decide_is_refused_in_the_judges_name() -> None:
+    """Automode decides nothing, so nobody passes what the judge could not judge, and the evidence counts a refusal."""
+    run = _automode_run_of(_draft_then_judge())
+
+    decision = await run.review("check", "a draft", note="The drafts are empty.")
+
+    assert decision == GateDecision(approve=False, feedback="The drafts are empty.", source="judge")
+    assert run.waiting_at() is None, "nothing waits for a person"
+    evidence = run.evidence()
+    assert evidence.gates_rejected == {"check": 1}
+    assert evidence.gates_auto_approved == [], "automode passed nothing"
+
+
+async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on() -> None:
+    run = _automode_run_of(_draft_then_judge())
+
+    decision = await run.review("check", "a draft")
+
+    assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
+    assert JUDGE_NOTE_FALLBACK.strip(), "a blank refusal tells the rerun step nothing"
+
+
+async def test_under_automode_a_judge_whose_note_is_only_whitespace_is_refused_with_the_fallback() -> None:
+    run = _automode_run_of(_draft_then_judge())
+
+    decision = await run.review("check", "a draft", note="  \n ")
+
+    assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
+
+
+async def test_under_automode_a_judge_that_never_decides_spends_the_gates_reaches_on_the_durable_engine() -> None:
+    """The durable loop end to end: each reach is the judge's own refusal, and the third ends the run with nothing passed."""
+    drafted: list[str] = []
+
+    async def draft() -> str:
+        drafted.append("draft A")
+        return "draft A"
+
+    async def check(value: str) -> _Unsure:
+        assert value == "draft A"
+        return _Unsure(outcome="cannot_judge")
+
+    registry = StepRegistry()
+    registry.register(draft)
+    registry.register(check)
+    spec = _draft_then_judge()
+    run = _automode_run_of(spec)
+    state = WorkflowState(params={})
+
+    with pytest.raises(RetryExhaustedError) as raised:
+        await build_graph(spec, registry, approval=run).run(state=state)
+
+    assert raised.value.attempts == 3
+    assert (raised.value.feedback.source, raised.value.feedback.feedback) == ("judge", JUDGE_NOTE_FALLBACK)
+    assert len(drafted) == 3
+    assert [(fact.source, fact.verdict) for fact in state.gate_decisions] == [("judge", "cannot_judge"), ("judge", "reject")] * 3
+    assert run.evidence().gates_rejected == {"check": 3}
+    assert run.evidence().gates_auto_approved == []
 
 
 async def test_a_gate_still_waits_for_a_person_when_automode_is_off() -> None:

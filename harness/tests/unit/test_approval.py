@@ -13,19 +13,49 @@ import asyncio
 
 from typing import TYPE_CHECKING, Any, cast
 
+import pytest
+
+from core.ai.workflows.contracts import JUDGE_NOTE_FALLBACK, FromNode, GateDecision, JudgeGate, RunNode, Workflow
+
 from harness.features.running.approval import ChatApproval
 from harness.features.running.domain.progress import GateVerdict
 from harness.session import NoSessionLog, Runtime
 
 if TYPE_CHECKING:
-    from core.ai.workflows.contracts import StepRegistry, Workflow
+    from core.ai.workflows.contracts import StepRegistry
+
+    from harness.domain.gates import GateMode
 
 from tests.support.state import a_throwaway_state
 
 
-def _approval(quarterly_report: Workflow, registry: StepRegistry, *, timeout: float) -> ChatApproval:
+def _approval(spec: Workflow, registry: StepRegistry, *, timeout: float, gate_mode: GateMode = "wait") -> ChatApproval:
     session = Runtime(registry=registry, library=cast("Any", None), agent=cast("Any", None), session_log=NoSessionLog(), state=a_throwaway_state())
-    return ChatApproval(session=session, workflow="wf.gated", spec=quarterly_report, timeout_seconds=timeout)
+    session.active.gate_mode = gate_mode
+    return ChatApproval(session=session, workflow="wf.gated", spec=spec, timeout_seconds=timeout)
+
+
+def _judged() -> Workflow:
+    """One drafting step and a judge gate that reviews what it drafted."""
+    return Workflow(
+        name="judged-drafts",
+        version=1,
+        description="One drafting step, and a judge gate that reviews what it drafted.",
+        nodes=(
+            RunNode(id="drafted", work="draft"),
+            JudgeGate(id="check", work="check", reviews=FromNode(node="drafted"), approved_when="outcome", rejected_to="drafted"),
+        ),
+        output=FromNode(node="check"),
+    )
+
+
+async def _until_parked(approval: ChatApproval) -> asyncio.Future[GateVerdict]:
+    for _ in range(500):
+        if (decision := approval.session.active.decision) is not None:
+            return decision
+        await asyncio.sleep(0.001)
+    msg = "the gate never parked"
+    raise AssertionError(msg)
 
 
 async def test_an_unanswered_park_refuses_in_the_deadlines_own_name(quarterly_report: Workflow, registry: StepRegistry) -> None:
@@ -85,3 +115,56 @@ async def test_a_door_with_an_asker_never_parks(quarterly_report: Workflow, regi
     assert [gate for gate, _ in asker.asked] == ["approve", "approve"]
     assert routed.session.active.pending is None, "nothing waiting: no panel is polling for it"
     assert routed.rejections() == {"approve": 1}, "the asker's verdicts are evidence like any click"
+
+
+# --- a judge that cannot decide, under each gate mode -----------------------------------------
+
+
+async def test_under_automode_a_judge_that_cannot_decide_sends_the_work_back_with_its_note(registry: StepRegistry) -> None:
+    """Automode decides nothing, so nobody approves what the judge could not judge.
+
+    The refusal is the judge's own, carrying its note back to the step the gate reruns, and it
+    spends one of the gate's reaches like any other refusal.
+    """
+    approval = _approval(_judged(), registry, timeout=0.01, gate_mode="auto")
+
+    decision = await approval.review("check", "the draft", note="The drafts are empty.")
+
+    assert decision == GateDecision(approve=False, feedback="The drafts are empty.", source="judge")
+    assert approval.decisions == {"check": [False]}
+    assert approval.rejections() == {"check": 1}
+    assert approval.auto_gates() == (), "automode passed nothing, so the record counts nothing in its name"
+    assert approval.session.active.pending is None, "nothing waits for a person"
+
+
+@pytest.mark.parametrize("note", ["", "  \n "])
+async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on(registry: StepRegistry, note: str) -> None:
+    approval = _approval(_judged(), registry, timeout=0.01, gate_mode="auto")
+
+    decision = await approval.review("check", "the draft", note=note)
+
+    assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
+
+
+async def test_under_automode_a_person_gate_still_passes_with_nobody_asked(quarterly_report: Workflow, registry: StepRegistry) -> None:
+    approval = _approval(quarterly_report, registry, timeout=0.01, gate_mode="auto")
+
+    decision = await approval.review("approve", "the draft")
+
+    assert decision == GateDecision(approve=True, source="auto")
+    assert approval.auto_gates() == ("approve",)
+    assert approval.decisions == {}, "an automatic pass is never a verdict on the record"
+
+
+async def test_waiting_a_judge_that_cannot_decide_still_asks_a_person(registry: StepRegistry) -> None:
+    approval = _approval(_judged(), registry, timeout=0.5)
+    waiting = asyncio.create_task(approval.review("check", "the draft", note="The drafts are empty."))
+    decision = await _until_parked(approval)
+
+    pending = approval.session.active.pending
+    assert pending is not None
+    assert pending.reviewing.startswith("The reviewer could not judge this and said: The drafts are empty.\n\n")
+    decision.set_result(GateVerdict(approve=True))
+
+    assert await waiting == GateDecision(approve=True, source="person")
+    assert approval.decisions == {"check": [True]}

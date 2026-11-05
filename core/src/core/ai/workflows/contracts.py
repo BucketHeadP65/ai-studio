@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from core.ai.artifacts import ArtifactRef
 from core.ai.workflows.authoring import build_type
+from core.ai.workflows.automode import JUDGE_NOTE_FALLBACK, automode_refusal
 from core.ai.workflows.birth import check_birth, shapes_of
 from core.ai.workflows.contract_port import WorkflowContract
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
@@ -141,6 +142,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CURRENT_STEP",
     "DEFAULT_TASK_QUEUE",
+    "JUDGE_NOTE_FALLBACK",
     "KNOWLEDGE_BASE_CONTROL",
     "NO_REUSABLE_STEPS",
     "AdaptationRefusedError",
@@ -240,6 +242,7 @@ __all__ = [
     "WorkflowUnknownError",
     "adapt",
     "approved_gates",
+    "automode_refusal",
     "build_graph",
     "build_type",
     "canonical_reviewed_value",

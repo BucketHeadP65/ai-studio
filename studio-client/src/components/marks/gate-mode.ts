@@ -33,7 +33,7 @@ export const GATE_MODE_WORDS: Record<GateMode, GateModeWords> = {
     label: "Pass automatically",
     short: "Automatically",
     description:
-      "Every gate passes on its own, no person approves it. It is recorded as automatic.",
+      "Every person gate passes on its own, no person approves it, and it is recorded as automatic. A judge that cannot decide sends the work back.",
     tag: "gates pass automatically",
     hint: "gates pass automatically",
   },

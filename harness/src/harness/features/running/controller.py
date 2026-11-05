@@ -548,7 +548,10 @@ class RunningController:
 
     @router.post("/run/automode")
     async def set_automode(self, body: AutomodeRequest) -> JSONResponse:
-        """Flip automode on the run in flight: from here on, every gate it reaches passes itself."""
+        """Flip automode on the run in flight.
+
+        From here on, every person gate it reaches passes itself, and a judge that cannot decide sends the work back.
+        """
         return run_automode(self._sessions.default, body, self._run.run_settings)
 
     @router.post("/sessions/{session_id}/run/automode")

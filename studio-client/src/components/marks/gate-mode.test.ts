@@ -30,6 +30,11 @@ describe("GATE_MODE_WORDS", () => {
     expect(GATE_MODE_WORDS.orchestrate.tag).toBe("the orchestrator decides gates");
   });
 
+  it("says automatic mode passes person gates and sends a judge's undecided work back", () => {
+    expect(GATE_MODE_WORDS.auto.description).toContain("Every person gate passes on its own");
+    expect(GATE_MODE_WORDS.auto.description).toContain("A judge that cannot decide sends the work back.");
+  });
+
   it("uses only the house's allowed punctuation in every word", () => {
     const ALLOWED_PUNCTUATION = /^[\w\s,.?()]*$/;
     for (const words of Object.values(GATE_MODE_WORDS)) {

@@ -42,7 +42,8 @@ Tier = Literal["orchestrator", "worker", "helper"]
 
 VERDICTS: tuple[str, ...] = ("approve", "reject", "cannot_judge")
 Verdict = Literal["approve", "reject", "cannot_judge"]
-"""What a judge answers: release the value, send it back with feedback, or hand it to a person."""
+"""What a judge answers: release the value, send it back with feedback, or hand it to whoever answers the run's
+person gates. Under gate mode `auto` nobody does, so `cannot_judge` sends the value back with the judge's note."""
 
 
 class Budget(BaseModel):
@@ -272,7 +273,9 @@ class JudgeGate(_Gate):
     bare `bool`.
 
     The field holds a `bool`, or the closed set `approve`, `reject`, `cannot_judge`.
-    `cannot_judge` hands the value to a person.
+    `cannot_judge` hands the value to whoever answers the run's person gates: a person, or the
+    run's orchestrator. Under gate mode `auto` nobody answers, so `cannot_judge` is a rejection in
+    the judge's name that carries its note and spends one of the gate's attempts.
 
     It is a field name, not an expression. Validation checks that the field exists and holds a
     verdict type, so a misspelled field is refused before the run."""

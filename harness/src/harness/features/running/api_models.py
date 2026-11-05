@@ -26,9 +26,10 @@ class RunRequest(BaseModel):
     """What to call this run in front of a person, at most `RUN_TITLE_MAX` characters. Empty leaves
     the run unnamed, and no name is borrowed from elsewhere."""
     gate_mode: GateMode = "wait"
-    """`"wait"` holds a person gate for a person, `"auto"` passes every gate with nobody asked,
-    `"orchestrate"` hands a person gate to this run's own orchestrator instead of waiting for a
-    person. A declared orchestrator gate decides the same way under every one of the three."""
+    """`"wait"` holds a person gate for a person, `"auto"` passes every person gate with nobody asked
+    and refuses a judge's `cannot_judge` in the judge's name, `"orchestrate"` hands a person gate to
+    this run's own orchestrator instead of waiting for a person. A declared orchestrator gate decides
+    the same way under every one of the three."""
 
 
 class SteerStepIn(BaseModel):
@@ -84,7 +85,10 @@ class Decision(BaseModel):
 
 
 class AutomodeRequest(BaseModel):
-    """Whether the live run's gates should pass themselves from here on, with nobody asked."""
+    """Whether the live run's person gates should pass themselves from here on, with nobody asked.
+
+    A judge that cannot decide sends the work back.
+    """
 
     on: bool
 

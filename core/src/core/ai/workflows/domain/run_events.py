@@ -67,7 +67,8 @@ class GateDecisionFact(BaseModel):
     attempt: PositiveInt
     verdict: Literal["approve", "reject", "cannot_judge"]
     source: DecisionSource
-    """Who decided. A judge that could not judge and the person it escalated to record one fact each."""
+    """Who decided. A judge that could not judge and whoever answered in its place record one fact each.
+    Under gate mode `auto` nobody answers, so the second fact is the judge's own `reject`."""
     review_generation: PositiveInt
     """Which reviewed value this decision belongs to: an approval of an earlier generation
     releases nothing for a later one, even when both generations digest identically."""
