@@ -129,10 +129,10 @@ straight into the source-queue cache rather than queuing it for a later resolve)
 one `build(resources: SourceResources)` classmethod, refusing there when a resource it needs is
 absent. `scan_watch_list` resolves every watch-list row's `scanner` against the scanners the host built, drops what
 is new into the source queue, and stamps the row's last scan. A scanner answers an `EntryScan`: the sources, the time
-the scan covered up to (`covered_until`, `None` for its whole window) and, for a scan that stopped on a failure, why
-(`failure`). A scan of the whole window that found nothing keeps the row's stamp, so its next scan asks for the same
+the scan covered up to (`covered_until`, `None` for its whole window) and, for a scan that met a failure (one that
+stopped it, or one that made it skip part of its window), why (`failure`). A scan of the whole window that found nothing keeps the row's stamp, so its next scan asks for the same
 window again. A scan that covered its window only up to `covered_until` stamps that time, found sources or not, and one
-that stopped on a failure also has its reason reported. A stamp never moves back, except that a stamp later than the
+that met a failure also has its reason reported. A stamp never moves back, except that a stamp later than the
 scan's time is first set to it, so no source after now is skipped. A scan's `notes` (what it saw that is not a failure,
 such as a day whose search may have held more) reach `ScanReport.notes` by label. A row whose scanner nothing serves,
 or whose scan fails, is reported against that one row and never fails the run. Its reason is one line

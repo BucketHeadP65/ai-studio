@@ -233,14 +233,15 @@ class Scanner(Protocol):
 
         A scanner caps at `entry.max_items`, keeping the head of that order. A scanner that covers its window in parts
         and answers the time it covered up to stops at the first part that brings it to `entry.max_items`, and answers
-        every source it found up to that time. A scanner that stops partway also answers why it stopped.
+        every source it found up to that time. A scanner that meets a failure, stopping on it or skipping part of its
+        window, also answers why.
 
         Args:
             entry: The watch entry to read.
             since: The entry's last scan, or `None` to answer every source.
 
         Returns:
-            The sources found and how far the scan covered.
+            The sources found, how far the scan covered, the failure it met if any, and its notes.
 
         Raises:
             ScanError: The entry could not be scanned.

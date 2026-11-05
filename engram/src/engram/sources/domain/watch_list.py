@@ -55,7 +55,8 @@ class FoundSource(BaseModel):
 class EntryScan(BaseModel):
     """What one scan of a watch entry found, and how far it covered the entry's window.
 
-    A scan that covered its window only up to a time answers that time. One that stopped on a failure also answers why.
+    A scan that covered its window only up to a time answers that time. One that met a failure, whether it stopped on it or
+    skipped part of its window, also answers why.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -65,7 +66,7 @@ class EntryScan(BaseModel):
     covered_until: datetime | None = None
     """Every source published after the entry's last scan and up to this time was asked for. `None` means the scan's whole window up to its own time was."""
     failure: str = ""
-    """Why the scan stopped on a failure before covering its window, or empty when it did not."""
+    """Why the scan met a failure, one that stopped it or one that made it skip part of its window, or empty when it met none."""
     notes: list[str] = []
     """What the scan saw that is not a failure, one line each, such as a day whose search may have held more."""
 
