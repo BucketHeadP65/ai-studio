@@ -9,6 +9,9 @@ for it, mirroring `harness.adapters.knowledge_base.StudioReindex`'s injectable-r
 
 from __future__ import annotations
 
+import os
+import sys
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
@@ -19,7 +22,7 @@ from engram.testing.specs import research_spec
 
 from studio.knowledge_base.cli import _BusReindex, _MultiKnowledgeBaseReindex
 from studio.knowledge_base.cli_support import _print_index_report
-from studio.knowledge_base.reindex import INDEX_ERROR_TAIL, SubprocessReindex
+from studio.knowledge_base.reindex import INDEX_ERROR_TAIL, SubprocessReindex, run_captured
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -159,6 +162,16 @@ class TestSubprocessReindex:
 
         assert result.outcome == "not_indexed"
         assert result.detail == "studio index for research failed with exit 3"
+
+
+class TestRunCaptured:
+    async def test_the_child_has_console_logging_off_even_when_the_parent_has_it_on(self):
+        parent = {**os.environ, "APP_LOGGING__CONSOLE": "true", "REINDEX_PROBE": "kept"}
+        probe = "import os; print(os.environ['APP_LOGGING__CONSOLE'], os.environ['REINDEX_PROBE'])"
+
+        code, output = await run_captured((sys.executable, "-c", probe), environ=parent)
+
+        assert (code, output) == (0, "false kept"), "console is off, and the rest of the parent's environment reaches the child"
 
 
 def _issue(page_id: str, rule: str = "dangling-link") -> ValidationIssue:

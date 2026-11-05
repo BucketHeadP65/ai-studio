@@ -8,6 +8,7 @@ decides what the failure means.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 
 from typing import TYPE_CHECKING, Protocol
@@ -15,7 +16,7 @@ from typing import TYPE_CHECKING, Protocol
 from engram.authoring.contracts import ReindexResult, reindex_result_from_subprocess
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from engram.authoring.contracts import AuthoringKnowledgeBase
 
@@ -39,16 +40,26 @@ INDEX_ERROR_TAIL = 1500
 """The most characters of output a failed index's result carries, taken from the end of the output."""
 
 
-async def run_captured(argv: Sequence[str]) -> tuple[int, str]:
-    """The default `CaptureRunner`: run `argv` with stdout and stderr merged.
+QUIET_CONSOLE = {"APP_LOGGING__CONSOLE": "false"}
+"""What a captured child's environment sets over its parent's, so the child prints no log records."""
+
+
+async def run_captured(argv: Sequence[str], *, environ: Mapping[str, str] = os.environ) -> tuple[int, str]:
+    """The default `CaptureRunner`: run `argv` with stdout and stderr merged and console logging off.
+
+    The child starts from `environ` with `QUIET_CONSOLE` set over it, so its output holds only what the command prints,
+    even when the parent prints its own log records.
 
     Args:
         argv: The command and its arguments.
+        environ: The environment the child starts from, this process's own unless given.
 
     Returns:
         The exit code, `-1` when there is none, and the last `INDEX_ERROR_TAIL` characters of the output.
     """
-    process = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT)
+    process = await asyncio.create_subprocess_exec(
+        *argv, env={**environ, **QUIET_CONSOLE}, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
+    )
     output, _ = await process.communicate()
     text = output.decode(errors="replace").strip()
     return process.returncode if process.returncode is not None else -1, text[-INDEX_ERROR_TAIL:]
@@ -57,8 +68,8 @@ async def run_captured(argv: Sequence[str]) -> tuple[int, str]:
 class SubprocessReindex:
     """Reindex a knowledge base by running `studio index --knowledge-base <path>` under this interpreter and environment.
 
-    It works for any knowledge base, because the subprocess resolves its own root from `--knowledge-base` and never
-    reuses this process's reader.
+    The default runner turns the child's console logging off. It works for any knowledge base, because the subprocess
+    resolves its own root from `--knowledge-base` and never reuses this process's reader.
     """
 
     def __init__(self, run: CaptureRunner = run_captured) -> None:
