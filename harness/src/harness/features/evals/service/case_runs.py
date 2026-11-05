@@ -19,6 +19,8 @@ from pydantic_ai.exceptions import (
     ModelContextWindowExceededError,
     ModelHTTPError,
     ModelNotFoundError,
+    ModelQuotaExceededError,
+    ModelRateLimitError,
     ModelRequestTimeout,
     ModelServerError,
     ModelUnavailableError,
@@ -50,11 +52,14 @@ _OUTSIDE_THE_STEP: tuple[type[BaseException], ...] = (
     ModelNotFoundError,
     ModelServerError,
     ModelUnavailableError,
+    ModelRateLimitError,
+    ModelQuotaExceededError,
     TimeoutError,
     SpendLimitExceeded,
 )
 """The errors whose cause lies outside the step: a model connection or timeout error, a provider error for the
-deployment's own setup (a refused key, a model not found, a server error), a timeout, and the deployment's spend limit."""
+deployment's own setup (a refused key, a model not found, a server error), a rate limit, an exhausted quota or credit,
+a timeout, and the deployment's spend limit."""
 
 _SERVER_ERROR = 500
 """The lowest HTTP status of a provider's server error, which the provider's setup and not the step caused."""
@@ -77,8 +82,8 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
     each as a step of its own named `<step_id>#<case name>`, never as the step calling this. A case with no name is
     named `Case <position>`, counted from 1. Build `registry` with the same `calls` as its stand-ins, so every write
     the cases make is counted. A case errored when its run stopped for a cause outside the step: a model connection or
-    timeout error, a provider error for the deployment's own setup (a refused key, a model not found, a 5xx), a
-    timeout, the deployment's spend limit, or a database connection failure. A new report is kept through `reports`,
+    timeout error, a provider error for the deployment's own setup (a refused key, a model not found, a 5xx), a rate
+    limit, an exhausted quota or credit, a timeout, the deployment's spend limit, or a database connection failure. A new report is kept through `reports`,
     so the same step and cases never run twice, unless a case errored: that report is returned and not kept, so the
     cases run again next time. A kept report is returned under `step_id`. Nothing runs, and nothing is kept, for a
     step with no cases, an agent step, a step whose output is another step's type, or a step holding a tool outside

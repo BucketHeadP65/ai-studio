@@ -17,10 +17,10 @@ class CaseResult(BaseModel):
     errored: bool
     """Whether the case errored: its run or an evaluator stopped for a cause outside the step. Such a cause is a model
     connection or timeout error, a provider error for the deployment's own setup (a refused key, a model not found, a
-    server error), a timeout, the deployment's spend limit, or a database connection failure inside a read tool. An
-    errored case did not pass and says nothing against the step. Every other raise is the step's own failure, not an
-    error: a context window overflow, a program that failed in the sandbox (a refused write included), output retries
-    run out, or the step going over its own usage limit."""
+    server error), a rate limit, an exhausted quota or credit, a timeout, the deployment's spend limit, or a database
+    connection failure inside a read tool. An errored case did not pass and says nothing against the step. Every other
+    raise is the step's own failure, not an error: a context window overflow, a program that failed in the sandbox (a
+    refused write included), output retries run out, or the step going over its own usage limit."""
     reason: str
     """What the evaluators said, or, for an errored case, `errored` and the error that stopped it."""
 
