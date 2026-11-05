@@ -1385,7 +1385,8 @@ four parts in turn, and a part that fails is logged while the next is still told
    `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
    `max_attempts`, which is how a run ends with nothing landed.
 4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
-   starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A run started by hand tells nobody.
+   starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
+   status is failed tells the owner too, as a live trial reads a failed run. A run started by hand tells nobody.
 
 ## What this station does not do (v1)
 

@@ -109,6 +109,17 @@ async def test_fewer_rejections_a_completed_run_and_another_workflow_write_nothi
     assert len(store.payloads) == written
 
 
+async def test_a_changed_step_whose_stored_document_no_longer_validates_leaves_the_later_flags_written() -> None:
+    workflow = _maintenance()
+    store, library, watch = await _world(workflow)
+    store.pages["st.a.v2"]["frontmatter"]["step"] = {"name": "a"}
+
+    await watch.run_ended(_ended(workflow))
+
+    assert await library.fetch_flag("mf.rejected.a") is None
+    assert await library.fetch_flag("mf.rejected.b") is not None
+
+
 async def test_a_changed_step_the_library_cannot_read_leaves_the_other_flags_written() -> None:
     workflow = _maintenance()
     _, library, watch = await _world(workflow)

@@ -6,6 +6,7 @@ from datetime import UTC
 from typing import TYPE_CHECKING
 
 from core.ai.workflows.contracts import (
+    STEP_MAINTENANCE_AGENT,
     JudgeGate,
     LibraryError,
     MaintenanceFlag,
@@ -15,8 +16,9 @@ from core.ai.workflows.contracts import (
     step_content_address,
 )
 from core.observability import get_logger
+from pydantic import ValidationError
 
-from harness.features.maintenance.domain import CHANGED_STEPS, MAINTENANCE_AGENT, MAINTENANCE_WORKFLOW, PLAN_GATE
+from harness.features.maintenance.domain import CHANGED_STEPS, MAINTENANCE_WORKFLOW, PLAN_GATE
 
 if TYPE_CHECKING:
     from core.ai.workflows.contracts import RunEvidence
@@ -30,8 +32,9 @@ class MaintenanceRunWatch:
     """Raises one `plan_rejected` maintenance flag per changed step when a step maintenance run ends failed at its plan judge.
 
     The run must have been rejected at `PLAN_GATE` as many times as the gate's `max_attempts`, which is how a run ends with
-    nothing landed. Every other run, of this workflow or another, writes nothing. A changed step the library cannot read,
-    or a flag it refuses, is logged and the other steps' flags are still written.
+    nothing landed. Every other run, of this workflow or another, writes nothing. A changed step the library cannot read
+    or whose stored document no longer validates, or a flag it refuses, is logged and the other steps' flags are still
+    written.
     """
 
     def __init__(self, sessions: PooledSessions) -> None:
@@ -83,9 +86,9 @@ class MaintenanceRunWatch:
                             f"{PLAN_GATE}'s rejection {rejections} of {gate.max_attempts}, with nothing landed. It was checking "
                             f"{', '.join(step_ids)}."
                         ),
-                        raised_by=MAINTENANCE_AGENT,
+                        raised_by=STEP_MAINTENANCE_AGENT,
                         raised_at=ended,
                     )
                 )
-            except LibraryError as exc:
+            except (LibraryError, ValidationError) as exc:
                 _logger.warning("the plan_rejected flag for {step} was not written: {reason}", step=step_id, reason=str(exc))

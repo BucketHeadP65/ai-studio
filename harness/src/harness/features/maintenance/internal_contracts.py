@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.contracts import Approval, Grade, RunEvidence
 
 
-class RunHistory(Protocol):
+class RunHistoryQueries(Protocol):
     """The evidence log's read by content address: every run, approval and grade one workflow version holds."""
 
     async def history_for(self, *, spec_hash: str) -> Sequence[RunEvidence | Approval | Grade]:

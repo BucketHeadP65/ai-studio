@@ -58,7 +58,7 @@ CONSUMER = Workflow(
     ),
     output=FromNode(node="digest"),
 )
-TRIAL_ID = "wf.digest-sources.v2"
+LIVE_TRIAL_ID = "wf.digest-sources.v2"
 PARENT_ID = "wf.digest-sources.v1"
 FLAG_ID = "mf.reverted.digest-sources.digest"
 
@@ -86,7 +86,7 @@ class World:
         return child
 
     async def baseline(self, *statuses: OutcomeStatus) -> None:
-        """Record completed runs of the consumer's v1, the oldest first, each a day before the trial's runs."""
+        """Record completed runs of the consumer's v1, the oldest first, each a day before the live trial's runs."""
         for index, status in enumerate(statuses):
             await self.log.append(_ran(CONSUMER, PARENT_ID, status=status, at=T0 - timedelta(days=len(statuses) - index)))
 
@@ -119,45 +119,45 @@ def _ran(
     })
 
 
-def _failed_at_the_step(trial: Workflow, *, at: datetime = T0, workflow_id: str = TRIAL_ID) -> RunEvidence:
-    """A failed run of the trial version where `fetch` produced and `digest`, which runs the adopted step, did not."""
-    return _ran(trial, workflow_id, outcome="failed", status="failed", produced={"fetch": "str"}, at=at)
+def _failed_at_the_step(live_trial: Workflow, *, at: datetime = T0, workflow_id: str = LIVE_TRIAL_ID) -> RunEvidence:
+    """A failed run of the live trial version where `fetch` produced and `digest`, which runs the adopted step, did not."""
+    return _ran(live_trial, workflow_id, outcome="failed", status="failed", produced={"fetch": "str"}, at=at)
 
 
 async def test_the_first_failed_run_reverts_declines_flags_and_tells_the_owner(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded", "succeeded", "succeeded")
-    run = _failed_at_the_step(trial)
+    run = _failed_at_the_step(live_trial)
 
     await world.ended(run)
 
-    assert "archived_at" in world.store.pages[TRIAL_ID]["frontmatter"]
+    assert "archived_at" in world.store.pages[LIVE_TRIAL_ID]["frontmatter"]
     assert not world.store.pages[PARENT_ID]["superseded"]
-    assert await world.library.current(TRIAL_ID) == PARENT_ID
+    assert await world.library.current(LIVE_TRIAL_ID) == PARENT_ID
     (entry,) = await world.library.fetch_consumer_record(PARENT_ID)
     assert (entry.declined, entry.declined_because) == (step_content_address(DIGEST[2]), "reverted")
     flag = await world.library.fetch_flag(FLAG_ID)
     assert flag is not None
     assert (flag.kind, flag.step, flag.step_id, flag.step_hash) == ("live_trial_reverted", "digest", "st.digest.v2", step_content_address(DIGEST[2]))
-    assert (flag.workflow, flag.raised_by, flag.raised_at, flag.status) == (TRIAL_ID, "agent:step-maintenance", run.at, "open")
+    assert (flag.workflow, flag.raised_by, flag.raised_at, flag.status) == (LIVE_TRIAL_ID, "agent:step-maintenance", run.at, "open")
     assert run.at.isoformat() in flag.evidence
     assert "digest, which runs the adopted step, produced nothing" in flag.evidence
     assert PARENT_ID in flag.evidence
     ((title, message),) = world.notifier.sent
     assert "digest" in title
-    assert TRIAL_ID in message
+    assert LIVE_TRIAL_ID in message
     assert PARENT_ID in message
 
 
 async def test_a_worse_run_reverts_too(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded", "succeeded", "succeeded")
 
-    await world.ended(_ran(trial, TRIAL_ID, status="partial"))
+    await world.ended(_ran(live_trial, LIVE_TRIAL_ID, status="partial"))
 
-    assert await world.library.current(TRIAL_ID) == PARENT_ID
+    assert await world.library.current(LIVE_TRIAL_ID) == PARENT_ID
     flag = await world.library.fetch_flag(FLAG_ID)
     assert flag is not None
     assert "partial" in flag.evidence
@@ -165,47 +165,47 @@ async def test_a_worse_run_reverts_too(tmp_path: Path) -> None:
 
 async def test_three_runs_that_count_write_nothing_and_the_next_run_is_not_read_as_a_live_trial(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded", "succeeded", "succeeded")
     written = len(world.store.payloads)
 
     for hour in range(3):
-        await world.ended(_ran(trial, TRIAL_ID, at=T0 + timedelta(hours=hour)))
+        await world.ended(_ran(live_trial, LIVE_TRIAL_ID, at=T0 + timedelta(hours=hour)))
     assert len(world.store.payloads) == written
 
-    await world.ended(_failed_at_the_step(trial, at=T0 + timedelta(hours=3)))
+    await world.ended(_failed_at_the_step(live_trial, at=T0 + timedelta(hours=3)))
 
     assert len(world.store.payloads) == written, "the live trial is over, so a failed run reverts nothing"
-    assert await world.library.current(PARENT_ID) == TRIAL_ID
+    assert await world.library.current(PARENT_ID) == LIVE_TRIAL_ID
     assert world.notifier.sent == []
 
 
 async def test_a_run_that_says_nothing_about_the_step_does_not_bring_the_end_closer(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded", "succeeded", "succeeded")
 
-    await world.ended(_ran(trial, TRIAL_ID, at=T0))
-    await world.ended(_ran(trial, TRIAL_ID, at=T0 + timedelta(hours=1)))
-    await world.ended(_ran(trial, TRIAL_ID, outcome="failed", status="failed", produced={}, at=T0 + timedelta(hours=2)))
-    await world.ended(_failed_at_the_step(trial, at=T0 + timedelta(hours=3)))
+    await world.ended(_ran(live_trial, LIVE_TRIAL_ID, at=T0))
+    await world.ended(_ran(live_trial, LIVE_TRIAL_ID, at=T0 + timedelta(hours=1)))
+    await world.ended(_ran(live_trial, LIVE_TRIAL_ID, outcome="failed", status="failed", produced={}, at=T0 + timedelta(hours=2)))
+    await world.ended(_failed_at_the_step(live_trial, at=T0 + timedelta(hours=3)))
 
-    assert await world.library.current(TRIAL_ID) == PARENT_ID, "a run that failed before the step ran was ignored, not counted"
+    assert await world.library.current(LIVE_TRIAL_ID) == PARENT_ID, "a run that failed before the step ran was ignored, not counted"
 
 
 async def test_a_failed_run_of_a_version_a_person_saved_past_reverts_nothing(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded", "succeeded", "succeeded")
-    person, lineage = adapt(trial, ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
+    person, lineage = adapt(live_trial, ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
     await world.library.put(person, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"}, lineage=lineage)
     written = len(world.store.payloads)
 
-    await world.ended(_failed_at_the_step(trial))
+    await world.ended(_failed_at_the_step(live_trial))
 
     assert len(world.store.payloads) == written
     assert await world.library.current(PARENT_ID) == "wf.digest-sources.v3"
-    assert "archived_at" not in world.store.pages[TRIAL_ID]["frontmatter"]
+    assert "archived_at" not in world.store.pages[LIVE_TRIAL_ID]["frontmatter"]
     assert await world.library.fetch_flag(FLAG_ID) is None
     assert world.notifier.sent == []
 
@@ -238,9 +238,9 @@ async def test_a_run_of_the_previous_version_launched_by_name_is_not_read_as_the
 
 async def test_a_run_launched_by_the_workflows_name_is_read_as_the_version_that_ran(tmp_path: Path) -> None:
     world = World(tmp_path)
-    trial = await world.adopt()
+    live_trial = await world.adopt()
     await world.baseline("succeeded")
 
-    await world.ended(_failed_at_the_step(trial, workflow_id="digest-sources"))
+    await world.ended(_failed_at_the_step(live_trial, workflow_id="digest-sources"))
 
-    assert await world.library.current(TRIAL_ID) == PARENT_ID
+    assert await world.library.current(LIVE_TRIAL_ID) == PARENT_ID

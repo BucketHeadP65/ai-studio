@@ -6,6 +6,7 @@ from datetime import UTC
 from typing import TYPE_CHECKING
 
 from core.ai.workflows.contracts import (
+    STEP_MAINTENANCE_AGENT,
     ConsumerRecords,
     Grade,
     LibraryError,
@@ -20,8 +21,6 @@ from core.ai.workflows.contracts import (
 )
 from core.observability import get_logger
 
-from harness.features.maintenance.domain import MAINTENANCE_AGENT
-
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from datetime import datetime
@@ -29,7 +28,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.contracts import Approval, LiveTrialMarker, LiveTrialVerdict, Workflow, WorkflowLibrary
 
     from harness.adapters.contracts import Notifier
-    from harness.features.maintenance.internal_contracts import RunHistory
+    from harness.features.maintenance.internal_contracts import RunHistoryQueries
     from harness.session import PooledSessions
 
 _logger = get_logger(__name__)
@@ -41,14 +40,15 @@ BASELINE_RUNS = 3
 class LiveTrialWatch:
     """Reads each ended run of a consumer version on live trial, and reverts the version after its first failed or worse run.
 
-    Each run is read once, by `live_trial_verdict`, against the previous version's newest completed runs. Once as many
+    Each run is read once, by `live_trial_verdict`, against the previous version's newest completed runs, with the grades
+    on record when the watch reads it: a grade written later never changes a verdict already acted on. Once as many
     earlier runs counted as the marker names, the live trial is over and nothing is read again. A revert makes the
     previous version live again, records its decline of the step version as reverted, raises a `live_trial_reverted`
     maintenance flag and tells the owner. A version that is no longer the newest live one of its name is never reverted.
     A library that keeps no live trials is never read past its type.
     """
 
-    def __init__(self, sessions: PooledSessions, history: RunHistory, notifier: Notifier) -> None:
+    def __init__(self, sessions: PooledSessions, history: RunHistoryQueries, notifier: Notifier) -> None:
         """Hold where the library is found, the evidence log read and the way to the owner.
 
         Args:
@@ -76,28 +76,33 @@ class LiveTrialWatch:
         if marker is None:
             return
         workflow = await library.fetch_workflow(evidence.workflow_id)
-        trial_id = await library.locate(workflow.name, workflow.version)
-        if trial_id is None or spec_identity(workflow) != evidence.spec_hash:
+        live_trial_id = await library.locate(workflow.name, workflow.version)
+        if live_trial_id is None or spec_identity(workflow) != evidence.spec_hash:
             return
-        verdict = await self._verdict(library, trial_id, workflow, marker, evidence)
+        verdict = await self._verdict(library, live_trial_id, workflow, marker, evidence)
         if verdict is None or verdict.kind not in ("failed", "worse"):
             return
         try:
-            restored = await library.revert(trial_id)
+            restored = await library.revert(live_trial_id)
         except LibraryError as exc:
-            _logger.warning("the live trial of {workflow} was not reverted: {reason}", workflow=trial_id, reason=str(exc))
+            _logger.warning(
+                "the live trial of {workflow} was not reverted: {reason}. When the previous version was already written back it may be "
+                "live again beside {workflow}, and the next failed or worse run of {workflow} asks for the revert again",
+                workflow=live_trial_id,
+                reason=str(exc),
+            )
             return
-        _logger.info("reverted {workflow} to {restored} after a {kind} run", workflow=trial_id, restored=restored, kind=verdict.kind)
+        _logger.info("reverted {workflow} to {restored} after a {kind} run", workflow=live_trial_id, restored=restored, kind=verdict.kind)
         await self._decline(library, restored, marker)
-        await self._raise_flag(library, trial_id=trial_id, workflow=workflow, restored=restored, marker=marker, verdict=verdict, ended_at=evidence.at)
-        message = f"{trial_id} was reverted after a {verdict.kind} run on live trial, and {restored} is live again. {verdict.reason}"
+        await self._raise_flag(library, live_trial_id=live_trial_id, workflow=workflow, restored=restored, marker=marker, verdict=verdict, ended_at=evidence.at)
+        message = f"{live_trial_id} was reverted after a {verdict.kind} run on live trial, and {restored} is live again. {verdict.reason}"
         await self._notifier.notify(f"Live trial of {marker.step} reverted", message)
 
     async def _verdict(
-        self, library: WorkflowLibrary, trial_id: str, workflow: Workflow, marker: LiveTrialMarker, evidence: RunEvidence
+        self, library: WorkflowLibrary, live_trial_id: str, workflow: Workflow, marker: LiveTrialMarker, evidence: RunEvidence
     ) -> LiveTrialVerdict | None:
         """The verdict on `evidence`, or None when as many earlier runs counted as the marker names."""
-        lineage = await library.fetch_lineage(trial_id)
+        lineage = await library.fetch_lineage(live_trial_id)
         previous = await library.fetch_workflow(marker.previous)
         prior = await self._history.history_for(spec_hash=spec_identity(previous))
         baseline = sorted((event for event in prior if isinstance(event, RunEvidence) and event.outcome == "completed"), key=lambda run: run.at)
@@ -129,7 +134,7 @@ class LiveTrialWatch:
         self,
         library: WorkflowLibrary,
         *,
-        trial_id: str,
+        live_trial_id: str,
         workflow: Workflow,
         restored: str,
         marker: LiveTrialMarker,
@@ -144,7 +149,7 @@ class LiveTrialWatch:
             if step_id is None:
                 _logger.warning(
                     "{workflow} was reverted, and no saved version of {step} has the content address its marker names, so no flag was raised",
-                    workflow=trial_id,
+                    workflow=live_trial_id,
                     step=marker.step,
                 )
                 return
@@ -155,19 +160,19 @@ class LiveTrialWatch:
                     step=marker.step,
                     step_id=step_id,
                     step_hash=marker.step_hash,
-                    workflow=trial_id,
+                    workflow=live_trial_id,
                     title=f"Live trial of {marker.step} reverted in {workflow.name}",
                     summary=f"Decide whether {workflow.name} adopts {step_id} again once it is fixed. {restored} is live and declines it.",
                     evidence=(
-                        f"A run of {trial_id} that ended at {ended.isoformat()} was {verdict.kind}. {verdict.reason}\n\n"
-                        f"{trial_id} was archived, and {restored}, the version it replaced, is live again."
+                        f"A run of {live_trial_id} that ended at {ended.isoformat()} was {verdict.kind}. {verdict.reason}\n\n"
+                        f"{live_trial_id} was archived, and {restored}, the version it replaced, is live again."
                     ),
-                    raised_by=MAINTENANCE_AGENT,
+                    raised_by=STEP_MAINTENANCE_AGENT,
                     raised_at=ended,
                 )
             )
         except Exception:
-            _logger.exception("{workflow} was reverted, and its live_trial_reverted flag was not written", workflow=trial_id)
+            _logger.exception("{workflow} was reverted, and its live_trial_reverted flag was not written", workflow=live_trial_id)
 
 
 def _grades_about(events: Sequence[RunEvidence | Approval | Grade], runs: Sequence[RunEvidence]) -> tuple[Grade, ...]:

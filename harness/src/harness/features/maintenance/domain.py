@@ -10,6 +10,3 @@ PLAN_GATE = "judge_plan"
 
 CHANGED_STEPS = "changed_step_ids"
 """The step maintenance workflow's parameter: the changed step versions' ids, comma-separated."""
-
-MAINTENANCE_AGENT = "agent:step-maintenance"
-"""Who a write by step maintenance or by a live trial is recorded as."""
