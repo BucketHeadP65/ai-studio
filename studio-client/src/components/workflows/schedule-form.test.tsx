@@ -502,6 +502,63 @@ describe("ScheduleForm", () => {
     expect(capacityLimit).toBeEnabled();
   });
 
+  it("refuses a capacity key with no limit, saying so beside the field", async () => {
+    mountApi();
+    const onSubmit = vi.fn();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-sales"
+        submitting={false}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await userEvent.type(await screen.findByLabelText("quarter"), "Q1");
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.type(screen.getByLabelText("Capacity key"), "gpu-pool");
+
+    expect(screen.getByLabelText("Capacity limit")).toHaveAccessibleDescription(
+      "Give the capacity a limit, or leave the key empty.",
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    await userEvent.type(screen.getByLabelText("Capacity limit"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ capacityKey: "gpu-pool", capacityLimit: 2 }),
+    );
+  });
+
+  it("refuses a capacity limit that is not a whole number when creating", async () => {
+    mountApi();
+    const onSubmit = vi.fn();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-sales"
+        submitting={false}
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await userEvent.type(await screen.findByLabelText("quarter"), "Q1");
+    await userEvent.click(screen.getByText("Advanced"));
+    await userEvent.type(screen.getByLabelText("Capacity key"), "gpu-pool");
+    await userEvent.type(screen.getByLabelText("Capacity limit"), "3x");
+
+    expect(screen.getByLabelText("Capacity limit")).toHaveAccessibleDescription(
+      "The capacity limit must be a whole number above zero.",
+    );
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("nudges softly when the blackout text does not look like the expected format, without blocking submission", async () => {
     mountApi();
     render(

@@ -184,11 +184,12 @@ function scheduleChanges(
 
 const WHOLE_NUMBER = /^\d+$/;
 
-// Why the capacity limit cannot be saved, or `null`. Only a limit beside a capacity key counts,
-// since the limit field is off without one.
+// Why the capacity limit cannot be saved, or `null`. A capacity key needs a limit beside it, and
+// the limit must be a whole number above zero. Without a key the limit field is off and never counts.
 function capacityLimitError(capacityKey: string, capacityLimit: string): string | null {
   const limit = capacityLimit.trim();
-  if (capacityKey.trim() === "" || limit === "") return null;
+  if (capacityKey.trim() === "") return null;
+  if (limit === "") return "Give the capacity a limit, or leave the key empty.";
   if (WHOLE_NUMBER.test(limit) && Number(limit) > 0) return null;
   return "The capacity limit must be a whole number above zero.";
 }
@@ -465,13 +466,13 @@ export function ScheduleForm(props: ScheduleFormProps) {
         );
   const changes = opened === null ? null : scheduleChanges(opened, payload);
   const nothingChanged = changes !== null && Object.keys(changes).length === 0;
-  const limitError = capacityLimitError(capacityKey, capacityLimit);
   // A saved limit emptied while the key stays, which clears the key as well on save.
   const limitClearsKey =
     opened !== null &&
     opened.capacityLimit !== null &&
     capacityKey.trim() !== "" &&
     capacityLimit.trim() === "";
+  const limitError = limitClearsKey ? null : capacityLimitError(capacityKey, capacityLimit);
   // An on refresh or after cadence fires only over a knowledge base the schedule's arguments choose,
   // so on a workflow that asks for none it would never fire.
   const firesNever =
