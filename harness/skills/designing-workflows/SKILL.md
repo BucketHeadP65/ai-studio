@@ -171,6 +171,10 @@ A deterministic landing step writes what was already validated, and still catche
 on the first: land every writable item, then fail the run naming each refusal. Nothing is silently dropped, and work
 refused at landing shows up again on the next pass's pending list.
 
+**Name what a step could not read.** A step that reads a set of sources lists each source it could not read, with the
+reason, apart from the sources it read and found nothing in. A source that failed to load and is counted as saying
+nothing turns a broken reader into a verdict, and nobody goes looking for the fault.
+
 **A result a person decides lands as a page.** Anything that waits for a person's decision (a proposal, a flag, a
 choice between options) is written into the destination as a page with a status the person changes and a stable id,
 never only as a value on the run's record. A person reads pages and an agent searches them. The stable id lets the
@@ -216,6 +220,7 @@ turn. Then check it against the spend rows after the first real run.
 - [ ] Does each judge review one concern, so a rejection reruns only that concern's work?
 - [ ] Does a judge over a list of independent items keep what passes and drop what fails, rather than lose them all?
 - [ ] Does each failed part show its reason on the run's record and screen, not only a count?
+- [ ] Does a step that reads sources list each one it could not read, apart from the ones that said nothing?
 - [ ] Is text that must be reproduced copied by a program from its source, the model naming it only by its handle?
 - [ ] Does a result that waits for a person land as a page with a status and a stable id?
 - [ ] Does the next run read the person's decision from the page itself, and write over only its own pending page,
