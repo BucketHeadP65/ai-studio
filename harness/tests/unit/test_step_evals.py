@@ -288,13 +288,13 @@ class TestReportFailedOverEveryEvaluator:
         assert report_failed(report) is True
         assert case_result(report.cases[0]) == CaseResult(name="unjudged", passed=False, errored=False, reason="no evaluator judged this case")
 
-    async def test_a_step_that_raised_errored_only_for_a_cause_outside_it(self) -> None:
+    async def test_a_step_that_raised_errored_only_when_its_caller_found_the_cause_outside_it(self) -> None:
         dataset = Dataset(name="probe", cases=[Case(name="raises", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[OutcomeMatches()])
 
         report = await run_step_evals(dataset, RaisingPerform(), STEP)
 
         assert report_failed(report) is True
-        assert case_result(report.failures[0], outside=frozenset({"ConnectionError"})) == CaseResult(
+        assert case_result(report.failures[0], run_errored=True) == CaseResult(
             name="raises", passed=False, errored=True, reason="errored before any evaluator judged it: ConnectionError: the model is unreachable"
         )
         assert case_result(report.failures[0]) == CaseResult(

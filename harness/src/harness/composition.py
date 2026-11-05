@@ -620,7 +620,8 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         stand_ins: Where the write tools' stand-ins record the calls they answered. A list mounts each write tool's
             stand-in under the tool's own name, in place of the real tool, for a briefing's grant and for a
             program's calls, so a step's case run lands nothing. Such a registry grants, mounts and reaches only the
-            tools in `CASE_RUN_TOOLS`, never the shell, and runs no agent step. `None` mounts the real tools.
+            tools in `CASE_RUN_TOOLS`, never the shell, runs no agent step, and registers neither `notify_owner`,
+            `run_external_agent` nor any custom step. `None` mounts the real tools.
 
     Returns:
         The registry of steps a session executes, with the owner's active custom steps loaded.
@@ -872,6 +873,13 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         capability_grants=capability_grants_for(promoted),
         judge_tools=frozenset(JUDGE_TOOLS) & frozenset(grantable),
     )
+    return registry if scope is not None else _session_registry(registry, notifier=notifier, external_agents=external_agents, session_log=session_log, custom=custom)
+
+
+def _session_registry(
+    registry: StepRegistry, *, notifier: Notifier | None, external_agents: ExternalAgentRegistry, session_log: SessionEvents, custom: Path
+) -> StepRegistry:
+    """`registry` with `notify_owner`, `run_external_agent` and the owner's active custom steps, as a session runs it."""
     registry.register(notify_owner_step(notifier or NoopNotifier()), name="notify_owner", replay_safe=False)
     registry.register(run_external_agent_step(external_agents, session_log=session_log), name="run_external_agent", replay_safe=False)
     session_registry = registry.copy()

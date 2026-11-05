@@ -63,23 +63,26 @@ def bind_collection(dataset: Dataset, collection: str) -> None:
             case.inputs = {**case.inputs, "collection": collection}
 
 
-def case_result(case: ReportCase | ReportCaseFailure, *, outside: frozenset[str] = frozenset()) -> CaseResult:
+def case_result(case: ReportCase | ReportCaseFailure, *, run_errored: bool = False, outside: frozenset[str] = frozenset()) -> CaseResult:
     """How one case came out: passed when at least one evaluator judged it and every one passed it.
 
-    An assertion passes when it is true and a score when it is 1.0. A case whose step or one of whose evaluators raised
-    an error whose class `outside` names errored, and its reason says `errored` and names the error. Any other raise is
-    the step's own failure, and so is a case no evaluator judged.
+    An assertion passes when it is true and a score when it is 1.0. A failed run errored the case when `run_errored`
+    says its cause lies outside the step, and an evaluator's raise errored it when `outside` names the error's class.
+    An errored case's reason says `errored` and names the error. Any other raise is the step's own failure, and so is
+    a case no evaluator judged.
 
     Args:
         case: A case of an evaluation report, run or failed.
-        outside: The class names of the errors whose cause lies outside the step. Empty reads every raise as the
-            step's own failure.
+        run_errored: Whether the case's run stopped for a cause outside the step, which only the caller that saw the
+            error can tell. `False` reads a failed run as the step's own failure.
+        outside: The class names of the errors whose cause lies outside the step, for an evaluator's raise. Empty
+            reads every evaluator's raise as a failure.
 
     Returns:
         The case's result, its reason naming every evaluator's verdict or the error.
     """
     if isinstance(case, ReportCaseFailure):
-        if _raised(case.error_message) in outside:
+        if run_errored:
             return CaseResult(name=case.name, passed=False, errored=True, reason=f"errored before any evaluator judged it: {case.error_message}")
         return CaseResult(name=case.name, passed=False, errored=False, reason=f"the step raised: {case.error_message}")
     if case.evaluator_failures:

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from asyncpg.exceptions import ConnectionDoesNotExistError
 from core.ai.workflows.contracts import (
     CURRENT_STEP,
     AgentStep,
@@ -25,7 +26,16 @@ from core.ai.workflows.contracts import (
 )
 from core.ai.workflows.domain.vocabulary import SameAs
 from pydantic import BaseModel, JsonValue
-from pydantic_ai.exceptions import ModelConnectionError, UnexpectedModelBehavior, UsageLimitExceeded
+from pydantic_ai.exceptions import (
+    ModelAuthenticationError,
+    ModelConnectionError,
+    ModelContextWindowExceededError,
+    ModelHTTPError,
+    ModelNotFoundError,
+    ModelTimeoutError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai_harness.spend import SpendLimitExceeded
 
 from harness.adapters.contracts import StandInCall
@@ -116,6 +126,12 @@ class ScriptedRunCode:
         self.ran.append(dict(inputs))
         self.output_types.append(output_type)
         return self.value
+
+
+def _raised_from(error: Exception, cause: Exception) -> Exception:
+    """`error` as `raise error from cause` leaves it."""
+    error.__cause__ = cause
+    return error
 
 
 def _files(root: Path) -> list[str]:
@@ -225,13 +241,34 @@ class TestPerformStepCases:
         ("raised", "errored"),
         [
             (ModelConnectionError("glm-flash", "the connection broke"), True),
+            (ModelTimeoutError("glm-flash", "the request timed out"), True),
+            (ModelAuthenticationError("glm-flash", "the key was refused"), True),
+            (ModelNotFoundError("glm-flash", "no such deployment"), True),
+            (ModelHTTPError(503, "glm-flash", {"error": "unavailable"}), True),
             (TimeoutError("the request timed out"), True),
             (SpendLimitExceeded("Budget 'day' exhausted for this day"), True),
+            (_raised_from(RuntimeError("search failed"), ConnectionDoesNotExistError("connection was closed in the middle of operation")), True),
+            (ModelContextWindowExceededError("glm-flash", "the input exceeds the context window"), False),
+            (ModelHTTPError(400, "glm-flash", {"error": "bad request"}), False),
             (RuntimeError("the program 'count_pages' failed in the sandbox: request_source was not recorded"), False),
             (UnexpectedModelBehavior("Exceeded maximum output retries (2)"), False),
             (UsageLimitExceeded("The next request would exceed the request_limit of 8"), False),
         ],
-        ids=["model connection", "timeout", "spend limit", "sandbox failure", "output retries", "own usage limit"],
+        ids=[
+            "model connection",
+            "model timeout",
+            "authentication",
+            "model not found",
+            "a 5xx",
+            "timeout",
+            "spend limit",
+            "database connection in a read tool",
+            "context window",
+            "a 4xx",
+            "sandbox failure",
+            "output retries",
+            "own usage limit",
+        ],
     )
     async def test_only_a_cause_outside_the_step_errors_a_case_and_the_steps_own_failure_is_kept(
         self, tmp_path: Path, raised: Exception, errored: bool
@@ -245,6 +282,30 @@ class TestPerformStepCases:
         assert (result.passed, result.errored) == (False, errored)
         assert result.reason.startswith("errored before any evaluator judged it: " if errored else "the step raised: ")
         assert len(_files(tmp_path)) == (0 if errored else 1)
+
+    async def test_an_unnamed_case_whose_position_name_another_case_holds_is_refused(self, tmp_path: Path) -> None:
+        calls: StandInCalls = []
+        perform = ScriptedPerform(calls)
+        cases: dict[str, JsonValue] = {
+            "cases": [{"inputs": {"drafts": []}}, {"name": "Case 1", "inputs": {"drafts": []}}],
+            "evaluators": ["OutcomeMatches"],
+        }
+
+        with pytest.raises(CaseRunRefusedError, match="'Case 1'"):
+            await perform_step_cases(_briefing(), "st.check_drafts.v3", cases, _granting(perform=perform), FileCaseReports(tmp_path), calls)
+
+        assert perform.performed == []
+
+    async def test_a_dataset_with_report_evaluators_is_refused_naming_them(self, tmp_path: Path) -> None:
+        calls: StandInCalls = []
+        perform = ScriptedPerform(calls)
+        cases: dict[str, JsonValue] = {**TWO_CASES, "report_evaluators": ["ConfusionMatrixEvaluator"]}
+
+        with pytest.raises(CaseRunRefusedError, match=r"ConfusionMatrixEvaluator.*one case at a time, so report evaluators do not run here"):
+            await perform_step_cases(_briefing(), "st.check_drafts.v3", cases, _granting(perform=perform), FileCaseReports(tmp_path), calls)
+
+        assert perform.performed == []
+        assert _files(tmp_path) == []
 
     async def test_unnamed_cases_are_named_by_position_and_none_is_dropped(self, tmp_path: Path) -> None:
         calls: StandInCalls = []

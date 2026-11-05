@@ -21,8 +21,10 @@ from pydantic_monty import AsyncMonty
 
 from harness.adapters.contracts import StandInCall, stand_in_caller, stand_in_toolset
 from harness.domain.contracts import CASE_RUN_TOOLS
+from harness.features.selfauthoring.infrastructure.steps import FileCustomSteps
 from tests.support.environment import fake_plugins, world_over
 from tests.support.fakes.writing_surface import CHECKED, FakeWritingSurface
+from tests.support.selfauthoring import FakeActivationLog
 from tests.support.streaming import streaming_function_model
 
 if TYPE_CHECKING:
@@ -207,6 +209,13 @@ async def sandbox() -> AsyncIterator[AsyncMonty]:
         yield pool
 
 
+DOUBLE = """
+async def double(x: int) -> int:
+    '''Doubles x.'''
+    return x * 2
+"""
+"""A custom step the owner activated, which only a real registry loads."""
+
 OUTSIDE_THE_TABLE = ("remove_source_artifacts", "write_policy", "source_queue_decide", "run_command")
 """Tools that act and have no stand-in, so a case run never reaches them."""
 
@@ -222,6 +231,18 @@ class TestAStandInRegistryServesNoRealWrite:
         assert set(stood_in.grants) <= set(CASE_RUN_TOOLS)
         assert real.run_agent is not None
         assert stood_in.run_agent is None
+
+    async def test_it_registers_no_owner_notice_no_external_agent_and_no_custom_step(self, tmp_path: Path) -> None:
+        model = streaming_function_model(_program_then_answer(WRITING))
+        for home in (tmp_path / "real", tmp_path / "stood-in"):
+            steps = FileCustomSteps(home / "custom" / "steps", activations=FakeActivationLog())
+            steps.write("double", DOUBLE)
+            assert steps.activate("double") is True
+        real = await world_over(model, engram=FakeWritingSurface(), state=tmp_path / "real")
+        stood_in = await world_over(model, engram=FakeWritingSurface(), stand_ins=[], state=tmp_path / "stood-in")
+
+        assert {"notify_owner", "run_external_agent", "double"} <= set(real.names)
+        assert not {"notify_owner", "run_external_agent", "double"} & set(stood_in.names)
 
     async def test_a_briefing_holding_the_shell_is_offered_no_shell(self, tmp_path: Path) -> None:
         offered: list[set[str]] = []
