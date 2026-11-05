@@ -8,6 +8,8 @@ may ask for, and whatever stamps the host adds. An inline step and an inline age
 the workflow and are not stamped.
 
 `spec_identity` hashes the workflow itself rather than its environment, and evidence is filed under that hash.
+`step_content_address` hashes one reusable step the same way, and `canonical_step_yaml` writes the document it hashes
+as YAML.
 """
 
 from __future__ import annotations
@@ -16,6 +18,8 @@ import hashlib
 import json
 
 from typing import TYPE_CHECKING
+
+import yaml
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
@@ -26,7 +30,7 @@ if TYPE_CHECKING:
 
     from pydantic import JsonValue
 
-    from core.ai.workflows.domain.vocabulary import Workflow
+    from core.ai.workflows.domain.vocabulary import InlineStep, Workflow
     from core.ai.workflows.registry import StepImplementation, StepRegistry
 
 
@@ -151,6 +155,54 @@ def _canonical_document(workflow: Workflow) -> dict[str, JsonValue]:
     document: dict[str, JsonValue] = workflow.model_dump(mode="json", exclude_defaults=True)
     document["nodes"] = [{**node.model_dump(mode="json", exclude_defaults=True), "kind": node.kind} for node in workflow.nodes]
     return document
+
+
+def step_content_address(step: InlineStep) -> str:
+    """A reusable step's content address: the SHA-256 of its canonical JSON.
+
+    It follows the rule `spec_identity` follows. The JSON is dumped with `mode="json"`, keys sorted, no spaces
+    and every field at its default left out at every depth, so a field written at its default and a field left
+    out hash the same. Two copies of a step are the same step exactly when their content addresses match, and any
+    other change of value moves it. A briefing, a program and an agent step never share one.
+
+    Args:
+        step: The step to address.
+
+    Returns:
+        The digest as lowercase hex.
+    """
+    return hashlib.sha256(json.dumps(_canonical_step(step), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def canonical_step_yaml(step: InlineStep) -> str:
+    """A reusable step as canonical YAML: the document `step_content_address` hashes, keys sorted.
+
+    Two steps with the same content address get the same text. A string holding a line break is written as a
+    literal block, one line of text per line, so a line diff of two steps names the lines that changed.
+
+    Args:
+        step: The step to write.
+
+    Returns:
+        The YAML text.
+    """
+    return yaml.dump(_canonical_step(step), Dumper=_CanonicalDumper, sort_keys=True, allow_unicode=True, width=1000)
+
+
+def _canonical_step(step: InlineStep) -> dict[str, JsonValue]:
+    """The step as JSON data with every default left out at every depth."""
+    return step.model_dump(mode="json", exclude_defaults=True)
+
+
+class _CanonicalDumper(yaml.SafeDumper):
+    """The safe dumper, writing a string that holds a line break as a literal block."""
+
+
+def _represent_text(dumper: yaml.SafeDumper, text: str) -> yaml.ScalarNode:
+    return dumper.represent_scalar("tag:yaml.org,2002:str", text, style="|" if "\n" in text else None)
+
+
+_CanonicalDumper.add_representer(str, _represent_text)
 
 
 def _agent_hash(name: str, registry: StepRegistry) -> str | None:

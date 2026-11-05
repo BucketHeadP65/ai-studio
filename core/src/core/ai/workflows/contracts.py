@@ -9,9 +9,17 @@ from core.ai.artifacts import ArtifactRef
 from core.ai.workflows.authoring import build_type
 from core.ai.workflows.birth import check_birth, shapes_of
 from core.ai.workflows.contract_port import WorkflowContract
+from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.document import SpecDocument, StepDocument, load_spec_document, load_step_document
 from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, approved_gates, orchestrated_gates, trust_level
-from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, drift, fingerprint, spec_identity
+from core.ai.workflows.domain.fingerprint import (
+    WorkflowFingerprint,
+    canonical_step_yaml,
+    drift,
+    fingerprint,
+    spec_identity,
+    step_content_address,
+)
 from core.ai.workflows.domain.identity import (
     CURRENT_STEP,
     ReviewedArtifacts,
@@ -144,6 +152,7 @@ __all__ = [
     "ArtifactRef",
     "Briefing",
     "CodeRunner",
+    "ConsumerEntry",
     "DecisionSource",
     "DocumentError",
     "DurableWorkflowRun",
@@ -212,6 +221,7 @@ __all__ = [
     "StepDocument",
     "StepIdentity",
     "StepRegistry",
+    "StepVersion",
     "TaskContract",
     "Tier",
     "TurnFacts",
@@ -233,9 +243,11 @@ __all__ = [
     "build_graph",
     "build_type",
     "canonical_reviewed_value",
+    "canonical_step_yaml",
     "carried_trust",
     "check_birth",
     "connect",
+    "consumer_record",
     "contract_of",
     "copy_reusable_steps",
     "decode_run_event",
@@ -260,6 +272,7 @@ __all__ = [
     "save",
     "shapes_of",
     "spec_identity",
+    "step_content_address",
     "step_page_id",
     "trust_level",
     "unsatisfied_parameters",
