@@ -150,3 +150,39 @@ async def test_new_cases_under_an_unchanged_version_update_it_and_hand_no_event(
 
     assert len(store.payloads) == written + 1
     assert store.events == []
+
+
+def _malformed_live_v5(store: FakeCollection) -> None:
+    """A live `st.digest.v5` page whose step document no longer parses as a step."""
+    store.pages["st.digest.v5"] = {
+        "id": "st.digest.v5",
+        "type": "step",
+        "title": "Digest",
+        "summary": "One source, one digest.",
+        "status": "draft",
+        "superseded": False,
+        "frontmatter": {"step_version": 5, "saved_by": "owner:cli", "step": {"name": "digest", "instructions": 7}},
+        "applicability": "Use per source.",
+    }
+
+
+async def test_a_malformed_lower_version_blocks_no_save_and_is_named_in_the_event() -> None:
+    store = FakeCollection()
+    _malformed_live_v5(store)
+
+    await _save(_library(store), V3, 6)
+
+    assert [(page, event.version, event.superseded) for page, event in store.events if isinstance(event, ReusableStepSaved)] == [
+        ("st.digest.v6", 6, ("st.digest.v5",))
+    ]
+
+
+async def test_a_version_below_a_malformed_newest_version_hands_no_event() -> None:
+    store = FakeCollection()
+    _malformed_live_v5(store)
+
+    await _save(_library(store), V3, 3)
+
+    assert "st.digest.v3" in store.pages
+    assert store.events == []
+

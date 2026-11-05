@@ -28,4 +28,7 @@ class ReusableStepSaved(Event):
     """Who saved it, as the save's provenance names them."""
 
     superseded: tuple[str, ...] = ()
-    """The page ids of the live lower versions this save links forward to it, lowest version first."""
+    """The page ids of the live lower versions this save retires, read before the write, lowest version first.
+
+    A link that fails leaves that version live.
+    """

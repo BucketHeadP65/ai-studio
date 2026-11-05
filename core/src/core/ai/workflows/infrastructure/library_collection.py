@@ -948,7 +948,8 @@ class LibraryCollection:
         A version holds one step content and refuses a different one. Saving an unchanged step writes nothing, except
         that a live version takes new cases in place, with no new version and no move of its content address. A new
         version links every live lower version of the name forward to it, and a link that fails warns with
-        `SupersessionIncompleteWarning`. A version above every saved version of the name, live, superseded or archived,
+        `SupersessionIncompleteWarning`. Saving the newest live version again links forward any live lower version a
+        failed link left behind. A version above every saved version of the name, live, superseded or archived,
         hands the ingest one `ReusableStepSaved` with its page, so the event lands in the page's transaction or not at
         all. No other save raises it. It assumes one writer at a time, such as an import or a CLI.
 
@@ -974,13 +975,20 @@ class LibraryCollection:
         saved = await self._rows.fetch(PAGE_SQL, step_id)
         if saved:
             await self._keep_saved_version(saved[0], step, cases)
+            live = await self._live_step_versions(step.name)
+            if live and live[-1][1] == step_id:
+                for lower_id in (lower_id for lower, lower_id in live if lower < version):
+                    await self._supersede(lower_id, by=step_id)
             return step_id
         saved_by = provenance.get("saved_by", "unknown")
         retired = tuple(lower_id for lower, lower_id in await self._live_step_versions(step.name) if lower < version)
         events: tuple[ReusableStepSaved, ...] = ()
         if version > await self._newest_step_version(step.name):
             step_hash = step_content_address(step)
-            events = (ReusableStepSaved(step=step.name, version=version, step_id=step_id, step_hash=step_hash, saved_by=saved_by, superseded=retired),)
+            saved_event = ReusableStepSaved(
+                step=step.name, version=version, step_id=step_id, step_hash=step_hash, saved_by=saved_by, superseded=retired
+            )
+            events = (saved_event,)
         frontmatter: dict[str, Any] = {
             "id": step_id,
             "type": STEP_PAGE_TYPE,
