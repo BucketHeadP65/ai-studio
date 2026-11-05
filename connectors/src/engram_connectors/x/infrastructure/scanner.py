@@ -12,9 +12,15 @@ from core.ai.content_filter import content_filter_message
 from core.cqrs.contracts import utcnow
 from core.files import atomic_write
 from engram.sources.contracts import EntryScan, FoundSource, ScanError, claimants_for, classify_url
-from pydantic_ai import Agent, NativeOutput
+from pydantic_ai import Agent, NativeOutput, UsageLimits
 from pydantic_ai.capabilities import XSearch
-from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.exceptions import (
+    ContentFilterError,
+    ModelContextWindowExceededError,
+    ModelHTTPError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 
 from engram_connectors.x.domain import XScan, render_post
 from engram_connectors.xai import build_xai_model, xai_resource
@@ -55,6 +61,16 @@ _FIRST_SCAN_WINDOW = timedelta(days=7)
 # one slice is one model call, so this bounds what one scan costs, and a stamp three weeks old catches up over two scans
 _SLICES_PER_SCAN = 14
 """The most one-day slices one scan searches."""
+# X search runs on xAI's side inside one model response (one live run made twelve searches in one), so a day takes one
+# response, output retries add a few, and eight ends a run that keeps asking
+_RESPONSES_PER_DAY = 8
+"""The most model responses one day's search run may take."""
+# one X search answers at most 10 posts, and a Latest and a Top search together reach about 20 distinct ones,
+# so a day answering 18 or more has likely reached that ceiling
+_MAY_HOLD_MORE_AT = 18
+"""A day whose search answers this many posts or more is noted as one X search may have held more of."""
+_CONTENT_FAULTS = (UnexpectedModelBehavior, ModelContextWindowExceededError, UsageLimitExceeded)
+"""The errors that come from one day's content, so the scan skips that day and goes on. Any other error stops it."""
 
 
 def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: datetime, until: datetime) -> Agent[None, XScan]:
@@ -136,6 +152,15 @@ def _day_slices(start: datetime, end: datetime) -> Iterator[tuple[datetime, date
         slice_end = min(slice_start + _SLICE, end)
         yield slice_start, slice_end
         slice_start = slice_end
+
+
+def _skipped_line(skipped: Sequence[tuple[datetime, str]]) -> str:
+    """One line naming the first day a content fault skipped, how many more there were, and the first fault, or empty."""
+    if not skipped:
+        return ""
+    first_day, reason = skipped[0]
+    more = f" and {len(skipped) - 1} more" if len(skipped) > 1 else ""
+    return f"skipped the day from {first_day.isoformat()}{more}: {reason}"
 
 
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
@@ -225,45 +250,61 @@ class XScanner:
         """List the posts by `entry.ref` since `since`, rendering each one to the cache, and say how far the scan covered.
 
         The window runs from `since`, or from seven days back on a first scan, to now. It is searched one day at a time,
-        oldest day first, for at most fourteen days. The walk stops after the day that brings it to `entry.max_items`
-        posts and keeps every post that day answered. A post dated at or before `since` is dropped. A post carrying no
-        date is kept, since nothing says it is old.
+        oldest day first, for at most fourteen days, each day asked for up to `entry.max_items` posts. The walk stops
+        after the day that brings it to `entry.max_items` posts and keeps every post that day answered. A day whose
+        search answers 18 posts or more is noted, since X search may have held more. A fault of a day's content (an
+        unexpected answer, a filtered answer, a prompt too long, a run past eight model responses) skips that day and
+        reports it, and any other fault stops the walk before that day. A post dated at or before `since` is dropped,
+        and a post carrying no date is kept.
 
         Args:
             entry: The watch-list entry whose `ref` is the handle and whose `max_items` stops the walk.
             since: The date of the last scan, or `None` for a first scan.
 
         Returns:
-            One source per post, newest first, each followed by one source per link it carries, with the end of the last
-            day searched when the walk stopped before now. When a search fails after posts were found, the posts found so
-            far, covered up to the end of the day before it, with one line saying why the scan stopped.
+            One source per post, newest first, each followed by one source per link it carries. The scan covers up to the
+            end of the last day it walked when that is before now, or up to a day before now when it found no post at
+            all. Its failure line names the fault that stopped it, else the days it skipped.
 
         Raises:
-            ScanError: A search failed before any post was found, with one line saying why.
+            ScanError: A fault other than a day's content stopped the walk on its first day, with one line saying why.
         """
         end = self._clock()
         start = since if since is not None else end - _FIRST_SCAN_WINDOW
         posts: dict[str, XPost] = {}
+        notes: list[str] = []
+        skipped: list[tuple[datetime, str]] = []
         covered = start
         for slice_start, slice_end in islice(_day_slices(start, end), _SLICES_PER_SCAN):
             try:
-                found = await self._search(entry, slice_start, slice_end, wanted=entry.max_items - len(posts))
+                found = await self._search(entry, slice_start, slice_end)
+            except _CONTENT_FAULTS as error:
+                skipped.append((slice_start, _scan_failure(error)))
+                covered = slice_end
+                continue
             except Exception as error:
-                if not posts:
+                if covered == start:
                     raise ScanError(_scan_failure(error)) from error
-                return EntryScan(sources=self._sources(posts), covered_until=covered, failure=_scan_failure(error))
+                return EntryScan(sources=self._sources(posts), covered_until=covered, failure=_scan_failure(error), notes=notes)
+            if len(found) >= _MAY_HOLD_MORE_AT:
+                notes.append(f"the day from {slice_start.isoformat()} answered {len(found)} posts, X search may have held more")
             for post in found:
                 if since is None or post.date is None or post.date > since:
                     posts.setdefault(post.url, post)
             covered = slice_end
             if len(posts) >= entry.max_items:
                 break
-        return EntryScan(sources=self._sources(posts), covered_until=None if covered >= end else covered)
+        if covered < end:
+            covered_until: datetime | None = covered
+        else:
+            covered_until = None if posts else max(start, end - _SLICE)
+        return EntryScan(sources=self._sources(posts), covered_until=covered_until, failure=_skipped_line(skipped), notes=notes)
 
-    async def _search(self, entry: WatchEntry, start: datetime, end: datetime, *, wanted: int) -> list[XPost]:
-        """The posts one agent run answers for the window from `start` to `end`."""
+    async def _search(self, entry: WatchEntry, start: datetime, end: datetime) -> list[XPost]:
+        """The posts one agent run answers for the window from `start` to `end`, asked for up to `entry.max_items` of them."""
         agent = self._agent_factory([entry.ref], start, end)
-        result = await agent.run(f"List every post by @{entry.ref} from {start.isoformat()} to {end.isoformat()}, up to {wanted} posts.")
+        prompt = f"List every post by @{entry.ref} from {start.isoformat()} to {end.isoformat()}, up to {entry.max_items} posts."
+        result = await agent.run(prompt, usage_limits=UsageLimits(request_limit=_RESPONSES_PER_DAY))
         return result.output.posts
 
     def _sources(self, posts: Mapping[str, XPost]) -> list[FoundSource]:

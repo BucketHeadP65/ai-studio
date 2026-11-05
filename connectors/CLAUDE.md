@@ -19,11 +19,17 @@ lazily at wiring time.
   (`VideoResolver`, `ArxivResolver`, `ArticleResolver`, `PostResolver`). A web page that is a bot check (`challenge_reason`)
   fails its row at fetch and is never served from the cache. Extra: `source-queue`, registered name `intake`.
 - `x/`: the `Scanner` for `x` watch-list entries. A Grok model with native X search lists an
-  account's posts one day of the scan's window at a time, oldest day first, for at most fourteen days or
-  until the day that brings it to the entry's `max_items`, and answers how far it covered. The next scan
-  continues from there. Each post is rendered straight into the source queue cache, so the refresh that
-  follows never re-fetches it. A search that fails after posts were found ends the scan with those posts,
-  covered up to the end of the day before it. Extra: `x` (`pydantic-ai`, `pydantic-ai-slim[xai]`).
+  account's posts one day of the scan's window at a time, oldest day first, each day asked for up to the
+  entry's `max_items`, for at most fourteen days or until the day that brings it to `max_items`, and answers
+  how far it covered. The next scan continues from there. A scan of the whole window that found nothing
+  covers up to a day before now, so only the last day stays open. One scan costs at most fourteen agent
+  runs, each held to eight model responses (`UsageLimits(request_limit=8)`). One X search answers about 20
+  posts at most, so a day that answers 18 or more gets a note (not a failure) that X search may have held
+  more. A fault of a day's content (`UnexpectedModelBehavior`, which covers a content filter,
+  `ModelContextWindowExceededError`, `UsageLimitExceeded`) skips that day and reports it. Any other fault
+  (a connection error, HTTP 401, 403, 429) stops the walk before that day, and raises `ScanError` when it
+  hits the first day. Each post is rendered straight into the source queue cache, so the refresh that
+  follows never re-fetches it. Extra: `x` (`pydantic-ai`, `pydantic-ai-slim[xai]`).
 - `conversion/`: the `DocumentConverter` adapters a resolver or the sync slice hands a PDF or
   URL to: `ArticleConverter` (trafilatura), `ArxivHtmlConverter` (the ar5iv/arXiv HTML route),
   `AzureDocumentConverter` (Azure Document Intelligence, the PDF fallback), `HybridConverter`
