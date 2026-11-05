@@ -124,11 +124,12 @@ class QuestionFrontmatterFactory(ModelFactory[BaseFrontmatter]):
 
 
 class ClaimBlockFactory(ModelFactory[ClaimBlock]):
-    """A `ClaimBlock` anchored at `^c1` with an `observation` page type."""
+    """A `ClaimBlock` anchored at `^c1` with an `observation` page type and no unread field."""
 
     anchor = "^c1"
     loc = "§1.1"
     page_type = "observation"
+    unread_fields = ()
 
 
 class SectionFactory(ModelFactory[Section]):

@@ -749,6 +749,29 @@ class TestParseFaultTolerance:
         # The two good notes still loaded despite the broken one (+ the meta.about page).
         assert {row["id"] for row in uow.pages.upserted_rows} == {"paper.lightrag-2025", "ent.lightrag", "meta.about@research"}
 
+    async def test_a_claim_field_over_two_lines_is_a_finding_and_every_claim_still_loads(self, tmp_path: Path):
+        knowledge_base = _build_knowledge_base(tmp_path)
+        KnowledgeBaseBuilder(knowledge_base).add_unit_document(
+            "Wiki/Papers",
+            "broken-quote",
+            "---\nid: paper.broken-quote\ntype: paper\ntitle: Broken quote\nstatus: draft\n"
+            "zotero_key: K3\nyear: 2025\npaper_type: method\nsource_hash: h\n---\n\n"
+            "## Findings\n\n"
+            '- Planning agents keep a task list. ^c1\n    - loc:: §1\n    - quote:: "agents keep\n      a task list"\n'
+            "    - kind:: observation\n"
+            "- The list survives compaction. ^c2\n    - loc:: §2\n    - kind:: observation\n",
+        )
+        uow = FakeKnowledgeBaseUnitOfWork()
+        handler = _handler(knowledge_base, uow=uow)
+
+        report = await handler.handle(IndexKnowledgeBase(collection="research"))
+
+        found = [issue for issue in report.validation.errors if issue.rule == "multiline-field"]
+        assert [(issue.page_id, issue.anchor) for issue in found] == [("paper.broken-quote", "^c1")]
+        assert "'quote'" in found[0].message
+        loaded = {(row["block_id"], row["quote"]) for row in uow.claims.upserted_rows if row["page_id"] == "paper.broken-quote"}
+        assert loaded == {("c1", None), ("c2", None)}
+
     async def test_validation_errors_still_load_rows(self, tmp_path: Path):
         knowledge_base = _build_knowledge_base(tmp_path)
         # A paper with an unregistered claim type → a validation ERROR, but the row must still load.

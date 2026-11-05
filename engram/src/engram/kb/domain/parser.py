@@ -7,7 +7,9 @@ A claim's fields are its direct `key:: value` sub-bullets only, and a `key::` ne
 Each key is a built-in claim field, an edge relation, or a text or link field the schema's claim grammar declares.
 Parsing refuses only a claim without `loc::`, a link-scalar field with more than one link, a multilink field whose text
 holds no `[[page]]` link, and a key that is none of those.
-Vocabulary, `quote::` presence and edge qualifiers are checked by the validate stage.
+A field line whose value runs onto a further line is not read. Its claim names it in `unread_fields` instead, with an
+empty `loc` when that line is the `loc::` one.
+Vocabulary, `quote::` presence, edge qualifiers and unread fields are checked by the validate stage.
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ if TYPE_CHECKING:
 
 _ANCHOR_RE = re.compile(r"\s*\^(?P<id>c\d+)\s*$")
 _FIELD_RE = re.compile(r"^(?P<key>[a-z_]+)::\s*(?P<value>.*)$")
+# A `key::` field line whose value runs onto a further line, which `_FIELD_RE` does not match.
+_BROKEN_FIELD_RE = re.compile(r"^(?P<key>[a-z_]+)::[^\n]*\n")
 _UNIT_LINK_TOKEN_RE = re.compile(r"\[\[[^\]]+?\]\]")
 # Paired Obsidian `%%comment%%` inline spans, stripped from captured text defensively.
 _OBSIDIAN_INLINE_COMMENT_RE = re.compile(r"%%.*?%%", re.DOTALL)
@@ -200,7 +204,7 @@ def _parse_claims(tokens: Sequence[Token], source_path: str, grammar: ClaimGramm
 class _PendingClaim:
     """Mutable accumulator for one claim while its direct child fields stream in."""
 
-    __slots__ = ("anchor", "built_in", "edges", "fields", "links", "text")
+    __slots__ = ("anchor", "built_in", "edges", "fields", "links", "text", "unread_fields")
 
     def __init__(self, anchor: str, text: str) -> None:
         self.anchor = anchor
@@ -209,19 +213,23 @@ class _PendingClaim:
         self.edges: list[tuple[str, UnitLink]] = []
         self.fields: dict[str, str] = {}
         self.links: dict[str, tuple[UnitLink, ...]] = {}
+        self.unread_fields: list[str] = []
 
 
 def _consume_inline(
     content: str, item_depth: int, pending: _PendingClaim | None, claims: list[ClaimBlock], source_path: str, grammar: ClaimGrammarSpec
 ) -> _PendingClaim | None:
-    """Fold one inline paragraph into the claim state and return the open claim."""
+    """Fold one inline paragraph into the claim state and return the open claim, naming a field over several lines unread."""
     anchor_match = _ANCHOR_RE.search(content)
     if item_depth == _CLAIM_ITEM_DEPTH and anchor_match is not None:
         _flush(pending, claims, source_path)
         return _PendingClaim(anchor=f"^{anchor_match.group('id')}", text=_read_value(content[: anchor_match.start()]))
 
     if item_depth == _FIELD_ITEM_DEPTH and pending is not None:
-        _absorb_field(content, pending, source_path, grammar)
+        if (broken := _BROKEN_FIELD_RE.match(content.strip())) is not None:
+            pending.unread_fields.append(broken.group("key"))
+        else:
+            _absorb_field(content, pending, source_path, grammar)
 
     return pending
 
@@ -298,10 +306,10 @@ def _links(key: str, value: str, claim: str) -> tuple[UnitLink, ...]:
 
 
 def _flush(pending: _PendingClaim | None, claims: list[ClaimBlock], source_path: str) -> None:
-    """Materialize a pending claim into a `ClaimBlock`, enforcing the `loc::` requirement."""
+    """Materialize a pending claim into a `ClaimBlock`, refusing one with no `loc::` line and leaving an unread `loc` empty."""
     if pending is None:
         return
-    if "loc" not in pending.built_in:
+    if "loc" not in pending.built_in and "loc" not in pending.unread_fields:
         msg = f"claim {pending.anchor} in {source_path} is missing the required loc:: field"
         raise ClaimParseError(msg)
 
@@ -311,9 +319,11 @@ def _flush(pending: _PendingClaim | None, claims: list[ClaimBlock], source_path:
                 "anchor": pending.anchor,
                 "text": pending.text,
                 "edges": tuple(pending.edges),
+                "loc": "",
                 **pending.built_in,
                 "fields": pending.fields,
                 "links": pending.links,
+                "unread_fields": tuple(pending.unread_fields),
             }
         )
     )

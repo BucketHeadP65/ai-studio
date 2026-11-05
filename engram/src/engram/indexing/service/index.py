@@ -85,7 +85,7 @@ if TYPE_CHECKING:
 _logger = get_logger(__name__)
 
 
-INDEXER_VERSION = "8"
+INDEXER_VERSION = "9"
 """The indexer's version, stored in the index fingerprint with the chunk sizes and the chunk planner (`indexer_version`). Another stored version forces a full rebuild.
 
 You must change it whenever a change alters what the index writes, such as a new parse rule or a new row shape.

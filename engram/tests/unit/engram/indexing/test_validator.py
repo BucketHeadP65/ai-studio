@@ -318,6 +318,23 @@ class TestComparativeQualifiers:
         assert "comparative-missing-qualifiers" not in _rules(report)
 
 
+class TestMultilineField:
+    """A claim field whose value the parser left unread because it runs over several lines is an error naming it."""
+
+    def test_each_unread_field_is_an_error_naming_the_claim_and_the_field(self, vocabulary: VocabularyIndex):
+        report = _report((_paper(claims=(_claim(anchor="^c3", unread_fields=("quote", "condition")),)),), vocabulary)
+
+        found = [(issue.anchor, issue.message) for issue in report.errors if issue.rule == "multiline-field"]
+        assert [anchor for anchor, _message in found] == ["^c3", "^c3"]
+        assert "'quote'" in found[0][1]
+        assert "'condition'" in found[1][1]
+
+    def test_a_claim_with_every_field_on_one_line_passes(self, vocabulary: VocabularyIndex):
+        report = _report((_paper(claims=(_claim(),)),), vocabulary)
+
+        assert "multiline-field" not in _rules(report)
+
+
 class TestAnchorUniqueness:
     """Block-id (anchor) collisions within a note are errors."""
 

@@ -294,6 +294,11 @@ class ClaimBlock(BaseModel):
     """The claim's declared text fields by name, each value as written."""
     links: Mapping[str, tuple[UnitLink, ...]] = Field(default_factory=dict)
     """The claim's declared link fields by name, each with its targets in written order, one target for a link scalar field."""
+    unread_fields: tuple[str, ...] = ()
+    """The names of the claim's field lines whose value runs onto a further line, in written order.
+
+    Parsing reads no value from such a line, and the validate stage reports each name. It never renders.
+    """
 
 
 class Section(BaseModel):

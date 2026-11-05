@@ -5,8 +5,9 @@ It only reports. Every note still loads, and the caller decides what the errors 
 * Claims: `missing-loc`, `missing-kind`, `missing-quote` (a quote-required kind, or any claim carrying an edge),
   `comparative-missing-qualifiers` (a claim asserting a comparative relation carries one field of every qualifier
   group that relation declares),
-  `duplicate-anchor` (block ids unique per file) and `quote-not-in-source` (every quoted snippet appears in the
-  source mirror, whitespace normalized).
+  `duplicate-anchor` (block ids unique per file), `quote-not-in-source` (every quoted snippet appears in the
+  source mirror, whitespace normalized) and `multiline-field` (one per field line the parser left unread because its
+  value runs onto a further line).
 * Vocabulary: `unknown-entity-type`, `unknown-relation`, `unknown-facet-value` and `unknown-kind`.
 * Pages: `duplicate-id` (an error) and `oversized-summary` (a warning).
 * Code paths: `dangling-code-path`, a declared `path_fields` value that is not an existing file or directory under
@@ -388,6 +389,7 @@ def _check_claim(
     issues.extend(_check_quote_required(claim, page_id, quote_required_types))
     issues.extend(_check_comparative_qualifiers(claim, page_id, required_qualifiers))
     issues.extend(_check_quotes(claim, page_id, mirror_text))
+    issues.extend(_check_unread_fields(claim, page_id))
     return issues
 
 
@@ -438,6 +440,19 @@ def _check_quotes(claim: ClaimBlock, page_id: str, mirror_text: str | None) -> l
     if not quotes_in_mirror(claim.quote, mirror_text):
         return [_error("quote-not-in-source", page_id, "claim quote not found in the source mirror", anchor=claim.anchor)]
     return []
+
+
+def _check_unread_fields(claim: ClaimBlock, page_id: str) -> list[ValidationIssue]:
+    """One error per field line the parser left unread because its value runs onto a further line."""
+    return [
+        _error(
+            "multiline-field",
+            page_id,
+            f"claim field {name!r} runs onto a further line, so the index does not read it. Write the value on one line",
+            anchor=claim.anchor,
+        )
+        for name in claim.unread_fields
+    ]
 
 
 def _error(rule: str, page_id: str, message: str, *, anchor: str | None = None) -> ValidationIssue:

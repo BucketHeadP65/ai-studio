@@ -42,7 +42,7 @@ from engram.kb.contracts import (
     render,
 )
 from engram.kb.domain.payload import AuthoringClaim, AuthoringSection
-from engram.kb.domain.renderer import _CLAIM_FIELD_ORDER, _CLAIM_HEADER_FIELDS
+from engram.kb.domain.renderer import _CLAIM_FIELD_ORDER, _CLAIM_HEADER_FIELDS, _CLAIM_UNRENDERED_FIELDS
 from engram.testing.knowledge_base_builder import GOLDEN_LIGHTRAG_PAPER
 from engram.testing.specs import research_spec
 
@@ -409,7 +409,8 @@ class TestClaimFieldOrderCoversModel:
     A claim renders in two places: the bullet header line `- {text} ^cN` (the
     `_CLAIM_HEADER_FIELDS` -- `text` and `anchor`) and the indented `key:: value`
     children driven by `_CLAIM_FIELD_ORDER` (with `edges` expanding inline). Together
-    those two sets must cover `ClaimBlock.model_fields` exactly. Deriving the model
+    with `_CLAIM_UNRENDERED_FIELDS`, what parsing could not read, those sets must cover
+    `ClaimBlock.model_fields` exactly. Deriving the model
     fields dynamically (not a hardcoded list) means adding a `ClaimBlock` field that is
     neither ordered nor header-handled trips this guard rather than silently losing data,
     forcing a deliberate choice: add it to `_CLAIM_FIELD_ORDER` to render it, or to
@@ -419,7 +420,7 @@ class TestClaimFieldOrderCoversModel:
     def test_order_and_header_fields_cover_model_exactly(self):
         model_fields = set(ClaimBlock.model_fields)
         order_fields = set(_CLAIM_FIELD_ORDER)
-        accounted_for = order_fields | _CLAIM_HEADER_FIELDS
+        accounted_for = order_fields | _CLAIM_HEADER_FIELDS | _CLAIM_UNRENDERED_FIELDS
 
         unrendered = model_fields - accounted_for
         stale = accounted_for - model_fields

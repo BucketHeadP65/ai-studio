@@ -38,8 +38,11 @@ if TYPE_CHECKING:
 _CLAIM_FIELD_ORDER: tuple[str, ...] = ("loc", "quote", "kind", "subject", "edges", "links", "fields", "status", "disputed_by")
 
 # Claim fields rendered on the bullet line `- {text} ^cN` rather than as field lines.
-# Together with `_CLAIM_FIELD_ORDER` it must cover every `ClaimBlock` field, or a field never renders.
+# Together with `_CLAIM_FIELD_ORDER` and `_CLAIM_UNRENDERED_FIELDS` it must cover every `ClaimBlock` field, or a field never renders.
 _CLAIM_HEADER_FIELDS: frozenset[str] = frozenset({"text", "anchor"})
+
+# Claim fields that record what parsing could not read, which never render.
+_CLAIM_UNRENDERED_FIELDS: frozenset[str] = frozenset({"unread_fields"})
 
 # Frontmatter keys that lead, in this order, when present. Every other key follows in model order.
 _FRONTMATTER_LEAD_KEYS: tuple[str, ...] = ("id", "type", "title")
@@ -234,7 +237,7 @@ def claims_not_read_back(payload: AuthoringPayload, note: KnowledgeBaseNote) -> 
 
     `note` must be the payload rendered and parsed back. Each written part is read the way the parser reads it back
     (edge whitespace and comments dropped, a quote unwrapped) before it is compared. A claim whose text holds a blank
-    line does not read back at all, and a field value with a line break reads back cut.
+    line does not read back at all, and a field value with a line break reads back cut or not at all.
 
     Args:
         payload: The payload that was rendered.

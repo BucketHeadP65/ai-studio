@@ -443,6 +443,39 @@ class TestMissingLoc:
         assert "c7" in str(exc.value)
 
 
+class TestFieldValueOverSeveralLines:
+    """A field line whose value runs onto a further line is named on the claim and left unread, never dropped unsaid."""
+
+    def test_the_claim_names_the_field_and_keeps_every_other_field_and_claim(self):
+        body = (
+            "## Findings\n\n"
+            "- Planning agents keep a task list. ^c1\n"
+            "    - loc:: §1\n"
+            '    - quote:: "agents keep\n'
+            '      a task list"\n'
+            "    - kind:: observation\n"
+            "- The list survives compaction. ^c2\n"
+            "    - loc:: §2\n"
+            '    - quote:: "survives compaction"\n'
+        )
+
+        first, second = parse(_paper(body), source_path="p.md", spec=_RESEARCH_SPEC).claims
+
+        assert first.unread_fields == ("quote",)
+        assert first.quote is None
+        assert (first.loc, first.kind) == ("§1", "observation")
+        assert second.unread_fields == ()
+        assert second.quote == "survives compaction"
+
+    def test_a_loc_over_two_lines_leaves_the_claim_an_empty_loc_rather_than_refusing_the_page(self):
+        body = "## Findings\n\n- A claim. ^c1\n    - loc:: §4.2,\n      Table 1\n    - kind:: observation\n"
+
+        claim = parse(_paper(body), source_path="p.md", spec=_RESEARCH_SPEC).claims[0]
+
+        assert claim.unread_fields == ("loc",)
+        assert claim.loc == ""
+
+
 class TestLinkScalarRefusesMultipleLinks:
     """A link-scalar field takes exactly one link; two or more raises, naming the field and count."""
 
