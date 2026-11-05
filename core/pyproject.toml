@@ -35,8 +35,8 @@ dependencies = [
     "pgvector>=0.5.1",
     "pydantic>=2.13.4",
     # `typesafe`: `core.ai.decision_models` builds TypeSafe's Jev on pydantic-ai's own TypeSafe model.
-    "pydantic-ai[retries,typesafe]>=2.63.0",
-    "pydantic-ai-harness>=0.63.0",
+    "pydantic-ai[retries,typesafe]>=2.66.0",
+    "pydantic-ai-harness>=0.66.0",
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.1.4",
     # `core.ai.retrieval.statement` reads a model's SQL by its tokens before it reaches the database.

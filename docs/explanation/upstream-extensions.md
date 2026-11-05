@@ -48,21 +48,14 @@ Entry shape: what it does, where it lives, since when, upstream candidate (yes, 
 - **Upstream candidate:** yes, as an option beside `dynamic_catalog`. The trade-off (per-argument descriptions and structured
   type fields leave the catalog, the stubs keep them) is worth stating in the issue.
 
-### UE-3. `ToolOutputLimits` carries `tools` through a spill
-
-- **What:** a reduced return keeps `ToolReturn.tools` ([UB-1](upstream-bugs.md)). On pydantic-ai 2.52 that does not make a
-  shortened load count as loaded, so the chat agent also keeps `load_capability` out of its output limits.
-- **Where:** `core/src/core/ai/tool_output_limits.py`, a subclass that puts `ToolReturn.tools` back after the upstream reduction,
-  tests in `core/tests/unit/test_tool_output_limits.py`. Moved out of the fork on 2026-09-29.
-- **Since:** 2026-08-25 (`07a7fa54`).
-- **Upstream candidate:** yes, as the bug report.
-
 ### UE-10. An ACP **client**: driving another agent over the protocol
 
 - **What:** the reverse direction of `experimental.acp`. `ExternalAgent.run(brief, *, cwd, permission, on_update,
-  timeout_seconds)` spawns an ACP agent (Claude Code, Codex, Pi), advertises no client capabilities, opens one session at a
+  timeout_seconds, open_timeout_seconds=None)` spawns an ACP agent (Claude Code, Codex, Pi), advertises no client capabilities, opens one session at a
   working directory, sends one prompt turn, forwards every `session/update` to a sink, answers `session/request_permission`
   through a `PermissionPolicy` (`AllowOnce` ships as the permissive one), and cancels with `session/cancel` at the timeout.
+  Starting the agent and opening its session are bounded by `open_timeout_seconds`, or by the turn's timeout when it is
+  `None`.
   `ExternalResult` is the text, the stop reason, and the paths the agent reported touching. The unadvertised client methods
   (`fs/read_text_file`, `fs/write_text_file`, `terminal/*`) answer with a clear error rather than a silent failure.
 - **Where:** `harness/src/harness/adapters/acp_client/` (`_external.py`, `_permission.py`, `__init__.py`), moved out of the
@@ -216,9 +209,10 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   pydantic/pydantic-ai-harness repository, taken before that pull request closed.
 - **Since:** 2026-08-01, the repository's first commit.
 - **Upstream candidate:** already proposed upstream. Pull request #336 closed unmerged on 2026-09-28, when
-  pydantic-ai-harness moved into the pydantic-ai repository. The idea continues as pydantic/pydantic-ai#9008 ("Add a
-  `DetectLoops` capability to interrupt repeated-action loops"), with #336 linked as its reference implementation.
-  Replace this copy with `DetectLoops` once a release ships it.
+  pydantic-ai-harness moved into the pydantic-ai repository. The idea continued as pydantic/pydantic-ai#9008 ("Add a
+  `DetectLoops` capability to interrupt repeated-action loops"), with #336 linked as its reference implementation, and
+  shipped as `pydantic_ai_harness.DetectLoops` in pydantic-ai-harness 0.63.0 (pydantic/pydantic-ai#11471). Replacing this
+  copy with `DetectLoops` is open work.
 
 ### UE-17. `PathGuardedShell` (core): a shell that refuses a command naming a denied path
 
@@ -226,7 +220,7 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   guard, while `FileSystem` refuses paths by `denied_patterns`. This capability wraps a `Shell`'s toolset and refuses a
   `run_command`, `start_command` or `shell` call whose command names a path matching a denied pattern, before the command runs.
   A named path is every word, the part of a word after an `=`, and every file a glob word matches, read from the run's
-  workspace working directory at call time (`Shell.cwd` is ignored by pydantic-ai-harness 0.52), with links followed and matched the way `FileSystem` matches. The authoring agent's and each delegate's shell mount pass it
+  workspace working directory at call time (`Shell.cwd` is ignored by pydantic-ai-harness 0.52 to 0.66), with links followed and matched the way `FileSystem` matches. The authoring agent's and each delegate's shell mount pass it
   the list of the files plugin beside them.
 - **Where:** `core/src/core/ai/shell.py`, tests in `core/tests/unit/test_path_guarded_shell.py`.
 - **Since:** 2026-09-30.

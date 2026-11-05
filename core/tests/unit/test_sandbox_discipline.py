@@ -134,6 +134,17 @@ async def test_the_unwrapped_voice_of_the_same_refusal_gets_the_same_hint() -> N
     assert "`adapt_workflow` is not a function inside the sandbox" in raised.message
 
 
+async def test_a_refusal_of_a_python_builtin_gets_no_hint_about_tools_or_capabilities() -> None:
+    """A program naming `hasattr` or `dir` wants a Python builtin the sandbox lacks, not a tool to load or call."""
+    type_checked = _retry(_TYPE_CHECK_REFUSAL.replace("adapt_workflow", "hasattr"))
+    run = _retry(_REFUSAL.replace("adapt_workflow", "dir"))
+
+    assert await _wrapped(RUN_CODE, type_checked) is type_checked
+    assert await _wrapped(RUN_CODE, run) is run
+    unwrapped = ModelRetry(_REFUSAL.replace("adapt_workflow", "callable"))
+    assert await _wrapped(RUN_CODE, unwrapped) is unwrapped
+
+
 async def test_any_other_sandbox_refusal_passes_through_untouched() -> None:
     original = _retry("Syntax error in code:\n  something else entirely")
     assert await _wrapped(RUN_CODE, original) is original
@@ -189,14 +200,18 @@ _CHAT_DIALECT = (
     "no loop to start. Await tools directly, and for parallel calls write `import asyncio` then "
     "`results = await asyncio.gather(...)` at top level: the module is not preloaded, and a "
     "program that skips the import fails on NameError. The last expression is the program's "
-    "result: end on the value, not on a bare function name. Build data as Python literals, "
-    "never paste a page's prose or markdown into the program as code, and keep any one program "
-    "under a few thousand characters: a huge program is where the sandbox breaks. `json.dumps` "
-    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. There "
-    "is no file system (`open` on any path is refused) and no `dir`/`hasattr`/`type` introspection: "
-    "keep values in variables between programs, and inspect one by printing or subscripting it."
+    "result: end on the value, not on a bare function name. Build data as Python literals, and "
+    "never paste a page's prose or markdown into the program as code. `json.dumps` "
+    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. A "
+    "generator expression is a list inside the sandbox, so take its first match with `next(iter(...))` "
+    "or a comprehension's `[0]`, never `next(<generator expression>)`. There "
+    "is no file system (`open` on any path is refused). Do not use `dir`, `vars`, `callable`, `hasattr` "
+    "or `getattr`. A turn's first program is refused for naming them, and later ones find `dir`, `vars` "
+    "and `callable` missing and `hasattr` blind to a list's, dict's or string's methods. Test a key with "
+    "`in`, and a value's kind with `type()` or `isinstance()`. Keep values in variables between programs, "
+    "and inspect one by printing or subscripting it."
 )
-"""The chat role's dialect, frozen as the chat agent has always read it."""
+"""The chat role's dialect, frozen as the chat agent reads it."""
 
 _CHAT_HINT = (
     "`adapt_workflow` is not a function inside the sandbox. If `adapt_workflow` is a tool in your tool list, call it as its own "

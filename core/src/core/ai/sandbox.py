@@ -7,6 +7,7 @@ functions, it is one top-level script, and it starts no event loop of its own.
 
 from __future__ import annotations
 
+import builtins
 import re
 
 from dataclasses import dataclass, replace
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
 
 _UNKNOWN_FUNCTION = re.compile(r"NameError: Unknown function: (\w+)|error\[unresolved-reference\]: Name `(\w+)` used when not defined")
 """The sandbox's refusal of a name it does not hold, as the runtime says it and as the type checker says it."""
+
+_PYTHON_BUILTINS = frozenset(dir(builtins))
+"""Every name CPython's builtins hold, which the way out never treats as a missing tool."""
 
 _DIRECT_TOOL_HINT = (
     "`{name}` is not a function inside the sandbox. If `{name}` is a tool in your tool list, call it as its own "
@@ -74,12 +78,16 @@ _DIALECT_PROGRAM = (
     "no loop to start. Await tools directly, and for parallel calls write `import asyncio` then "
     "`results = await asyncio.gather(...)` at top level: the module is not preloaded, and a "
     "program that skips the import fails on NameError. The last expression is the program's "
-    "result: end on the value, not on a bare function name. Build data as Python literals, "
-    "never paste a page's prose or markdown into the program as code, and keep any one program "
-    "under a few thousand characters: a huge program is where the sandbox breaks. `json.dumps` "
-    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. There "
-    "is no file system (`open` on any path is refused) and no `dir`/`hasattr`/`type` introspection: "
-    "keep values in variables between programs, and inspect one by printing or subscripting it."
+    "result: end on the value, not on a bare function name. Build data as Python literals, and "
+    "never paste a page's prose or markdown into the program as code. `json.dumps` "
+    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. A "
+    "generator expression is a list inside the sandbox, so take its first match with `next(iter(...))` "
+    "or a comprehension's `[0]`, never `next(<generator expression>)`. There "
+    "is no file system (`open` on any path is refused). Do not use `dir`, `vars`, `callable`, `hasattr` "
+    "or `getattr`. A turn's first program is refused for naming them, and later ones find `dir`, `vars` "
+    "and `callable` missing and `hasattr` blind to a list's, dict's or string's methods. Test a key with "
+    "`in`, and a value's kind with `type()` or `isinstance()`. Keep values in variables between programs, "
+    "and inspect one by printing or subscripting it."
 )
 
 
@@ -130,7 +138,7 @@ class SandboxDiscipline(AbstractCapability[AgentDepsT]):
 
         Raises:
             ToolRetryError: The sandbox's refusal, with the hint appended after the sandbox's own words when it names an
-                unknown function. It is the same retry, so it is counted once.
+                unknown function that is not a Python builtin. It is the same retry, so it is counted once.
             ModelRetry: The same refusal, hinted the same way, for a caller that runs tools without retry wrapping.
             UnexpectedModelBehavior: `run_code` has spent its retry budget and no person reads the answer.
             Exception: Any other error, exactly as it arrived.
@@ -158,10 +166,12 @@ class SandboxDiscipline(AbstractCapability[AgentDepsT]):
             return _RETRIES_SPENT
 
     def _hinted(self, message: str) -> str | None:
-        """The refusal with the way out appended, or `None` for a refusal that is not about an unknown name."""
+        """The refusal with the way out appended, or `None` when it is not about an unknown name or names a Python builtin."""
         unknown = _UNKNOWN_FUNCTION.search(message)
         if unknown is None:
             return None
         name = unknown.group(1) or unknown.group(2)
+        if name in _PYTHON_BUILTINS:
+            return None
         rest = _LOAD_CAPABILITY_HINT if self.loads_capabilities else _NO_SUCH_TOOL_HINT
         return f"{message}\n\n{_DIRECT_TOOL_HINT.format(name=name)}{rest.format(name=name)}"

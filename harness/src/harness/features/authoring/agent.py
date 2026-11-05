@@ -20,7 +20,6 @@ from core.ai.format_maps.contracts import FormatMaps, MappedTool, command_starts
 from core.ai.history.contracts import RequestParametersSink, recording_capabilities
 from core.ai.sandbox import SandboxDiscipline
 from core.ai.shell import PathGuardedShell
-from core.ai.tool_output_limits import ToolOutputLimits
 from core.ai.voice import RuntimeVoiced
 from core.observability import get_logger
 from engram.skills.contracts import SKILLS as ENGRAM_SKILLS
@@ -35,7 +34,7 @@ from pydantic_ai_harness.pydantic_ai_docs import PydanticAIDocs
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS, Shell
 from pydantic_ai_harness.skills import Skills
 from pydantic_ai_harness.spend import Budget, SpendLimits
-from pydantic_ai_harness.tool_output_limits import Band, Spill, Truncate
+from pydantic_ai_harness.tool_output_limits import Band, Spill, ToolOutputLimits, Truncate
 from pydantic_ai_harness.warn_on_cache_busts import WarnOnCacheBusts
 
 from harness.adapters.contracts import (
@@ -168,8 +167,8 @@ CONTEXT_BOUND: tuple[str, ...] = (*ACTS, SANDBOX, *NOT_IN_SANDBOX, KNOWLEDGE_BAS
 """Tools whose return lands in this agent's context, the only ones the output limits may spill.
 
 Every other tool runs inside `CodeMode`, where a spill would replace a value mid-program with a
-notice and break the program. `load_capability` is left out: a shortened load no longer counts as
-loaded, so the capability's tools stay locked and its instructions arrive as a preview."""
+notice and break the program. `load_capability`'s return lands in this agent's context too. The list
+leaves it out, and the output limits never reduce a load either way."""
 
 def _shell_workspace_instructions() -> str:
     """The shell plugin's situating sentence, a function so it renders after the identity instructions."""
