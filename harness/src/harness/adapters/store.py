@@ -21,6 +21,7 @@ from core.settings import read_infrastructure
 from harness.settings import settings_file
 
 if TYPE_CHECKING:
+    from core.cqrs.contracts import Outbox
     from core.settings import DatabaseSettings
 
 KNOWLEDGE_BASE_DB = "knowledge_bases"
@@ -297,6 +298,13 @@ class ScheduleDatabase:
     """The pool the standing schedules live in."""
 
     pool: asyncpg.Pool
+
+
+@dataclass(frozen=True)
+class LibraryOutbox:
+    """The outbox of the workflow library's database, where each new reusable step version's event waits for the server."""
+
+    outbox: Outbox
 
 
 RECORD_NAMESPACE = "history"

@@ -41,6 +41,7 @@ class Schedules(Protocol):
         A change that leaves `enabled` unset leaves `paused_at` alone.
         When `changes.clears_next_fire` is set, the next fire is cleared in the same write and `changes.next_run_at` is ignored.
         When `changes.clears_pending_page_ids` is set, the pending changed pages are cleared in the same write.
+        When `changes.clears_pending_step_ids` is set, the pending changed steps are cleared in the same write.
 
         Args:
             schedule_id: The schedule's id.
@@ -82,20 +83,23 @@ class Schedules(Protocol):
         next_run_at: datetime | None,
         session_id: str,
         cleared_page_ids: Sequence[str],
+        cleared_step_ids: Sequence[str],
     ) -> bool:
-        """Record one fire in the tick log, with the runner session that made it, and remove the changed pages it passed on.
+        """Record one fire in the tick log, with the runner session that made it, and remove the changed pages or steps it passed on.
 
         Only the ids in `cleared_page_ids` leave the schedule's pending changed pages, so a page an arm added during the fire stays.
         When `cleared_page_ids` is not empty and pages stay pending, the schedule keeps the next fire it holds, the one that arm gave it,
-        and `next_run_at` is ignored.
+        and `next_run_at` is ignored. The changed steps follow the same rule through `cleared_step_ids`.
 
         Args:
             schedule_id: The schedule's id.
             last_run_at: When the fire happened.
             last_outcome: What the fire did, in words.
-            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears pages and others stay pending.
+            next_run_at: When the schedule next comes due, or `None` to stop it coming due. Ignored when the stamp clears ids and others
+                stay pending.
             session_id: The runner session the fire used.
             cleared_page_ids: The changed pages the fire passed on. Empty when the fire passed none on.
+            cleared_step_ids: The changed steps the fire passed on. Empty when the fire passed none on.
 
         Returns:
             Whether a schedule had that id.
@@ -144,6 +148,22 @@ class Schedules(Protocol):
             fires: The next fire of each schedule to arm, by schedule id. An id no enabled schedule has is skipped.
             event_id: The event id of the index this arming answers.
             page_ids: The changed pages of that index.
+
+        Returns:
+            Whether the event was a repeat, and which schedules it armed.
+        """
+        ...
+
+    async def arm_with_steps(self, fires: Mapping[UUID, datetime], *, event_id: UUID, step_ids: Sequence[str]) -> Armed:
+        """Give every enabled schedule among `fires` the next fire it maps to, and add `step_ids` to its pending changed steps.
+
+        The fire given replaces any fire the schedule already holds, and each step id is added once.
+        The event is recorded as handled in the same write, even when `fires` is empty, and an event recorded before arms nothing.
+
+        Args:
+            fires: The next fire of each schedule to arm, by schedule id. An id no enabled schedule has is skipped.
+            event_id: The event id of the reusable step version this arming answers.
+            step_ids: The changed steps that event names.
 
         Returns:
             Whether the event was a repeat, and which schedules it armed.

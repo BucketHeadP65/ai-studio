@@ -20,14 +20,16 @@ The workflow engine keeps its own shape: a framework-pure package
 machinery) plus `adapters/`, with the agent half's FastAPI app over it, split
 into `browsing` and `running` slices.
 
-### CQRS message bus (knowledge base half only)
+### CQRS message bus
 `core/src/core/cqrs/`, frozen pydantic `Command`/`Event` bases, one handler per command. A handler's events go to the
 `coordination.outbox` table (inside the handler's transaction when it has one), and the app's `Worker` delivers them to
 the bus's subscriptions once per subscriber, recorded in `coordination.event_deliveries`. Background work is a row in
 `coordination.jobs`, claimed under `SKIP LOCKED`. Deliberately introduced for the ingestion pipeline
 ([ADR 0002](../../adr/0002-wiki-cqrs-bus-and-wikinote-kernel.md)) and re-homed into the shared library by
 [ADR 0007](../../adr/0007-consolidate-shared-python-into-core.md). Only the knowledge base half dispatches through it, and nothing
-else should grow a second bus casually.
+else should grow a second bus casually. The agent half holds one subscription and no command: a worker in the harness
+server delivers each `ReusableStepSaved` from the outbox of `engram_workflows` to the on-step-change arming
+([ADR 0023](../../adr/0023-reusable-step-changes-arm-step-maintenance.md)).
 
 ### Agent inspection and measured improvements
 

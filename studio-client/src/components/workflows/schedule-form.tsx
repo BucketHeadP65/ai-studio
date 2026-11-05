@@ -74,8 +74,10 @@ const INTERVAL = /^every\s+(\d+)\s*([mhd])$/i;
 const ON_REFRESH = /^on\s+refresh$/i;
 const AFTER_RUN = /^after\s+\S+$/i;
 const ON_INDEX = /^on\s+index\s+\S+(?:\s+quiet\s+\d+\s*[smh])?$/i;
-const EVENT_CADENCES = [ON_REFRESH, AFTER_RUN, ON_INDEX];
-// Checked after the event cadences, since "on index docs quiet 30m" also has five words.
+const ON_STEP_CHANGE = /^on\s+step\s+change(?:\s+quiet\s+\d+\s*[smh])?$/i;
+const EVENT_CADENCES = [ON_REFRESH, AFTER_RUN, ON_INDEX, ON_STEP_CHANGE];
+// Checked after the event cadences, since "on index docs quiet 30m" and "on step change quiet 10m"
+// also have five words.
 const CRON = /^\S+(?:\s+\S+){4}$/;
 const FAIL_AFTER = /^fail_after:(.*)$/;
 
@@ -661,6 +663,11 @@ export function ScheduleForm(props: ScheduleFormProps) {
                 <code className="font-mono">on index &lt;knowledge base&gt; quiet 30m</code> runs
                 once that knowledge base is indexed with changed pages and 30 minutes pass with no
                 further index.
+              </li>
+              <li>
+                <code className="font-mono">on step change quiet 10m</code> runs once new reusable
+                step versions are imported and 10 minutes pass with no further one. The workflow
+                must take <code className="font-mono">changed_step_ids</code>.
               </li>
             </ul>
           ) : null}

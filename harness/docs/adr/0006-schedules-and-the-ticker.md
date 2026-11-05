@@ -32,6 +32,10 @@ resting between fires.
 a third event cadence (`on index <knowledge base>`), armed by an index with changed pages after a quiet period, whose
 fire passes those pages to the workflow parameter `changed_page_ids`.
 
+**Extended:** on 2026-11-05 by root [ADR 0023](../../../docs/adr/0023-reusable-step-changes-arm-step-maintenance.md),
+a fourth event cadence (`on step change`), armed by each new reusable step version after a quiet period, whose fire
+passes the changed steps to the workflow parameter `changed_step_ids`.
+
 ## Context
 
 The owner ruled that scheduled workflows are specced now, at professional grade, not deferred.

@@ -20,6 +20,7 @@ from harness.features.scheduling.domain import (
     IntervalCadence,
     OnIndexCadence,
     OnRefreshCadence,
+    OnStepChangeCadence,
     Schedule,
     ScheduleUpdate,
     blacked_out_until,
@@ -90,6 +91,36 @@ def test_a_quiet_period_of_a_day_is_accepted(text: str) -> None:
     assert parse_cadence(text) == OnIndexCadence(knowledge_base="docs", quiet_seconds=86400)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("on step change", OnStepChangeCadence(quiet_seconds=1800)),
+        ("On  Step  Change", OnStepChangeCadence(quiet_seconds=1800)),
+        ("on step change quiet 10m", OnStepChangeCadence(quiet_seconds=600)),
+        ("ON STEP CHANGE QUIET 45s", OnStepChangeCadence(quiet_seconds=45)),
+        ("on step change quiet 24h", OnStepChangeCadence(quiet_seconds=86400)),
+    ],
+)
+def test_the_on_step_change_cadence_parses_with_its_quiet_period(text: str, expected: Cadence) -> None:
+    assert parse_cadence(text) == expected
+
+
+@pytest.mark.parametrize("text", ["on step", "on step changed", "on step change docs", "on step change quiet 10d", "on step change soon"])
+def test_a_malformed_on_step_change_cadence_is_refused(text: str) -> None:
+    with pytest.raises(ValueError, match="is not a cadence"):
+        parse_cadence(text)
+
+
+def test_an_on_step_change_quiet_period_of_zero_is_refused() -> None:
+    with pytest.raises(ValueError, match="quiet period must be longer than zero"):
+        parse_cadence("on step change quiet 0s")
+
+
+def test_an_on_step_change_quiet_period_over_a_day_is_refused() -> None:
+    with pytest.raises(ValueError, match=r"quiet period must be at most 24 hours \(86400 seconds\)"):
+        parse_cadence("on step change quiet 25h")
+
+
 def test_the_refusal_names_every_cadence_form() -> None:
     with pytest.raises(ValueError, match="is not a cadence") as refusal:
         parse_cadence("sometimes")
@@ -98,12 +129,18 @@ def test_the_refusal_names_every_cadence_form() -> None:
     assert "'every <N><s|m|h|d>'" in message
     assert "a 5-field cron expression" in message
     assert "'on refresh', 'after <workflow name>'" in message
-    assert "or 'on index <knowledge base>' with an optional 'quiet <N><s|m|h>'" in message
+    assert "'on index <knowledge base>' with an optional 'quiet <N><s|m|h>'" in message
+    assert "or 'on step change' with an optional 'quiet <N><s|m|h>'" in message
 
 
 @pytest.mark.parametrize(
     "cadence",
-    [OnRefreshCadence(), AfterRunCadence(workflow_name="nightly-report"), OnIndexCadence(knowledge_base="repo-docs", quiet_seconds=1800)],
+    [
+        OnRefreshCadence(),
+        AfterRunCadence(workflow_name="nightly-report"),
+        OnIndexCadence(knowledge_base="repo-docs", quiet_seconds=1800),
+        OnStepChangeCadence(quiet_seconds=1800),
+    ],
 )
 def test_an_event_cadence_has_no_next_fire_and_no_preview(cadence: Cadence) -> None:
     now = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
@@ -300,7 +337,7 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
     next_at = ran_at + timedelta(hours=2)
 
     stamped = await store.stamp(
-        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=(), cleared_step_ids=()
     )
 
     assert stamped is True
@@ -315,7 +352,7 @@ async def test_stamp_records_the_tick_and_reuses_the_runner_session() -> None:
 async def test_stamp_of_an_unknown_id_is_false() -> None:
     assert (
         await FakeSchedules().stamp(
-            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=()
+            uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=()
         )
         is False
     )

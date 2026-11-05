@@ -90,7 +90,7 @@ C4Container
     Rel(studiocorpus, engram, "indexes and queries through the library plugins")
     Rel(studioagent, core, "core.ai.workflows engine + adapters")
     Rel(studiocorpus, corpusdb, "SQLAlchemy 2 async, serve path via corpus_reader")
-    Rel(studioagent, storedb, "workflows as an engram collection")
+    Rel(studioagent, storedb, "workflows as an engram collection, its outbox read for new reusable step versions")
     Rel(studiocorpus, corpus, "sync mirrors, index notes")
     Rel(studiocorpus, azure, "embeddings + PDF fallback")
     Rel(studiocorpus, providers, "resolves declared connector names by entry point")
@@ -134,6 +134,9 @@ Load-bearing properties of this picture:
   ([ADR 0020](../adr/0020-refresh-runs-arm-schedules.md)).
   It reports the pages each index changed to `POST /api/schedules/index-runs` the same way, and the harness collects them on every enabled `on index <knowledge base>` schedule that names that knowledge base
   ([ADR 0022](../adr/0022-index-runs-arm-schedules-with-their-changed-pages.md)). These three routes are the only ones the studio calls on the harness.
+  `harness import` reaches the harness server through the outbox of `engram_workflows`: a new reusable step version
+  lands there in the transaction that writes its page, and a worker in the server arms every enabled `on step change`
+  schedule with it ([ADR 0023](../adr/0023-reusable-step-changes-arm-step-maintenance.md)).
 - **Both backends are localhost-only by design.** `studio serve-http` binds
   127.0.0.1:8100 (CORS open exactly to :3031). The agent app binds
   127.0.0.1:8770 (CORS open to exactly the two spellings of the studio's dev
@@ -174,14 +177,16 @@ The workflow engine keeps its own shape: a framework-pure package
 machinery) plus `adapters/`, with the agent half's FastAPI app over it, split
 into `browsing` and `running` slices.
 
-### CQRS message bus (knowledge base half only)
+### CQRS message bus
 `core/src/core/cqrs/`, frozen pydantic `Command`/`Event` bases, one handler per command. A handler's events go to the
 `coordination.outbox` table (inside the handler's transaction when it has one), and the app's `Worker` delivers them to
 the bus's subscriptions once per subscriber, recorded in `coordination.event_deliveries`. Background work is a row in
 `coordination.jobs`, claimed under `SKIP LOCKED`. Deliberately introduced for the ingestion pipeline
 ([ADR 0002](../adr/0002-wiki-cqrs-bus-and-wikinote-kernel.md)) and re-homed into the shared library by
 [ADR 0007](../adr/0007-consolidate-shared-python-into-core.md). Only the knowledge base half dispatches through it, and nothing
-else should grow a second bus casually.
+else should grow a second bus casually. The agent half holds one subscription and no command: a worker in the harness
+server delivers each `ReusableStepSaved` from the outbox of `engram_workflows` to the on-step-change arming
+([ADR 0023](../adr/0023-reusable-step-changes-arm-step-maintenance.md)).
 
 ### Agent inspection and measured improvements
 

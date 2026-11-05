@@ -111,6 +111,21 @@ describe("cadenceWords", () => {
       "after each index of docs, once 1 hour passes quietly",
     );
   });
+
+  it("names a reusable step change and its default quiet period", () => {
+    expect(cadenceWords("on step change")).toBe(
+      "after each new reusable step version, once 30 minutes pass quietly",
+    );
+  });
+
+  it("names the quiet period an on step change cadence sets, in any case", () => {
+    expect(cadenceWords("On Step Change quiet 10m")).toBe(
+      "after each new reusable step version, once 10 minutes pass quietly",
+    );
+    expect(cadenceWords("on step change quiet 1h")).toBe(
+      "after each new reusable step version, once 1 hour passes quietly",
+    );
+  });
 });
 
 describe("formatNextRun", () => {

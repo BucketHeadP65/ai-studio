@@ -38,6 +38,7 @@ Repo-level ADRs for the monorepo. App-local decisions live with their app (e.g. 
 | [0020](0020-refresh-runs-arm-schedules.md) | A refresh run reaches the harness over HTTP, and schedules fire on a refresh run or a run's end | accepted | 2026-10-06 |
 | [0021](0021-frontend-shared-code-lives-in-the-spa.md) | The shared frontend code lives inside studio-client, in `src/shared/` | accepted | 2026-10-23 |
 | [0022](0022-index-runs-arm-schedules-with-their-changed-pages.md) | An index tells the harness which pages it changed, and an on-index schedule passes them to its run | accepted | 2026-10-28 |
+| [0023](0023-reusable-step-changes-arm-step-maintenance.md) | A new reusable step version arms an on-step-change schedule through the library's outbox | proposed | 2026-11-05 |
 
 ## Status legend
 

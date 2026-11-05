@@ -96,10 +96,13 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         workflow_id: A library id this session's own environment can run.
         cadence: `every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh` (once after each refresh
             of the knowledge base the arguments select that brought in new sources), `after <workflow name>`
-            (once after a run of that workflow over the same knowledge base ends succeeded or partial), or
+            (once after a run of that workflow over the same knowledge base ends succeeded or partial),
             `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` of at most 24 hours (once after that knowledge base
-            is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further index).
-            An on-index fire passes the changed pages to the workflow's `changed_page_ids` parameter, which the workflow must declare.
+            is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further index), or
+            `on step change` with the same optional `quiet` (once after new reusable step versions are imported and the quiet
+            period passes with no further one). An on-index fire passes the changed pages to the workflow's `changed_page_ids`
+            parameter, and an on-step-change fire passes the changed steps to its `changed_step_ids` parameter, which the
+            workflow must declare.
         run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
         arguments: The workflow's parameters, one per declared parameter, each as the JSON value
             that parameter's own type asks for.
@@ -118,7 +121,8 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
     Raises:
         ModelRetry: `workflow_id` does not check out here, an argument is not what its parameter
             declares, `cadence`, `gate_policy`, or `blackout` is not one of its own shapes, an
-            `on index` cadence names a workflow without a `changed_page_ids` parameter, or
+            `on index` cadence names a workflow without a `changed_page_ids` parameter, an
+            `on step change` cadence names one without a `changed_step_ids` parameter, or
             `gate_mode` is `orchestrate` on a deployment that runs on Temporal.
     """
     now = datetime.now(UTC)
@@ -187,8 +191,9 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         schedule_id: The schedule's own id, as shown by `schedules`.
         run_engine: The engine this deployment runs workflows on. Temporal refuses a change to gate mode `orchestrate`.
         workflow_id: Point the schedule at a different saved workflow.
-        cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages the schedule collected,
-            unless it is `on index` over the same knowledge base, so a change of the quiet period alone keeps them.
+        cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages or steps the schedule
+            collected, unless it is `on index` over the same knowledge base or `on step change` again, so a change of the quiet period
+            alone keeps them.
         arguments: Replace the workflow's parameters, each as the JSON value that parameter's own
             type asks for.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.
@@ -207,7 +212,8 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         ModelRetry: `schedule_id` names no schedule, `workflow_id` does not check out here, an
             argument is not what its parameter declares, `cadence`, `gate_policy`, or `blackout`
             is not one of its own shapes, an `on index` cadence names a workflow without a
-            `changed_page_ids` parameter, or `gate_mode` is `orchestrate` on a deployment that runs
+            `changed_page_ids` parameter, an `on step change` cadence names one without a
+            `changed_step_ids` parameter, or `gate_mode` is `orchestrate` on a deployment that runs
             on Temporal.
     """
     schedule_uuid = _parse_id(schedule_id)

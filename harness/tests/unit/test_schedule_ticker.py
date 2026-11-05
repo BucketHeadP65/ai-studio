@@ -21,7 +21,7 @@ from core.ai.workflows.contracts import FromNode, FromParameter, LibraryError, P
 from harness.features.running import service as running_service
 from harness.features.running.contracts import schedule_runner
 from harness.features.running.records import RunCollaborators
-from harness.features.scheduling.domain import CHANGED_PAGES_PARAMETER, Schedule, ScheduleUpdate
+from harness.features.scheduling.domain import CHANGED_PAGES_PARAMETER, CHANGED_STEPS_PARAMETER, Schedule, ScheduleUpdate
 from harness.features.scheduling.exceptions import ScheduleSettingInvalidError
 from harness.features.scheduling.service import CAUGHT_UP_OUTCOME, ENGINE_UNREACHABLE_OUTCOME, MISSED_OUTCOME, Scheduler
 from harness.session import NoSessionLog, Runtime, SessionPool
@@ -950,3 +950,246 @@ async def test_a_change_that_keeps_the_knowledge_base_keeps_the_pending_pages(ch
     after = await schedules.get(schedule.id)
     assert after is not None
     assert after.pending_page_ids == ("a.one",)
+
+
+# --- on-step-change fires -----------------------------------------------------------------------
+
+
+def _steps_spec(name: str = "wf-steps") -> Workflow:
+    """A workflow whose one step reads the changed steps a fire passes."""
+    return Workflow(
+        name=name,
+        version=1,
+        description="read the reusable steps that changed",
+        parameters={CHANGED_STEPS_PARAMETER: ParameterSpec(description="the changed steps", json_schema={"type": "string"}, required=False)},
+        nodes=(RunNode(id="read", work="read_steps", inputs={"changed_step_ids": FromParameter(parameter=CHANGED_STEPS_PARAMETER)}),),
+        output=FromNode(node="read"),
+    )
+
+
+def _steps_registry(seen: list[str], hold: asyncio.Event | None = None) -> StepRegistry:
+    """A registry whose one step records the changed steps a fire handed it, and waits for `hold` when given."""
+    from core.ai.workflows.contracts import StepRegistry as Registry
+
+    registry = Registry()
+
+    async def read_steps(changed_step_ids: str) -> str:
+        seen.append(changed_step_ids)
+        if hold is not None:
+            await hold.wait()
+        return changed_step_ids
+
+    registry.register(read_steps)
+    return registry
+
+
+async def test_an_on_step_change_fire_passes_the_changed_steps_sorted_and_clears_them(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = FakeWorkflowStore(specs={"wf-steps": _steps_spec()})
+    pool = SessionPool(_runtime(_steps_registry(seen), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-steps", arguments={}, cadence="on step change", pending_step_ids=("st.b.v2", "st.c.v1", "st.a.v7"))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.last_outcome == "launched"
+    assert (after.next_run_at, after.pending_step_ids) == (None, ()), "the fire rests and every step it passed on leaves the schedule"
+    session = await pool.get(after.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["st.a.v7,st.b.v2,st.c.v1"]
+
+
+async def test_two_step_changes_naming_one_step_give_one_fire_that_passes_it_once(tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = FakeWorkflowStore(specs={"wf-steps": _steps_spec()})
+    pool = SessionPool(_runtime(_steps_registry(seen), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-steps", arguments={}, cadence="on step change quiet 10m", next_run_at=None)
+    await schedules.insert(schedule)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+    first = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    second = first + timedelta(minutes=4)
+
+    await scheduler.arm_after_step_change(event_id=uuid4(), step_ids=("st.digest_source.v12",), now=first)
+    await scheduler.tick(pool, run=run, now=first + timedelta(minutes=5))
+    await scheduler.arm_after_step_change(event_id=uuid4(), step_ids=("st.digest_source.v12",), now=second)
+    await scheduler.tick(pool, run=run, now=first + timedelta(minutes=10))
+    await scheduler.tick(pool, run=run, now=second + timedelta(minutes=10))
+    await scheduler.tick(pool, run=run, now=second + timedelta(minutes=30))
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.last_outcome == "launched"
+    assert (after.next_run_at, after.pending_step_ids) == (None, ())
+    session = await pool.get(after.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["st.digest_source.v12"], "one fire, passing the step once"
+
+
+async def test_a_held_on_step_change_fire_keeps_its_steps_and_its_fire(tmp_path: Path) -> None:
+    seen: list[str] = []
+    hold = asyncio.Event()
+    store = FakeWorkflowStore(specs={"wf-steps": _steps_spec()})
+    pool = SessionPool(_runtime(_steps_registry(seen, hold), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-steps", arguments={}, cadence="on step change", pending_step_ids=("st.a.v1",))
+    await schedules.insert(schedule)
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+    first_fire = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    second_fire = first_fire + timedelta(minutes=30)
+
+    await scheduler.tick(pool, run=run, now=first_fire)
+    await schedules.arm_with_steps({schedule.id: second_fire}, event_id=uuid4(), step_ids=["st.c.v3"])
+    await scheduler.tick(pool, run=run, now=second_fire)
+
+    held = await schedules.get(schedule.id)
+    assert held is not None
+    assert held.last_outcome == MISSED_OUTCOME
+    assert (held.next_run_at, held.pending_step_ids) == (second_fire, ("st.c.v3",)), "the overlap keeps the arm and the steps it collected"
+    hold.set()
+    session = await pool.get(held.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["st.a.v1"], "only the first fire passed steps on"
+
+
+async def test_a_refused_on_step_change_fire_keeps_its_steps(registry: StepRegistry, tmp_path: Path) -> None:
+    """The newest version dropped the parameter, so the fire refuses and the steps wait for a fire that can pass them on."""
+    store = FakeWorkflowStore(
+        specs={"wf.steps.v1": _steps_spec("steps"), "wf.steps.v2": _one_node_spec("steps")}, newest={"wf.steps.v1": "wf.steps.v2"}
+    )
+    pool = SessionPool(_runtime(registry, store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf.steps.v1", cadence="on step change", pending_step_ids=("st.a.v1",))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    outcome = await Scheduler(schedules, schedules, FakeBroadcaster()).run_now(pool, schedule.id, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    assert outcome == "refused: wf.steps.v2 declares no changed_step_ids"
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert (after.next_run_at, after.pending_step_ids) == (None, ("st.a.v1",)), "the schedule rests and keeps its steps"
+
+
+async def test_an_on_step_change_schedule_over_a_workflow_without_the_parameter_is_refused_at_save(registry: StepRegistry) -> None:
+    schedules = FakeSchedules()
+
+    with pytest.raises(ScheduleSettingInvalidError) as refusal:
+        await Scheduler(schedules, schedules, FakeBroadcaster()).create_schedule(
+            FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}),
+            registry,
+            workflow_id="wf-sales",
+            arguments={"quarter": "Q1"},
+            cadence="on step change quiet 10m",
+            gate_policy="wait",
+            gate_mode="auto",
+            capacity_key=None,
+            capacity_limit=None,
+            blackout=None,
+            catch_up=False,
+            names=None,
+            now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+            run_engine="in_process",
+        )
+
+    assert str(refusal.value) == (
+        "an on-step-change schedule passes the changed steps to changed_step_ids, and wf-sales declares no such parameter. "
+        "Pick a workflow that declares changed_step_ids, or add that parameter to this one."
+    )
+    assert await schedules.list_all() == [], "a refused schedule is never stored"
+
+
+async def test_a_change_to_an_on_step_change_cadence_over_a_workflow_without_the_parameter_is_refused(registry: StepRegistry) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule()
+    await schedules.insert(schedule)
+
+    with pytest.raises(ScheduleSettingInvalidError, match="declares no such parameter"):
+        await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+            FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}),
+            registry,
+            schedule.id,
+            ScheduleUpdate(cadence="on step change"),
+            names=None,
+            run_engine="in_process",
+        )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.cadence == "every 30m"
+
+
+async def test_an_on_step_change_schedule_over_a_workflow_with_the_parameter_is_saved_resting() -> None:
+    schedules = FakeSchedules()
+
+    saved = await Scheduler(schedules, schedules, FakeBroadcaster()).create_schedule(
+        FakeWorkflowStore(specs={"wf-steps": _steps_spec()}),
+        _steps_registry([]),
+        workflow_id="wf-steps",
+        arguments={},
+        cadence="on step change quiet 10m",
+        gate_policy="wait",
+        gate_mode="auto",
+        capacity_key=None,
+        capacity_limit=None,
+        blackout=None,
+        catch_up=False,
+        names=None,
+        now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+        run_engine="in_process",
+    )
+
+    assert (saved.next_run_at, saved.pending_step_ids) == (None, ()), "the schedule rests until a step change arms it"
+
+
+@pytest.mark.parametrize("cadence", ["on index notes", "every 30m"], ids=["an on-index cadence", "a clock cadence"])
+async def test_a_cadence_change_clears_the_pending_steps(cadence: str) -> None:
+    """Steps collected for one cadence never ride a fire of another."""
+    schedules = FakeSchedules()
+    spec = _steps_spec()
+    both = spec.model_copy(
+        update={
+            "parameters": {
+                **spec.parameters,
+                CHANGED_PAGES_PARAMETER: ParameterSpec(description="the changed pages", json_schema={"type": "string"}, required=False),
+            }
+        }
+    )
+    schedule = _schedule(workflow_id="wf-steps", arguments={}, cadence="on step change", pending_step_ids=("st.a.v1",))
+    await schedules.insert(schedule)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        FakeWorkflowStore(specs={"wf-steps": both}), _steps_registry([]), schedule.id, ScheduleUpdate(cadence=cadence), names=None, run_engine="in_process"
+    )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert (after.cadence, after.pending_step_ids) == (cadence, ())
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [ScheduleUpdate(enabled=False), ScheduleUpdate(cadence="On Step Change"), ScheduleUpdate(cadence="on step change quiet 10m")],
+    ids=["no cadence", "the same cadence spelled otherwise", "only another quiet period"],
+)
+async def test_a_change_that_still_waits_on_step_changes_keeps_the_pending_steps(changes: ScheduleUpdate) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-steps", arguments={}, cadence="on step change", pending_step_ids=("st.a.v1",))
+    await schedules.insert(schedule)
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        FakeWorkflowStore(specs={"wf-steps": _steps_spec()}), _steps_registry([]), schedule.id, changes, names=None, run_engine="in_process"
+    )
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.pending_step_ids == ("st.a.v1",)

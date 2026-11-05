@@ -7,11 +7,13 @@ A fire held by overlap or blackout skips to the next turn of the cadence, unless
 With `catch_up`, the first fire after the hold clears runs at once and is stamped "caught up".
 A schedule whose cadence waits for an event rests after it fires, until it is armed again.
 An on-index fire passes the changed pages it collected to the workflow's `changed_page_ids` parameter, and a fire that launches nothing keeps them.
+An on-step-change fire passes the changed steps it collected to `changed_step_ids` the same way.
 """
 
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
 
@@ -23,12 +25,14 @@ from harness.domain.contracts import AdmissionRefused, SessionRenamed, admitted_
 from harness.features.running import contracts as running
 from harness.features.scheduling.domain import (
     CHANGED_PAGES_PARAMETER,
+    CHANGED_STEPS_PARAMETER,
     AfterRunCadence,
     Armed,
     BlackoutWindow,
     Cadence,
     OnIndexCadence,
     OnRefreshCadence,
+    OnStepChangeCadence,
     Schedule,
     ScheduleUpdate,
     blacked_out_until,
@@ -75,6 +79,31 @@ ORCHESTRATE_ON_TEMPORAL = (
 
 _BLACKOUT_WALK_LIMIT = 1000
 """The most cadence occurrences `_next_outside_blackout` walks past before it gives up."""
+
+_EVENT_CADENCES = (OnRefreshCadence, AfterRunCadence, OnIndexCadence, OnStepChangeCadence)
+"""The cadences that wait for an event: the clock never brings them due, and a fire leaves them resting."""
+
+
+@dataclass(frozen=True)
+class _Collected:
+    """The ids an event cadence collected for one fire, the workflow parameter the fire passes them to, and the pending list a launch clears."""
+
+    parameter: str
+    ids: tuple[str, ...]
+    pending: Literal["pages", "steps"]
+
+    def cleared(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """The page ids and the step ids a launched fire clears, in that order."""
+        return (self.ids, ()) if self.pending == "pages" else ((), self.ids)
+
+
+def _collected(schedule: Schedule, cadence: Cadence) -> _Collected | None:
+    """The ids a fire of this schedule passes on, sorted, or `None` for a cadence that collects none."""
+    if isinstance(cadence, OnIndexCadence):
+        return _Collected(CHANGED_PAGES_PARAMETER, tuple(sorted(schedule.pending_page_ids)), "pages")
+    if isinstance(cadence, OnStepChangeCadence):
+        return _Collected(CHANGED_STEPS_PARAMETER, tuple(sorted(schedule.pending_step_ids)), "steps")
+    return None
 
 
 def live_phase(pool: Sessions, session_id: str) -> str | None:
@@ -126,16 +155,16 @@ async def current_version(library: WorkflowLibrary, workflow_id: str) -> str:
         return workflow_id
 
 
-async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollaborators, changed_pages: tuple[str, ...] | None) -> str:
-    """Validate the newest version of the schedule's workflow and launch it, passing `changed_pages` on unless it is `None`, or say why not."""
+async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollaborators, collected: _Collected | None) -> str:
+    """Validate the newest version of the schedule's workflow and launch it, passing the `collected` ids on unless it is `None`, or say why not."""
     workflow_id = await current_version(session.library, schedule.workflow_id)
     try:
         spec = await _checked_workflow(session.library, session.registry, workflow_id)
     except (WorkflowUnavailableError, running.WorkflowNotRunnableError) as exc:
         return f"refused: {exc}"
-    if changed_pages is not None and CHANGED_PAGES_PARAMETER not in spec.parameters:
-        return f"refused: {workflow_id} declares no {CHANGED_PAGES_PARAMETER}"
-    arguments = schedule.arguments if changed_pages is None else {**schedule.arguments, CHANGED_PAGES_PARAMETER: ",".join(changed_pages)}
+    if collected is not None and collected.parameter not in spec.parameters:
+        return f"refused: {workflow_id} declares no {collected.parameter}"
+    arguments = schedule.arguments if collected is None else {**schedule.arguments, collected.parameter: ",".join(collected.ids)}
     try:
         _require_parameters(workflow_id, spec, arguments)
         params = await admitted_arguments(
@@ -199,30 +228,36 @@ def _after_itself(workflow_name: str) -> str:
     return f"a schedule of {workflow_name!r} cannot fire after {workflow_name!r}, because every run that succeeds would fire it again"
 
 
-def _refuse_index_cadence_without_pages(workflow_id: str, spec: Workflow, cadence: Cadence) -> None:
-    """Refuse an on-index cadence over a workflow that declares no parameter for the changed pages."""
+def _refuse_cadence_without_its_parameter(workflow_id: str, spec: Workflow, cadence: Cadence) -> None:
+    """Refuse an on-index or on-step-change cadence over a workflow that declares no parameter for the ids it collects."""
     if isinstance(cadence, OnIndexCadence) and CHANGED_PAGES_PARAMETER not in spec.parameters:
         msg = f"an on-index schedule passes the changed pages to {CHANGED_PAGES_PARAMETER}, and {workflow_id} declares no such parameter"
+        raise ScheduleSettingInvalidError(msg)
+    if isinstance(cadence, OnStepChangeCadence) and CHANGED_STEPS_PARAMETER not in spec.parameters:
+        msg = (
+            f"an on-step-change schedule passes the changed steps to {CHANGED_STEPS_PARAMETER}, and {workflow_id} declares no such parameter. "
+            f"Pick a workflow that declares {CHANGED_STEPS_PARAMETER}, or add that parameter to this one."
+        )
         raise ScheduleSettingInvalidError(msg)
 
 
 async def _refuse_event_cadence_change(
     library: WorkflowLibrary, registry: StepRegistry, held: Schedule, changes: ScheduleUpdate, cadence: Cadence | None
 ) -> None:
-    """Refuse a change that leaves an after-run cadence naming the schedule's own workflow, or an on-index cadence over a workflow without the changed pages."""
+    """Refuse a change that leaves an after-run cadence naming the schedule's own workflow, or a cadence that collects ids over a workflow without their parameter."""
     if changes.cadence is None and changes.workflow_id is None:
         return
     try:
         effective = cadence if cadence is not None else parse_cadence(held.cadence)
     except ValueError:
         return
-    if not isinstance(effective, AfterRunCadence | OnIndexCadence):
+    if not isinstance(effective, AfterRunCadence | OnIndexCadence | OnStepChangeCadence):
         return
     workflow_id = changes.workflow_id or held.workflow_id
     spec = await _checked_workflow(library, registry, workflow_id)
     if isinstance(effective, AfterRunCadence) and effective.workflow_name == spec.name:
         raise ScheduleSettingInvalidError(_after_itself(spec.name))
-    _refuse_index_cadence_without_pages(workflow_id, spec, effective)
+    _refuse_cadence_without_its_parameter(workflow_id, spec, effective)
 
 
 async def _checked_workflow(library: WorkflowLibrary, registry: StepRegistry, workflow_id: str) -> Workflow:
@@ -273,6 +308,16 @@ def _clears_pending_page_ids(held: Schedule, cadence: Cadence | None) -> bool:
     stored = _cadence_or_none(held.cadence)
     if isinstance(cadence, OnIndexCadence) and isinstance(stored, OnIndexCadence):
         return cadence.knowledge_base != stored.knowledge_base
+    return cadence != stored
+
+
+def _clears_pending_step_ids(held: Schedule, cadence: Cadence | None) -> bool:
+    """Whether a new cadence drops the collected steps, which it does unless it still waits on step changes."""
+    if cadence is None:
+        return False
+    stored = _cadence_or_none(held.cadence)
+    if isinstance(cadence, OnStepChangeCadence) and isinstance(stored, OnStepChangeCadence):
+        return False
     return cadence != stored
 
 
@@ -351,6 +396,32 @@ class Scheduler:
             if schedule.enabled and isinstance(cadence, OnIndexCadence) and cadence.knowledge_base == knowledge_base:
                 fires[schedule.id] = now + timedelta(seconds=cadence.quiet_seconds)
         armed = await self._schedules.arm_with_pages(fires, event_id=event_id, page_ids=page_ids)
+        if armed.schedule_ids:
+            self._topics.publish("schedules")
+        return armed
+
+    async def arm_after_step_change(self, *, event_id: UUID, step_ids: Sequence[str], now: datetime) -> Armed:
+        """Arm every enabled on-step-change schedule and give it the changed steps, once per event.
+
+        Each armed schedule's fire moves to `now` plus its own quiet period, replacing the fire it held.
+        The event id is recorded even when no schedule matches, so the same event delivered again arms nothing, and an
+        event that arrives before any on-step-change schedule exists never arms one created later.
+        A schedule whose stored cadence no longer parses is skipped.
+
+        Args:
+            event_id: The id of the event that named the changed steps.
+            step_ids: The reusable step versions that changed, as `st.<name>.v<version>`.
+            now: The moment each quiet period is counted from.
+
+        Returns:
+            Whether the event was delivered before, and which schedules it armed.
+        """
+        fires: dict[UUID, datetime] = {}
+        for schedule in await self._queries.list_all():
+            cadence = _cadence_or_none(schedule.cadence)
+            if schedule.enabled and isinstance(cadence, OnStepChangeCadence):
+                fires[schedule.id] = now + timedelta(seconds=cadence.quiet_seconds)
+        armed = await self._schedules.arm_with_steps(fires, event_id=event_id, step_ids=step_ids)
         if armed.schedule_ids:
             self._topics.publish("schedules")
         return armed
@@ -453,8 +524,9 @@ class Scheduler:
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
-                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, or the gate
-                mode is `orchestrate` on Temporal.
+                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, an
+                on-step-change cadence names one that declares no `changed_step_ids` parameter, or the gate mode is `orchestrate`
+                on Temporal.
         """
         spec = await _checked_workflow(library, registry, workflow_id)
         _require_parameters(workflow_id, spec, arguments)
@@ -468,7 +540,7 @@ class Scheduler:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         if isinstance(parsed_cadence, AfterRunCadence) and parsed_cadence.workflow_name == spec.name:
             raise ScheduleSettingInvalidError(_after_itself(spec.name))
-        _refuse_index_cadence_without_pages(workflow_id, spec, parsed_cadence)
+        _refuse_cadence_without_its_parameter(workflow_id, spec, parsed_cadence)
         _refuse_orchestrate_on_temporal(gate_mode, run_engine)
         schedule = Schedule(
             workflow_id=workflow_id,
@@ -503,8 +575,9 @@ class Scheduler:
         The arguments are written only when `changes` sets them.
         A schedule with no next fire, such as one whose fire failed, gets its next fire from its cadence again.
         A change that sets a cadence waiting for an event clears the next fire, so the schedule rests until something arms it.
-        A change to another cadence clears the changed pages the schedule collected, so none rides a fire of the new cadence.
-        An on-index cadence over the same knowledge base keeps them, so a change of its quiet period alone loses no page.
+        A change to another cadence clears the changed pages and steps the schedule collected, so none rides a fire of the new cadence.
+        An on-index cadence over the same knowledge base keeps its pages, and an on-step-change cadence keeps its steps, so a change
+        of the quiet period alone loses nothing.
         Turning the schedule off stamps it paused at `now`, and turning it on clears the stamp.
         A change that asks to clear the capacity or the blackout writes them as none.
 
@@ -527,8 +600,9 @@ class Scheduler:
             WorkflowParametersMissingError: The arguments leave a required parameter without a value.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
-                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, or the change
-                sets gate mode `orchestrate` on Temporal.
+                schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, an
+                on-step-change cadence names one that declares no `changed_step_ids` parameter, or the change sets gate mode
+                `orchestrate` on Temporal.
         """
         held = await self._schedules.get(schedule_id)
         if held is None:
@@ -544,7 +618,7 @@ class Scheduler:
             raise ScheduleSettingInvalidError(str(exc)) from exc
         _refuse_orchestrate_on_temporal(changes.gate_mode, run_engine)
         await _refuse_event_cadence_change(library, registry, held, changes, cadence)
-        rests = isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
+        rests = isinstance(cadence, _EVENT_CADENCES)
         moment = now if now is not None else datetime.now(UTC)
         resolved = changes.model_copy(
             update={
@@ -552,6 +626,7 @@ class Scheduler:
                 "next_run_at": None if rests else _restored_next_fire(held, changes, moment),
                 "clears_next_fire": rests,
                 "clears_pending_page_ids": _clears_pending_page_ids(held, cadence),
+                "clears_pending_step_ids": _clears_pending_step_ids(held, cadence),
                 "paused_at": held.paused_at_after(enabled=changes.enabled, now=moment),
             }
         )
@@ -634,6 +709,7 @@ class Scheduler:
                         next_run_at=None,
                         session_id=schedule.session_id,
                         cleared_page_ids=(),
+                        cleared_step_ids=(),
                     )
                 self._topics.publish("schedules")
 
@@ -643,13 +719,14 @@ class Scheduler:
         return sum(1 for row in siblings if live_phase(pool, row.session_id) is not None)
 
     async def _fire(self, pool: Sessions, schedule: Schedule, *, run: running.RunCollaborators, moment: datetime) -> str:
-        """Fire one schedule, or record the first hold among overlap, capacity and blackout, then stamp the tick log and clear the pages a launch passed on."""
+        """Fire one schedule, or record the first hold among overlap, capacity and blackout, then stamp the tick log and clear the ids a launch passed on."""
         session = await _runner_session(pool, schedule)
         cadence = parse_cadence(schedule.cadence)
         windows = parse_blackout(schedule.blackout) if schedule.blackout else ()
-        keeps_held_fire = schedule.catch_up or isinstance(cadence, OnRefreshCadence | AfterRunCadence | OnIndexCadence)
-        changed_pages = tuple(sorted(schedule.pending_page_ids)) if isinstance(cadence, OnIndexCadence) else None
+        keeps_held_fire = schedule.catch_up or isinstance(cadence, _EVENT_CADENCES)
+        collected = _collected(schedule, cadence)
         cleared_page_ids: tuple[str, ...] = ()
+        cleared_step_ids: tuple[str, ...] = ()
 
         # A hold that keeps its fire writes no next fire at all, so an arm made while the fire was held stands.
         keeps_next_fire = False
@@ -672,11 +749,11 @@ class Scheduler:
             if not keeps_held_fire:
                 next_run_at = _next_outside_blackout(cadence, windows, moment)
         else:
-            launched = await _launch(session, schedule, run, changed_pages)
+            launched = await _launch(session, schedule, run, collected)
             outcome = CAUGHT_UP_OUTCOME if schedule.catch_up and launched == "launched" and _held_before(schedule.last_outcome) else launched
             next_run_at = next_after(cadence, moment)
-            if launched == "launched" and changed_pages is not None:
-                cleared_page_ids = changed_pages
+            if launched == "launched" and collected is not None:
+                cleared_page_ids, cleared_step_ids = collected.cleared()
 
         if keeps_next_fire:
             await self._schedules.stamp_held(schedule.id, last_run_at=moment, last_outcome=outcome, session_id=session.session_id or "")
@@ -688,6 +765,7 @@ class Scheduler:
                 next_run_at=next_run_at,
                 session_id=session.session_id or "",
                 cleared_page_ids=cleared_page_ids,
+                cleared_step_ids=cleared_step_ids,
             )
         self._topics.publish("schedules")
         return outcome

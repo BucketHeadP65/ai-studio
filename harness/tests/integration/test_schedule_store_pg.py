@@ -130,7 +130,7 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
     next_at = ran_at + timedelta(hours=2)
 
     stamped = await store.stamp(
-        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=()
+        schedule.id, last_run_at=ran_at, last_outcome="ok", next_run_at=next_at, session_id="sess-1", cleared_page_ids=(), cleared_step_ids=()
     )
 
     assert stamped is True
@@ -143,7 +143,7 @@ async def test_stamp_records_the_tick(store: PostgresSchedules) -> None:
 
 
 async def test_stamp_of_an_unknown_id_is_false(store: PostgresSchedules) -> None:
-    stamped = await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=())
+    stamped = await store.stamp(uuid4(), last_run_at=datetime.now(UTC), last_outcome="ok", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
 
     assert stamped is False
 
@@ -257,7 +257,7 @@ async def test_arm_with_an_event_id_seen_before_arms_nothing(store: PostgresSche
     event_id = uuid4()
 
     first = await store.arm([resting.id], at=at, event_id=event_id)
-    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=())
+    await store.stamp(resting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=(), cleared_step_ids=())
     second = await store.arm([resting.id], at=at + timedelta(minutes=1), event_id=event_id)
 
     assert first.schedule_ids == (resting.id,)
@@ -373,7 +373,7 @@ async def test_stamp_removes_only_the_page_ids_it_passed(store: PostgresSchedule
     waiting = _schedule(cadence="on index notes", next_run_at=at, pending_page_ids=("a", "b", "c"))
     await store.insert(waiting)
 
-    stamped = await store.stamp(waiting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    stamped = await store.stamp(waiting.id, last_run_at=at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     assert stamped is True
     fetched = await store.get(waiting.id)
@@ -388,7 +388,7 @@ async def test_stamp_keeps_the_fire_an_index_set_while_ids_remain_pending(store:
     await store.insert(waiting)
     await store.arm_with_pages({waiting.id: armed_fire}, event_id=uuid4(), page_ids=["c"])
 
-    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"])
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=["a", "b"], cleared_step_ids=())
 
     fetched = await store.get(waiting.id)
     assert fetched is not None
@@ -400,8 +400,151 @@ async def test_stamp_that_passed_no_pages_applies_its_next_fire(store: PostgresS
     waiting = _schedule(cadence="on index notes", next_run_at=fired_at, pending_page_ids=("a",))
     await store.insert(waiting)
 
-    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=[])
+    await store.stamp(waiting.id, last_run_at=fired_at, last_outcome="refused: no", next_run_at=None, session_id="", cleared_page_ids=[], cleared_step_ids=())
 
     fetched = await store.get(waiting.id)
     assert fetched is not None
     assert (fetched.next_run_at, fetched.pending_page_ids) == (None, ("a",)), "a refused fire rests and keeps its pages"
+
+
+# --- on-step-change: the pending step ids ------------------------------------------------------
+
+
+async def test_the_migration_adds_an_empty_pending_step_ids_column(store: PostgresSchedules, migrated: str) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
+    schedule = _schedule()
+    await store.insert(schedule)
+    connection = await asyncpg.connect(_asyncpg_dsn(migrated))
+    try:
+        column = await connection.fetchrow(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns"
+            " WHERE table_schema = 'public' AND table_name = 'schedules' AND column_name = 'pending_step_ids'"
+        )
+    finally:
+        await connection.close()
+
+    assert column is not None
+    assert (column["data_type"], column["is_nullable"], column["column_default"]) == ("ARRAY", "NO", "'{}'::text[]")
+    fetched = await store.get(schedule.id)
+    assert fetched is not None
+    assert fetched.pending_step_ids == ()
+
+
+async def test_pending_step_ids_round_trip(store: PostgresSchedules) -> None:
+    schedule = _schedule(cadence="on step change", pending_step_ids=("st.b.v1", "st.a.v2"))
+
+    await store.insert(schedule)
+
+    fetched = await store.get(schedule.id)
+    assert fetched is not None
+    assert (fetched.pending_step_ids, fetched.pending_page_ids) == (("st.a.v2", "st.b.v1"), ())
+
+
+async def test_arm_with_steps_records_the_event_once_under_its_own_subscriber(store: PostgresSchedules, migrated: str) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
+    at = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
+    waiting = _schedule(cadence="on step change")
+    await store.insert(waiting)
+    event_id = uuid4()
+
+    first = await store.arm_with_steps({waiting.id: at}, event_id=event_id, step_ids=["st.digest_source.v12"])
+    second = await store.arm_with_steps({waiting.id: at + timedelta(minutes=5)}, event_id=event_id, step_ids=["st.other.v2"])
+
+    assert first == Armed(schedule_ids=(waiting.id,))
+    assert second == Armed(repeat=True)
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_step_ids) == (at, ("st.digest_source.v12",)), "the repeat changed no row"
+    connection = await asyncpg.connect(_asyncpg_dsn(migrated))
+    try:
+        subscribers = await connection.fetch("SELECT subscriber FROM coordination.event_deliveries WHERE event_id = $1", event_id)
+    finally:
+        await connection.close()
+    assert [row["subscriber"] for row in subscribers] == ["schedules.on_step_change"]
+
+
+async def test_arm_with_steps_with_no_schedule_to_arm_still_records_the_event(store: PostgresSchedules) -> None:
+    event_id = uuid4()
+
+    first = await store.arm_with_steps({}, event_id=event_id, step_ids=["st.a.v1"])
+    second = await store.arm_with_steps({}, event_id=event_id, step_ids=["st.a.v1"])
+
+    assert (first, second) == (Armed(), Armed(repeat=True))
+
+
+async def test_arm_with_steps_moves_the_fire_and_unions_the_ids(store: PostgresSchedules) -> None:
+    first_fire = datetime(2026, 11, 5, 12, 10, tzinfo=UTC)
+    second_fire = first_fire + timedelta(minutes=4)
+    waiting = _schedule(cadence="on step change quiet 10m")
+    paused = _schedule(cadence="on step change", enabled=False)
+    for row in (waiting, paused):
+        await store.insert(row)
+
+    await store.arm_with_steps({waiting.id: first_fire, paused.id: first_fire}, event_id=uuid4(), step_ids=["st.digest_source.v12"])
+    armed = await store.arm_with_steps({waiting.id: second_fire}, event_id=uuid4(), step_ids=["st.digest_source.v12", "st.a.v3"])
+
+    assert armed == Armed(schedule_ids=(waiting.id,))
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert fetched.next_run_at == second_fire, "the latest step change moves the fire"
+    assert fetched.pending_step_ids == ("st.a.v3", "st.digest_source.v12"), "a step named twice is collected once"
+    assert fetched.pending_page_ids == ()
+    left = await store.get(paused.id)
+    assert left is not None
+    assert (left.next_run_at, left.pending_step_ids) == (None, ()), "a paused schedule is never armed"
+
+
+async def test_stamp_removes_only_the_step_ids_it_passed_and_keeps_the_fire_an_arm_set(store: PostgresSchedules) -> None:
+    fired_at = datetime(2026, 11, 5, 12, 30, tzinfo=UTC)
+    armed_fire = fired_at + timedelta(minutes=10)
+    waiting = _schedule(cadence="on step change", next_run_at=fired_at, pending_step_ids=("st.a.v1", "st.b.v1"))
+    await store.insert(waiting)
+    await store.arm_with_steps({waiting.id: armed_fire}, event_id=uuid4(), step_ids=["st.c.v1"])
+
+    await store.stamp(
+        waiting.id,
+        last_run_at=fired_at,
+        last_outcome="launched",
+        next_run_at=None,
+        session_id="",
+        cleared_page_ids=[],
+        cleared_step_ids=["st.a.v1", "st.b.v1"],
+    )
+
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_step_ids) == (armed_fire, ("st.c.v1",)), "the step the arm added fires on the arm's fire"
+
+
+async def test_stamp_that_passed_every_step_applies_its_next_fire(store: PostgresSchedules) -> None:
+    fired_at = datetime(2026, 11, 5, 12, 30, tzinfo=UTC)
+    waiting = _schedule(cadence="on step change", next_run_at=fired_at, pending_step_ids=("st.a.v1",))
+    await store.insert(waiting)
+
+    await store.stamp(
+        waiting.id, last_run_at=fired_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=[], cleared_step_ids=["st.a.v1"]
+    )
+
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_step_ids) == (None, ())
+
+
+async def test_update_that_clears_the_pending_steps_clears_them(store: PostgresSchedules) -> None:
+    held = _schedule(cadence="on step change", pending_step_ids=("st.a.v1",), pending_page_ids=("note.a",))
+    await store.insert(held)
+
+    assert await store.update(held.id, ScheduleUpdate(cadence="every 30m", clears_pending_step_ids=True)) is True
+
+    fetched = await store.get(held.id)
+    assert fetched is not None
+    assert (fetched.cadence, fetched.pending_step_ids, fetched.pending_page_ids) == ("every 30m", (), ("note.a",))
+
+
+async def test_update_that_leaves_the_pending_steps_keeps_them(store: PostgresSchedules) -> None:
+    held = _schedule(cadence="on step change", pending_step_ids=("st.a.v1",))
+    await store.insert(held)
+
+    assert await store.update(held.id, ScheduleUpdate(enabled=False, clears_pending_page_ids=True)) is True
+
+    fetched = await store.get(held.id)
+    assert fetched is not None
+    assert fetched.pending_step_ids == ("st.a.v1",)

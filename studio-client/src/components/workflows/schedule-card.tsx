@@ -27,9 +27,11 @@ const INTERVAL = /^every\s+(\d+)\s*(s|m|h|d)$/i;
 const ON_REFRESH = /^on\s+refresh$/i;
 const AFTER_RUN = /^after\s+(\S+)$/i;
 const ON_INDEX = /^on\s+index\s+(\S+)(?:\s+quiet\s+(\d+)\s*(s|m|h))?$/i;
+const ON_STEP_CHANGE = /^on\s+step\s+change(?:\s+quiet\s+(\d+)\s*(s|m|h))?$/i;
 const UNIT_WORD: Record<string, string> = { s: "second", m: "minute", h: "hour", d: "day" };
 
-// An on index cadence without its own quiet period waits 30 minutes, as the harness does.
+// An on index or on step change cadence without its own quiet period waits 30 minutes, as the
+// harness does.
 const DEFAULT_QUIET_COUNT = 30;
 const DEFAULT_QUIET_UNIT = "m";
 
@@ -38,11 +40,18 @@ function countWords(count: number, unit: string): string {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-// The raw cadence text in words: an interval ("every 30m"), one of the three event cadences
-// ("on refresh", "after <workflow name>", "on index <knowledge base>" with an optional
-// "quiet <N><s|m|h>"), or a 5-field cron expression. A cron expression has no cheap,
-// always-correct English rendering without a library this app does not carry, so it reads as
-// its own expression, named as one.
+// "once 30 minutes pass quietly", from the quiet period a cadence names, or the default.
+function quietWords(count: string | undefined, unit: string | undefined): string {
+  const quietCount = count === undefined ? DEFAULT_QUIET_COUNT : Number(count);
+  const quiet = countWords(quietCount, unit ?? DEFAULT_QUIET_UNIT);
+  return `once ${quiet} ${quietCount === 1 ? "passes" : "pass"} quietly`;
+}
+
+// The raw cadence text in words: an interval ("every 30m"), one of the four event cadences
+// ("on refresh", "after <workflow name>", "on index <knowledge base>" and "on step change", the
+// last two with an optional "quiet <N><s|m|h>"), or a 5-field cron expression. A cron expression
+// has no cheap, always-correct English rendering without a library this app does not carry, so it
+// reads as its own expression, named as one.
 export function cadenceWords(cadence: string): string {
   const text = cadence.trim();
   const interval = INTERVAL.exec(text);
@@ -60,9 +69,12 @@ export function cadenceWords(cadence: string): string {
   const onIndex = ON_INDEX.exec(text);
   if (onIndex !== null) {
     const [, knowledgeBase, count, unit] = onIndex;
-    const quietCount = count === undefined ? DEFAULT_QUIET_COUNT : Number(count);
-    const quiet = countWords(quietCount, unit ?? DEFAULT_QUIET_UNIT);
-    return `after each index of ${knowledgeBase}, once ${quiet} ${quietCount === 1 ? "passes" : "pass"} quietly`;
+    return `after each index of ${knowledgeBase}, ${quietWords(count, unit)}`;
+  }
+  const onStepChange = ON_STEP_CHANGE.exec(text);
+  if (onStepChange !== null) {
+    const [, count, unit] = onStepChange;
+    return `after each new reusable step version, ${quietWords(count, unit)}`;
   }
   return `on cron schedule ${cadence}`;
 }

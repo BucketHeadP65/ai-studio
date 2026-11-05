@@ -52,10 +52,12 @@ before creating a new one, to see whether one already covers the same workflow.
   (fires once after a run of that workflow over the same knowledge base ends succeeded or partial), or
   `on index <knowledge base>` with an optional `quiet <N><s, m, or h>` of at most 24 hours (fires once after that
   knowledge base is indexed with changed pages and the quiet period, 30 minutes unless named, passes with no further
-  index). The last
-  three never fire by the clock, keep their arm through an overlap or a blackout whatever `catch_up` says, and rest
+  index), or `on step change` with the same optional `quiet` (fires once after new reusable step versions are
+  imported and the quiet period passes with no further one). The last
+  four never fire by the clock, keep their arm through an overlap or a blackout whatever `catch_up` says, and rest
   again after the fire. A schedule cannot fire after its own workflow. An `on index` fire passes the changed pages
-  to the workflow's `changed_page_ids` parameter, so the schedule is refused over a workflow that does not declare it.
+  to the workflow's `changed_page_ids` parameter, and an `on step change` fire passes the changed steps to its
+  `changed_step_ids` parameter, so either schedule is refused over a workflow that does not declare its parameter.
 - `gate_mode`: `wait` opens a gate decided by a person (the default). `orchestrate` hands it to
   this schedule's own orchestrator instead. `auto` passes every person gate with nobody asked, only on
   the person's explicit instruction, and a judge that cannot decide sends the work back as a rejection. `gate_policy` (`wait`, or `fail_after, <seconds>`) governs

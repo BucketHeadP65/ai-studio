@@ -23,8 +23,8 @@ class ScheduleIn(BaseModel):
     the row is written. Text under a parameter that cannot hold it is read as JSON once, so a
     client with nothing but strings still writes a schedule that fires."""
     cadence: str
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, `on index <knowledge base>` or
+    `on step change`, the last two with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
     gate_policy: str = "wait"
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
     gate_mode: GateMode = "wait"
@@ -50,8 +50,8 @@ class SchedulePatch(BaseModel):
     workflow_id: str | None = None
     arguments: WorkflowArguments | None = None
     cadence: str | None = None
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, `on index <knowledge base>` or
+    `on step change`, the last two with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
     enabled: bool | None = None
     gate_policy: str | None = None
     """`wait` to hold a gate for a person forever, or `fail_after:<seconds>`."""
@@ -73,8 +73,8 @@ class CadenceIn(BaseModel):
     """The cadence text the preview route parses without keeping anything."""
 
     cadence: str
-    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, or `on index <knowledge base>`
-    with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
+    """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, `on index <knowledge base>` or
+    `on step change`, the last two with an optional `quiet <N><s, m, or h>` of at most 24 hours."""
 
 
 class ScheduleOut(BaseModel):
@@ -99,6 +99,9 @@ class ScheduleOut(BaseModel):
     paused_at: datetime | None
     pending_page_ids: list[str]
     """The changed pages an on-index schedule has collected since its last fire, to be passed on by its next. Empty for every other cadence."""
+    pending_step_ids: list[str]
+    """The changed steps an on-step-change schedule has collected since its last fire, to be passed on by its next. Empty for every other
+    cadence."""
     live: str | None
     spend_today_usd: Decimal
     spend_week_usd: Decimal

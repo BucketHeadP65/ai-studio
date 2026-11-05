@@ -41,8 +41,10 @@ from core.cqrs.contracts import (
     Clock,
     JobHandler,
     JobsAndQueries,
+    MemoryJobs,
     MemoryOutbox,
     MessageBus,
+    Outbox,
     PollingWake,
     TopicSink,
     Wake,
@@ -59,7 +61,16 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from wireup.integration import fastapi as wireup_fastapi
 
 from harness import session as session_state
-from harness.adapters.contracts import DEFAULT_TIERS, ModelList, ModelTiers, TierSetting, prune_ended_spill_folders, set_tier, stored_tiers
+from harness.adapters.contracts import (
+    DEFAULT_TIERS,
+    LibraryOutbox,
+    ModelList,
+    ModelTiers,
+    TierSetting,
+    prune_ended_spill_folders,
+    set_tier,
+    stored_tiers,
+)
 from harness.composition import ensure_run_engine, restore_waiting_run, restore_waiting_runs, run_log_folders, serve_durable_runs
 from harness.container import create_container
 from harness.domain.contracts import Booted, SessionEvents, SessionTranscript, last_forgotten_at, live_session, logged_run_ids
@@ -69,7 +80,7 @@ from harness.features.inspection.controller import InspectionController
 from harness.features.projects.controller import ProjectsController
 from harness.features.running.contracts import RunCollaborators, RunRecords
 from harness.features.running.controller import RunningController
-from harness.features.scheduling.contracts import Scheduler
+from harness.features.scheduling.contracts import Scheduler, StepChangeArming
 from harness.features.scheduling.controller import SchedulingController
 from harness.features.selfauthoring.contracts import SelectionError, select_profile, selected_profile_name
 from harness.features.selfauthoring.controller import SelfAuthoringController
@@ -261,6 +272,39 @@ def coordination_worker(pool: SessionPool, scheduler: Scheduler, run: RunCollabo
     return worker
 
 
+LIBRARY_EVENT_POLL_SECONDS = 30.0
+"""How often, in seconds, the library event worker reads the outbox of the workflow library's database."""
+
+
+def library_event_worker(arming: StepChangeArming, outbox: Outbox, driving: Driving) -> Worker:
+    """Build the worker that delivers the workflow library's outbox to the on-step-change arming.
+
+    You must make it the only worker over that outbox. It closes every event type other than `ReusableStepSaved` undelivered.
+    It serves no job, runs no periodic and reads `outbox` every `LIBRARY_EVENT_POLL_SECONDS`, never on the wake in `driving`.
+    A row is closed once the arming took it, an event no schedule waits for included, and a row whose arming fails stays in
+    the outbox for the next pass.
+
+    Args:
+        arming: What arms the on-step-change schedules.
+        outbox: The outbox of the workflow library's database.
+        driving: The name and clock the worker runs with.
+
+    Returns:
+        The worker, with the arming subscribed to `ReusableStepSaved`.
+    """
+    bus = MessageBus({}, {})
+    arming.subscribe(bus)
+    return Worker(
+        jobs=MemoryJobs(),
+        outbox=outbox,
+        bus=bus,
+        wake=PollingWake(),
+        name=f"{driving.name}:library-events",
+        clock=driving.clock,
+        poll_seconds=LIBRARY_EVENT_POLL_SECONDS,
+    )
+
+
 def _report_loop_exit(task: asyncio.Task[None]) -> None:
     """Log a background worker that stopped before the process did, which nothing restarts."""
     if task.cancelled():
@@ -446,8 +490,13 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:
             )
             driving = Driving(wake=await container.get(Wake), name=f"harness:{os.getpid()}")
             timers = coordination_worker(pool, scheduler, await container.get(RunCollaborators), driving, inspecting)
-            names = ("timers", INSPECT_RUN_KIND, ATTRIBUTE_LEAD_KIND, SCAN_RUN_KIND, "reconciliation")
-            workers = (timers, *inspection_workers(inspecting, driving), reconciliation_worker(inspecting, driving))
+            names = ("timers", INSPECT_RUN_KIND, ATTRIBUTE_LEAD_KIND, SCAN_RUN_KIND, "reconciliation", "library-events")
+            workers = (
+                timers,
+                *inspection_workers(inspecting, driving),
+                reconciliation_worker(inspecting, driving),
+                library_event_worker(StepChangeArming(scheduler, clock=driving.clock), (await container.get(LibraryOutbox)).outbox, driving),
+            )
             for name, worker in zip(names, workers, strict=True):
                 loop_task = asyncio.create_task(worker.run_forever(stop=stopping), name=f"{driving.name}:{name}")
                 loop_task.add_done_callback(_report_loop_exit)

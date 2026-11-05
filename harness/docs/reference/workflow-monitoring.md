@@ -1277,7 +1277,8 @@ the same index answers `"repeat": true` and changes nothing. The event id is rec
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
 `gate_mode`, `capacity_key`, `capacity_limit`, `blackout`, `catch_up`, `session_id`, `created_at`, `last_run_at`,
 `last_outcome`, `next_run_at`, `paused_at`, the moment a person last turned the schedule off or `null` while it is on, and
-`pending_page_ids`, the changed pages an on-index schedule has collected for its next fire) plus
+`pending_page_ids`, the changed pages an on-index schedule has collected for its next fire, and `pending_step_ids`, the
+changed steps an on-step-change schedule has collected for its next fire) plus
 `live`: where its runner session's run stands right now (`"running" | "paused" | "waiting"`, or `null` when nothing is
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
@@ -1303,7 +1304,7 @@ fresh the same way as `live` rather than stored. Each counts only a fire whose s
 runner (`"app:schedule:<id>"`): `spend_today_usd` sums since UTC midnight, `spend_week_usd` over the trailing seven
 days, neither a calendar boundary.
 
-**Cadence** is an interval (`"every 30m"`, `"every 2h"`, `"every 1d"`), a 5-field cron expression (`"0 9 * * 1"`, parsed by `croniter`), `"on refresh"`, `"after <workflow name>"` or `"on index <knowledge base>"` with an optional `"quiet <N><s|m|h>"`: `POST /api/schedules` and `PATCH /api/schedules/{id}` refuse anything else in
+**Cadence** is an interval (`"every 30m"`, `"every 2h"`, `"every 1d"`), a 5-field cron expression (`"0 9 * * 1"`, parsed by `croniter`), `"on refresh"`, `"after <workflow name>"`, `"on index <knowledge base>"` or `"on step change"`, the last two with an optional `"quiet <N><s|m|h>"`: `POST /api/schedules` and `PATCH /api/schedules/{id}` refuse anything else in
 words, and `POST /api/schedules/preview` walks a candidate cadence forward three fires without storing anything, so a
 cadence can be checked before it is saved. An event cadence never comes due by the clock, so its preview answers
 `{"next": []}`. `workflow_id` is revalidated against the process's own environment on
@@ -1311,12 +1312,12 @@ create and on any patch that changes it. A schedule naming a workflow that does 
 saved broken. `arguments` are admitted against the named workflow's own parameters at the same moment, and stored as
 the JSON they were admitted as: see [Run arguments](#run-arguments-typed-json-admitted-once).
 
-**Event cadences.** `on refresh`, `after <workflow name>` and `on index <knowledge base>` never come due by the
-clock. A schedule holding one rests with `next_run_at` null until it is armed: the studio's report of a refresh run
+**Event cadences.** `on refresh`, `after <workflow name>`, `on index <knowledge base>` and `on step change` never come
+due by the clock. A schedule holding one rests with `next_run_at` null until it is armed: the studio's report of a refresh run
 that created sources arms every enabled `on refresh` schedule whose arguments select that knowledge base, a run that
 ends `succeeded` or `partial` arms every enabled `after <its name>` schedule that selects a knowledge base the run
-also selected, and the studio's report of an index with changed pages arms every enabled `on index` schedule naming
-that knowledge base. An `on refresh` or `after` schedule's knowledge base is read through its workflow card's
+also selected, the studio's report of an index with changed pages arms every enabled `on index` schedule naming
+that knowledge base, and a new reusable step version arms every enabled `on step change` schedule. An `on refresh` or `after` schedule's knowledge base is read through its workflow card's
 knowledge-base selector, and an `on index` schedule names its own. The tick fires an armed schedule through the same
 holds as any other, an overlap or a blackout keeps the arm whatever `catch_up` says, and the fire leaves it resting.
 A hold that keeps the arm, as every capacity hold does, writes only the tick log (`last_run_at`, `last_outcome`,
@@ -1338,6 +1339,21 @@ patch that gives the schedule another cadence clears its `pending_page_ids`, so 
 rides a later fire. A patch to another `on index` cadence over the same knowledge base keeps them, so a change of the
 quiet period alone loses no page. `POST /api/schedules/{id}/run-now` on an on-index schedule that has collected nothing passes an
 empty `changed_page_ids`, and a workflow that reads an empty value as every page then runs a full pass.
+
+**The on-step-change cadence** waits for a new reusable step version. `harness import` saves a version above every
+saved version of its name with `ReusableStepSaved` in the same transaction, a row in `coordination.outbox` of the
+workflow library's database. A worker in this server reads that outbox every 30 seconds, so an import while the server
+is down is delivered after it starts. Each delivered event moves the fire of every enabled `on step change` schedule to
+the moment of delivery plus its quiet period, 1800 seconds unless the cadence names one (`on step change quiet 10m`),
+at most 86400 seconds, and adds the saved version's id (`st.<name>.v<version>`) to `pending_step_ids`, each id once. The
+event id is recorded under `schedules.on_step_change` in the same transaction, so an event delivered twice arms
+nothing the second time, and an event no schedule waits for is recorded, closed and never seen by a schedule created
+later. A fire that launches passes the collected ids, sorted and comma-separated, to the workflow parameter
+`changed_step_ids` and removes exactly the ids it passed, as the on-index cadence does with its pages. A fire whose
+newest workflow version declares no `changed_step_ids` stamps `refused: <workflow id> declares no changed_step_ids` and
+rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-step-change schedule over a workflow
+that declares no `changed_step_ids`. A patch that gives the schedule another cadence clears its `pending_step_ids`,
+and a patch to another quiet period keeps them. Migration 0074 adds the column.
 
 **Gate policy** is `"wait"` (default: a gated fire waits for a person indefinitely) or `"fail_after:<seconds>"`, how
 long **one reach** of a gate waits before nobody deciding counts as a refusal. Such a refusal is recorded with source

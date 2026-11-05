@@ -45,7 +45,8 @@ only shrink. The tiers, inward first:
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database
-  and runs its dispatch and sweep. `harness inspect` issues commands by hand.
+  and runs its dispatch and sweep. `harness inspect` issues commands by hand. One more worker reads the outbox of the
+  library's database (`engram_workflows`) and arms the on-step-change schedules with each new reusable step version.
 
 `harness/skills/` (the app root, beside `workflows/`) is the registry of skills: every skill a model tier here may
 name and the files this repository's `.claude/skills` and `.agents/skills` symlinks point at, data not code. `harness/library/`
@@ -82,7 +83,10 @@ One settings root, one container, three composition roots.
   field a controller stores that no route reads. `test_create_app.py` refuses a container the module
   keeps, so two applications never share one. `test_environment_names.py` reads `harness/` and
   `scripts/stack/` whole, decision records included, and refuses a retired environment name wherever
-  it appears.
+  it appears. `test_test_container_reaches_no_database.py` refuses a registration whose factory reaches a
+  database DSN and that `IO_LEAVES` (`tests/support/container.py`) does not answer, and a lifespan over
+  `IO_LEAVES` in which any registration holds a live DSN or a real pool. A new registration that opens a
+  database gets its double in `IO_LEAVES` in the same change.
 
 ## No knowledge base vocabulary here (binding)
 

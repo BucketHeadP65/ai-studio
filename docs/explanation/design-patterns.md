@@ -48,7 +48,9 @@ decision records in the ADRs.
   hold the Postgres and in-memory adapters), recording each delivery in
   `coordination.event_deliveries`. `core.cqrs.events` separately broadcasts live
   change topics over Postgres LISTEN/NOTIFY for readers to refetch by. Subscriber
-  failures on the delivery path are isolated (logged, not surfaced).
+  failures on the delivery path are isolated (logged, not surfaced). The harness
+  server runs one worker over the outbox of `engram_workflows`, whose one
+  subscriber arms the on-step-change schedules (root ADR 0023).
 - **Advantages:** framework-pure, additive late-route seam
   (`MessageBus.register`). The outbox survives a crash between the handler
   returning and delivery. A natural place for job orchestration.

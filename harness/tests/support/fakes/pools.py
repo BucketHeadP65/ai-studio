@@ -108,3 +108,10 @@ class FakeScheduleDatabase:
     """Where the standing schedules live, in memory."""
 
     pool: FakePool = field(default_factory=FakePool)
+
+
+@dataclass(frozen=True)
+class FakeInspectionDatabase:
+    """The pool the inspection's cursors, leads and findings live in, in memory."""
+
+    pool: FakePool = field(default_factory=FakePool)

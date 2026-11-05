@@ -57,6 +57,7 @@ from harness.adapters.steps import notify_owner_step
 from harness.adapters.store import (
     RECORD_NAMESPACE,
     DatabaseBinding,
+    LibraryOutbox,
     RecordDatabase,
     ScheduleDatabase,
     SessionsDatabase,
@@ -89,6 +90,7 @@ __all__ = [
     "ExternalAgent",
     "ExternalResult",
     "KnowledgeBaseReading",
+    "LibraryOutbox",
     "MacNotifier",
     "ModelEntry",
     "ModelFactory",
