@@ -15,6 +15,7 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, cast
 
+import httpx2
 import pytest
 
 from core.ai.workflows.contracts import (
@@ -32,9 +33,12 @@ from core.ai.workflows.contracts import (
     WorkflowArguments,
     run_workflow,
 )
+from openai import AsyncOpenAI
 from pydantic_ai.exceptions import ContentFilterError, ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_core import to_jsonable_python
 
 from harness.composition import build_environment
@@ -330,6 +334,65 @@ async def test_a_turn_stopped_mid_answer_files_what_it_was_billed_and_its_resume
     assert to_jsonable_python(result) == {"title": "quantum computing"}
     assert any(isinstance(part, TextPart) and part.content == WORKING for message in calls[2] for part in message.parts), "the resume starts from the stopped turn's history"
     assert [row.step for row in ledger.rows[stopped:]] == ["digest"], "the resumed turn files only its own answer"
+
+
+class _StreamCutBeforeItsLastEvent(httpx2.AsyncByteStream):
+    """A Responses API stream that sends its opening events and one text delta, then waits for an end that never comes.
+
+    Azure and OpenRouter report usage only in the last event, so a stream cut here leaves an answer with no usage at all.
+    """
+
+    def __init__(self, streaming: asyncio.Event) -> None:
+        self.streaming = streaming
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        item: dict[str, object] = {"id": "msg_1", "type": "message", "role": "assistant", "status": "in_progress", "content": []}
+        located: dict[str, object] = {"item_id": "msg_1", "output_index": 0, "content_index": 0}
+        response: dict[str, object] = {
+            "id": "resp_1", "object": "response", "created_at": 1, "model": "some-deployment", "output": [],
+            "parallel_tool_calls": True, "tool_choice": "auto", "tools": [], "status": "in_progress",
+        }
+        events: list[dict[str, object]] = [
+            {"type": "response.created", "response": response},
+            {"type": "response.output_item.added", "output_index": 0, "item": item},
+            {"type": "response.content_part.added", **located, "part": {"type": "output_text", "text": "", "annotations": []}},
+            {"type": "response.output_text.delta", **located, "delta": HALF_SAID, "logprobs": []},
+        ]
+        for number, event in enumerate(events):
+            yield f"event: {event['type']}\ndata: {json.dumps({**event, 'sequence_number': number})}\n\n".encode()
+        self.streaming.set()
+        await asyncio.Event().wait()
+
+
+class _AnswersByStreamCutBeforeItsLastEvent(httpx2.AsyncBaseTransport):
+    """Answers every Responses API request with a stream that never sends its last event."""
+
+    def __init__(self) -> None:
+        self.streaming = asyncio.Event()
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, headers={"content-type": "text/event-stream"}, stream=_StreamCutBeforeItsLastEvent(self.streaming), request=request)
+
+
+async def test_a_stop_during_a_streamed_answer_its_provider_had_not_yet_measured_files_one_unpriced_row(tmp_path: Path) -> None:
+    """The provider would have reported the answer's usage in the last event, which the stop cut off. It was still billed."""
+    transport = _AnswersByStreamCutBeforeItsLastEvent()
+    client = AsyncOpenAI(api_key="unused", base_url="https://responses.example/v1/", http_client=httpx2.AsyncClient(transport=transport), max_retries=0)
+    model = OpenAIResponsesModel("some-deployment", provider=OpenAIProvider(openai_client=client))
+    active = _active_run()
+    ledger = FiledRows()
+    records = replace(records_under(tmp_path), spend=ledger)
+    environment = await build_environment(model, engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records, web_search=WebSearchSettings(), tiers=tiers_under(tmp_path))
+
+    running = asyncio.create_task(run_workflow(WORKER_SPEC, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=_no_wait))
+    await asyncio.wait_for(transport.streaming.wait(), timeout=10)
+    await asyncio.sleep(0.1)
+    running.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    (row,) = ledger.rows
+    assert (row.step, row.input_tokens, row.output_tokens, row.cost) == ("digest", 0, 0, None), "filed with no figure, so it reads as unpriced"
 
 
 def _asked(prompt: str) -> ModelRequest:
