@@ -392,6 +392,7 @@ async def test_a_step_changed_at_an_unchanged_version_refuses_the_folder_before_
         await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert refused.value.step_id == "st.step_b.v1"
+    assert getattr(refused.value, "__notes__", []) == [f"The step file is {tmp_path / 'steps' / 'step-b.md'}."]
     assert len(store.payloads) == written, "nothing is written"
 
 
@@ -432,14 +433,27 @@ async def test_a_step_s_case_file_is_carried_to_the_cases_of_its_page(tmp_path: 
     assert "cases" not in store.written("st.step_b.v1"), "a step with no case file carries none"
 
 
-async def test_a_step_with_no_case_file_removes_the_cases_its_version_held(tmp_path: Path) -> None:
+async def test_a_step_with_no_case_file_in_the_folder_s_evals_removes_the_cases_its_version_held(tmp_path: Path) -> None:
     _, library = await _holding(STEP_A)
     assert await library.fetch_step_cases("st.step_a.v1") == CASES
     _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
+    _write_cases(tmp_path, "another-step.yaml", CASES)
 
     await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
 
     assert await library.fetch_step_cases("st.step_a.v1") is None
+
+
+async def test_a_folder_with_no_evals_folder_keeps_the_cases_each_version_holds(tmp_path: Path) -> None:
+    """A partial import, such as one workflow copied with its step files alone, never strips a step's cases."""
+    store, library = await _holding(STEP_A)
+    written = len(store.payloads)
+    _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
+
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    assert await library.fetch_step_cases("st.step_a.v1") == CASES
+    assert len(store.payloads) == written, "an unchanged step whose cases are kept writes nothing"
 
 
 @pytest.mark.parametrize(

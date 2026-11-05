@@ -294,9 +294,13 @@ def lock_steps(folder: str = typer.Argument(..., help="A workflows folder holdin
     """Record every step file's version and content address in the folder's steps.lock, and print each one.
 
     Run it after every edit to a step file. It refuses a step whose content changed while its version did not rise,
-    writes nothing and exits 1. Raise `version` in that step file and run it again.
+    a step file that does not parse or that the library would read back different, and a lock file that does not
+    parse. A refusal writes nothing and exits 1. For a changed step, raise `version` in its step file and run it again.
     """
     from pathlib import Path  # noqa: PLC0415 (what this verb needs loads only when it runs, off the other verbs' import path)
+
+    from core.ai.workflows.contracts import DocumentError  # noqa: PLC0415 (same)
+    from pydantic import ValidationError  # noqa: PLC0415 (same)
 
     from harness.features.browsing.contracts import StepLockRefusedError, write_lock  # noqa: PLC0415 (same)
 
@@ -305,7 +309,7 @@ def lock_steps(folder: str = typer.Argument(..., help="A workflows folder holdin
         fail(f"{where} holds no steps/ folder, so it has no step lock file. Name a workflows folder that holds steps/.")
     try:
         lock = write_lock(where)
-    except StepLockRefusedError as error:
+    except (StepLockRefusedError, DocumentError, ValidationError) as error:
         fail(str(error))
     for name, entry in lock.steps.items():
         typer.echo(f"{name} v{entry.version} {entry.step_hash}")

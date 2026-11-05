@@ -9,9 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from core.ai.workflows.contracts import load_step_document, step_content_address
+from core.ai.workflows.contracts import DocumentError, load_step_document, step_content_address
+from engram.indexing.service.row_builder import _jsonable_frontmatter_value
 
 from harness.features.browsing.contracts import StepLock, StepLockEntry, StepLockRefusedError, locked_steps, read_lock, write_lock
+from harness.features.browsing.step_locks import _stored
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -33,6 +35,8 @@ Use first.
 """
 
 EDITED = STEP.replace('"a"', '"aa"')
+
+NULL_DEFAULT = STEP.replace("  output: {json_schema: {type: string}}", "  output: {json_schema: {type: string, default: null, enum: []}}")
 
 
 def _folder(tmp_path: Path, text: str) -> Path:
@@ -114,6 +118,25 @@ def test_writing_a_field_at_its_default_leaves_the_lock_unchanged(tmp_path: Path
 
     assert locked_steps(folder) == held
     assert write_lock(folder) == held
+
+
+def test_a_step_the_import_refuses_cannot_be_locked(tmp_path: Path) -> None:
+    folder = _folder(tmp_path, NULL_DEFAULT)
+
+    with pytest.raises(DocumentError, match=r"step-a\.md.*`output\.json_schema\.default`, `output\.json_schema\.enum`"):
+        write_lock(folder)
+
+    assert not (folder / "steps.lock").exists()
+
+
+def test_the_drop_rule_is_the_one_engram_stores_frontmatter_with() -> None:
+    files = [file for folder in STEPS_FOLDERS for file in sorted((folder / "steps").glob("*.md"))]
+    dumps = [load_step_document(file.read_text(encoding="utf-8")).step.model_dump(mode="json") for file in files]
+    dumps.append(load_step_document(NULL_DEFAULT).step.model_dump(mode="json"))
+
+    assert len(dumps) > 30, "every shipped step file is read"
+    for dump in dumps:
+        assert _stored(dump) == _jsonable_frontmatter_value(dump), dump["name"]
 
 
 def test_a_folder_with_no_lock_reads_as_an_empty_one(tmp_path: Path) -> None:

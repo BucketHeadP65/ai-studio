@@ -121,17 +121,20 @@ uv run python -m harness.acp                           # the agent served over A
 
 A schedule fires the newest live version of its workflow, so importing a new version moves every schedule on that
 workflow at once, with no `PATCH`. Import a version only when it is ready to run unattended. To import one workflow,
-copy its workflow file and the step files it uses into a folder of their own and import that folder, because other
-sessions own the other workflows in a template.
+copy its workflow file, the step files it uses and each of those steps' case files (`evals/<step name with
+hyphens>.yaml`, when it has one) into a folder of their own and import that folder, because other sessions own the
+other workflows in a template. A folder with an `evals/` folder but no case file for a step removes that step
+version's cases from the library. A folder with no `evals/` folder keeps every version's cases.
 
 **Every edit to a step file runs `uv run harness steps lock <folder>`** (binding), where `<folder>` holds the
 `steps/` folder you edited: `workflows` for this app's own steps, `../templates/<slug>/workflows` for a
 template's. A changed step needs a higher `version` in its file first. Each such folder keeps a `steps.lock`
 naming every step file's version and content address, `tests/unit/test_step_locks.py` fails when a step file
 no longer matches it, and the verb refuses a step whose content changed while its version did not rise.
-`harness import` refuses the same thing against the library, before it writes anything. It also carries a
-step's cases from `evals/<step name with hyphens>.yaml` into the library and refuses a case file the step's
-case run would refuse.
+`harness import` refuses the same thing against the library, before it writes anything. The verb, the test and
+the import all refuse a step the library would read back different (one holding a null value or an empty list or
+mapping). The import also carries a step's cases from `evals/<step name with hyphens>.yaml` into the library and
+refuses a case file the step's case run would refuse.
 
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes

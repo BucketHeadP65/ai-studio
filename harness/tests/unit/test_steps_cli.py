@@ -59,6 +59,29 @@ def test_steps_lock_exits_1_with_the_refusal_on_a_changed_step_at_an_unchanged_v
     assert (folder / "steps.lock").read_text(encoding="utf-8") == held
 
 
+def test_steps_lock_refuses_a_broken_step_file_naming_it(tmp_path: Path) -> None:
+    folder = _folder(tmp_path, "---\ntitle: No step\nsummary: s\nversion: 1\n---\n\nBody.\n")
+
+    result = CliRunner().invoke(app, ["steps", "lock", str(folder)])
+
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
+    assert "step-a.md" in result.output
+    assert not (folder / "steps.lock").exists()
+
+
+def test_steps_lock_refuses_a_broken_lock_file(tmp_path: Path) -> None:
+    folder = _folder(tmp_path, STEP)
+    (folder / "steps.lock").write_text("not a lock\n", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["steps", "lock", str(folder)])
+
+    assert result.exit_code == 1, result.output
+    assert isinstance(result.exception, SystemExit), result.exception
+    assert "StepLock" in result.output
+    assert (folder / "steps.lock").read_text(encoding="utf-8") == "not a lock\n"
+
+
 def test_steps_lock_refuses_a_folder_with_no_steps_folder(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["steps", "lock", str(tmp_path)])
 

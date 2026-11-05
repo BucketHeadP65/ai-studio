@@ -147,16 +147,19 @@ writes anything. One refused step file refuses the whole folder.
   content address and imports as unchanged.
 - **A step the library would read back different.** The library drops null values and empty lists and mappings at
   every depth when it stores a page, so a step holding one (a `json_schema` with `default: null`, say) would read back
-  with another content address. The import refuses that file and names each such value.
+  with another content address. The import refuses that file and names each such value, and so do
+  `harness steps lock` and the lock test.
 - **The step's cases.** A step's case file is `evals/<step name with hyphens>.yaml` beside the `steps/` folder, the
   dataset `harness evals run` reads. The import checks it as the step's case run would (it loads as a
   `pydantic_evals` dataset with `OutcomeMatches` registered, no two cases share a name, no report evaluators, every
-  `LLMJudge` names a model) and saves it with the step. A step with no case file is saved with none, which removes
-  the cases its version held.
+  `LLMJudge` names a model) and saves it with the step. When the folder has an `evals/` folder, a step with no case
+  file there is saved with none, which removes the cases its version held. A folder with no `evals/` folder keeps
+  every version's cases, so a partial import never strips them.
 
 Each folder with a `steps/` folder keeps a step lock file, `steps.lock`, beside it: JSON naming each step file's
 version and content address. `harness steps lock <folder>` writes it and prints each step it recorded, and refuses,
-writing nothing, a step whose content changed while its version did not rise. `tests/unit/test_step_locks.py` fails
+writing nothing, a step whose content changed while its version did not rise, a step file the import would refuse,
+and a lock file that does not parse. `tests/unit/test_step_locks.py` fails
 when a step file in the repository no longer matches its folder's lock, so every edit to a step file raises its
 `version` and runs `harness steps lock <folder>`.
 
