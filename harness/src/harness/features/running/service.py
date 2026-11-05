@@ -496,8 +496,8 @@ async def stop(session: Runtime, *, records: RunRecords) -> bool:
     It sets `stopping` before cancelling, so the cancellation arm that catches it says "stopped"
     rather than "paused". Once the task is quiescent the run log is read back, recorded as
     `outcome="stopped"`, archived and unlinked, and `run_phase` then reads the session as holding
-    nothing live. The evidence and the archive record it writes carry no rejected gates, and name
-    the launcher the run log names. It waits for the run to index each knowledge base it held back
+    nothing live. The evidence and the archive record it writes count the rejections the run log's
+    gate decisions hold, and name the launcher the run log names. It waits for the run to index each knowledge base it held back
     for its end, as `pause` does. A run whose graph had already ended when the stop arrived records
     its own ending and keeps its own result, and the stop records nothing and answers False.
 
@@ -527,6 +527,7 @@ async def stop(session: Runtime, *, records: RunRecords) -> bool:
         auto = session.active.auto_gates()
         orchestrated = combined_orchestrated_gates(session, waiting.spec, waiting.values)
         gates_approved = tuple(g for g in approved_gates(waiting.spec, waiting.values) if g not in auto and g not in orchestrated)
+        gates_rejected = gate_rejections(waiting.gate_decisions)
         reviewed = reviewed_values(path, waiting.run_id) if waiting.run_id else None
         result = checked_outcome(
             EndedRun(
@@ -554,6 +555,7 @@ async def stop(session: Runtime, *, records: RunRecords) -> bool:
                 gates_approved=gates_approved,
                 gates_auto=auto,
                 gates_orchestrated=orchestrated,
+                gates_rejected=gates_rejected,
                 params=dict(waiting.params),
                 produced=shapes_of(waiting.values),
                 runner=waiting.runner,
@@ -572,7 +574,7 @@ async def stop(session: Runtime, *, records: RunRecords) -> bool:
             conversations=session.active.conversations.archived(),
             gates_approved=gates_approved,
             gates_orchestrated=orchestrated,
-            gates_rejected={},
+            gates_rejected=gates_rejected,
             gates_auto=auto,
             result=result,
             reviewed=reviewed.captured() if reviewed is not None else (),
