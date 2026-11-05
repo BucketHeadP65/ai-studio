@@ -2526,7 +2526,7 @@ async def test_a_proposal_of_an_idea_a_pending_flag_holds_takes_its_id_and_write
     ), "the pending flag is written again in place with the run's findings"
     result = _value(state, "write_stance_flags")
     assert (result["written"], result["removed"]) == (["flag.stance-agent-recall"], [])
-    assert _value(state, "apply_groups")["groups"] == [{"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "ids": grouped}]
+    assert _value(state, "merge_same_ideas")["groups"] == [{"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "ids": grouped}]
 
 
 async def test_two_proposals_of_one_idea_merge_into_one_backing(sandbox: AsyncMonty) -> None:
@@ -2562,7 +2562,7 @@ async def test_one_proposal_and_two_pending_flags_of_its_idea_keep_one_flag_and_
 
     assert [flag["flag_id"] for flag in scripted.candidates[0]["flags"]] == list(flags)
     assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.memory-for-agents"], "the first flag the group names keeps the idea"
-    assert _value(state, "apply_groups")["duplicates"] == [
+    assert _value(state, "merge_same_ideas")["duplicates"] == [
         {"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "kept": "flag.stance-memory-for-agents"}
     ]
     result = _value(state, "write_stance_flags")
@@ -2660,7 +2660,7 @@ async def test_a_group_the_grouping_answers_wrong_is_refused_and_named_and_its_p
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    applied = _value(state, "apply_groups")
+    applied = _value(state, "merge_same_ideas")
     assert (applied["refused"], applied["groups"], applied["duplicates"]) == (refused, [], [])
     assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.agent-memory"]
     assert _value(state, "write_stance_flags")["written"] == ["flag.stance-agent-memory"]
@@ -2711,7 +2711,7 @@ async def test_flags_that_cannot_be_listed_fail_the_run_when_a_judge_drop_asks_f
     state = await _run(sandbox, bases, scripted, changed="adr-1", raises=RuntimeError)
 
     listing = "no page_type 'flag' in knowledge base 'research', the page_types are paper, stance"
-    assert _value(state, "apply_groups")["not_grouped"] == "list_pages refused the pending flags, so every proposal stands alone: " + listing
+    assert _value(state, "merge_same_ideas")["not_grouped"] == "list_pages refused the pending flags, so every proposal stands alone: " + listing
     assert _value(state, "write_stance_flags")["refused_removals"] == [
         {
             "flag_id": "flag.stance-agent-memory",
@@ -2733,7 +2733,7 @@ async def test_a_failed_grouping_call_leaves_every_proposal_alone_and_says_why(s
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
     assert scripted.calls.count("group_proposals") == 1
-    applied = _value(state, "apply_groups")
+    applied = _value(state, "merge_same_ideas")
     assert applied["not_grouped"] == "The call that finds proposals of the same idea gave no answer, so every proposal stands alone."
     assert [proposal["stance_id"] for proposal in scripted.backed] == ["stance.agent-memory"]
     assert _value(state, "write_stance_flags")["written"] == ["flag.stance-agent-memory"], "the pass goes on"
@@ -2745,7 +2745,7 @@ def test_the_run_card_shows_the_groups_and_every_removed_flag() -> None:
     text = (RESEARCH / "workflows" / "research-stance-refresh.md").read_text(encoding="utf-8")
     presentation = yaml.safe_load(text.split("---", 2)[1])["presentation"]
     paths = [field["path"] for field in presentation["result_fields"]]
-    assert {"values.apply_groups", "values.write_stance_flags.removed"} <= set(paths)
+    assert {"values.merge_same_ideas", "values.write_stance_flags.removed"} <= set(paths)
 
 
 async def test_the_grouping_call_holds_no_tool_and_answers_ids_alone() -> None:

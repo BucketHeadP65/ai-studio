@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge dropped, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 13
+version: 14
 step:
   name: write_stance_flags
   source: |
@@ -149,7 +149,7 @@ step:
   inputs:
     listed: {like: list_proposals}
     unplaced: {like: list_unplaced}
-    grouped: {like: apply_groups}
+    grouped: {like: merge_same_ideas}
     collection:
       json_schema: {type: string}
   output:
@@ -272,7 +272,7 @@ in `dropped`, the digests the base holds that the run could not read in `unread`
 hold in `missing`, each with read_page's refusal, and the placements `list_unplaced` named, each under a stance id no
 stance page carries, in `unplaced`.
 
-Once every flag is written it removes flags, with `grouped` wired from the same run's `apply_groups`: each pending flag
+Once every flag is written it removes flags, with `grouped` wired from the same run's `merge_same_ideas`: each pending flag
 the grouping found the same idea as the flag a group keeps, and the pending flag of each proposal `list_proposals`
 dropped as `dropped_by_judge`, the judge's own reading of the idea: a repeat of a listed stance, or its verdicts leaving
 findings from fewer than two digests. A drop the judge never read keeps its flag. A flag the index

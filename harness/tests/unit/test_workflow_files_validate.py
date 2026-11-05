@@ -134,7 +134,7 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
     `place_stance_pages`, `refresh_stance`, `find_same_ideas`, `back_proposal`, `judge_proposal`, `write_stances` and
     `write_stance_flags` type against `group_pages`, `merge_work`, `list_candidates`, `merge_proposals`, `check_findings`,
-    `list_backings`, `list_proposals`, `list_unplaced` and `apply_groups`, defined only inside
+    `list_backings`, `list_proposals`, `list_unplaced` and `merge_same_ideas`, defined only inside
     `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.

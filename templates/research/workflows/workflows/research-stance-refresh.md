@@ -13,7 +13,7 @@ uses:
   - st.back_proposal.v5
   - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v13
+  - st.write_stance_flags.v14
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -64,12 +64,12 @@ presentation:
     - {label: "Digests the base holds that the run could not read, each with read_page's refusal, whose findings it lost (recorded)", path: values.check_findings.unread}
     - {label: "Ids the backings cited that the base does not hold, each with read_page's refusal (recorded)", path: values.check_findings.missing}
     - {label: "Placements under a stance the base does not list, left out of every rewrite (recorded)", path: values.list_unplaced}
-    - {label: "Stance proposals grouped as one idea, each by the flag it is kept as, the pending flags found the same idea, each group refused with why, and why nothing was grouped when the grouping did not run (recorded)", path: values.apply_groups}
+    - {label: "Stance proposals grouped as one idea, each by the flag it is kept as, the pending flags found the same idea, each group refused with why, and why nothing was grouped when the grouping did not run (recorded)", path: values.merge_same_ideas}
     - {label: "Stance flags written, left as the owner decided them, refused, removed and refused removal, with the stance proposals dropped and why, and the placements under no listed stance (recorded)", path: values.write_stance_flags}
     - {label: "Stance flags removed, each by its id, title and path with why, since the base keeps no copy of a removed file (recorded)", path: values.write_stance_flags.removed}
 workflow:
   name: research-stance-refresh
-  version: 24
+  version: 25
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then group every new stance they propose with the base's pending stance flags of the same idea under one id, back each with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, write each listed one as a pending stance flag, and remove each pending flag a group repeats or whose proposal the judge dropped, drafting no stance and never writing or removing a flag the owner decided.
   parameters:
     collection:
@@ -401,7 +401,7 @@ workflow:
                   properties:
                     flag_id: {type: string}
                     title: {type: string}
-    - name: apply_groups
+    - name: merge_same_ideas
       source: |
         by_name = {}
         for proposal in proposals:
@@ -593,7 +593,7 @@ workflow:
       source: |
         applied["proposals"]
       inputs:
-        applied: {like: apply_groups}
+        applied: {like: merge_same_ideas}
       output: {like: merge_proposals}
     - name: check_findings
       source: |
@@ -1155,8 +1155,8 @@ workflow:
       on_error: skip
       abort_after_repeats: 3
     - kind: run
-      id: apply_groups
-      work: apply_groups
+      id: merge_same_ideas
+      work: merge_same_ideas
       inputs:
         proposals: {node: merge_proposals}
         listed: {node: list_stance_flags}
@@ -1165,7 +1165,7 @@ workflow:
       id: list_grouped
       work: list_grouped
       inputs:
-        applied: {node: apply_groups}
+        applied: {node: merge_same_ideas}
     - kind: map
       id: back_proposals
       turns: [back_proposal]
@@ -1210,7 +1210,7 @@ workflow:
       inputs:
         listed: {node: list_proposals}
         unplaced: {node: list_unplaced}
-        grouped: {node: apply_groups}
+        grouped: {node: merge_same_ideas}
         collection: {parameter: collection}
     - kind: run
       id: check_removals
@@ -1258,7 +1258,7 @@ it twice. `list_stance_flags` lists the base's pending stance flags with `list_p
 grouping its one item, the run's proposals by stance_id, title and placement's reasons and those flags, only when they
 number two or more, a flag already carrying a proposal's own id left out since it is that proposal. With no proposal
 it lists nothing. `group_proposals` makes that one helper model call, which answers groups of the ids of one idea and
-nothing else. `apply_groups` checks the answer in code: an id is a proposal's `stance_id` or a flag's `flag_id`, either
+nothing else. `merge_same_ideas` checks the answer in code: an id is a proposal's `stance_id` or a flag's `flag_id`, either
 written as the other, `stance.<name>` or `flag.stance-<name>`, or as a link. A group naming an id the call was not
 given, an id the answer names twice, or no proposal of this run, so a pass never touches flags unrelated to its pages,
 is refused whole with why under `refused`, and its proposals stand alone. Each other group of two or more ids is kept
@@ -1334,7 +1334,7 @@ answer, with the dropped proposals as `dropped`, the digests the base holds that
 the cited ids the base does not hold as `missing` and the placements `list_unplaced` named as `unplaced` beside the
 flags, is the run's output.
 
-Once every flag is written, `write_stance_flags` removes, each in its own try, every pending flag `apply_groups` named
+Once every flag is written, `write_stance_flags` removes, each in its own try, every pending flag `merge_same_ideas` named
 under `duplicates`, and the pending flag of every proposal dropped as `dropped_by_judge` that the index lists at `pending`.
 It reads each one's file with `read_page` first and removes it with `remove_undecided_page` only while that file is a
 stance flag at `pending`, so a flag the owner decided is never removed, and neither is one this run wrote. A flag the
