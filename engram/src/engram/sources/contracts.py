@@ -17,7 +17,7 @@ from engram.sources.domain.source_queue import (
     url_key,
 )
 from engram.sources.domain.sync import SyncError, SyncMirrors, SyncReport
-from engram.sources.domain.watch_list import FoundSource, ScanReport, ScanWatchList, WatchEntry
+from engram.sources.domain.watch_list import FoundSource, ScanReport, ScanWatchList, WatchEntry, without_url_secrets
 from engram.sources.exceptions import ConnectorNotInstalledError, ConversionError, ScanError, SourceQueueUnreadableError
 from engram.sources.infrastructure.source_queue import SourceQueue
 from engram.sources.infrastructure.watch_list import WatchListFile
@@ -85,4 +85,5 @@ __all__ = [
     "known_scanners",
     "scanner_class",
     "url_key",
+    "without_url_secrets",
 ]
