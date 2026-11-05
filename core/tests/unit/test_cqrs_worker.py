@@ -182,19 +182,18 @@ def _starting_up() -> DBAPIError:
 
 
 class _OnceFailingOutbox(MemoryOutbox):
-    """An outbox whose first read of undelivered events raises `error`, and whose second sets `read_again`."""
+    """An outbox whose first reads of undelivered events raise `errors` in turn, and whose first good read sets `read_again`."""
 
-    def __init__(self, error: Exception) -> None:
+    def __init__(self, *errors: Exception) -> None:
         super().__init__()
-        self.error: Exception | None = error
+        self.errors = list(errors)
         self.reads = 0
         self.read_again = asyncio.Event()
 
     async def undelivered(self, *, limit: int = 100) -> list[StoredEvent]:
         self.reads += 1
-        if self.error is not None:
-            error, self.error = self.error, None
-            raise error
+        if self.errors:
+            raise self.errors.pop(0)
         self.read_again.set()
         return await super().undelivered(limit=limit)
 
@@ -502,6 +501,19 @@ class TestRunForever:
 
         assert outbox.reads == 2, "the loop ticked again after the failed tick"
         assert "tick lost its database connection" in caplog.text
+
+    async def test_a_database_down_for_several_ticks_is_logged_once_and_its_return_once(self, clock: _Clock, caplog: pytest.LogCaptureFixture):
+        outbox = _OnceFailingOutbox(*(_starting_up() for _ in range(3)))
+        worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
+
+        with caplog.at_level(logging.INFO, logger="core.cqrs.worker"):
+            await asyncio.wait_for(worker.run_forever(stop=outbox.read_again), timeout=2)
+
+        said = [(record.levelno, record.getMessage()) for record in caplog.records if record.name == "core.cqrs.worker"]
+        assert outbox.reads == 4
+        assert [level for level, _ in said] == [logging.WARNING, logging.INFO], said
+        assert "tick lost its database connection" in said[0][1]
+        assert "restored after 3 failed attempts" in said[1][1]
 
     async def test_a_tick_that_fails_any_other_way_ends_the_loop(self, clock: _Clock):
         outbox = _OnceFailingOutbox(RuntimeError("a bug in a port"))

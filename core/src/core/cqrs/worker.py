@@ -38,6 +38,28 @@ def _lost_its_database(error: Exception) -> bool:
     return isinstance(error, LOST_CONNECTION_ERRORS) or is_database_connection_failure(error)
 
 
+@dataclass
+class _Outage:
+    """How many ticks and waits in a row lost the database, so only the first loss and the recovery are logged."""
+
+    failures: int = 0
+
+    def lost(self, error: Exception, words: str) -> bool:
+        """Whether `error` is a lost database connection, logging `words` with it when it is the first in a row."""
+        if not _lost_its_database(error):
+            return False
+        if not self.failures:
+            _logger.warning("{words}: {reason}", words=words, reason=str(error))
+        self.failures += 1
+        return True
+
+    def recovered(self) -> None:
+        """Log the recovery after a run of losses, once."""
+        if self.failures:
+            _logger.info("database connection restored after {failures} failed attempts", failures=self.failures)
+            self.failures = 0
+
+
 class PollingWake:
     """A bounded wait for a job runner with no notification listener."""
 
@@ -182,43 +204,45 @@ class Worker:
     async def run_forever(self, *, stop: asyncio.Event) -> None:
         """Loop until `stop` is set: a tick, then wait for a wake-up or the next due periodic.
 
-        A tick or a wait that loses its database connection, such as to a database still starting up, is logged, and
-        the loop waits `poll_seconds`, or until `stop` is set, and goes on. That is one of `LOST_CONNECTION_ERRORS`, or
-        such an error SQLAlchemy wraps. Any other error a tick or a wait raises ends the loop.
+        A tick or a wait that loses its database connection, such as to a database still starting up, makes the loop
+        wait `poll_seconds`, or until `stop` is set, and go on. That is one of `LOST_CONNECTION_ERRORS`, or such an error
+        SQLAlchemy wraps. The first such failure is logged as a warning and the next good tick as restored, with none
+        logged between. Any other error a tick or a wait raises ends the loop.
 
         Args:
             stop: Set to end the loop after the current tick or wait.
         """
+        outage = _Outage()
         while not stop.is_set():
             try:
                 await self.tick()
             except Exception as exc:
-                if not _lost_its_database(exc):
+                if not outage.lost(exc, "tick lost its database connection, ticking again after each poll wait"):
                     raise
-                _logger.warning("tick lost its database connection, ticking again after the poll wait: {reason}", reason=str(exc))
                 await self._pause(stop)
                 continue
-            wait_for = min([self._poll_seconds, *(p.due_in(self._clock()) for p in self._periodics)])
-            waiting = asyncio.create_task(self._wake.wait(wait_for))
-            stopping = asyncio.create_task(stop.wait())
+            outage.recovered()
             try:
-                done, _ = await asyncio.wait({waiting, stopping}, return_when=asyncio.FIRST_COMPLETED)
-            finally:
-                for task in (waiting, stopping):
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(waiting, stopping, return_exceptions=True)
-            for task in done:
-                if task is waiting:
-                    try:
-                        task.result()
-                    except Exception as exc:
-                        if not _lost_its_database(exc):
-                            raise
-                        _logger.warning("wake wait failed, skipping this wait: {reason}", reason=str(exc))
-                        await self._pause(stop)
-                else:
-                    task.result()
+                await self._wait(stop)
+            except Exception as exc:
+                if not outage.lost(exc, "wake wait failed, skipping this wait"):
+                    raise
+                await self._pause(stop)
+
+    async def _wait(self, stop: asyncio.Event) -> None:
+        """Wait for a wake-up, the next due periodic or `stop`, raising what the wake wait raised."""
+        wait_for = min([self._poll_seconds, *(p.due_in(self._clock()) for p in self._periodics)])
+        waiting = asyncio.create_task(self._wake.wait(wait_for))
+        stopping = asyncio.create_task(stop.wait())
+        try:
+            done, _ = await asyncio.wait({waiting, stopping}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in (waiting, stopping):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(waiting, stopping, return_exceptions=True)
+        for task in done:
+            task.result()
 
     async def _pause(self, stop: asyncio.Event) -> None:
         """Wait `poll_seconds`, or less when `stop` is set first."""
