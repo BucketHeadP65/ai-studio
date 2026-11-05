@@ -79,8 +79,10 @@ _DIALECT_PROGRAM = (
     "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. A "
     "generator expression is a list inside the sandbox, so take its first match with `next(iter(...))` "
     "or a comprehension's `[0]`, never `next(<generator expression>)`. There "
-    "is no file system (`open` on any path is refused) and no `dir`/`hasattr`/`type` introspection: "
-    "keep values in variables between programs, and inspect one by printing or subscripting it."
+    "is no file system (`open` on any path is refused). `type()` and `isinstance()` work. `dir`, `vars` "
+    "and `callable` do not exist, and `hasattr` and `getattr` cannot see a method of a list, dict or "
+    "string, so `hasattr([1], 'append')` is `False`. Keep values in variables between programs, and "
+    "inspect one by printing or subscripting it."
 )
 
 
