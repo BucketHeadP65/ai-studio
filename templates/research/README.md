@@ -29,22 +29,23 @@ from this template can register its own vocabulary for any research domain.
   the run's output. Once every rewrite is written, one worker per proposal names the claims of the base's digests (its
   paper, talk, article and post pages) that support or contest that position. The run reads each cited digest and
   keeps a claim only when the digest is not at status skipped and holds that claim, copying the claim's text from the
-  page. A digest it cannot read is named with the refusal on the run card and in the run's output, and a proposal that
-  lost its backing to one says so. Then a judge reads each proposal alone, says which of its findings bear on the
-  position and whether it repeats a stance, and the run keeps the findings that bear. A proposal left with findings
-  from fewer than two digests, or one that repeats a stance, is dropped and listed with why, and a weak finding is
-  never sent back to be repaired. An implementation choice with no research question behind it is skipped. The run
-  card shows every kept proposal with the records pages behind it and each finding (the claim's reference and text,
-  whether it supports or contests the position, and one sentence on how) among what the run left behind (the
-  `proposed_stances` artifact), marking one the literature only argues against, so you draft the ones you pick by
-  hand. Each kept stance proposal is also written as a pending stance flag, `flag.stance-` and the proposed id without
-  `stance.`, in `Wiki/Flags`, with its records pages, the reason placement gave for each, its findings as claim links,
-  and each claim of its backings left out, with why. You accept, dismiss or complete it there, and the run never
-  writes a flag you decided again, even before the base is indexed again. A pending flag you moved is written where it
-  sits, and a page of another kind under the same id is left alone and named. A proposal whose worker changed its id
-  or title, or added or left out a page, is left off. A run whose proposals fail keeps its rewrites: each is written
-  to its file at once, and a knowledge base indexed once per run indexes them when the run ends. Under the opt-in
-  Temporal engine writes are never held for the run, so even such a knowledge base indexes after each write.
+  page. A digest it cannot read, and an id the base does not hold, are each named with the refusal on the run card and
+  in the run's output, and a proposal that lost its backing to one says so. Then a judge reads each proposal alone,
+  says which of its findings bear on the position and whether it repeats a stance, and the run keeps the findings that
+  bear. A proposal left with findings from fewer than two digests, or one that repeats a stance, is dropped and listed
+  with why, and a weak finding is never sent back to be repaired. An implementation choice with no research question
+  behind it is skipped. The run card shows every kept proposal with the records pages behind it and each finding (the
+  claim's reference and text, whether it supports or contests the position, and one sentence on how) among what the
+  run left behind (the `proposed_stances` artifact), marking one the literature only argues against, so you draft the
+  ones you pick by hand. Each kept stance proposal is also written as a pending stance flag, `flag.stance-` and the
+  proposed id without `stance.`, in `Wiki/Flags`, with its records pages, the reason placement gave for each, its
+  findings as claim links, and each claim of its backings left out, with why. You accept, dismiss or complete it
+  there, and the run never writes a flag you decided again, even before the base is indexed again. A pending flag you
+  moved is written where it sits, and a page of another kind under the same id is left alone and named. A proposal
+  whose worker changed its id or title, or added or left out a page, is left off. A run whose proposals fail keeps its
+  rewrites: each is written to its file at once, and a knowledge base indexed once per run indexes them when the run
+  ends. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes
+  after each write.
 - `workflows/steps/`, the steps only these workflows use.
 - `workflows/evals/examples/`, worked examples: an authored brief in the shape the steps return, and beside it the
   real output of the workflow's own deterministic program over that brief.

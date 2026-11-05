@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
-summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals and the placements under no listed stance.
-version: 7
+summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
+version: 8
 step:
   name: write_stance_flags
   source: |
@@ -96,7 +96,7 @@ step:
             failed.append({"flag_id": flag_id, "reason": "write_note refused the page: " + str(error)})
             continue
         written.append(flag_id)
-    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unread": listed["unread"], "unplaced": unplaced}
+    {"written": written, "kept_decided": kept_decided, "failed": failed, "dropped": listed["dropped"], "unread": listed["unread"], "missing": listed["missing"], "unplaced": unplaced}
   inputs:
     listed: {like: list_proposals}
     unplaced: {like: list_unplaced}
@@ -106,7 +106,7 @@ step:
     json_schema:
       type: object
       title: StanceFlagsWritten
-      required: [written, kept_decided, failed, dropped, unread, unplaced]
+      required: [written, kept_decided, failed, dropped, unread, missing, unplaced]
       properties:
         written:
           type: array
@@ -140,10 +140,20 @@ step:
                 items: {type: string}
         unread:
           type: array
-          description: Each digest the run could not read, with read_page's refusal, as `list_proposals` handed them.
+          description: Each digest the base holds that the run could not read, with read_page's refusal, as `list_proposals` handed them.
           items:
             type: object
             title: UnreadDigest
+            required: [digest, reason]
+            properties:
+              digest: {type: string}
+              reason: {type: string}
+        missing:
+          type: array
+          description: Each cited id the base does not hold, with read_page's refusal, as `list_proposals` handed them.
+          items:
+            type: object
+            title: MissingId
             required: [digest, reason]
             properties:
               digest: {type: string}
@@ -184,4 +194,6 @@ answered in `failed` and left as it is. A base whose flags live in another folde
 is answered in `failed`. A write `write_note` refuses is caught and answered in `failed` with the reason, and every
 other flag still lands. When `list_pages` refuses the flags, no flag is written, and each is answered in `failed`.
 Its answer is the run's output, so it also answers, unchanged, the proposals `list_proposals` dropped, each with why,
-in `dropped`, and the placements `list_unplaced` named, each under a stance id no stance page carries, in `unplaced`.
+in `dropped`, the digests the base holds that the run could not read in `unread` and the cited ids the base does not
+hold in `missing`, each with read_page's refusal, and the placements `list_unplaced` named, each under a stance id no
+stance page carries, in `unplaced`.

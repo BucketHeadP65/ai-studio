@@ -133,8 +133,8 @@ def _shelf_and_workflow_glue(steps: dict[str, InlineStep]) -> dict[str, InlineSt
     `remove_artifacts`, both defined only inside `source-remove.md`'s own `tasks:`. `repair_digest` types
     against `list_repairs`, defined only inside `research-compound.md`'s own `inline:` beside `count_owner_repairs`.
     `place_stance_pages`, `refresh_stance`, `back_proposal`, `judge_proposal`, `write_stances` and `write_stance_flags`
-    type against `group_pages`, `merge_work`, `merge_proposals`, `check_findings`, `list_proposals` and `list_unplaced`, defined only inside
-    `research-stance-refresh.md`'s own `inline:`.
+    type against `group_pages`, `merge_work`, `merge_proposals`, `check_findings`, `list_backings`, `list_proposals` and
+    `list_unplaced`, defined only inside `research-stance-refresh.md`'s own `inline:`.
     This is glue those workflows bring, not library files, so `_steps()` never sees it. Bringing it in here
     lets every reusable step build on its own, the same guarantee `_bring_every_step` gives every other file.
     """
@@ -454,6 +454,9 @@ _DROPPED_PROPOSAL: dict[str, object] = {
 _UNREAD_DIGEST: dict[str, object] = {"digest": "talk.c", "reason": "talk.c at Wiki/Talks/c.md cannot be read as a payload"}
 """One digest the run could not read, which the flag writer answers unchanged."""
 
+_MISSING_ID: dict[str, object] = {"digest": "paper.made-up", "reason": "no indexed page 'paper.made-up' in knowledge base 'research'"}
+"""One cited id the base does not hold, which the flag writer answers unchanged."""
+
 _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
     "find_undigested": {"collection": "research", "picked_sources": ""},
     "recent_digests": {"collection": "research", "digest_ids": ""},
@@ -529,7 +532,7 @@ _PROGRAM_INPUTS: dict[str, dict[str, object]] = {
         "collection": "research",
     },
     "write_stance_flags": {
-        "listed": {"proposals": [_STANCE_PROPOSAL], "dropped": [_DROPPED_PROPOSAL], "unread": [_UNREAD_DIGEST]},
+        "listed": {"proposals": [_STANCE_PROPOSAL], "dropped": [_DROPPED_PROPOSAL], "unread": [_UNREAD_DIGEST], "missing": [_MISSING_ID]},
         "unplaced": [_UNPLACED],
         "collection": "research",
     },
@@ -829,6 +832,7 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
         "failed": [],
         "dropped": [_DROPPED_PROPOSAL],
         "unread": [_UNREAD_DIGEST],
+        "missing": [_MISSING_ID],
         "unplaced": [_UNPLACED],
     }
     assert [name for name, _ in called_by_step["write_stance_flags"]] == ["list_pages", "read_notes", "write_note"]
