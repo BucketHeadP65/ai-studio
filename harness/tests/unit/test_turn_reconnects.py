@@ -323,6 +323,14 @@ async def test_a_turn_stopped_mid_answer_files_what_it_was_billed_and_its_resume
     assert [row.step for row in ledger.rows[stopped:]] == ["digest"], "the resumed turn files only its own answer"
 
 
+async def _relayed(active: ActiveRun, text: str) -> None:
+    """Return once the one open step line's live stream carries `text`, so the agent has taken that delta in."""
+    (line,) = active.conversations.conversations.values()
+    async for chunk in line.stream.tail():
+        if text in chunk:
+            return
+
+
 class _StreamCutBeforeItsLastEvent(httpx2.AsyncByteStream):
     """A Responses API stream that sends its opening events and one text delta, then waits for an end that never comes.
 
@@ -373,7 +381,7 @@ async def test_a_stop_during_a_streamed_answer_its_provider_had_not_yet_measured
 
     running = asyncio.create_task(run_workflow(WORKER_SPEC, environment, params={"item": {"title": "quantum computing"}}, approval=ApproveAll(), sleep=_no_wait))
     await asyncio.wait_for(transport.streaming.wait(), timeout=10)
-    await asyncio.sleep(0.1)
+    await asyncio.wait_for(_relayed(active, HALF_SAID), timeout=10)
     running.cancel()
     with pytest.raises(asyncio.CancelledError):
         await running
