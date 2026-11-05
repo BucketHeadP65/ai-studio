@@ -237,6 +237,11 @@ def _parse_archived_at(frontmatter: Mapping[str, JsonValue] | str | None, *, wor
     return _EPOCH
 
 
+def _cases_text(cases: Mapping[str, JsonValue]) -> str:
+    """A step's cases as the JSON text its page keeps, since the ingest drops the empty lists, mappings and nulls of a nested document."""
+    return json.dumps(dict(cases))
+
+
 def _presentation_of(recorded: JsonValue) -> WorkflowPresentation | None:
     """One saved presentation, a mapping or its JSON text, or None when there is none or it no longer parses."""
     if recorded is None:
@@ -812,35 +817,37 @@ class LibraryCollection:
     ) -> str:
         """Save one reusable step version as its own page, `st.<name>.v<version>`, and return its id.
 
-        A version holds one content. Saving a version that already holds the same content writes nothing, and a
-        version that holds different content is refused. After a new version is written, every live lower version
-        of the name is linked forward to it with `superseded_by`, and a lower version saved after a higher one stays
-        live. A link that fails leaves the new page saved and warns with `SupersessionIncompleteWarning`.
+        A version holds one step content, and a version that holds a different step is refused. Saving a version
+        whose step is unchanged writes nothing, unless the version is live and its cases differ. Then only the cases
+        are replaced in place: no new version, no supersession, and the version's content address does not move.
+        After a new version is written, every live lower version of the name is linked forward to it with
+        `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
+        page saved and warns with `SupersessionIncompleteWarning`.
 
         Args:
             step: The step to save. Its name and `version` choose the page.
             version: The step's version.
-            title: The card's title.
-            summary: The card's summary.
-            applicability: When to use the step, written as the page's Applicability section.
+            title: The card's title. A version already saved keeps its own.
+            summary: The card's summary. A version already saved keeps its own.
+            applicability: When to use the step, written as the page's Applicability section. A version already
+                saved keeps its own.
             provenance: `saved_by` names who saved it.
-            cases: The step's cases, kept on the page exactly as given and read back with `fetch_step_cases`. None
-                saves the version without cases.
+            cases: The step's cases, kept on the page as given and read back with `fetch_step_cases`. Each save of a
+                live version leaves it holding exactly these, and None leaves it without cases. A superseded version
+                keeps the cases it holds.
 
         Returns:
             The step's page id.
 
         Raises:
-            StepVersionChangedError: If this version already holds different content. Nothing is written.
+            StepVersionChangedError: If this version already holds a different step. Nothing is written.
             LibraryError: If the ingest refuses the page.
         """
         step_id = step_page_id(step.name, version)
-        saved = await self._rows.fetchval(FETCH_SQL, step_id)
-        if saved is not None:
-            document = saved if isinstance(saved, Mapping) else json.loads(saved)
-            if "step" in document and step_content_address(_STEP.validate_python(document["step"])) == step_content_address(step):
-                return step_id
-            raise StepVersionChangedError(step_id)
+        saved = await self._rows.fetch(PAGE_SQL, step_id)
+        if saved:
+            await self._keep_saved_version(saved[0], step, cases)
+            return step_id
         frontmatter: dict[str, Any] = {
             "id": step_id,
             "type": STEP_PAGE_TYPE,
@@ -852,8 +859,7 @@ class LibraryCollection:
             "step": step.model_dump(mode="json"),
         }
         if cases is not None:
-            # JSON text, because the ingest drops the empty lists, empty mappings and nulls of a nested document.
-            frontmatter["cases"] = json.dumps(dict(cases))
+            frontmatter["cases"] = _cases_text(cases)
         try:
             await self._ingest(
                 {"frontmatter": frontmatter, "sections": [{"heading": "Applicability", "body": applicability}]},
@@ -868,6 +874,41 @@ class LibraryCollection:
             if lower < version:
                 await self._supersede(lower_id, by=step_id)
         return step_id
+
+    async def _keep_saved_version(self, page: Mapping[str, Any], step: InlineStep, cases: Mapping[str, JsonValue] | None) -> None:
+        """Refuse a different step at a saved version, else bring a live version's cases in place up to `cases`."""
+        step_id = str(page["id"])
+        stored = page["frontmatter"]
+        long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
+        if "step" not in long_tail or step_content_address(_STEP.validate_python(long_tail["step"])) != step_content_address(step):
+            raise StepVersionChangedError(step_id)
+        held = long_tail.get("cases")
+        if (json.loads(held) if isinstance(held, str) else held) == (None if cases is None else json.loads(_cases_text(cases))):
+            return
+        superseded = await self._rows.fetch(SUPERSEDED_SQL, step_id)
+        if superseded and bool(superseded[0].get("superseded")):
+            return
+        long_tail.pop("cases", None)
+        if cases is not None:
+            long_tail["cases"] = _cases_text(cases)
+        try:
+            await self._ingest(
+                {
+                    "frontmatter": {
+                        **long_tail,
+                        "id": step_id,
+                        "type": str(page["type"]),
+                        "title": str(page["title"]),
+                        "summary": str(page["summary"] or ""),
+                        "status": str(page["status"]),
+                    },
+                    "sections": [{"heading": "Applicability", "body": str(page["applicability"] or "")}],
+                },
+                collection=self._collection,
+            )
+        except Exception as exc:
+            msg = f"the collection refused to update the cases of {step_id!r}: {exc}"
+            raise LibraryError(msg) from exc
 
     async def step_versions(self, name: str) -> tuple[StepVersion, ...]:
         """Every saved version of one reusable step, live or superseded, lowest version first.
@@ -913,7 +954,7 @@ class LibraryCollection:
         return {name: tuple(sorted(versions, key=lambda saved: saved.version)) for name, versions in found.items()}
 
     async def fetch_step_cases(self, step_id: str) -> Mapping[str, JsonValue] | None:
-        """The cases one reusable step version carries, exactly as `put_step` was given them.
+        """The cases one reusable step version carries, exactly as the save that wrote them gave them.
 
         Args:
             step_id: The step version's page id, `st.<name>.v<version>`.

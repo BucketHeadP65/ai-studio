@@ -26,7 +26,7 @@ from core.ai.workflows.contracts import (
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
-from core.ai.workflows.infrastructure.library_collection import FETCH_SQL, LIVE_STEP_VERSIONS_SQL, PAGE_SQL, STEP_PAGES_SQL
+from core.ai.workflows.infrastructure.library_collection import FETCH_SQL, LIVE_STEP_VERSIONS_SQL, PAGE_SQL, STEP_PAGES_SQL, SUPERSEDED_SQL
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -94,8 +94,10 @@ class FakeCollection:
                 and "archived_at" not in page["frontmatter"]
                 and not page["superseded"]
             ]
-        assert sql == PAGE_SQL, sql
         page = self.pages.get(str(args[0]))
+        if sql == SUPERSEDED_SQL:
+            return [{"superseded": page["superseded"]}] if page is not None else []
+        assert sql == PAGE_SQL, sql
         return [page] if page is not None else []
 
     async def fetchval(self, sql: str, /, *args: object) -> str | Mapping[str, Any] | None:
@@ -296,3 +298,80 @@ async def test_fetch_step_cases_refuses_cases_kept_in_any_shape_but_json_text() 
 
     with pytest.raises(LibraryError, match="JSON text of an object"):
         await library.fetch_step_cases(with_cases)
+
+
+CASES_A: Mapping[str, JsonValue] = {"cases": [{"name": "one source", "inputs": {"source": "a"}}]}
+CASES_B: Mapping[str, JsonValue] = {
+    "cases": [{"name": "one source", "inputs": {"source": "a"}}, {"name": "no source", "inputs": {"source": ""}}]
+}
+
+
+async def test_cases_changed_under_an_unchanged_step_update_that_version_in_place() -> None:
+    """Only the cases change: no new version, no supersession, and the page keeps its own title and words."""
+    store = FakeCollection(prune=True)
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases=CASES_A)
+    stored_step = store.pages[step_id]["frontmatter"]["step"]
+
+    again = await library.put_step(
+        _digest(), version=1, title="Digest, renamed", summary="s", applicability="a", provenance={"saved_by": "x"}, cases=CASES_B
+    )
+
+    assert again == step_id
+    (rewritten,) = store.payloads[1:]
+    assert rewritten["frontmatter"]["id"] == "st.digest.v1"
+    assert "superseded_by" not in rewritten["frontmatter"]
+    assert rewritten["frontmatter"]["title"] == "Digest", "an update in place changes the cases and nothing else"
+    assert rewritten["frontmatter"]["step"] == stored_step, "the step is written back as the page held it"
+    assert rewritten["sections"] == [{"heading": "Applicability", "body": "Use per source."}]
+    assert await library.fetch_step_cases(step_id) == CASES_B
+
+
+async def test_the_version_s_step_hash_is_unchanged_after_its_cases_update() -> None:
+    store = FakeCollection(prune=True)
+    library = _library(store)
+    await _save(library, _digest(), 1, cases=CASES_A)
+    (before,) = await library.step_versions("digest")
+
+    await _save(library, _digest(), 1, cases=CASES_B)
+
+    (after,) = await library.step_versions("digest")
+    assert await library.fetch_step_cases(after.step_id) == CASES_B, "the cases did change"
+    assert after.step_hash == before.step_hash == step_content_address(_digest())
+
+
+async def test_equal_step_and_equal_cases_still_write_nothing() -> None:
+    store = FakeCollection(prune=True)
+    library = _library(store)
+    await _save(library, _digest(), 1, cases=CASES_A)
+
+    await _save(library, _digest(), 1, cases={"cases": [{"name": "one source", "inputs": {"source": "a"}}]})
+
+    assert len(store.payloads) == 1
+
+
+async def test_saving_an_unchanged_step_without_cases_removes_the_cases_it_held() -> None:
+    """The page keeps the cases its latest save gave, so a deleted case file takes the cases away."""
+    store = FakeCollection()
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases=CASES_A)
+
+    await _save(library, _digest(), 1)
+
+    assert "cases" not in store.payloads[1]["frontmatter"]
+    assert await library.fetch_step_cases(step_id) is None
+
+
+async def test_a_superseded_version_keeps_its_cases_and_its_supersession() -> None:
+    """A retired version is never written again except by the link that retires it, so its cases stay as saved."""
+    store = FakeCollection()
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases=CASES_A)
+    await _save(library, _digest("Read the whole source and write one digest page that quotes every claim."), 2)
+    written_so_far = len(store.payloads)
+
+    await _save(library, _digest(), 1, cases=CASES_B)
+
+    assert len(store.payloads) == written_so_far
+    assert store.pages[step_id]["superseded"]
+    assert await library.fetch_step_cases(step_id) == CASES_A
