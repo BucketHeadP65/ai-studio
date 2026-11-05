@@ -22,6 +22,7 @@ from studio.knowledge_base.refresh.contracts import (
     RefreshCounts,
     RefreshResult,
     RefreshStarted,
+    ScanFailure,
     refresh_history,
 )
 from studio.knowledge_base.refresh.domain import is_forwarded, refresh_facts, refresh_runs
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from core.cqrs.domain import JobState
 
 CREATED = datetime(2026, 8, 26, 6, 0, tzinfo=UTC)
+FAILURE = ScanFailure(entry="x:someone", reason="xAI answered HTTP 403 for grok-4-fast-non-reasoning")
 STARTED = CREATED + timedelta(seconds=1)
 FINISHED = CREATED + timedelta(seconds=9)
 
@@ -97,6 +99,14 @@ class TestRefreshFacts:
         assert isinstance(completed, RefreshCompleted)
         assert (completed.detail, completed.counts) == ("indexed 6 pages", counts)
 
+    def test_a_done_job_whose_result_names_scan_failures_carries_them(self):
+        result = RefreshResult(detail="indexed 6 pages", scan_failures=(FAILURE,)).model_dump_json()
+
+        _, completed = refresh_facts(_job("done", result=result))
+
+        assert isinstance(completed, RefreshCompleted)
+        assert completed.scan_failures == (FAILURE,)
+
     def test_a_done_job_whose_result_is_not_the_pass_document_is_refused(self):
         with pytest.raises(ValidationError):
             refresh_facts(_job("done", result="indexed 3 pages, 3 embedded"))
@@ -153,6 +163,26 @@ class TestRefreshRuns:
         (run,) = refresh_runs(facts)
 
         assert run.counts == counts
+
+    def test_a_completion_with_a_scan_failure_is_a_partial_run_naming_it(self):
+        facts = [
+            RefreshStarted(knowledge_base="demo", job_id=7, occurred_at=STARTED),
+            RefreshCompleted(knowledge_base="demo", job_id=7, detail="indexed 3 pages", scan_failures=(FAILURE,), occurred_at=FINISHED),
+        ]
+
+        (run,) = refresh_runs(facts)
+
+        assert (run.outcome, run.detail, run.scan_failures) == ("partial", "indexed 3 pages", (FAILURE,))
+
+    def test_a_completion_with_no_scan_failure_is_ok_and_names_none(self):
+        facts = [
+            RefreshStarted(knowledge_base="demo", job_id=7, occurred_at=STARTED),
+            RefreshCompleted(knowledge_base="demo", job_id=7, detail="indexed 3 pages", occurred_at=FINISHED),
+        ]
+
+        (run,) = refresh_runs(facts)
+
+        assert (run.outcome, run.scan_failures) == ("ok", ())
 
     def test_an_abandonment_is_a_failed_run_carrying_its_reason(self):
         facts = [

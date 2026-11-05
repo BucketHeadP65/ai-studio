@@ -13,6 +13,7 @@ from studio.knowledge_base.refresh.domain import (
     RefreshResult,
     RefreshRun,
     RefreshStarted,
+    ScanFailure,
     refresh_history,
 )
 from studio.knowledge_base.refresh.service import TICK_INTERVAL_SECONDS, RefreshKnowledgeBaseJob, Ticker
@@ -30,6 +31,7 @@ __all__ = [
     "RefreshResult",
     "RefreshRun",
     "RefreshStarted",
+    "ScanFailure",
     "Ticker",
     "refresh_history",
 ]

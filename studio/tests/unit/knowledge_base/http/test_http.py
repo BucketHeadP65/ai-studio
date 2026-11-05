@@ -33,7 +33,7 @@ from httpx import ASGITransport, AsyncClient
 from studio.knowledge_base.http.api import create_app
 from studio.knowledge_base.http.api_models import error_response
 from studio.knowledge_base.http.exceptions import KnowledgeBaseRefusal, unknown_knowledge_base_error
-from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob, RefreshResult
+from studio.knowledge_base.refresh.contracts import REFRESH_KIND, REFRESH_POLICY, RefreshJob, RefreshResult, ScanFailure
 from studio.knowledge_base.settings import ApplicationSettings
 from tests.support.fakes.topics import FakeListener, FakeNotifier
 from tests.support.http_app import AppWiring, raw_stream, stop_stream, wiring, write_settings_json
@@ -1424,13 +1424,13 @@ def _register_plain_knowledge_base(tmp_path: Path, name: str) -> tuple[Applicati
     return _settings_at(settings_path), knowledge_base_path, settings_path
 
 
-async def _finished_run(jobs: MemoryJobs, name: str, *, detail: str) -> None:
+async def _finished_run(jobs: MemoryJobs, name: str, *, detail: str, scan_failures: tuple[ScanFailure, ...] = ()) -> None:
     """Put one completed `kb.refresh` job on the ledger, as the worker would have left it."""
     answer = await jobs.enqueue(REFRESH_KIND, name, RefreshJob(knowledge_base=name, trigger="schedule"), policy=JobPolicy())
     claimed = await jobs.claim([REFRESH_KIND], worker="test")
     assert claimed is not None
     assert claimed.id == answer.job_id
-    await jobs.complete(answer.job_id, result=RefreshResult(detail=detail).model_dump_json())
+    await jobs.complete(answer.job_id, result=RefreshResult(detail=detail, scan_failures=scan_failures).model_dump_json())
 
 
 class TestIngestRun:
@@ -1545,6 +1545,21 @@ class TestKnowledgeBaseRefreshRuns:
         body = response.json()
         assert [row["detail"] for row in body["refresh_runs"]] == ["second", "first"]
         assert all(row["outcome"] == "ok" for row in body["refresh_runs"])
+        assert all(row["scan_failures"] == [] for row in body["refresh_runs"])
+
+    async def test_a_run_whose_scan_could_not_read_an_entry_is_partial_and_names_the_entry_with_its_reason(self, tmp_path: Path):
+        settings, _knowledge_base_path, settings_path = _register_plain_knowledge_base(tmp_path, "demo")
+        jobs = MemoryJobs()
+        reason = "xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has run out."
+        failures = (ScanFailure(entry="x:someone", reason=reason),)
+        await _finished_run(jobs, "demo", detail="scanned 0 entries/1 entries failed", scan_failures=failures)
+
+        async with _client(settings, wiring(), settings_path=settings_path, jobs=jobs) as client:
+            response = await client.get("/api/knowledge-bases/demo/refresh-runs")
+
+        (row,) = response.json()["refresh_runs"]
+        assert row["outcome"] == "partial"
+        assert row["scan_failures"] == [{"entry": "x:someone", "reason": reason}]
 
     async def test_a_queued_job_is_not_a_finished_pass_yet(self, tmp_path: Path):
         settings, _knowledge_base_path, settings_path = _register_plain_knowledge_base(tmp_path, "demo")

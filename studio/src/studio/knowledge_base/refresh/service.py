@@ -1,7 +1,8 @@
 """The refresh use cases: the handler a worker runs for one refresh job, and the ticker that queues the due ones.
 
 A refresh pass preflights the schema, scans the watch list, syncs the mirrors, places new mirrors and indexes, through the knowledge base's own bus.
-A clean pass answers a one-line detail. Any failure raises, and the worker turns that into a retry or an abandonment.
+A completed pass answers a one-line detail and the watch-list entries it could not scan, each logged as a warning when the scan reports it.
+Any other failure raises, and the worker turns that into a retry or an abandonment.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from studio.knowledge_base.refresh.domain import (
     RefreshCounts,
     RefreshResult,
     RefreshStarted,
+    ScanFailure,
     is_due,
 )
 from studio.knowledge_base.refresh.infrastructure.librarian import LibrarianPlacer, librarian_agent, new_mirrors_at
@@ -83,6 +85,19 @@ def _sync_summary(report: SyncReport) -> str:
     return summary + (f"/{len(report.errors)} errored, " if report.errors else ", ")
 
 
+def _scan_failures_of(scan: ScanReport, knowledge_base: str) -> tuple[ScanFailure, ...]:
+    """The watch-list entries `scan` could not read, each logged as one warning naming the entry and its reason."""
+    failures = tuple(ScanFailure(entry=label, reason=reason) for label, reason in scan.failed)
+    for failure in failures:
+        _logger.warning(
+            "watch entry {entry} of knowledge base {knowledge_base!r} could not be scanned: {reason}",
+            entry=failure.entry,
+            knowledge_base=knowledge_base,
+            reason=failure.reason,
+        )
+    return failures
+
+
 def _counts_of(scan: ScanReport | None, sync: SyncReport) -> RefreshCounts:
     """What one attempt's scan and sync brought in."""
     return RefreshCounts(
@@ -93,9 +108,14 @@ def _counts_of(scan: ScanReport | None, sync: SyncReport) -> RefreshCounts:
 
 
 async def _perform_refresh(
-    entry: KnowledgeBaseEntry, container: Container, schema_preflight: Callable[[str], None], *, on_counts: Callable[[RefreshCounts], None]
-) -> str:
-    """Preflight, scan, sync, place and index one knowledge base, telling `on_counts` what the sync brought in before anything after it can raise."""
+    name: str,
+    entry: KnowledgeBaseEntry,
+    container: Container,
+    schema_preflight: Callable[[str], None],
+    *,
+    on_counts: Callable[[RefreshCounts], None],
+) -> tuple[str, tuple[ScanFailure, ...]]:
+    """Refresh one knowledge base, answering its detail and scan failures and giving `on_counts` the sync's counts before any raise."""
     schema = kb.load_knowledge_base_schema(entry.path)
     database = await container.get(DatabaseSettings)
     await asyncio.to_thread(schema_preflight, database.url)
@@ -104,12 +124,14 @@ async def _perform_refresh(
     sync_detail = ""
     sync_errors: tuple[SyncError, ...] = ()
     scan_result: ScanReport | None = None
+    scan_failures: tuple[ScanFailure, ...] = ()
     if schema.sources.enabled and (entry.path / WATCH_LIST_PATH).is_file():
         scanned = await bus.handle(ScanWatchList())
         if not isinstance(scanned, ScanReport):  # pragma: no cover (the scan handler always returns a ScanReport)
             msg = "scan produced no report"
             raise TypeError(msg)
         scan_result = scanned
+        scan_failures = _scan_failures_of(scanned, name)
         sync_detail = f"scanned {scan_result.found} entries/{scan_result.requested} requested/{len(scan_result.failed)} entries failed, "
     if schema.sources.enabled:
         sources_dir: Path | None = None
@@ -141,7 +163,7 @@ async def _perform_refresh(
         reasons = ", ".join(f"{error.key}: {error.message}" for error in sync_errors)
         msg = f"{indexed}, sync failed: {len(sync_errors)} error(s) ({reasons})"
         raise RuntimeError(msg)
-    return indexed
+    return indexed, scan_failures
 
 
 class RefreshKnowledgeBaseJob:
@@ -179,7 +201,7 @@ class RefreshKnowledgeBaseJob:
     async def __call__(self, payload: RefreshJob, context: JobContext) -> str:
         """Refresh the knowledge base the payload names, announcing the pass on its bus.
 
-        The pass announces `RefreshStarted` before its first command and `RefreshCompleted` when it ends clean.
+        The pass announces `RefreshStarted` before its first command and `RefreshCompleted` when it runs to its end, scan failures included.
         A failure on the last attempt announces `RefreshAbandoned` before it raises. An earlier failure announces nothing.
 
         Args:
@@ -187,7 +209,7 @@ class RefreshKnowledgeBaseJob:
             context: The job's id and which attempt this is.
 
         Returns:
-            The clean pass's detail and counts, as the one JSON line `refresh_history` reads back.
+            The completed pass's detail, counts and scan failures, as the one JSON line `refresh_history` reads back.
 
         Raises:
             LookupError: When the payload names a knowledge base the registry does not carry.
@@ -208,30 +230,35 @@ class RefreshKnowledgeBaseJob:
         try:
             outbox = (await container.get(MessageBus)).outbox
             await outbox.append([RefreshStarted(knowledge_base=payload.knowledge_base, job_id=context.job_id, trigger=payload.trigger)])
-            detail = await self._refresh(entry, container, payload, context, outbox=outbox)
+            detail, scan_failures = await self._refresh(entry, container, payload, context, outbox=outbox)
             counts = self._carried.get(context.job_id, RefreshCounts())
             await outbox.append(
                 [
                     RefreshCompleted(
-                        knowledge_base=payload.knowledge_base, job_id=context.job_id, trigger=payload.trigger, detail=detail, counts=counts
+                        knowledge_base=payload.knowledge_base,
+                        job_id=context.job_id,
+                        trigger=payload.trigger,
+                        detail=detail,
+                        counts=counts,
+                        scan_failures=scan_failures,
                     )
                 ]
             )
             self._carried.pop(context.job_id, None)
-            return RefreshResult(detail=detail, counts=counts).model_dump_json()
+            return RefreshResult(detail=detail, counts=counts, scan_failures=scan_failures).model_dump_json()
         finally:
             await self._dispose(container)
 
     async def _refresh(
         self, entry: KnowledgeBaseEntry, container: Container, payload: RefreshJob, context: JobContext, *, outbox: Outbox
-    ) -> str:
+    ) -> tuple[str, tuple[ScanFailure, ...]]:
         """Run the pass, carrying its counts across the job's attempts and announcing `RefreshAbandoned` when this attempt is the last one."""
 
         def carry(counts: RefreshCounts) -> None:
             self._carried[context.job_id] = self._carried.get(context.job_id, RefreshCounts()).plus(counts)
 
         try:
-            return await _perform_refresh(entry, container, self._preflight, on_counts=carry)
+            return await _perform_refresh(payload.knowledge_base, entry, container, self._preflight, on_counts=carry)
         except Exception as error:
             if context.attempt >= REFRESH_POLICY.max_attempts:
                 counts = self._carried.get(context.job_id, RefreshCounts())

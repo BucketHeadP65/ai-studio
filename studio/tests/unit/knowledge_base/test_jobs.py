@@ -9,6 +9,7 @@ pass answers a one-line detail, and every failure raises, which is what turns in
 from __future__ import annotations
 
 import json
+import logging
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
@@ -31,6 +32,7 @@ from studio.knowledge_base.refresh.contracts import (
     RefreshKnowledgeBaseJob,
     RefreshResult,
     RefreshStarted,
+    ScanFailure,
 )
 from studio.knowledge_base.settings import AzureOpenAiSettings, DatabaseSettings, IngestionSettings, KnowledgeBaseSettings
 
@@ -460,3 +462,40 @@ class TestCounts:
         assert isinstance(completed, RefreshCompleted)
         assert completed.counts.sources_created == 7
         assert RefreshResult.model_validate_json(returned).counts.sources_created == 7
+
+
+class TestScanFailures:
+    async def test_a_pass_whose_scan_could_not_read_an_entry_completes_naming_it_and_logs_one_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        knowledge_base_path = _youtube_knowledge_base(tmp_path / "tube", "tube")
+        (knowledge_base_path / "_meta" / "watch-list.yaml").write_text("[]", encoding="utf-8")
+        settings_path = _register(tmp_path, "tube", knowledge_base_path)
+        reason = "xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has run out of credits."
+        container = FakeRunContainer(bus=FakeMessageBus(scan_report=ScanReport(failed=(("x:someone", reason),))))
+
+        with caplog.at_level(logging.WARNING, logger="studio.knowledge_base.refresh.service"):
+            returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+
+        expected = (ScanFailure(entry="x:someone", reason=reason),)
+        _, completed = container.bus.outbox.appended
+        assert isinstance(completed, RefreshCompleted)
+        assert completed.scan_failures == expected
+        assert RefreshResult.model_validate_json(returned).scan_failures == expected
+        assert [record.getMessage() for record in caplog.records] == [
+            f"watch entry x:someone of knowledge base 'tube' could not be scanned: {reason}"
+        ]
+
+    async def test_a_pass_whose_scan_read_every_entry_names_no_failure_and_logs_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        knowledge_base_path = _youtube_knowledge_base(tmp_path / "tube", "tube")
+        (knowledge_base_path / "_meta" / "watch-list.yaml").write_text("[]", encoding="utf-8")
+        settings_path = _register(tmp_path, "tube", knowledge_base_path)
+        container = FakeRunContainer(bus=FakeMessageBus(scan_report=ScanReport(found=1, requested=1)))
+
+        with caplog.at_level(logging.WARNING, logger="studio.knowledge_base.refresh.service"):
+            returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+
+        assert RefreshResult.model_validate_json(returned).scan_failures == ()
+        assert caplog.records == []

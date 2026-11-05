@@ -1,7 +1,9 @@
 """The refresh of one registered knowledge base: its job, its three events, its history, and when its cadence comes due.
 
 A refresh runs as a job of type `kb.refresh`, keyed by the knowledge base's registry name.
-It announces `RefreshStarted` when a pass begins, `RefreshCompleted` when it ends clean and `RefreshAbandoned` when its last attempt fails.
+It announces `RefreshStarted` when a pass begins, `RefreshCompleted` when it runs to its end and `RefreshAbandoned` when its last
+attempt fails.
+A pass whose scan could not read a watch-list entry still runs to its end, and its completion names each such entry with its reason.
 All three carry the job id, so a start pairs with its ending in whatever order they are read, and both endings carry what the job brought in.
 A refresh appears in the history only once it is over.
 """
@@ -22,7 +24,8 @@ if TYPE_CHECKING:
 
     from studio.knowledge_base.settings import Schedule
 
-RefreshOutcome = Literal["ok", "failed"]
+RefreshOutcome = Literal["ok", "partial", "failed"]
+"""How a refresh ended: `ok` ran to its end, `partial` did so with a watch-list entry it could not scan, `failed` was abandoned."""
 RefreshTrigger = Literal["manual", "schedule"]
 
 REFRESH_KIND = "kb.refresh"
@@ -88,13 +91,26 @@ class RefreshCounts(BaseModel):
         )
 
 
+class ScanFailure(BaseModel):
+    """One watch-list entry a refresh's scan could not read, and why."""
+
+    model_config = ConfigDict(frozen=True)
+
+    entry: str
+    """The entry's label, `<scanner>:<ref>`."""
+    reason: str
+    """One line saying why the scan failed, as the scan recorded it."""
+
+
 class RefreshResult(BaseModel):
-    """What a clean pass stores as its job's result: its one-line detail and what it brought in, as one JSON line."""
+    """What a pass that ran to its end stores as its job's result, as one JSON line: its detail, its counts and its scan failures."""
 
     model_config = ConfigDict(frozen=True)
 
     detail: str = ""
     counts: RefreshCounts = Field(default_factory=RefreshCounts)
+    scan_failures: tuple[ScanFailure, ...] = ()
+    """The watch-list entries the pass's scan could not read. Empty when every entry was read or the pass scanned nothing."""
 
 
 class RefreshStarted(Event):
@@ -107,7 +123,7 @@ class RefreshStarted(Event):
 
 
 class RefreshCompleted(Event):
-    """One refresh pass ended clean, carrying the one-sentence detail it answered."""
+    """One refresh pass ran to its end, carrying the one-sentence detail it answered and the watch-list entries it could not scan."""
 
     knowledge_base: str
     """The registry name of the knowledge base."""
@@ -116,6 +132,8 @@ class RefreshCompleted(Event):
     detail: str = ""
     counts: RefreshCounts = Field(default_factory=RefreshCounts)
     """What every attempt of the job brought in."""
+    scan_failures: tuple[ScanFailure, ...] = ()
+    """The watch-list entries the last attempt's scan could not read."""
 
 
 class RefreshAbandoned(Event):
@@ -148,7 +166,7 @@ def is_forwarded(ending: RefreshCompleted | RefreshAbandoned) -> bool:
 
 
 class RefreshRun(BaseModel):
-    """One finished refresh: when it started and finished, whether it succeeded, a one-sentence detail and what it brought in.
+    """One finished refresh: when it started and finished, how it ended, its detail, what it brought in and what it could not scan.
 
     `started_at` and `finished_at` are RFC 3339 times in UTC.
     """
@@ -163,6 +181,8 @@ class RefreshRun(BaseModel):
     """`manual` for a pass the HTTP route queued, `schedule` for one the ticker queued."""
     counts: RefreshCounts = Field(default_factory=RefreshCounts)
     """What the refresh brought in. An abandoned run read back from its job carries zeros."""
+    scan_failures: tuple[ScanFailure, ...] = ()
+    """The watch-list entries the refresh could not scan, each with its reason. An abandoned run carries none."""
 
 
 def _trigger_of(payload: Mapping[str, JsonValue]) -> RefreshTrigger:
@@ -174,7 +194,7 @@ def _trigger_of(payload: Mapping[str, JsonValue]) -> RefreshTrigger:
 
 
 def _result_of(text: str | None) -> RefreshResult:
-    """A done job's stored result, the document a clean pass writes, or an empty result when it stored none."""
+    """A done job's stored result, the document a completed pass writes, or an empty result when it stored none."""
     if not text:
         return RefreshResult()
     return RefreshResult.model_validate_json(text)
@@ -183,7 +203,7 @@ def _result_of(text: str | None) -> RefreshResult:
 def refresh_facts(job: Job) -> tuple[RefreshEvent, ...]:
     """The events one job row stands for: a start and its ending, or nothing while the pass is unfinished.
 
-    A `done` job reads as a `RefreshCompleted` carrying the detail and the counts its result holds.
+    A `done` job reads as a `RefreshCompleted` carrying the detail, the counts and the scan failures its result holds.
     An `abandoned` job reads as a `RefreshAbandoned` carrying its last error.
     A time the job never recorded falls back to an earlier one, so both events always carry a time.
 
@@ -194,7 +214,7 @@ def refresh_facts(job: Job) -> tuple[RefreshEvent, ...]:
         The start and its ending, or an empty tuple for a job that is queued, running or waiting to retry.
 
     Raises:
-        ValidationError: A `done` job's result is not the document a clean pass writes.
+        ValidationError: A `done` job's result is not the document a completed pass writes.
     """
     started_at = job.started_at or job.created_at
     trigger = _trigger_of(job.payload)
@@ -203,7 +223,13 @@ def refresh_facts(job: Job) -> tuple[RefreshEvent, ...]:
     if job.state == "done":
         result = _result_of(job.result)
         completed = RefreshCompleted(
-            knowledge_base=job.key, job_id=job.id, trigger=trigger, detail=result.detail, counts=result.counts, occurred_at=finished_at
+            knowledge_base=job.key,
+            job_id=job.id,
+            trigger=trigger,
+            detail=result.detail,
+            counts=result.counts,
+            scan_failures=result.scan_failures,
+            occurred_at=finished_at,
         )
         return (started, completed)
     if job.state == "abandoned":
@@ -222,14 +248,16 @@ def refresh_run_of(started: RefreshStarted, ending: RefreshCompleted | RefreshAb
         ending: The event the pass ended with.
 
     Returns:
-        The run, `ok` for a completed pass and `failed` for an abandoned one.
+        The run: `ok` for a completed pass, `partial` for a completed pass with a scan failure, `failed` for an abandoned one.
     """
     if isinstance(ending, RefreshCompleted):
-        outcome: RefreshOutcome = "ok"
+        outcome: RefreshOutcome = "partial" if ending.scan_failures else "ok"
         detail = ending.detail
+        scan_failures = ending.scan_failures
     else:
         outcome = "failed"
         detail = ending.reason
+        scan_failures = ()
     return RefreshRun(
         started_at=started.occurred_at,
         finished_at=ending.occurred_at,
@@ -237,6 +265,7 @@ def refresh_run_of(started: RefreshStarted, ending: RefreshCompleted | RefreshAb
         detail=detail,
         trigger=ending.trigger,
         counts=ending.counts,
+        scan_failures=scan_failures,
     )
 
 
@@ -276,7 +305,7 @@ def refresh_history(jobs: Sequence[Job], *, limit: int = 20) -> tuple[RefreshRun
         The runs, at most `limit` of them.
 
     Raises:
-        ValidationError: A `done` job's result is not the document a clean pass writes.
+        ValidationError: A `done` job's result is not the document a completed pass writes.
     """
     return refresh_runs([fact for job in jobs for fact in refresh_facts(job)], limit=limit)
 
