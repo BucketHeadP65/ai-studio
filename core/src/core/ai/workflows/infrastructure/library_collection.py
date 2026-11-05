@@ -818,8 +818,9 @@ class LibraryCollection:
         """Save one reusable step version as its own page, `st.<name>.v<version>`, and return its id.
 
         A version holds one step content, and a version that holds a different step is refused. Saving a version
-        whose step is unchanged writes nothing, unless the version is live and its cases differ. Then only the cases
-        are replaced in place: no new version, no supersession, and the version's content address does not move.
+        whose step is unchanged writes nothing, unless the version is live and the cases given differ from its own.
+        Then only the cases are replaced in place: no new version, no supersession, and the version's content
+        address does not move.
         After a new version is written, every live lower version of the name is linked forward to it with
         `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
         page saved and warns with `SupersessionIncompleteWarning`.
@@ -832,9 +833,9 @@ class LibraryCollection:
             applicability: When to use the step, written as the page's Applicability section. A version already
                 saved keeps its own.
             provenance: `saved_by` names who saved it.
-            cases: The step's cases, kept on the page as given and read back with `fetch_step_cases`. Each save of a
-                live version leaves it holding exactly these, and None leaves it without cases. A superseded version
-                keeps the cases it holds.
+            cases: The step's cases, kept on the page as given and read back with `fetch_step_cases`. A save of a
+                live version replaces the cases it holds, and an empty mapping removes them. None keeps whatever cases
+                the version holds, and saves a new version without any. A superseded version keeps the cases it holds.
 
         Returns:
             The step's page id.
@@ -858,7 +859,7 @@ class LibraryCollection:
             "saved_by": provenance.get("saved_by", "unknown"),
             "step": step.model_dump(mode="json"),
         }
-        if cases is not None:
+        if cases:
             frontmatter["cases"] = _cases_text(cases)
         try:
             await self._ingest(
@@ -876,20 +877,22 @@ class LibraryCollection:
         return step_id
 
     async def _keep_saved_version(self, page: Mapping[str, Any], step: InlineStep, cases: Mapping[str, JsonValue] | None) -> None:
-        """Refuse a different step at a saved version, else bring a live version's cases in place up to `cases`."""
+        """Refuse a different step at a saved version, else bring a live version's cases in place up to `cases` when given."""
         step_id = str(page["id"])
         stored = page["frontmatter"]
         long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
         if "step" not in long_tail or step_content_address(_STEP.validate_python(long_tail["step"])) != step_content_address(step):
             raise StepVersionChangedError(step_id)
+        if cases is None:
+            return
         held = long_tail.get("cases")
-        if (json.loads(held) if isinstance(held, str) else held) == (None if cases is None else json.loads(_cases_text(cases))):
+        if (json.loads(held) if isinstance(held, str) else held) == (json.loads(_cases_text(cases)) if cases else None):
             return
         superseded = await self._rows.fetch(SUPERSEDED_SQL, step_id)
         if superseded and bool(superseded[0].get("superseded")):
             return
         long_tail.pop("cases", None)
-        if cases is not None:
+        if cases:
             long_tail["cases"] = _cases_text(cases)
         try:
             await self._ingest(

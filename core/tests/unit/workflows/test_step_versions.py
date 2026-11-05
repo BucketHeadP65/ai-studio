@@ -350,16 +350,30 @@ async def test_equal_step_and_equal_cases_still_write_nothing() -> None:
     assert len(store.payloads) == 1
 
 
-async def test_saving_an_unchanged_step_without_cases_removes_the_cases_it_held() -> None:
-    """The page keeps the cases its latest save gave, so a deleted case file takes the cases away."""
+async def test_saving_an_unchanged_step_with_no_cases_given_keeps_the_cases_it_holds() -> None:
+    """None says nothing about the cases, so a save that passes none, such as the save_step tool's, leaves them."""
     store = FakeCollection()
     library = _library(store)
     step_id = await _save(library, _digest(), 1, cases=CASES_A)
 
     await _save(library, _digest(), 1)
 
+    assert len(store.payloads) == 1, "nothing is written"
+    assert await library.fetch_step_cases(step_id) == CASES_A
+
+
+async def test_an_empty_mapping_removes_a_live_version_s_cases_and_saves_a_new_version_without_any() -> None:
+    store = FakeCollection()
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases=CASES_A)
+
+    await _save(library, _digest(), 1, cases={})
+    relate_id = await _save(library, _relate(), 1, cases={})
+
     assert "cases" not in store.payloads[1]["frontmatter"]
     assert await library.fetch_step_cases(step_id) is None
+    assert "cases" not in store.payloads[2]["frontmatter"], "a new version saved with an empty mapping carries no key"
+    assert await library.fetch_step_cases(relate_id) is None
 
 
 async def test_a_superseded_version_keeps_its_cases_and_its_supersession() -> None:
