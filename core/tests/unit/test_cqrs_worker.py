@@ -8,10 +8,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Self
 
+import asyncpg
 import pytest
 
 from asyncpg.exceptions import CannotConnectNowError, TooManyConnectionsError
 from pydantic import BaseModel
+from sqlalchemy.dialects.postgresql.asyncpg import AsyncAdapt_asyncpg_dbapi
+from sqlalchemy.exc import DBAPIError
 
 from core.cqrs.contracts import (
     CoordinationBuffer,
@@ -33,6 +36,7 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from core.cqrs.contracts import UnitOfWork
+    from core.cqrs.domain import StoredEvent
 
 T0 = datetime(2026, 8, 26, 12, 0, tzinfo=UTC)
 
@@ -163,6 +167,36 @@ class _OnceFailingWake:
         if self.calls == 1:
             raise self.error
         await asyncio.Event().wait()
+
+
+def _starting_up() -> DBAPIError:
+    """What SQLAlchemy raises when a statement meets a database still starting up."""
+    dbapi = AsyncAdapt_asyncpg_dbapi(asyncpg)
+    driver_error = CannotConnectNowError("the database system is starting up")
+    adapted = dbapi.Error(f"{type(driver_error)}: {driver_error}")
+    adapted.__cause__ = driver_error
+    wrapped = DBAPIError.instance("SELECT 1", (), adapted, dbapi.Error)
+    wrapped.__cause__ = adapted
+    assert isinstance(wrapped, DBAPIError)
+    return wrapped
+
+
+class _OnceFailingOutbox(MemoryOutbox):
+    """An outbox whose first read of undelivered events raises `error`, and whose second sets `read_again`."""
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error: Exception | None = error
+        self.reads = 0
+        self.read_again = asyncio.Event()
+
+    async def undelivered(self, *, limit: int = 100) -> list[StoredEvent]:
+        self.reads += 1
+        if self.error is not None:
+            error, self.error = self.error, None
+            raise error
+        self.read_again.set()
+        return await super().undelivered(limit=limit)
 
 
 @pytest.fixture
@@ -452,6 +486,29 @@ class TestRunForever:
         assert passes == 3
         assert wake.waits
         assert all(w <= 15 for w in wake.waits)
+
+    @pytest.mark.parametrize(
+        "error",
+        [_starting_up(), ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 5434)")],
+        ids=["starting-up", "refused"],
+    )
+    async def test_a_tick_that_loses_its_database_is_logged_and_the_loop_goes_on(
+        self, error: Exception, clock: _Clock, caplog: pytest.LogCaptureFixture
+    ):
+        outbox = _OnceFailingOutbox(error)
+        worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
+
+        await asyncio.wait_for(worker.run_forever(stop=outbox.read_again), timeout=2)
+
+        assert outbox.reads == 2, "the loop ticked again after the failed tick"
+        assert "tick lost its database connection" in caplog.text
+
+    async def test_a_tick_that_fails_any_other_way_ends_the_loop(self, clock: _Clock):
+        outbox = _OnceFailingOutbox(RuntimeError("a bug in a port"))
+        worker = Worker(jobs=MemoryJobs(clock=clock), outbox=outbox, bus=MessageBus({}, {}), wake=ImmediateWake(), name="w1", clock=clock, poll_seconds=0.01)
+
+        with pytest.raises(RuntimeError, match="a bug in a port"):
+            await asyncio.wait_for(worker.run_forever(stop=asyncio.Event()), timeout=2)
 
     async def test_a_failing_wake_propagates_and_leaves_no_pending_task(self, clock: _Clock):
         worker = Worker(jobs=MemoryJobs(clock=clock), outbox=MemoryOutbox(), bus=MessageBus({}, {}), wake=_RaisingWake(), name="w1", clock=clock, poll_seconds=30)

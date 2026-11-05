@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ConfigDict, JsonValue, ValidationError
 
+from core.connection_failures import is_database_connection_failure
 from core.cqrs.domain import JobContext, JobPolicy, utcnow
 from core.cqrs.internal_contracts import TransactionalSubscriber
 from core.db import LOST_CONNECTION_ERRORS
@@ -30,6 +31,11 @@ if TYPE_CHECKING:
     from core.cqrs.internal_contracts import JobHandler, JobsAndQueries, Outbox, Periodic, Wake
 
 _logger = get_logger(__name__)
+
+
+def _lost_its_database(error: Exception) -> bool:
+    """Whether `error` is a lost database connection, raw or wrapped by SQLAlchemy."""
+    return isinstance(error, LOST_CONNECTION_ERRORS) or is_database_connection_failure(error)
 
 
 class PollingWake:
@@ -176,14 +182,22 @@ class Worker:
     async def run_forever(self, *, stop: asyncio.Event) -> None:
         """Loop until `stop` is set: a tick, then wait for a wake-up or the next due periodic.
 
-        A wait that fails with one of `LOST_CONNECTION_ERRORS`, such as a database still starting up, is logged and
-        followed by a sleep of `poll_seconds`, and the loop goes on. Any other error the wait raises ends the loop.
+        A tick or a wait that loses its database connection, such as to a database still starting up, is logged, and
+        the loop waits `poll_seconds`, or until `stop` is set, and goes on. That is one of `LOST_CONNECTION_ERRORS`, or
+        such an error SQLAlchemy wraps. Any other error a tick or a wait raises ends the loop.
 
         Args:
             stop: Set to end the loop after the current tick or wait.
         """
         while not stop.is_set():
-            await self.tick()
+            try:
+                await self.tick()
+            except Exception as exc:
+                if not _lost_its_database(exc):
+                    raise
+                _logger.warning("tick lost its database connection, ticking again after the poll wait: {reason}", reason=str(exc))
+                await self._pause(stop)
+                continue
             wait_for = min([self._poll_seconds, *(p.due_in(self._clock()) for p in self._periodics)])
             waiting = asyncio.create_task(self._wake.wait(wait_for))
             stopping = asyncio.create_task(stop.wait())
@@ -198,11 +212,18 @@ class Worker:
                 if task is waiting:
                     try:
                         task.result()
-                    except LOST_CONNECTION_ERRORS as exc:
+                    except Exception as exc:
+                        if not _lost_its_database(exc):
+                            raise
                         _logger.warning("wake wait failed, skipping this wait: {reason}", reason=str(exc))
-                        await asyncio.sleep(self._poll_seconds)
+                        await self._pause(stop)
                 else:
                     task.result()
+
+    async def _pause(self, stop: asyncio.Event) -> None:
+        """Wait `poll_seconds`, or less when `stop` is set first."""
+        with suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=self._poll_seconds)
 
     async def deliver_once(self) -> int:
         """Deliver undelivered outbox events to their subscriptions.
