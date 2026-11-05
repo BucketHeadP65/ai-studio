@@ -17,10 +17,13 @@ from uuid import UUID
 import pytest
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic_ai.exceptions import ContentFilterError
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse
 from temporalio import workflow
-from temporalio.exceptions import ApplicationError, TemporalError
+from temporalio.exceptions import ActivityError, ApplicationError, TemporalError
 from temporalio.testing import ActivityEnvironment
 
+from core.ai.content_filter import content_filter_message
 from core.ai.history.contracts import ContinuationAttempt, ContinuationInFlightError, ContinuationPayloadTooLargeError, ContinuationRef
 from core.ai.history.domain import CONTINUATION_REF_BYTES
 from core.ai.workflows.contracts import (
@@ -66,8 +69,10 @@ from core.ai.workflows.infrastructure.temporal import (
     InlineStepOutcome,
     ScheduledWork,
     TurnOnTheWire,
+    _as_activity,
     _binding,
     _exhausted_gate,
+    _filter_refusal,
     _identity_from_wire,
     _identity_on_wire,
     _inline_step_activity,
@@ -461,6 +466,76 @@ def test_a_step_a_content_filter_cut_is_not_performed_again(registry: StepRegist
 
     assert policy is not None
     assert "ContentFilterError" in (policy.non_retryable_error_types or ())
+
+
+_FLAGGED = ModelResponse(
+    parts=[],
+    finish_reason="content_filter",
+    provider_details={"finish_reason": "content_filter", "content_filter_result": {"self_harm": {"filtered": True, "severity": "medium"}}},
+)
+_SENTENCE = "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium."
+
+
+def _cut() -> ContentFilterError:
+    """What an agent raises for a response a content filter cut whole: pydantic-ai's own words, the response as the body."""
+    msg = "Content filter triggered. Finish reason: 'content_filter'"
+    return ContentFilterError(msg, body=ModelMessagesTypeAdapter.dump_json([_FLAGGED]).decode())
+
+
+def _assert_names_the_category(raised: ApplicationError) -> None:
+    assert raised.type == "ContentFilterError", "the retry policy matches this type and never performs the step again"
+    assert raised.non_retryable is True
+    assert raised.message == _SENTENCE, "the failure names the category, not the body"
+    assert raised.details
+    assert ModelMessagesTypeAdapter.validate_json(str(raised.details[0])) == [_FLAGGED]
+
+
+async def test_an_inline_step_a_content_filter_cut_fails_its_activity_naming_the_category(registry: StepRegistry) -> None:
+    host = registry.copy()
+
+    async def perform(task: Briefing, output_type: type, /, **inputs: object) -> object:
+        del task, output_type, inputs
+        raise _cut()
+
+    host.perform = perform
+    run = _inline_step_activity(host)
+
+    with pytest.raises(ApplicationError) as raised:
+        await run(InlineStepCall(spec=BROUGHT, step="summarise_sales", arguments={"sales": {"quarter": "Q2", "total": 1000}}))
+
+    _assert_names_the_category(raised.value)
+
+
+async def test_a_published_step_a_content_filter_cut_fails_its_activity_naming_the_category() -> None:
+    registry = StepRegistry()
+
+    async def judge(text: str) -> str:
+        del text
+        raise _cut()
+
+    impl = registry.register(judge)
+
+    with pytest.raises(ApplicationError) as raised:
+        await _as_activity(impl)("anything")
+
+    _assert_names_the_category(raised.value)
+
+
+def test_a_content_filter_failure_comes_back_into_workflow_code_as_the_error_it_was() -> None:
+    failed = ActivityError(
+        "Activity task failed", scheduled_event_id=1, started_event_id=2, identity="worker", activity_type="judge", activity_id="1", retry_state=None
+    )
+    failed.__cause__ = ApplicationError(_SENTENCE, ModelMessagesTypeAdapter.dump_json([_FLAGGED]).decode(), type="ContentFilterError", non_retryable=True)
+    other = ActivityError(
+        "Activity task failed", scheduled_event_id=1, started_event_id=2, identity="worker", activity_type="judge", activity_id="1", retry_state=None
+    )
+    other.__cause__ = ApplicationError("boom", type="RuntimeError")
+
+    refusal = _filter_refusal(failed)
+
+    assert isinstance(refusal, ContentFilterError)
+    assert content_filter_message(refusal) == _SENTENCE
+    assert _filter_refusal(other) is None
 
 
 def test_the_workflow_type_is_a_stable_name() -> None:

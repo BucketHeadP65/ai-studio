@@ -652,7 +652,10 @@ parts removed, so the agent records its usage like any other response's and rais
 caller of `request` outside an agent run gets that empty response. The response never reaches output validation and no
 output retry is sent for it. Both engines perform the turn once. The in-process engine performs a turn again only when it
 lost its model connection, and `ContentFilterError` is not a `ModelConnectionError`. The Temporal engine's default retry
-policy lists `ContentFilterError` among the errors it never retries.
+policy lists `ContentFilterError` among the errors it never retries. A durable step a filter ends fails its activity with
+an `ApplicationError` typed `ContentFilterError` (`CONTENT_FILTER_FAILURE`), whose message is `content_filter_message`'s
+sentence and whose detail is the response, and workflow code raises `ContentFilterError` again from it. A run it ends
+fails with that same `ApplicationError`.
 
 - `content_filter_message(error)` answers one sentence read from the response in the error's body. It opens as
   pydantic-ai's own (`Content filter triggered. Finish reason: 'content_filter'.`) and ends by naming each filter

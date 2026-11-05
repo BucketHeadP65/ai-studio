@@ -371,8 +371,9 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   agent commits a response. A prompt Azure refuses with HTTP 400 and the error code `content_filter` raises it at once
   (UB-19). The response never reaches output validation, so no output retry is spent on it. Both engines perform the
   turn once: the in-process engine performs a turn again only for a `ModelConnectionError`, and the Temporal engine's
-  default retry policy lists `ContentFilterError` as non-retryable. `FilterReportingResponsesModel` subclasses
-  `OpenAIResponsesModel` and overrides the `_process_provider_details` hook to keep the top-level `content_filters` list
+  default retry policy lists `ContentFilterError` as non-retryable. A durable step's activity fails with an
+  `ApplicationError` of that type naming the categories, and workflow code raises `ContentFilterError` again from it.
+  `FilterReportingResponsesModel` subclasses `OpenAIResponsesModel` and overrides the `_process_provider_details` hook to keep the top-level `content_filters` list
   Azure sends, as sent, in the provider details, streamed or not. `content_filter_message(error)` reads the response back
   from the error's body and answers one sentence that opens as pydantic-ai's own and ends by naming each category that
   filtered or detected, with its source and severity, or by saying the response holds no filter result. That sentence is

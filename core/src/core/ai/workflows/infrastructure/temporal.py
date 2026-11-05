@@ -25,7 +25,7 @@ from uuid import UUID, uuid5
 from temporalio import activity, workflow
 from temporalio.client import Client
 from temporalio.common import RetryPolicy
-from temporalio.exceptions import ApplicationError
+from temporalio.exceptions import ActivityError, ApplicationError
 from temporalio.worker import Worker
 from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner, SandboxRestrictions
 from temporalio.workflow import ActivityConfig
@@ -35,7 +35,9 @@ from temporalio.workflow import ActivityConfig
 with workflow.unsafe.imports_passed_through():
     from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
     from pydantic_ai.durable_exec.temporal import AgentPlugin, LogfirePlugin, PydanticAIPlugin
+    from pydantic_ai.exceptions import ContentFilterError
 
+    from core.ai.content_filter import content_filter_message
     from core.ai.history.contracts import (
         ContinuationAttempt,
         ContinuationConflictError,
@@ -76,6 +78,9 @@ DEFAULT_TASK_QUEUE = "pydantic-ai-workflows"
 WORKFLOW_TYPE = "PydanticAIWorkflowRun"
 """The registered Temporal workflow type. It must not change while a run is in flight."""
 
+CONTENT_FILTER_FAILURE: Final = "ContentFilterError"
+"""The type a content filter's refusal fails an activity with. The retry policy never retries it, and workflow code raises
+`ContentFilterError` again for it."""
 EXHAUSTED_GATE = "RetryExhaustedError"
 """The failure type a client reads to tell a spent gate ceiling from any other run failure.
 
@@ -200,7 +205,7 @@ def continuing_step_conversation(state: StepConversationContinuation) -> Generat
 _DEFAULT_ACTIVITY_CONFIG = ActivityConfig(
     start_to_close_timeout=timedelta(minutes=5),
     retry_policy=RetryPolicy(
-        maximum_attempts=5, non_retryable_error_types=("NotFoundError", "TypeError", "ValidationError", "ContentFilterError")
+        maximum_attempts=5, non_retryable_error_types=("NotFoundError", "TypeError", "ValidationError", CONTENT_FILTER_FAILURE)
     ),
 )
 """How a step is scheduled when the caller states nothing: five minutes per attempt and at most five attempts.
@@ -570,12 +575,14 @@ class ActivityExecutor:
             return await implementation.function(**kwargs)
         scheduled = self.scheduling(implementation, kwargs)
         if not self.continues(scheduled):
-            return await workflow.execute_activity(
-                scheduled.activity, args=scheduled.args, result_type=implementation.output_type, **self.activity_config
+            with _filter_refusals_raised():
+                return await workflow.execute_activity(
+                    scheduled.activity, args=scheduled.args, result_type=implementation.output_type, **self.activity_config
+                )
+        with _filter_refusals_raised():
+            outcome = await workflow.execute_activity(
+                scheduled.activity, args=scheduled.args, result_type=InlineStepOutcome, **self.activity_config
             )
-        outcome = await workflow.execute_activity(
-            scheduled.activity, args=scheduled.args, result_type=InlineStepOutcome, **self.activity_config
-        )
         if scheduled.conversation is not None and outcome.continuation is not None:
             self.conversations[scheduled.conversation] = outcome.continuation
         return TypeAdapter(implementation.output_type).validate_python(outcome.output)
@@ -592,6 +599,40 @@ class ActivityExecutor:
             True when the answer is an `InlineStepOutcome`.
         """
         return scheduled.conversation is not None
+
+
+def _filter_failure(exc: ContentFilterError) -> ApplicationError:
+    """A content filter's refusal as a final Temporal failure: its sentence naming the categories, its response as the detail."""
+    return ApplicationError(content_filter_message(exc), exc.body, type=CONTENT_FILTER_FAILURE, non_retryable=True)
+
+
+def _filter_refusal(error: ActivityError) -> ContentFilterError | None:
+    """The `ContentFilterError` an activity failed with, rebuilt in workflow code, or `None` when it failed another way."""
+    cause = error.cause
+    if not isinstance(cause, ApplicationError) or cause.type != CONTENT_FILTER_FAILURE:
+        return None
+    body = cause.details[0] if cause.details and isinstance(cause.details[0], str) else None
+    return ContentFilterError(cause.message, body=body)
+
+
+@contextmanager
+def _filter_refusals_raised() -> Generator[None]:
+    """Raise an activity that a content filter's refusal failed as that `ContentFilterError`, and any other failure as it came."""
+    try:
+        yield
+    except ActivityError as exc:
+        if (refusal := _filter_refusal(exc)) is not None:
+            raise refusal from exc
+        raise
+
+
+@contextmanager
+def _filter_failures_named() -> Generator[None]:
+    """Fail an activity a content filter's refusal ended with the Temporal failure that names its categories."""
+    try:
+        yield
+    except ContentFilterError as exc:
+        raise _filter_failure(exc) from exc
 
 
 def _exhausted_gate(exc: RetryExhaustedError) -> ApplicationError:
@@ -633,7 +674,8 @@ class DurableWorkflowRun:
             What the graph run returns.
 
         Raises:
-            ApplicationError: When a gate's retry ceiling is spent, typed `EXHAUSTED_GATE` and final.
+            ApplicationError: When a gate's retry ceiling is spent, typed `EXHAUSTED_GATE` and final, or when a content
+                filter's refusal ends the run, typed `CONTENT_FILTER_FAILURE`, final, and naming the categories.
         """
         binding = _binding(workflow.info().task_queue)
         self._began = workflow.now().timestamp()
@@ -652,6 +694,8 @@ class DurableWorkflowRun:
             return await graph.run(state=self._state)
         except RetryExhaustedError as exc:
             raise _exhausted_gate(exc) from exc
+        except ContentFilterError as exc:
+            raise _filter_failure(exc) from exc
 
     @workflow.query
     def evidence(self) -> RunEvidence:
@@ -801,7 +845,8 @@ def step_activities(registry: StepRegistry) -> list[Callable[..., Awaitable[obje
 def _as_activity(impl: StepImplementation) -> Callable[..., Awaitable[object]]:
     @functools.wraps(impl.function)
     async def perform_step(*args: object) -> object:
-        return await impl.function(*args)
+        with _filter_failures_named():
+            return await impl.function(*args)
 
     return activity.defn(name=impl.name)(perform_step)
 
@@ -818,14 +863,15 @@ def _inline_step_activity(registry: StepRegistry) -> Callable[[InlineStepCall], 
             raise ApplicationError(msg, non_retryable=True)
         kwargs = {name: TypeAdapter(impl.input_types[name]).validate_python(value) for name, value in call.arguments.items()}
         if call.identity is None:
-            return await impl.function(**kwargs)
+            with _filter_failures_named():
+                return await impl.function(**kwargs)
         identity = _identity_from_wire(call.identity, extended)
         if step_conversation_of(identity) is None:
-            with performing_step(identity):
+            with performing_step(identity), _filter_failures_named():
                 return await impl.function(**kwargs)
         continuing = _step_conversation_continuation(call, identity)
         try:
-            with performing_step(identity), continuing_step_conversation(continuing):
+            with performing_step(identity), continuing_step_conversation(continuing), _filter_failures_named():
                 produced = await impl.function(**kwargs)
         except (
             ContinuationInFlightError,
