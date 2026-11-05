@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import TYPE_CHECKING
 
 import pytest
+
+from core.markdown import split_frontmatter
 
 from engram.kb.contracts import AuthoringPayload, payload_of, render
 from engram.testing.specs import research_spec
@@ -113,6 +116,51 @@ def test_a_frontmatter_list_written_in_flow_style_is_carried_with_the_same_value
     frontmatter = payload["frontmatter"]
     assert isinstance(frontmatter, dict)
     assert frontmatter["alternative_to"] == ["[[talk.other-talk]]"]
+
+
+def test_a_yaml_date_in_the_frontmatter_comes_as_its_iso_text_and_renders_back_the_same_value() -> None:
+    spec = research_spec()
+    text = _rendered(_PAYLOAD).replace("created: '2026-10-14'\n", "created: 2026-10-14\nupdated: 2026-10-15 09:30:00\n", 1)
+    text = text.replace("published: '2024-05-01'\n", "published: 2024-05-01\n", 1)
+    written_values, written_body = split_frontmatter(text)
+    assert isinstance(written_values["created"], date), "the page holds YAML dates, not strings"
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    frontmatter = payload["frontmatter"]
+    assert isinstance(frontmatter, dict)
+    assert (frontmatter["created"], frontmatter["updated"], frontmatter["published"]) == ("2026-10-14", "2026-10-15T09:30:00", "2024-05-01")
+    rendered_values, rendered_body = split_frontmatter(_rendered(payload))
+    assert rendered_body == written_body
+    assert rendered_values == {key: value.isoformat() if isinstance(value, date) else value for key, value in written_values.items()}
+
+
+def test_a_claim_s_field_lines_in_the_grammar_s_order_render_back_byte_for_byte() -> None:
+    spec = research_spec()
+    text = _rendered(_PAYLOAD)
+    assert "    - on_dataset:: [[dataset.alpha]], [[dataset.beta]]\n    - on_task:: [[task.planning]]\n" in text
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    assert _rendered(payload) == text
+
+
+def test_a_claim_s_field_lines_out_of_the_grammar_s_order_are_refused_naming_the_first_line_that_moves() -> None:
+    spec = research_spec()
+    on_dataset, on_task = "    - on_dataset:: [[dataset.alpha]], [[dataset.beta]]\n", "    - on_task:: [[task.planning]]\n"
+    text = _rendered(_PAYLOAD).replace(on_dataset + on_task, on_task + on_dataset, 1)
+
+    with pytest.raises(ValueError, match=r"cannot carry whole, first at '    - on_task:: \[\[task\.planning\]\]'"):
+        payload_of(text, source_path="note.md", spec=spec)
+
+
+def test_a_quote_broken_over_two_lines_is_refused_rather_than_dropped() -> None:
+    """The parser reads no field from a field line whose value runs onto a second line."""
+    spec = research_spec()
+    text = _rendered(_PAYLOAD).replace('    - quote:: "survives compaction"\n', '    - quote:: "survives\ncompaction"\n', 1)
+
+    with pytest.raises(ValueError, match="""cannot carry whole, first at '    - quote:: "survives'"""):
+        payload_of(text, source_path="note.md", spec=spec)
 
 
 def _with_tl_dr_body(body: str) -> dict[str, object]:

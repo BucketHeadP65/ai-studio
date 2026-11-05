@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import copy
 import difflib
+import re
 
+from datetime import date
 from typing import TYPE_CHECKING
 
 import pytest
 
+from core.markdown import split_frontmatter
 from pydantic_ai import ModelRetry
 
 from engram.testing.fakes.authoring import FakeAdminGateway
@@ -120,6 +123,24 @@ async def test_the_payload_written_back_unchanged_rewrites_the_page_byte_for_byt
     await doors.write_note("research", payload, _TALK_PATH)
 
     assert (tmp_path / _TALK_PATH).read_text(encoding="utf-8") == before
+
+
+async def test_a_page_with_unquoted_yaml_dates_writes_back_with_the_same_values_and_the_same_body(tmp_path: Path) -> None:
+    doors, written = await _written_talk(tmp_path)
+    before = re.sub(r"^created: '(\d{4}-\d{2}-\d{2})'$", r"created: \1\nupdated: 2026-10-15", written, count=1, flags=re.MULTILINE)
+    before = before.replace("published: '2024-05-01'\n", "published: 2024-05-01\n", 1)
+    (tmp_path / _TALK_PATH).write_text(before, encoding="utf-8")
+    values_before, body_before = split_frontmatter(before)
+    assert isinstance(values_before["created"], date)
+    assert isinstance(values_before["updated"], date)
+    assert isinstance(values_before["published"], date)
+    payload = await _payload_of_talk(doors)
+
+    await doors.write_note("research", payload, _TALK_PATH)
+
+    values_after, body_after = split_frontmatter((tmp_path / _TALK_PATH).read_text(encoding="utf-8"))
+    assert body_after == body_before
+    assert values_after == {key: value.isoformat() if isinstance(value, date) else value for key, value in values_before.items()}
 
 
 async def test_setting_link_fields_on_the_payload_changes_only_those_lines(tmp_path: Path) -> None:

@@ -165,7 +165,7 @@ and status, at one status when given, only the pages with no outgoing link of th
 given, an unknown page type refused naming the page types. `read_page(knowledge_base, page_id)` answers one indexed
 page's knowledge-base-relative `path` (the one the index last read it from) and its file parsed by `kb.parse` into a
 ready `write_note` `payload` (`kb.payload_of`), which written back with that path keeps every frontmatter value and
-the body byte for byte. In the payload each heading is a section of its own while that renders the page back. When it
+the body byte for byte. A frontmatter date or datetime comes as its ISO text and writes back quoted. In the payload each heading is a section of its own while that renders the page back. When it
 does not, a section the page type does not declare comes inside the body of the section before it, heading included
 and as written, but only when the renderer would move it (it sits before a declared section) or change it (such as a
 heading with no blank line under it). Every other section stays a section of its own. It refuses an id no indexed

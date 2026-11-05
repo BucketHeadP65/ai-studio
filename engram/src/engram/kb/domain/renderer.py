@@ -12,6 +12,7 @@ The built-in fields and edges come in a fixed order, the declared fields in the 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING
 
 from core.markdown import heading_for_slug, heading_slug, render_frontmatter, split_frontmatter
@@ -95,7 +96,8 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
     """One page's markdown parsed into the write_note payload (frontmatter, sections, claims) that renders it back.
 
     Rendering the payload gives the same frontmatter values and the same body, byte for byte. Only the layout of the
-    frontmatter YAML may differ. Each claim keeps its anchor and names each declared field as a key of its own, a link
+    frontmatter YAML may differ. A frontmatter date or datetime comes as its ISO text, which renders quoted and counts
+    as the same value. Each claim keeps its anchor and names each declared field as a key of its own, a link
     as a `"[[…]]"` string. The claims section's body is empty when the page has claims, because the renderer writes them.
     Each heading is a section of its own while that renders the page back. When it does not, a section the page type
     does not declare is carried, heading included and as written, in the body of the section before it, but only when
@@ -119,7 +121,7 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
     note = parse(text, source_path=source_path, spec=spec)
     claim_section = spec.claims.section if spec.claims is not None else None
     headed = [section for section in sorted(note.sections, key=lambda section: section.ord) if section.kind == "heading"]
-    frontmatter = _frontmatter_dict(note.frontmatter, spec)
+    frontmatter = _with_iso_dates(_frontmatter_dict(note.frontmatter, spec))
     scalar_links = spec.claims.link_scalar_names if spec.claims is not None else frozenset[str]()
     claims: list[JsonValue] = [_claim_payload(claim, scalar_links) for claim in note.claims]
     sections: list[JsonValue] = [
@@ -133,6 +135,7 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
     payload: dict[str, JsonValue] = {"frontmatter": frontmatter, "sections": sections, "claims": claims}
     written_values, written_body = split_frontmatter(text)
     rendered_values, rendered_body = _rendered_parts(payload, spec)
+    written_values, rendered_values = _with_iso_dates(written_values), _with_iso_dates(rendered_values)
     if rendered_values != written_values:
         changed = sorted(key for key in {*written_values, *rendered_values} if written_values.get(key) != rendered_values.get(key))
         msg = f"{note.frontmatter.id} holds frontmatter a payload cannot carry whole: {', '.join(changed)}"
@@ -152,6 +155,22 @@ def payload_of(text: str, *, source_path: str, spec: KnowledgeBaseSchema) -> dic
 def _rendered_parts(payload: Mapping[str, JsonValue], spec: KnowledgeBaseSchema) -> tuple[dict[str, JsonValue], str]:
     """The frontmatter values and the body `payload` renders to."""
     return split_frontmatter(render(AuthoringPayload.model_validate({**payload, "knowledge_base_schema": spec}), spec=spec))
+
+
+def _with_iso_dates(values: Mapping[str, JsonValue | date]) -> dict[str, JsonValue]:
+    """Frontmatter values with each date and datetime in them as its ISO text."""
+    return {key: _iso_text(value) for key, value in values.items()}
+
+
+def _iso_text(value: JsonValue | date) -> JsonValue:
+    """`value` with each date and datetime in it, at any depth of lists and mappings, as its ISO text."""
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [_iso_text(item) for item in value]
+    if isinstance(value, dict):
+        return _with_iso_dates(value)
+    return value
 
 
 def _carried_sections(sections: Sequence[Section], body: str, *, has_claims: bool, claim_section: str | None) -> list[JsonValue]:
