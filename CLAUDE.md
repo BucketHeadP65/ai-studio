@@ -49,6 +49,8 @@ applications are kept clean of:
   templates/<slug>/workflows` imports its workflows. Nothing outside `templates/` imports or reads a
   template except the `studio init --template` resolver and `engram.testing.specs`, held by an
   import-boundary test in each Python project.
+- **`vendor/pydantic-graph/`**: pydantic-graph 2.66.0 with the unreleased fix for UB-17 and UB-22 applied. core
+  declares it with a path source, so every Python project resolves to it, and its README says when to delete it.
 - **`pydantic-ai-harness`** comes from PyPI (`>=0.66.0`), released from the pydantic-ai repository
   (`src/pydantic_ai_harness`). It versions with pydantic-ai (0.66 goes with 2.66). Our additions over it live in our own code: `core.ai.format_maps`,
   `core.ai.filesystem`, `harness.adapters.acp_client` and `engram.evals.harness.code_mode`. Upstream
