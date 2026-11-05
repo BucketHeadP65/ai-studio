@@ -232,4 +232,3 @@ TD-46 onward came from the close of the code standard refactor on
   row holds one `embedding` and its id is `<page-id>#<section-path>`, so the parts need rows of their own or a table of section
   part vectors, and search has to fold a part's hit back onto its section.
 - **Found:** 2026-09-30, in the review of the change that splits a raw mirror's long section within the embed budget.
-

@@ -10,9 +10,9 @@ app: harness
 created: '2026-09-30'
 ---
 
-Amended by [0022](0022-chat-runs-wait-and-rejections-drop-what-they-rerun.md): a chat session's run waits for the person, and an interrupted rejection rerun runs again.
-
 ## Context
+
+Amended by [0022](0022-chat-runs-wait-and-rejections-drop-what-they-rerun.md): a chat session's run waits for the person, and an interrupted rejection rerun runs again.
 
 The in-process engine writes every finished step of a run to a run log. At boot only the process's own session's run log was relaunched ([0015](0015-in-process-by-default-temporal-opt-in.md)). A pooled session, such as a chat session or a scheduled run's runner session, kept its run log on disk and nothing relaunched it.
 

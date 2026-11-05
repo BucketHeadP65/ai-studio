@@ -135,7 +135,6 @@ Entry shape: what was not adopted, what we do instead, why not, what would make 
 - **Where:** `harness/docs/adr/0006-schedules-and-the-ticker.md`, the superseding note of 2026-08-28. Found 2026-08-27
   in the record sweep.
 
-
 ## DD-12. No uv workspace, shared Python code ships as path sources
 
 - **Not adopted:** a uv workspace over the Python projects.
