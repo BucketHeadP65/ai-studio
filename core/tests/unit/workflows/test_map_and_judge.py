@@ -778,6 +778,7 @@ async def test_a_skipped_model_failure_records_its_message_without_the_body_and_
         keys[1]: "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium.",
         keys[2]: "Exceeded maximum output retries (4)",
     }
+    assert state.skipped == {"each": [details[keys[1]], details[keys[2]]]}, "the skipped reasons carry no body either"
 
 
 async def test_on_error_left_at_fail_still_fails_the_run() -> None:

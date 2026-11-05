@@ -651,14 +651,13 @@ def _build_map_steps(
                 if count >= node.abort_after_repeats:
                     _settle(ctx.state, node.id, generation, item_key, "failed", f"{failure} repeated {count} times")
                     raise RepeatedFailureError(node.id, failure, count) from exc
-            reason = str(exc)
             said = _failure_text(exc)
             first_line = said.splitlines()[0] if said else type(exc).__name__
             if node.on_error != "skip":
                 _settle(ctx.state, node.id, generation, item_key, "failed", f"{failure}: {first_line}")
                 raise
             _logger.warning("map {node_id!r} skipped an item: {reason}", node_id=node.id, reason=first_line)
-            ctx.state.skipped.setdefault(node.id, []).append(reason)
+            ctx.state.skipped.setdefault(node.id, []).append(said)
             _settle(ctx.state, node.id, generation, item_key, "skipped", first_line)
             return _SKIPPED
         ctx.state.failure_streaks.pop(node.id, None)
