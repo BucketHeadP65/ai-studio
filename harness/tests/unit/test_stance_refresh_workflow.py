@@ -38,6 +38,7 @@ backing worker and the rewrite judge.
 from __future__ import annotations
 
 import asyncio
+import re
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -60,7 +61,10 @@ from core.ai.workflows.contracts import (
     step_page_id,
 )
 from core.ai.workflows.exceptions import RepeatedFailureError
+from engram.authoring.contracts import AuthoringKnowledgeBase, AuthoringTools
 from engram.kb.contracts import AuthoringPayload, KnowledgeBaseSchema, parse, render
+from engram.testing.fakes.authoring import FakeAdminGateway, FakeReindex
+from engram.testing.specs import research_spec
 from pydantic import ValidationError
 from pydantic_ai.exceptions import ModelHTTPError, ModelRetry, UsageLimitExceeded
 from pydantic_core import to_jsonable_python
@@ -77,6 +81,7 @@ if TYPE_CHECKING:
 
     from core.ai.workflows.contracts import InlineStep, Outcome
     from core.ai.workflows.registry import StepImplementation
+    from engram.sources.contracts import SourceQueue
 
 RESEARCH = Path(__file__).resolve().parents[3] / "templates" / "research" / "workflows"
 
@@ -2248,3 +2253,23 @@ async def test_every_claim_a_kept_proposal_left_out_is_named_with_its_own_reason
     assert "- `paper.dense-retrieval#^c2`: The judge gave it no verdict." in evidence
     assert "- `talk.agent-loops#^c4`: Its backings gave it opposite sides." in evidence
     assert "[[talk.agent-loops#^c4]]" not in evidence, "a claim left out is never written as a link"
+
+
+def _no_queue(knowledge_base: AuthoringKnowledgeBase) -> SourceQueue:
+    msg = f"read_page never opens {knowledge_base.name}'s source queue"
+    raise AssertionError(msg)
+
+
+async def test_the_missing_id_split_keys_on_read_pages_own_refusal(tmp_path: Path) -> None:
+    program = (RESEARCH / "workflows" / "research-stance-refresh.md").read_text(encoding="utf-8")
+    [prefix] = re.findall(r'refusal\.startswith\("([^"]+)"\)', program)
+    (tmp_path / "_meta" / "vocabulary").mkdir(parents=True)
+    research = AuthoringKnowledgeBase(name="research", collection="research", path=tmp_path, schema=research_spec())
+    tools = AuthoringTools(
+        knowledge_bases={"research": research}, reindex=FakeReindex(), admin=FakeAdminGateway(rows=[]), queue_for=_no_queue
+    )
+
+    with pytest.raises(ModelRetry) as refused:
+        await tools.read_page("research", "paper.made-up")
+
+    assert str(refused.value).startswith(prefix), "check_findings would file an id the base does not hold under unread"
