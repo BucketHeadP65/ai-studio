@@ -26,7 +26,7 @@ from pydantic_ai.messages import ModelResponse, TextContent, TextPart, ToolCallP
 from pydantic_ai.models.anthropic import AnthropicCompaction
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.workspaces import LocalWorkspaceBackend
-from pydantic_ai_harness import DynamicWorkflow, SubAgents
+from pydantic_ai_harness import DetectLoops, DynamicWorkflow, SubAgents
 from pydantic_ai_harness.compaction import ReportContextUsage, TieredCompaction
 from pydantic_ai_harness.conversation_search import ConversationSearch
 from pydantic_ai_harness.filesystem import FileSystem, FileSystemToolset
@@ -187,6 +187,15 @@ class TestCompactionMount:
         agent._root_capability.apply(lambda cap: mounted.append(cap) if isinstance(cap, EmptyAnswerRetry) else None)
 
         assert len(mounted) == 1
+
+    def test_the_loop_guard_is_always_mounted_once_and_nudges(self, tmp_path: Path) -> None:
+        agent = _build(ProjectConfig(), tmp_path)
+
+        mounted: list[DetectLoops[Runtime]] = []
+        agent._root_capability.apply(lambda cap: mounted.append(cap) if isinstance(cap, DetectLoops) else None)
+
+        (guard,) = mounted
+        assert guard.action == "nudge", "a loop in a chat turn steers the model rather than ending the turn"
 
 
 class TestRecallMount:

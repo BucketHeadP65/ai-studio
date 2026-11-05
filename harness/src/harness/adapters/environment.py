@@ -20,9 +20,9 @@ from core.ai.format_maps.contracts import FileContentCache
 from core.ai.tool_call_limit import ToolCallLimitWarning
 from pydantic import TypeAdapter
 from pydantic_ai.capabilities import LocalWorkspace
+from pydantic_ai_harness import DetectLoops
 from pydantic_ai_harness._monty_exec import MontyExecutor
 from pydantic_ai_harness.compaction import WarnNearLimits
-from pydantic_ai_harness.detect_loops import DetectLoops
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS, Shell
 from pydantic_ai_harness.tool_output_limits import Band, LocalFileStore, OverflowStore, Spill, ToolOutputLimits, Truncate
 from pydantic_core import to_jsonable_python

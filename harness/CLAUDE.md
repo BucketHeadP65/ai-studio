@@ -47,9 +47,8 @@ only shrink. The tiers, inward first:
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database
   and runs its dispatch and sweep. `harness inspect` issues commands by hand.
 
-`harness/skills/` (the app root, beside `workflows/`) is
-the registry of skills: every skill a model tier here may name and the files this repository's `.claude/skills`
-and `.agents/skills` symlinks point at, data not code. Runtime state (`.state/`, `custom/`) lives under this checkout, provider keys live in the shared settings file's `infrastructure` section, and
+`harness/skills/` (the app root, beside `workflows/`) is the registry of skills: every skill a model tier here may
+name and the files this repository's `.claude/skills` and `.agents/skills` symlinks point at, data not code. Runtime state (`.state/`, `custom/`) lives under this checkout, provider keys live in the shared settings file's `infrastructure` section, and
 every session's conversation lives in the record in `aifactory_sessions`.
 
 ## Wiring (enforced by `tests/unit/test_wiring.py` and `tests/unit/test_routes.py`)
