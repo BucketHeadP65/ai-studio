@@ -41,7 +41,8 @@ class ConsumerEntry(BaseModel):
 
     A copy that matches a saved version names it in `version`. A diverged copy has no `version` and names the
     version it diverged from, with how that was found. `diverged_from` and `diverged_basis` come together, and so do
-    `declined` and `declined_because`. An entry that breaks either rule is refused.
+    `declined` and `declined_because`. An entry with no `version` names `diverged_from`, and an entry with a `version`
+    does not. An entry that breaks any of these is refused.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

@@ -178,7 +178,9 @@ def canonical_step_yaml(step: InlineStep) -> str:
     """A reusable step as canonical YAML: the document `step_content_address` hashes, keys sorted.
 
     Two steps with the same content address get the same text. A string holding a line break is written as a
-    literal block, one line of text per line, so a line diff of two steps names the lines that changed.
+    literal block, one line of text per line, when YAML allows one, so no tab and no line ending in a space. A line
+    diff of two such steps names the lines that changed. Any other string with a line break is double-quoted, its
+    line breaks escaped.
 
     Args:
         step: The step to write.
