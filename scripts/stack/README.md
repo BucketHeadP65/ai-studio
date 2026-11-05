@@ -47,6 +47,10 @@ scripts/stack/stack.sh uninstall
   named for it: each read tool (`search`, `fetch`, `graph_expand`, `find_paths`) names the one base
   it reads, and `APP_LIBRARY_SEARCH__CROSS_KNOWLEDGE_BASE_SEARCH=true` lets one call read every
   base at once instead.
+- `studio-api.sh` exports `APP_LOGGING__CONSOLE=true`, so `serve-http` and the `studio worker` child it
+  starts print their log records into `studio-api.log`, such as the warning for each watch-list entry a
+  refresh could not scan. Only this wrapper sets it, because `studio mcp` reads the same settings file and
+  speaks over stdout.
 - **The harness needs `studio-api` up to boot.** The registry of knowledge bases belongs to the
   studio, so the agent reads it over the studio API (`GET /api/knowledge-bases` for the names, folders and
   whether each is private or shared, `GET /api/knowledge-bases/{name}/schema` for each one's schema) rather than out of
