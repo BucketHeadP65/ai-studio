@@ -3,7 +3,7 @@ title: Refresh stances from the docs
 description: >-
   Places each changed records page against the base's stances, rewrites the stances they change under a judge,
   keeping their Evidence and Alternatives, and writes each new stance they propose as one pending flag per idea,
-  removing pending flags it repeats or a judge finds weak.
+  removing pending flags it repeats or a judge drops.
 uses:
   - st.list_stance_changes.v2
   - st.place_stance_pages.v6
@@ -13,7 +13,7 @@ uses:
   - st.back_proposal.v5
   - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v10
+  - st.write_stance_flags.v11
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -34,7 +34,7 @@ presentation:
     side and how, and each claim left out with why. One whose findings all contest it is marked so. Every dropped
     proposal is listed with why, and every digest the run could not read, or cited id the base does not hold, is named
     with the refusal. A pending flag is written again with newer findings, and a flag you decided, read from its file,
-    is left as it is and listed. A pending flag a group repeats, or whose proposal the judge's own verdicts found weak,
+    is left as it is and listed. A pending flag a group repeats, or whose proposal the judge dropped as weak or a repeat,
     is removed, with its id, title and path on the card since its file is gone, and a refused removal fails the run
     once the rest is written. The proposals start only after every rewrite is written, so a run whose proposals fail
     keeps its rewrites, each written to its file at once.
@@ -47,7 +47,7 @@ presentation:
     wait (fail_after:<seconds>). Every rewrite lands directly. To undo one, put the page back from the run's stances as
     they were before it. A proposed new stance is yours to draft by hand: accept, dismiss or complete its stance flag
     in the research knowledge base, and the run never writes or removes a flag you decided. A pending stance flag the run
-    finds the same idea as another, or whose proposal its judge finds weak, is removed without asking you.
+    finds the same idea as another, or whose proposal its judge drops as weak or a repeat of a stance, is removed without asking you.
   not_for: >-
     Not for adding literature to a stance, which comes from the digests and the flag pass. Not for editing a
     stance's Evidence or Alternatives, which this run never changes. Not for more than twenty-five changed pages at
@@ -70,7 +70,7 @@ presentation:
 workflow:
   name: research-stance-refresh
   version: 24
-  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then group every new stance they propose with the base's pending stance flags of the same idea under one id, back each with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, write each listed one as a pending stance flag, and remove each pending flag a group repeats or whose proposal the judge found weak, drafting no stance and never writing or removing a flag the owner decided.
+  description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then group every new stance they propose with the base's pending stance flags of the same idea under one id, back each with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, write each listed one as a pending stance flag, and remove each pending flag a group repeats or whose proposal the judge dropped, drafting no stance and never writing or removing a flag the owner decided.
   parameters:
     collection:
       description: The knowledge base holding the stance pages, by name.
@@ -852,7 +852,7 @@ workflow:
                     reason = "No backing carries its id, title and pages: its worker failed, or changed the proposal's id, title or pages."
                 if absent:
                     reason = reason + " It cited ids the base does not hold: " + ", ".join(absent) + "."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "dropped_by_judge": False})
                 continue
             verdicts = {}
             duplicate = ""
@@ -887,11 +887,11 @@ workflow:
                     verdicts[claim].append(verdict)
             if not judged:
                 reason = "The judge gave no verdict: its judge item failed or was skipped, or its judge changed the proposal's id, title or pages."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "dropped_by_judge": False})
                 continue
             if duplicate:
                 reason = "The judge found it repeats the existing stance " + duplicate + "."
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "judged_weak": False})
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": [reason], "dropped_by_judge": True})
                 continue
             order = []
             first = {}
@@ -929,8 +929,8 @@ workflow:
                 spared.append(claim)
             digests = {finding["claim"].split("#")[0]: True for finding in findings}
             if len(digests) < 2:
-                judged_weak = len({claim.split("#")[0]: True for claim in spared}) < 2
-                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": ["Fewer than two digests are left with findings that bear."] + reasons, "judged_weak": judged_weak})
+                dropped_by_judge = len({claim.split("#")[0]: True for claim in spared}) < 2
+                dropped.append({"stance_id": made["stance_id"], "title": made["title"], "reasons": ["Fewer than two digests are left with findings that bear."] + reasons, "dropped_by_judge": dropped_by_judge})
                 continue
             contests_only = True
             for finding in findings:
@@ -1008,16 +1008,16 @@ workflow:
               items:
                 type: object
                 title: DroppedStanceProposal
-                required: [stance_id, title, reasons, judged_weak]
+                required: [stance_id, title, reasons, dropped_by_judge]
                 properties:
                   stance_id: {type: string}
                   title: {type: string}
                   reasons:
                     type: array
                     items: {type: string}
-                  judged_weak:
+                  dropped_by_judge:
                     type: boolean
-                    description: True when the judge's own verdicts left it findings from fewer than two digests, every claim the judge did not refuse counted, so the idea is weak. False for every other drop.
+                    description: True when the judge's own reading dropped it, as a repeat of a listed stance or because its verdicts left findings from fewer than two digests, every claim the judge did not refuse counted. False for a drop the judge never read, such as a code check or a failed worker.
             unread:
               type: array
               description: Each digest the base holds that check_findings could not read, with read_page's refusal.
@@ -1305,10 +1305,10 @@ bears. A judge's claim written as a wikilink, a search ref or an anchor with no 
 `check_findings` counts a backing's. A proposal left with findings from fewer than two digests is dropped with each
 finding's reason. A kept proposal carries each claim of its backings left out as `refused`, each with why: the judge
 said it does not bear, gave it no verdict, or its backings gave it opposite sides, and `contests_only` counts only the
-findings that remain. A dropped proposal is `judged_weak` when the judge's own verdicts did it: its claims the judge did
-not refuse, those it gave no verdict and those its backings gave opposite sides counted in, come from fewer than two
-digests. Every other drop, a failed worker or judge, a changed copy, too few digests the base holds, a digest it could
-not read, an id it does not hold, or a repeat of a listed stance, is not. The map collects its answers as they finish, so nothing is paired by position. A backing that
+findings that remain. A dropped proposal is `dropped_by_judge` when the judge's own reading dropped it: it repeats a
+listed stance, or the claims the judge did not refuse, those it gave no verdict and those its backings gave opposite
+sides counted in, come from fewer than two digests. Every drop the judge never read, a failed worker or judge, a
+changed copy, too few digests the base holds, a digest it could not read or an id it does not hold, is not. The map collects its answers as they finish, so nothing is paired by position. A backing that
 matches no proposal, such as one whose worker reworded its copy, added or left out a page, or took another proposal's
 id, puts nothing on the card, and the honest backing of that proposal still does. It answers `proposals`, the run's
 `proposed_stances` artifact, `dropped`, each dropped proposal with its reasons, and `unread` and `missing` as
@@ -1335,7 +1335,7 @@ the cited ids the base does not hold as `missing` and the placements `list_unpla
 flags, is the run's output.
 
 Once every flag is written, `write_stance_flags` removes, each in its own try, every pending flag `apply_groups` named
-under `duplicates`, and the pending flag of every proposal dropped as `judged_weak` that the index lists at `pending`.
+under `duplicates`, and the pending flag of every proposal dropped as `dropped_by_judge` that the index lists at `pending`.
 It reads each one's file with `read_page` first and removes it with `remove_undecided_page` only while that file is a
 stance flag at `pending`, so a flag the owner decided is never removed, and neither is one this run wrote. The base
 keeps no copy of a removed file, so `removed` names each by its id, its title, the path it was read from and why, and

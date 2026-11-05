@@ -450,7 +450,7 @@ _DROPPED_PROPOSAL: dict[str, object] = {
     "stance_id": "stance.z",
     "title": "Z",
     "reasons": ["The judge found it repeats the existing stance stance.x."],
-    "judged_weak": False,
+    "dropped_by_judge": True,
 }
 """The one stance proposal dropped here, which the flag writer answers unchanged."""
 

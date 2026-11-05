@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
-summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge found weak, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 10
+summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge dropped, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
+version: 11
 step:
   name: write_stance_flags
   source: |
@@ -102,7 +102,7 @@ step:
     for duplicate in grouped["duplicates"]:
         removing.append({"flag_id": duplicate["flag_id"], "title": duplicate["title"], "reason": "The grouping found it the same idea as " + duplicate["kept"] + "."})
     for dropped in listed["dropped"]:
-        if not dropped["judged_weak"]:
+        if not dropped["dropped_by_judge"]:
             continue
         stance_id = dropped["stance_id"]
         name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
@@ -201,14 +201,14 @@ step:
           items:
             type: object
             title: DroppedStanceProposal
-            required: [stance_id, title, reasons, judged_weak]
+            required: [stance_id, title, reasons, dropped_by_judge]
             properties:
               stance_id: {type: string}
               title: {type: string}
               reasons:
                 type: array
                 items: {type: string}
-              judged_weak: {type: boolean}
+              dropped_by_judge: {type: boolean}
         unread:
           type: array
           description: Each digest the base holds that the run could not read, with read_page's refusal, as `list_proposals` handed them.
@@ -271,7 +271,8 @@ stance page carries, in `unplaced`.
 
 Once every flag is written it removes flags, with `grouped` wired from the same run's `apply_groups`: each pending flag
 the grouping found the same idea as the flag a group keeps, and the pending flag of each proposal `list_proposals`
-dropped as `judged_weak`, the judge's own verdicts leaving it findings from fewer than two digests. A flag the index
+dropped as `dropped_by_judge`, the judge's own reading of the idea: a repeat of a listed stance, or its verdicts leaving
+findings from fewer than two digests. A drop the judge never read keeps its flag. A flag the index
 does not list at `pending` has nothing to remove for a dropped proposal. Before each removal it reads the flag's file
 with `read_page` and removes it with `remove_undecided_page` only while that file is a stance flag at `pending`, so a
 flag the owner decided is never removed, nor one this run wrote. Each removal is caught on its own. Every removed flag

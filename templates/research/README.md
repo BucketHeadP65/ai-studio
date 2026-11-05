@@ -48,8 +48,9 @@ from this template can register its own vocabulary for any research domain.
   there, and the run never writes or removes a flag you decided, even before the base is indexed again. A pending flag
   you moved is written where it sits, and a page of another kind under the same id is left alone and named. Once every
   flag is written, the run removes each pending flag a group found the same idea as the flag it kept, and the pending
-  flag of each proposal its judge's own verdicts left findings from fewer than two digests, reading each file first.
-  A drop for any other reason, such as a failed worker or a digest the base could not read, keeps the flag. The base
+  flag of each proposal its judge dropped, as a repeat of a listed stance or with findings that bear from fewer than
+  two digests, reading each file first. A drop the judge never read, such as a failed worker or a digest the base
+  could not read, keeps the flag. The base
   keeps no copy of a removed file, so the card names each by its id, title and path, and a refused removal fails the
   run once everything else has landed. A proposal
   whose worker changed its id or title, or added or left out a page, is left off. A run whose proposals fail keeps its

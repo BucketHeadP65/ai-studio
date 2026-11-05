@@ -32,13 +32,13 @@ since the map collects its answers as they finish. A claim two matching backings
 whichever finishes first. Then the stance flags: an approved proposal is written as a pending flag of kind stance that
 the research schema takes, a pending one is written again and keeps its created date, one the owner decided is left
 alone and listed, and a refused write or a refused listing is named while the run succeeds. Then the budgets of the
-backing worker and the rewrite judge. Last, one flag per idea: a proposal the judge's own verdicts find weak removes
-its pending flag, while a drop for the code checks, an unread or missing digest, a failed worker or judge, or a claim
-the judge left unanswered keeps it. A proposal the grouping call puts with a pending flag takes that flag's id and
+backing worker and the rewrite judge. Last, one flag per idea: a proposal its judge drops, as weak or as a repeat of a
+listed stance, removes its pending flag, while a drop for the code checks, an unread or missing digest, a failed worker
+or judge, or a claim the judge left unanswered keeps it. A proposal the grouping call puts with a pending flag takes that flag's id and
 title and writes it in place, two proposals of one idea are backed once, and one proposal with two pending flags of
 its idea keeps the first and removes the other. A decided flag the grouping names is never removed, a group naming an
 id outside its input, an id twice or no proposal is refused and named, a refused removal fails the run after the rest
-lands with the writer's answer still recorded, flags that cannot be listed fail the run when a weak verdict asked for a
+lands with the writer's answer still recorded, flags that cannot be listed fail the run when a judge drop asked for a
 removal, and a failed grouping call leaves every proposal alone and says why.
 """
 
@@ -2027,15 +2027,15 @@ async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bear
                 "Fewer than two digests are left with findings that bear.",
                 "art.memory-survey#^c3 does not bear: It only shares the topic.",
             ],
-            "judged_weak": True,
+            "dropped_by_judge": True,
         },
         {
             "stance_id": "stance.reranking",
             "title": "Reranking",
             "reasons": ["The judge found it repeats the existing stance stance.x."],
-            "judged_weak": False,
+            "dropped_by_judge": True,
         },
-        {"stance_id": "stance.routing", "title": "Routing", "reasons": [NO_VERDICT], "judged_weak": False},
+        {"stance_id": "stance.routing", "title": "Routing", "reasons": [NO_VERDICT], "dropped_by_judge": False},
     ]
     assert _dropped(state) == dropped
     flags = _value(state, "write_stance_flags")
@@ -2145,7 +2145,7 @@ async def test_a_proposal_is_dropped_as_a_duplicate_only_of_a_stance_the_base_li
                 "stance_id": "stance.agent-memory",
                 "title": "Agent memory",
                 "reasons": ["The judge found it repeats the existing stance stance.x."],
-                "judged_weak": False,
+                "dropped_by_judge": True,
             }
         ]
     )
@@ -2243,7 +2243,7 @@ async def test_a_claim_the_judge_leaves_out_has_no_verdict_and_is_dropped(sandbo
 
     assert _proposals(state) == []
     reasons = ["Fewer than two digests are left with findings that bear.", "art.memory-survey#^c3 has no verdict from the judge."]
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}], (
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "dropped_by_judge": False}], (
         "a claim the judge left unanswered is no verdict that the idea is weak"
     )
 
@@ -2257,7 +2257,7 @@ async def test_a_judge_that_rewords_its_copy_matches_nothing_and_the_reason_says
     )
 
     assert _proposals(state) == []
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": [NO_VERDICT], "judged_weak": False}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": [NO_VERDICT], "dropped_by_judge": False}]
 
 
 @pytest.mark.parametrize("named", ["[[stance.x]]", "[[stance.x|X]]", "stance.x ", " [[ stance.x ]] "])
@@ -2272,7 +2272,7 @@ async def test_a_duplicate_named_as_a_link_or_with_spaces_counts_as_its_bare_id(
 
     assert _proposals(state) == []
     reasons = ["The judge found it repeats the existing stance stance.x."]
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "dropped_by_judge": True}]
 
 
 @pytest.mark.parametrize("copy_says", ["refuses-c1", "names-a-duplicate"])
@@ -2397,22 +2397,41 @@ WEAK = ["Fewer than two digests are left with findings that bear.", "art.memory-
 """Why list_proposals drops stance.agent-memory when its judge says art.memory-survey#^c3 does not bear."""
 
 
-async def test_a_proposal_the_judge_finds_weak_removes_its_pending_flag(sandbox: AsyncMonty) -> None:
+def _calls_it_a_repeat(backing: Backing) -> dict[str, object]:
+    """A proposal judge that finds every finding bears and the proposal repeats the listed stance stance.x."""
+    verdicts = [{"claim": finding["claim"], "bears": True, "why": "It measures it."} for finding in backing["findings"]]
+    return _judgement(backing, verdicts, duplicates="stance.x")
+
+
+REPEAT = ["The judge found it repeats the existing stance stance.x."]
+"""Why list_proposals drops stance.agent-memory when its judge says it repeats stance.x."""
+
+
+@pytest.mark.parametrize(
+    ("judge", "reasons"),
+    [
+        pytest.param(_refusing("art.memory-survey#^c3"), WEAK, id="too-few-findings-bear"),
+        pytest.param(_calls_it_a_repeat, REPEAT, id="it-repeats-a-listed-stance"),
+    ],
+)
+async def test_a_proposal_its_judge_drops_removes_its_pending_flag(
+    sandbox: AsyncMonty, judge: Callable[[Backing], dict[str, object]], reasons: list[str]
+) -> None:
     bases = _flag_bases(flags={"flag.stance-agent-memory": FlagFile(title="Agent memory")})
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=_refusing("art.memory-survey#^c3"))
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=judge)
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": WEAK, "judged_weak": True}]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "dropped_by_judge": True}]
     assert [removal["page_id"] for removal in bases.removals] == ["flag.stance-agent-memory"]
-    assert "flag.stance-agent-memory" not in bases.flags, "nobody had decided on it, so the newest judge's verdict removes it"
+    assert "flag.stance-agent-memory" not in bases.flags, "nobody had decided on it, so the newest judge's reading removes it"
     result = _value(state, "write_stance_flags")
     assert result["removed"] == [
         {
             "flag_id": "flag.stance-agent-memory",
             "title": "Agent memory",
             "path": "Wiki/Flags/stance-agent-memory.md",
-            "reason": "The newest judge dropped its proposal: " + " ".join(WEAK),
+            "reason": "The newest judge dropped its proposal: " + " ".join(reasons),
         }
     ], "the card names the removed page by its id, title and path, since the base keeps no copy"
     assert result["refused_removals"] == []
@@ -2460,7 +2479,7 @@ async def test_a_proposal_the_judge_finds_weak_removes_its_pending_flag(sandbox:
         ),
     ],
 )
-async def test_a_proposal_dropped_for_anything_but_the_judges_verdict_keeps_its_pending_flag(
+async def test_a_proposal_dropped_for_anything_but_its_judges_reading_keeps_its_pending_flag(
     sandbox: AsyncMonty,
     refused_digests: frozenset[str],
     back: Callable[[Proposal], list[Finding]],
@@ -2474,8 +2493,8 @@ async def test_a_proposal_dropped_for_anything_but_the_judges_verdict_keeps_its_
 
     state = await _run(sandbox, bases, scripted, changed="adr-1")
 
-    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "judged_weak": False}]
-    assert bases.removals == [], "a drop the judge's verdict did not make never removes a flag"
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons, "dropped_by_judge": False}]
+    assert bases.removals == [], "a drop the judge's own reading did not make never removes a flag"
     assert "flag.stance-agent-memory" in bases.flags
     assert _value(state, "write_stance_flags")["removed"] == []
 
@@ -2666,7 +2685,7 @@ async def test_a_refused_removal_leaves_the_writers_answer_on_the_card(sandbox: 
     assert [entry["flag_id"] for entry in to_jsonable_python(result["refused_removals"])] == ["flag.stance-agent-recall"]
 
 
-async def test_flags_that_cannot_be_listed_fail_the_run_when_a_weak_verdict_asks_for_a_removal(sandbox: AsyncMonty) -> None:
+async def test_flags_that_cannot_be_listed_fail_the_run_when_a_judge_drop_asks_for_a_removal(sandbox: AsyncMonty) -> None:
     bases = _flag_bases()
     bases.refuses_flag_listing = True
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=_refusing("art.memory-survey#^c3"))
@@ -2681,7 +2700,7 @@ async def test_flags_that_cannot_be_listed_fail_the_run_when_a_weak_verdict_asks
             "title": "Agent memory",
             "reason": "list_pages refused the flags, so its flag was not looked for: " + listing,
         }
-    ], "the removal a weak verdict asked for is named, never skipped"
+    ], "the removal a judge drop asked for is named, never skipped"
     assert bases.removals == []
 
 
