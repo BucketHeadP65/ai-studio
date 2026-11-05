@@ -122,22 +122,37 @@ export function RefreshCard({ name, registered, lastRun, schedule }: Props) {
   );
 }
 
+const OUTCOME_TONES = { ok: "ok", partial: "warn", failed: "danger" } as const;
+
+// A run's outcome and detail, then one line for each watch-list entry its scan could not read, with
+// the reason exactly as the scan recorded it.
 function RunRow({ record, label }: { record: RefreshRun; label?: string }) {
   return (
-    <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      {label ? <span className="text-caption text-label-3">{label}</span> : null}
-      <Badge tone={record.outcome === "ok" ? "ok" : "danger"} className="normal-case">
-        {record.outcome}
-      </Badge>
-      {record.trigger === "schedule" ? (
-        <Badge tone="neutral" className="normal-case">
-          scheduled
+    <div className="mt-2">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        {label ? <span className="text-caption text-label-3">{label}</span> : null}
+        <Badge tone={OUTCOME_TONES[record.outcome]} className="normal-case">
+          {record.outcome}
         </Badge>
+        {record.trigger === "schedule" ? (
+          <Badge tone="neutral" className="normal-case">
+            scheduled
+          </Badge>
+        ) : null}
+        <span className="text-caption text-label-3 tabular-nums">
+          {formatRelative(record.finished_at)}
+        </span>
+        <span className="min-w-0 flex-1 text-caption text-label-2">{record.detail}</span>
+      </div>
+      {record.scan_failures.length > 0 ? (
+        <ul className="mt-1 space-y-0.5 text-caption text-warn-ink">
+          {record.scan_failures.map((failure) => (
+            <li key={failure.entry} className="break-words">
+              {`Watch entry ${failure.entry} could not be scanned: ${failure.reason}`}
+            </li>
+          ))}
+        </ul>
       ) : null}
-      <span className="text-caption text-label-3 tabular-nums">
-        {formatRelative(record.finished_at)}
-      </span>
-      <span className="min-w-0 flex-1 text-caption text-label-2">{record.detail}</span>
     </div>
   );
 }

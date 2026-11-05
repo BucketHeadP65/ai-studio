@@ -96,6 +96,35 @@ describe("knowledgeBaseApi", () => {
     await expect(knowledgeBaseApi.graph()).rejects.toThrowError();
   });
 
+  it("parses a partial refresh run with the watch entries its scan could not read", async () => {
+    const failure = {
+      entry: "x:someone",
+      reason: "xAI answered HTTP 403 for grok-4-fast-non-reasoning",
+    };
+    server.use(
+      http.get(`${BASE}/api/knowledge-bases/research/refresh-runs`, () =>
+        HttpResponse.json({
+          refresh_runs: [
+            {
+              started_at: "2026-11-04T06:00:01+00:00",
+              finished_at: "2026-11-04T06:09:00+00:00",
+              outcome: "partial",
+              detail: "scanned 0 entries/0 requested/1 entries failed, indexed 3 pages, 3 embedded",
+              trigger: "schedule",
+              counts: { sources_created: 0, requested_by_entry: {}, created_by_connector: {} },
+              scan_failures: [failure],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const [run] = (await knowledgeBaseApi.refreshRuns("research")).refresh_runs;
+
+    expect(run.outcome).toBe("partial");
+    expect(run.scan_failures).toEqual([failure]);
+  });
+
   it("serialises only the provided filters into the query string", async () => {
     let seenUrl = "";
     server.use(

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { Job, JobState } from "@/api/types";
+import type { Job, JobState, RefreshRun } from "@/api/types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
 
@@ -49,6 +49,18 @@ function serveRefresh(states: JobState[]) {
 }
 
 beforeEach(() => serveRefresh(["running"]));
+
+function lastRun(overrides: Partial<RefreshRun>): RefreshRun {
+  return {
+    started_at: "2026-08-26T09:00:01+00:00",
+    finished_at: "2026-08-26T09:00:20+00:00",
+    outcome: "ok",
+    detail: "scanned 2 entries/2 requested/0 entries failed, indexed 3 pages, 3 embedded",
+    trigger: "schedule",
+    scan_failures: [],
+    ...overrides,
+  };
+}
 
 describe("RefreshCard", () => {
   it("names the job it queued while the worker is still running it", async () => {
@@ -108,4 +120,33 @@ describe("RefreshCard", () => {
       timeout: 8000,
     });
   }, 15000);
+
+  it("names each watch entry the last refresh could not scan, with the reason as recorded", async () => {
+    const reason =
+      "xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits or reached its monthly spending limit.";
+    render(
+      <RefreshCard
+        name="tube"
+        registered={true}
+        lastRun={lastRun({
+          outcome: "partial",
+          detail: "scanned 0 entries/0 requested/1 entries failed, indexed 3 pages, 3 embedded",
+          scan_failures: [{ entry: "x:omarsar0", reason }],
+        })}
+        schedule={null}
+      />,
+    );
+
+    expect(screen.getByText("partial")).toBeInTheDocument();
+    expect(
+      screen.getByText(`Watch entry x:omarsar0 could not be scanned: ${reason}`),
+    ).toBeInTheDocument();
+  });
+
+  it("shows nothing about scanning when the last refresh scanned every entry", async () => {
+    render(<RefreshCard name="tube" registered={true} lastRun={lastRun({})} schedule={null} />);
+
+    expect(screen.getByText("ok")).toBeInTheDocument();
+    expect(screen.queryByText(/could not be scanned/)).not.toBeInTheDocument();
+  });
 });

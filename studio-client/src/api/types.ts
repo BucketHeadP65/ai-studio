@@ -150,15 +150,21 @@ export type Job = z.infer<typeof JobSchema>;
 export const JobStartedSchema = z.object({ job_id: z.number() });
 export type JobStarted = z.infer<typeof JobStartedSchema>;
 
-// -- refresh runs and the schedule declaration (studio/knowledge_base/runs.py, settings.py Schedule) ----
+// -- refresh runs and the schedule declaration (studio/knowledge_base/refresh/domain.py, settings.py Schedule) ----
 // A refresh run is a finished job projected onto this shape, so a queued or running job has none yet.
 
+// One watch-list entry a refresh could not scan: its label (`<scanner>:<ref>`) and the one line the scan recorded.
+export const ScanFailureSchema = z.object({ entry: z.string(), reason: z.string() });
+export type ScanFailure = z.infer<typeof ScanFailureSchema>;
+
+// `partial` is a run that went to its end while a watch-list entry could not be scanned.
 export const RefreshRunSchema = z.object({
   started_at: z.string().datetime({ offset: true }),
   finished_at: z.string().datetime({ offset: true }),
-  outcome: z.enum(["ok", "failed"]),
+  outcome: z.enum(["ok", "partial", "failed"]),
   detail: z.string(),
   trigger: z.enum(["manual", "schedule"]),
+  scan_failures: z.array(ScanFailureSchema),
 });
 export type RefreshRun = z.infer<typeof RefreshRunSchema>;
 
