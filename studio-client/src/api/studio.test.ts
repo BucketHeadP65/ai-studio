@@ -270,6 +270,7 @@ describe("studioApi", () => {
     const paths =
       refused instanceof ZodError ? refused.issues.map((issue) => issue.path.join(".")) : [];
     expect(paths).toEqual(["trust.total"]);
+    expect(refused instanceof ZodError ? refused.message : "").toContain('"total"');
   });
 
   it("parses a graph carrying an orchestrator gate node, the kind that used to break the whole page", async () => {
