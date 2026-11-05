@@ -4,7 +4,7 @@ description: >-
   Reads the digests a knowledge base has gained recently, repairs the defects it finds in the base's own pages, and
   proposes what the owner should see, each proposal evidenced from the base's own pages and left pending for the
   owner to decide on.
-uses: [st.recent_digests.v5, st.flag_ideas.v6, st.write_flags.v3, st.merge_flags.v2, st.repair_digest.v1, st.finish.v2]
+uses: [st.recent_digests.v5, st.flag_ideas.v6, st.write_flags.v4, st.merge_flags.v2, st.repair_digest.v1, st.finish.v2]
 presentation:
   purpose: >-
     Turn what a knowledge base has just learned into a short list of things the owner should decide on, rather
@@ -38,7 +38,7 @@ presentation:
       artifact_ids: [approved_flags]
 workflow:
   name: research-compound
-  version: 13
+  version: 14
   description: Propose flags and defects over new digests in parallel groups of five, merge, gate, then write the flags and repair the defects side by side, and notify. digest_ids names exact digests, whatever their age.
   parameters:
     collection:
@@ -212,7 +212,7 @@ and groups it into fives. `propose_flags` runs one worker per group, four groups
 own slice against what the base already holds. `merge_candidates` deduplicates and combines across groups, which is
 where a connection no single group could see gets proposed. `check_flags` is the gate, and a rejection sends the
 merge round again rather than the proposals.
-Behind the gate two branches run side by side. `write_flags` writes the approved flags, every page pending.
+Behind the gate two branches run side by side. `write_flags` writes the approved flags, every page pending, each `about` page linked once however the drafter wrote it. A flag the base refuses is named, every other flag still lands, and then the run fails.
 `list_repairs` turns the approved defects, and every digest the index found misquoting its source, into one repair per
 source, and `repair_sources` runs one worker per repair, two at a time, each skipping, rewriting or naming its source for the
 owner. `count_owner_repairs` counts the repairs that need the owner, `notify` tells the owner when a flag was written or a

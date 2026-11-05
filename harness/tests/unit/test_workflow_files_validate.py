@@ -1155,3 +1155,41 @@ async def test_news_relate_counts_the_digests_related_and_the_links_they_gained(
 
     assert to_jsonable_python(report) == {"related": 3, "linked": 2, "edges_added": 3}
     assert called == []
+
+
+async def _write_flags(sandbox: AsyncMonty, flags: list[dict[str, object]], writes: list[dict[str, object]], *, refuse: str = "") -> object:
+    """Run the shipped write_flags program over `flags`, refusing the flag whose title is `refuse`, and keep each written frontmatter in `writes`."""
+
+    async def call(name: str, args: dict[str, object], /) -> object:
+        frontmatter = to_jsonable_python(args["payload"])["frontmatter"]
+        if frontmatter["title"] == refuse:
+            msg = "the page was refused by research's grammar: not a unit link"
+            raise ValueError(msg)
+        writes.append(frontmatter)
+        return frontmatter["id"]
+
+    runner = code_runner(sandbox, reads=await app_reads(), call=call)
+    ready = prepare(_bring_every_step(_shelf_and_workflow_glue(_steps())), await _registry(runner))
+    assert ready.report.ok, ready.report.issues
+    built = ready.registry.get("write_flags")
+    assert built is not None
+    return await built.function(approved={"flags": flags, "defects": []}, collection="research")
+
+
+async def test_write_flags_links_an_about_id_once_however_the_drafter_wrote_it(sandbox: AsyncMonty) -> None:
+    """A drafter that typed the link itself, or a label after a pipe, still gets one plain unit link per page."""
+    flag = {**_FLAGS[0], "about": ["[[talk.agents-that-plan]]", " [[talk.agents-that-plan|Agents that plan]] ", "paper.x"]}
+
+    writes: list[dict[str, object]] = []
+    written = await _write_flags(sandbox, [flag], writes)
+
+    assert written == 1
+    assert [page["about"] for page in writes] == [["[[talk.agents-that-plan]]", "[[paper.x]]"]]
+
+
+async def test_write_flags_lands_every_other_flag_before_it_fails_naming_the_refused_one(sandbox: AsyncMonty) -> None:
+    """One refused page never keeps the flags after it from landing, and the run still fails, naming it."""
+    writes: list[dict[str, object]] = []
+    with pytest.raises(Exception, match=r"wrote 1 flag, refused 1: flag\.try-planning-reminders: the page was refused"):
+        await _write_flags(sandbox, list(_FLAGS), writes, refuse="Try planning reminders")
+    assert [page["id"] for page in writes] == ["flag.watch-the-context-budget"], "the flag after the refused one still landed"
