@@ -216,7 +216,8 @@ async def test_a_lead_abandoned_again_after_its_retry_is_left_as_it_is_and_logge
 
     assert _attributions(jobs, lead_id) == ["abandoned", "abandoned"]
     assert (await sweep.tick()).retried == 0
-    assert f"lead {lead_id} of record:r1: its attribution was abandoned again after a retry, left open" in caplog.text
+    assert (await sweep.tick()).retried == 0
+    assert caplog.text.count(f"lead {lead_id} of record:r1: its attribution was abandoned again after a retry, left open") == 1
 
 
 def _a_finding_for(lead: StoredLead) -> Finding:
@@ -225,8 +226,8 @@ def _a_finding_for(lead: StoredLead) -> Finding:
     return Finding(symptom=TAXONOMY.symptom(lead.symptom), evidence=tuple(lead.spans), blames=(blame,), found_by="inspector")
 
 
-@pytest.mark.parametrize("settled_by", ["finding", "dismissed", "undecided"])
-async def test_a_lead_with_an_outcome_is_not_asked_about_again(settled_by: Literal["finding", "dismissed", "undecided"]) -> None:
+@pytest.mark.parametrize("settled_by", ["finding", "dismissed", "undecided", "invalid"])
+async def test_a_lead_with_an_outcome_is_not_asked_about_again(settled_by: Literal["finding", "dismissed", "undecided", "invalid"]) -> None:
     store = FakeLeadsAndFindings()
     jobs = MemoryJobs()
     lanes, lead_id = await _an_inspected_run_with_one_lead(store, jobs)

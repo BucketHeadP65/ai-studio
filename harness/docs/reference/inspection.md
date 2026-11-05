@@ -51,7 +51,7 @@ Event positions are assigned before commit. Reconciliation therefore covers live
 
 A run is current only when its successful final rules command matches its terminal marker and any matching final scan is complete. Pending, failed or abandoned final scans are not mistaken for completed inspection. An explicitly undecided scan is a completed attempt with an unresolved verdict, not a clean run, and is not resubmitted forever.
 
-In a run already current, the sweep looks at each lead still `open` (no finding, no dismissal, no recorded attempt) under the watch. When the lead's newest `attribute_lead` job is abandoned and it is the lead's only abandoned one, the sweep issues `AttributeLead` once more. A lead whose retry is abandoned too is left open and logged as a warning on each pass while its run stays in the window, so a stuck lead never loops. A lead whose attempt ended `undecided` or `invalid` is not asked again.
+In a run already current, the sweep looks at each lead still `open` (no finding, no dismissal, no recorded attempt) under the watch. When the lead's newest `attribute_lead` job is abandoned and it is the lead's only abandoned one, the sweep issues `AttributeLead` once more. A lead whose retry is abandoned too is left open and logged once as a warning by each running harness, so a stuck lead never loops. A lead whose attempt ended `undecided` or `invalid` is not asked again.
 
 The separate reconciliation loop uses `sweep_seconds`. Live watches use `reconcile_hours`. Explicit sweep watches retain `sweep_hours`. These windows bound automatic recovery. The CLI can request a larger historical window.
 

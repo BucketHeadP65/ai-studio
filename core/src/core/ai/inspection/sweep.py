@@ -4,12 +4,12 @@ What the dispatch cannot see (an event committed behind its position, a run that
 record) the sweep finds by time. Only a successful command naming the terminal event proves the final transcript was
 processed. Earlier or abandoned commands do not suppress it, and a live command coalesces until the next sweep. In a run
 already inspected, an open lead whose attribution job was abandoned is asked about once more, and a lead abandoned again
-after that is left and logged.
+after that is left and logged once per process.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -47,6 +47,8 @@ class Sweep:
     leads: LeadQueries
     clock: Clock = utcnow
     limit: int = 1000
+    reported: set[int] = field(default_factory=set)
+    """The leads already logged as left after their retry was abandoned, so each is logged once per process."""
 
     async def window(self, watch: Watch, hours: int, *, now: datetime | None = None, through_position: int | None = None) -> SweepPass:
         """Reconcile one watch over the terminal events of a fixed range. Newer arrivals wait for the next pass.
@@ -95,7 +97,8 @@ class Sweep:
             if lead_id in settled:
                 continue
             outcome = await self.lanes.retry_abandoned_attribution(lead_id)
-            if outcome == "left":
+            if outcome == "left" and lead_id not in self.reported:
+                self.reported.add(lead_id)
                 _logger.warning(
                     "lead {lead_id} of {source}: its attribution was abandoned again after a retry, left open",
                     lead_id=lead_id,
