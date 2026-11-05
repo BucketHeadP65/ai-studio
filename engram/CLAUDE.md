@@ -129,7 +129,10 @@ straight into the source-queue cache rather than queuing it for a later resolve)
 one `build(resources: SourceResources)` classmethod, refusing there when a resource it needs is
 absent. `scan_watch_list` resolves every watch-list row's `scanner` against the scanners the host built, drops what
 is new into the source queue, and stamps the row's last scan when the scan found at least one source. A row whose
-scan found nothing keeps its stamp, so its next scan asks for the same window again. A row whose scanner nothing serves,
+scan found nothing keeps its stamp, so its next scan asks for the same window again. A scanner answers an `EntryScan`: the
+sources, the time the scan covered up to (`covered_until`, `None` for its whole window) and, for a scan that stopped
+partway, why (`failure`). A scan that stopped partway has its sources queued and its reason reported, and the row's stamp
+moves only to `covered_until`, never back. A row whose scanner nothing serves,
 or whose scan fails, is reported against that one row and never fails the run. Its reason is one line
 (`scan_failure_reason`: the message's first line, at most 300 characters, through `without_url_secrets`, which drops the
 user part of any URL and masks as `***` the value of any query, fragment or `;` path parameter whose name holds a word of

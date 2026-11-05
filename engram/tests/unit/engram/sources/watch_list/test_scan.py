@@ -94,6 +94,38 @@ async def test_a_first_scan_that_finds_nothing_leaves_the_entry_unstamped(tmp_pa
     assert watch_list.entries()[0].last_scanned is None
 
 
+async def test_a_scan_that_stops_partway_queues_what_it_found_reports_why_and_keeps_the_stamp(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    earlier = _NOW - timedelta(days=21)
+    watch_list.stamp(_PODCAST, "someone", earlier)
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    scanner = FakeScanner(
+        entries={"someone": [_entry("https://podcast.example.org/2", 1)]},
+        covered_until={"someone": earlier},
+        stopped={"someone": "xAI answered HTTP 503 for grok-4-fast-non-reasoning"},
+    )
+
+    report = await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert [row.url for row in queue.entries()] == ["https://podcast.example.org/2"]
+    assert (report.found, report.requested) == (1, 1)
+    assert report.failed == (("podcast:someone", "xAI answered HTTP 503 for grok-4-fast-non-reasoning"),)
+    assert watch_list.entries()[0].last_scanned == earlier, "the stretch after the old stamp was never covered"
+
+
+async def test_a_scan_covering_its_window_only_partway_is_stamped_where_its_cover_ends(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    covered = _NOW - timedelta(days=7)
+    scanner = FakeScanner(entries={"someone": [_entry("https://podcast.example.org/2", 1)]}, covered_until={"someone": covered}, stopped={"someone": "503"})
+
+    await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert watch_list.entries()[0].last_scanned == covered
+
+
 async def test_a_feeds_whole_scan_lands_in_one_write_and_counts_only_the_new_rows(tmp_path: Path) -> None:
     watch_list = WatchListFile(tmp_path / "watch-list.yaml")
     watch_list.add(_BLOGS, "https://blog.example.org/entry.xml")

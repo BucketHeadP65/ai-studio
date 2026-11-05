@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from engram.sources.domain.source_item import ItemPreview, SourceItem
     from engram.sources.domain.source_queue import SourceType
     from engram.sources.domain.sync import SyncMirrors, SyncReport
-    from engram.sources.domain.watch_list import FoundSource, WatchEntry
+    from engram.sources.domain.watch_list import EntryScan, WatchEntry
 
 
 class Connector(Protocol):
@@ -228,17 +228,18 @@ class MirrorStore(Protocol):
 class Scanner(Protocol):
     """One scanner's way of listing what is new in the thing it reads."""
 
-    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> list[FoundSource]:
-        """Sources newer than `since`, in publication order (by convention newest first).
+    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
+        """Sources newer than `since`, in publication order (by convention newest first), and how far the scan covered.
 
-        A scanner caps at `entry.max_items`, keeping the head of that order.
+        A scanner caps at `entry.max_items`, keeping the head of that order. A scanner that stops partway answers the
+        sources it found, the time it covered up to and why it stopped.
 
         Args:
             entry: The watch entry to read.
             since: The entry's last scan, or `None` to answer every source.
 
         Returns:
-            The sources found.
+            The sources found and how far the scan covered.
 
         Raises:
             ScanError: The entry could not be scanned.

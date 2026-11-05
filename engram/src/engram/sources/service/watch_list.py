@@ -23,6 +23,8 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
     """Scan every entry, add unseen URLs to the queue, stamp the entries whose scan found a source, report the ones that failed.
 
     An entry whose scan finds no source keeps its last stamp, so its next scan asks for the same window again.
+    An entry whose scan stopped partway has its sources queued, its reason reported, and its stamp moved only to the
+    time the scan covered up to, never back.
     An entry's `scanner` is resolved against `scanners`, the names the host actually built. A name
     nothing there serves is that entry's own reported failure, naming what is available. Whatever
     a scanner raises is that entry's failure alone, so one unscannable entry never aborts the run,
@@ -33,7 +35,7 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
         watch_list: The knowledge base's watch-list file.
         scanners: The scanners the host built, by registered name.
         queue: The source queue new URLs land on.
-        now: The scan's time, stamped on new rows and on every entry whose scan found a source.
+        now: The scan's time, stamped on new rows and on every entry whose scan found a source and covered its window.
 
     Returns:
         How many sources were found, how many rows were added in all and by each entry, and the entries that failed.
@@ -47,17 +49,21 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
             failed.append((entry.label, f"no scanner named {entry.scanner!r} (scanners: {', '.join(sorted(scanners)) or 'none'})"))
             continue
         try:
-            sources = await scanner.scan(entry, since=entry.last_scanned)
+            scan = await scanner.scan(entry, since=entry.last_scanned)
         except Exception as error:  # noqa: BLE001 (any scanner failure is this entry's reported reason, never the run's end)
             failed.append((entry.label, scan_failure_reason(str(error)) or type(error).__name__))
             continue
+        if scan.failure:
+            failed.append((entry.label, scan_failure_reason(scan.failure)))
+        sources = scan.sources
         found += len(sources)
         added = queue.add_many([source.url for source in sources], found_via=entry.label, found_at=now)
         requested += added
         if added:
             requested_by_entry[entry.label] = requested_by_entry.get(entry.label, 0) + added
-        if sources:
-            watch_list.stamp(entry.scanner, entry.ref, now)
+        covered = now if scan.covered_until is None else min(scan.covered_until, now)
+        if sources and (entry.last_scanned is None or covered > entry.last_scanned):
+            watch_list.stamp(entry.scanner, entry.ref, covered)
     return ScanReport(found=found, requested=requested, failed=tuple(failed), requested_by_entry=requested_by_entry)
 
 

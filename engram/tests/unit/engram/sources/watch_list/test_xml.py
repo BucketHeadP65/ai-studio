@@ -49,7 +49,7 @@ async def test_a_real_rss_feed_with_a_minus_zero_pubdate_scans_against_a_stamp()
     )
     fetcher = FakePageFetcher(pages={entry.ref: xml})
 
-    entries = await XmlScanner(fetcher).scan(entry, since=_NOW - timedelta(hours=3))
+    entries = (await XmlScanner(fetcher).scan(entry, since=_NOW - timedelta(hours=3))).sources
 
     assert [entry.url for entry in entries] == ["https://blog.example.org/a"]
 
@@ -58,7 +58,7 @@ async def test_a_feed_is_fetched_at_its_own_ref() -> None:
     entry = WatchEntry(scanner=XML_SCANNER, ref="https://blog.example.org/entry.xml")
     fetcher = FakePageFetcher(pages={entry.ref: _rss(("A", "https://blog.example.org/a", None))})
 
-    entries = await XmlScanner(fetcher).scan(entry, since=None)
+    entries = (await XmlScanner(fetcher).scan(entry, since=None)).sources
 
     assert fetcher.calls == [entry.ref]
     assert [e.url for e in entries] == ["https://blog.example.org/a"]
@@ -99,7 +99,7 @@ async def test_a_hand_edited_naive_last_scanned_loads_utc_aware_and_scans_withou
     xml = _rss(("new", "https://blog.example.org/new", _NOW - timedelta(hours=1)))
     fetcher = FakePageFetcher(pages={entry.ref: xml})
 
-    entries = await XmlScanner(fetcher).scan(entry, since=entry.last_scanned)
+    entries = (await XmlScanner(fetcher).scan(entry, since=entry.last_scanned)).sources
 
     assert [entry.url for entry in entries] == ["https://blog.example.org/new"]
 
@@ -115,7 +115,7 @@ async def test_max_items_caps_from_the_head_before_the_since_filter() -> None:
     )
     fetcher = FakePageFetcher(pages={entry.ref: xml})
 
-    entries = await XmlScanner(fetcher).scan(entry, since=since)
+    entries = (await XmlScanner(fetcher).scan(entry, since=since)).sources
 
     assert entries == []
 

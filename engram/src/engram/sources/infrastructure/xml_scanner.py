@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 
 from core.net import HttpxPageFetcher
 
+from engram.sources.domain.watch_list import EntryScan
 from engram.sources.exceptions import ScanError
 from engram.sources.infrastructure.atom import parse_atom_or_rss
 from engram.sources.registry import available_scanners, installed_scanners
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from core.net import PageFetcher
 
     from engram.config import SourceResources
-    from engram.sources.domain.watch_list import FoundSource, WatchEntry
+    from engram.sources.domain.watch_list import WatchEntry
     from engram.sources.internal_contracts import Scanner
     from engram.sources.registry import ScannerSource
 
@@ -49,7 +50,7 @@ class XmlScanner:
         del resources
         return cls(HttpxPageFetcher())
 
-    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> list[FoundSource]:
+    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
         """Fetch the document at `entry.ref` and keep sources newer than `since`, at most `entry.max_items`.
 
         Args:
@@ -57,7 +58,7 @@ class XmlScanner:
             since: The entry's last scan, or `None` to keep every source.
 
         Returns:
-            The sources found.
+            The sources found, covering the whole window.
 
         Raises:
             ScanError: The fetch failed, or the document is not well-formed XML.
@@ -72,8 +73,8 @@ class XmlScanner:
             msg = f"{entry.ref}: malformed XML"
             raise ScanError(msg) from error
         if since is None:
-            return sources
-        return [source for source in sources if source.published is None or source.published > since]
+            return EntryScan(sources=sources)
+        return EntryScan(sources=[source for source in sources if source.published is None or source.published > since])
 
 
 def known_scanners(*, source: ScannerSource = installed_scanners) -> tuple[str, ...]:

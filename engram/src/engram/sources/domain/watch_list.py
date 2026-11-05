@@ -1,4 +1,4 @@
-"""What a knowledge base watches, what a scanner finds, what a scan reports, and the scan command."""
+"""What a knowledge base watches, what a scanner finds, how far one scan covered, what a scan reports, and the scan command."""
 
 from __future__ import annotations
 
@@ -50,6 +50,23 @@ class FoundSource(BaseModel):
     url: str
     title: str
     published: datetime | None = None
+
+
+class EntryScan(BaseModel):
+    """What one scan of a watch entry found, and how far it covered the entry's window.
+
+    A scan that stopped before covering its window still answers the sources it found, with the time it covered up to
+    and why it stopped.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    sources: list[FoundSource] = []
+    """The sources found, newest first."""
+    covered_until: datetime | None = None
+    """Every source published after the entry's last scan and up to this time was asked for. `None` means the scan's whole window up to its own time was."""
+    failure: str = ""
+    """Why the scan stopped before covering its window, or empty when it did not stop early."""
 
 
 REASON_LIMIT = 300
