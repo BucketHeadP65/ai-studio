@@ -1,16 +1,14 @@
 """Cadence parsing, and `Schedules`'s CRUD + due-scan + tick-stamp contract against a fake.
 
-The fake is the reference behavior: `test_schedule_store_pg.py` runs the same shaped assertions
-against `PostgresSchedules` over a real, migrated `schedules` table, so a pass here pins the
-contract the adapter must also satisfy.
+The fake is the shared one in `tests/support/fakes/schedules.py`, the reference behavior: `test_schedule_store_pg.py`
+runs the same shaped assertions against `PostgresSchedules` over a real, migrated `schedules` table, so a pass here pins
+the contract the adapter must also satisfy.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, time, timedelta
-from typing import TYPE_CHECKING
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -31,9 +29,7 @@ from harness.features.scheduling.domain import (
     parse_cadence,
     preview_fires,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from tests.support.fakes.schedules import FakeSchedules
 
 # --- parse_cadence ----------------------------------------------------------------------------
 
@@ -219,84 +215,6 @@ def test_blacked_out_until_checks_every_window_in_a_multi_window_blackout() -> N
 
 
 # --- Schedules, exercised against the fake ------------------------------------------------
-
-
-@dataclass
-class FakeSchedules:
-    """In-memory `Schedules`: a plain dict keyed by id, snapshot-on-write like the real table."""
-
-    rows: dict[UUID, Schedule] = field(default_factory=dict)
-
-    async def insert(self, schedule: Schedule) -> None:
-        self.rows[schedule.id] = schedule
-
-    async def get(self, schedule_id: UUID) -> Schedule | None:
-        return self.rows.get(schedule_id)
-
-    async def list_all(self) -> list[Schedule]:
-        return list(self.rows.values())
-
-    async def update(self, schedule_id: UUID, changes: ScheduleUpdate) -> bool:
-        current = self.rows.get(schedule_id)
-        if current is None:
-            return False
-        fields = {
-            "workflow_id": changes.workflow_id,
-            "arguments": changes.arguments,
-            "cadence": changes.cadence,
-            "enabled": changes.enabled,
-            "gate_policy": changes.gate_policy,
-            "capacity_key": changes.capacity_key,
-            "capacity_limit": changes.capacity_limit,
-            "blackout": changes.blackout,
-            "catch_up": changes.catch_up,
-        }
-        updates = {k: v for k, v in fields.items() if v is not None}
-        if changes.enabled is not None:
-            updates["paused_at"] = changes.paused_at
-        self.rows[schedule_id] = current.model_copy(update=updates)
-        return True
-
-    async def delete(self, schedule_id: UUID) -> bool:
-        return self.rows.pop(schedule_id, None) is not None
-
-    async def due(self, now: datetime) -> list[Schedule]:
-        candidates = (row for row in self.rows.values() if row.enabled and row.next_run_at is not None and row.next_run_at <= now)
-        return sorted(candidates, key=lambda row: row.next_run_at)  # type: ignore[arg-type,return-value]
-
-    async def stamp(
-        self,
-        schedule_id: UUID,
-        *,
-        last_run_at: datetime,
-        last_outcome: str,
-        next_run_at: datetime | None,
-        session_id: str,
-        cleared_page_ids: Sequence[str],
-    ) -> bool:
-        current = self.rows.get(schedule_id)
-        if current is None:
-            return False
-        cleared = set(cleared_page_ids)
-        pending = tuple(page_id for page_id in current.pending_page_ids if page_id not in cleared)
-        self.rows[schedule_id] = current.model_copy(
-            update={
-                "last_run_at": last_run_at,
-                "last_outcome": last_outcome,
-                "next_run_at": next_run_at,
-                "session_id": session_id,
-                "pending_page_ids": pending,
-            }
-        )
-        return True
-
-
-    async def stamp_held(self, schedule_id: UUID, *, last_run_at: datetime, last_outcome: str, session_id: str) -> bool:
-        current = self.rows.get(schedule_id)
-        if current is None:
-            return False
-        self.rows[schedule_id] = current.model_copy(update={"last_run_at": last_run_at, "last_outcome": last_outcome, "session_id": session_id})
-        return True
 
 
 def _schedule(**overrides: object) -> Schedule:

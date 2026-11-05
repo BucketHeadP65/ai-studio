@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from harness.features.scheduling.domain import Armed
 
@@ -26,6 +27,9 @@ class FakeSchedules:
     """Every event id `arm` recorded, standing in for `coordination.event_deliveries`."""
     received_index: set[UUID] = field(default_factory=set)
     """Every event id `arm_with_pages` recorded, standing in for `coordination.event_deliveries` under the on-index subscriber."""
+    index_after_due: tuple[UUID, datetime, tuple[str, ...]] | None = None
+    """An index the next `due` lands once it has read the due rows, the way one arrives while a fire is held: the schedule it
+    arms, the fire it gives and its changed pages. Cleared once landed."""
 
     async def insert(self, schedule: Schedule) -> None:
         self.rows[schedule.id] = schedule
@@ -75,7 +79,12 @@ class FakeSchedules:
         candidates = [
             (row.next_run_at, row) for row in self.rows.values() if row.enabled and row.next_run_at is not None and row.next_run_at <= now
         ]
-        return [row for _, row in sorted(candidates, key=lambda pair: pair[0])]
+        rows = [row for _, row in sorted(candidates, key=lambda pair: pair[0])]
+        if self.index_after_due is not None:
+            schedule_id, at, page_ids = self.index_after_due
+            self.index_after_due = None
+            await self.arm_with_pages({schedule_id: at}, event_id=uuid4(), page_ids=page_ids)
+        return rows
 
     async def stamp(
         self,

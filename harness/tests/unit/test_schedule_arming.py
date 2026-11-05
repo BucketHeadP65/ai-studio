@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -23,11 +22,8 @@ from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _
 
 if TYPE_CHECKING:
     from pathlib import Path
-    from uuid import UUID
 
     from core.ai.workflows.contracts import StepRegistry, Workflow
-
-    from harness.features.scheduling.domain import Schedule
 
 T0 = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -316,22 +312,6 @@ async def test_a_blackout_keeps_the_arm_without_catch_up(cadence: str, registry:
     assert held.next_run_at == T0
 
 
-@dataclass
-class _IndexedDuringTheFire(FakeSchedules):
-    """A store an index arms right after a tick reads the due schedules, between the fire's read and its stamp."""
-
-    arming: tuple[UUID, datetime] | None = None
-    """The schedule the next `due` arms once it has read the due rows, and the fire the index gives it. Cleared once used."""
-
-    async def due(self, now: datetime) -> list[Schedule]:
-        rows = await super().due(now)
-        if self.arming is not None:
-            schedule_id, at = self.arming
-            self.arming = None
-            await self.arm_with_pages({schedule_id: at}, event_id=uuid4(), page_ids=["note.late"])
-        return rows
-
-
 def _register_slow_pages(registry: StepRegistry, hold: asyncio.Event) -> Workflow:
     """Register a workflow taking the changed pages whose one step blocks on `hold`, so its run stays live until released."""
 
@@ -353,7 +333,7 @@ async def test_a_held_fire_keeps_the_fire_an_index_set_while_it_was_held(hold_ki
     hold = asyncio.Event()
     store = FakeWorkflowStore(specs={"wf-hold": _register_slow_step(registry, hold), "wf-pages": _register_slow_pages(registry, hold)})
     pool = SessionPool(_runtime(registry, store))
-    schedules = _IndexedDuringTheFire()
+    schedules = FakeSchedules()
     scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
     run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
     settings: dict[str, object] = {"workflow_id": "wf-pages", "arguments": {}, "cadence": "on index notes quiet 10m"}
@@ -372,7 +352,7 @@ async def test_a_held_fire_keeps_the_fire_an_index_set_while_it_was_held(hold_ki
         waiting = _schedule(**settings, blackout="11:00-13:00", next_run_at=T0, pending_page_ids=("note.a",))
         await schedules.insert(waiting)
     later = T0 + timedelta(minutes=10)
-    schedules.arming = (waiting.id, later)
+    schedules.index_after_due = (waiting.id, later, ("note.late",))
 
     await scheduler.tick(pool, run=run, now=T0)
 
