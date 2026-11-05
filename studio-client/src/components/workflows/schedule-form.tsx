@@ -474,7 +474,6 @@ export function ScheduleForm(props: ScheduleFormProps) {
   }
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: jsdom in tests doesn't implement <dialog>.showModal, matches the shared ConfirmDialog.
     <div
       role="dialog"
       aria-modal="true"
