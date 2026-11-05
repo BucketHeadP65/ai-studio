@@ -369,6 +369,20 @@ class TestWatchListOnDryRun:
         assert len(scanner.since) == 2
         assert "Scanned the watch list" in result.stdout
 
+    def test_a_failed_row_is_printed_without_the_secrets_its_url_carries(self) -> None:
+        root = Path.cwd()
+        (root / "_meta").mkdir(exist_ok=True)
+        ref = "https://user:pw@feeds.example.org/me.atom?token=s3cr3t"
+        container = self._container(root, FakeScanner(errors={ref: "503"}))
+        WatchListFile(root / WATCH_LIST_PATH).add("xml", ref)
+
+        result = runner.invoke(app, ["sync"], obj=lambda: container)
+
+        assert result.exit_code == 0, result.stdout
+        assert "  FAILED xml:https://feeds.example.org/me.atom: 503" in result.stdout
+        assert "s3cr3t" not in result.stdout
+        assert "pw@" not in result.stdout
+
 
 class TestDispatch:
     def test_flags_are_plumbed_to_the_command(self):

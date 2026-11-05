@@ -78,7 +78,16 @@ from engram.retrieval.contracts import (
 from engram.retrieval.contracts import policy_instructions as read_policy_instructions
 from engram.retrieval.infrastructure.embedded import slug_only_stamp
 from engram.retrieval.infrastructure.mcp_server import PROPOSE_SEEDS, create_mcp_server
-from engram.sources.contracts import ScanReport, ScanWatchList, ScanWatchListHandler, SyncMirrors, SyncReport, WatchEntry, WatchListFile
+from engram.sources.contracts import (
+    ScanReport,
+    ScanWatchList,
+    ScanWatchListHandler,
+    SyncMirrors,
+    SyncReport,
+    WatchEntry,
+    WatchListFile,
+    without_url_secrets,
+)
 from pydantic import ValidationError
 from sqlalchemy import NullPool, text
 from sqlalchemy.exc import DBAPIError
@@ -281,10 +290,10 @@ async def _scan_watch_list(bus: MessageBus) -> ScanReport:
 
 
 def _print_scan_report(report: ScanReport) -> None:
-    """Echo the human-readable scan summary, printed before the sync summary."""
+    """Echo the human-readable scan summary, printed before the sync summary, each failed entry's label without URL secrets."""
     typer.echo(f"Scanned the watch list: {report.found} found, {report.requested} requested, {len(report.failed)} failed")
     for label, reason in report.failed:
-        typer.echo(f"  FAILED {label}: {reason}")
+        typer.echo(f"  FAILED {without_url_secrets(label)}: {reason}")
 
 
 def _print_watch_list_rows(plan: _WatchListPlan) -> None:

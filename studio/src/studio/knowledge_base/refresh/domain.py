@@ -71,7 +71,10 @@ class RefreshCounts(BaseModel):
     sources_created: int = 0
     """The mirrors the sync created."""
     requested_by_entry: dict[str, int] = Field(default_factory=dict)
-    """The rows each watch-list entry added to the source queue, by the entry's label. An entry that added none is absent."""
+    """The rows each watch-list entry added to the source queue, by the entry's label without URL secrets.
+
+    An entry that added none is absent.
+    """
     created_by_connector: dict[str, int] = Field(default_factory=dict)
     """The mirrors each connector created, by connector name. A connector that created none is absent."""
 
@@ -97,7 +100,7 @@ class ScanFailure(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     entry: str
-    """The entry's label, `<scanner>:<ref>`."""
+    """The entry's label, `<scanner>:<ref>`, with no user part, query or fragment on a URL in it."""
     reason: str
     """One line saying why the scan failed, as the scan recorded it."""
 

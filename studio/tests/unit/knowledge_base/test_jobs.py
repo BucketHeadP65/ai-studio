@@ -14,6 +14,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+import httpx
 import pytest
 
 from core.cqrs.contracts import JobContext, MemoryOutbox, MessageBus
@@ -34,6 +35,7 @@ from studio.knowledge_base.refresh.contracts import (
     RefreshStarted,
     ScanFailure,
 )
+from studio.knowledge_base.refresh.infrastructure.harness_forward import HarnessRefreshForward
 from studio.knowledge_base.settings import AzureOpenAiSettings, DatabaseSettings, IngestionSettings, KnowledgeBaseSettings
 
 if TYPE_CHECKING:
@@ -499,3 +501,33 @@ class TestScanFailures:
 
         assert RefreshResult.model_validate_json(returned).scan_failures == ()
         assert caplog.records == []
+
+    async def test_no_url_secret_of_a_watch_entry_reaches_the_record_the_log_or_the_forwarded_counts(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        knowledge_base_path = _youtube_knowledge_base(tmp_path / "tube", "tube")
+        (knowledge_base_path / "_meta" / "watch-list.yaml").write_text("[]", encoding="utf-8")
+        settings_path = _register(tmp_path, "tube", knowledge_base_path)
+        failing = "xml:https://user:pw@feeds.example.org/me.atom?token=s3cr3t"
+        finding = "xml:https://user:pw@feeds.example.org/news.atom?token=s3cr3t"
+        reason = "Client error '401 Unauthorized' for url 'https://feeds.example.org/me.atom'"
+        report = ScanReport(found=2, requested=2, failed=((failing, reason),), requested_by_entry={finding: 2})
+        container = FakeRunContainer(bus=FakeMessageBus(scan_report=report))
+        posted: list[httpx.Request] = []
+
+        def answer(request: httpx.Request) -> httpx.Response:
+            posted.append(request)
+            return httpx.Response(200, json={})
+
+        with caplog.at_level(logging.WARNING, logger="studio.knowledge_base.refresh.service"):
+            returned = await _job(settings_path, container)(RefreshJob(knowledge_base="tube"), CONTEXT)
+        _, completed = container.bus.outbox.appended
+        await HarnessRefreshForward("http://harness.test", transport=httpx.MockTransport(answer))(completed)
+
+        result = RefreshResult.model_validate_json(returned)
+        assert result.scan_failures == (ScanFailure(entry="xml:https://feeds.example.org/me.atom", reason=reason),)
+        assert result.counts.requested_by_entry == {"xml:https://feeds.example.org/news.atom": 2}
+        (request,) = posted
+        for carrier in (returned, completed.model_dump_json(), caplog.text, request.content.decode()):
+            assert "pw@" not in carrier
+            assert "s3cr3t" not in carrier

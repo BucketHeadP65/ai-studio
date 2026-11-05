@@ -17,7 +17,7 @@ from core.observability import get_logger
 from engram.indexing.contracts import IndexKnowledgeBase, IndexReport
 from engram.init.contracts import assert_schema_at_head
 from engram.kb import contracts as kb
-from engram.sources.contracts import ScanReport, ScanWatchList, SyncError, SyncMirrors, SyncReport
+from engram.sources.contracts import ScanReport, ScanWatchList, SyncError, SyncMirrors, SyncReport, without_url_secrets
 
 from studio.knowledge_base.refresh.domain import (
     REFRESH_KIND,
@@ -86,8 +86,8 @@ def _sync_summary(report: SyncReport) -> str:
 
 
 def _scan_failures_of(scan: ScanReport, knowledge_base: str) -> tuple[ScanFailure, ...]:
-    """The watch-list entries `scan` could not read, each logged as one warning naming the entry and its reason."""
-    failures = tuple(ScanFailure(entry=label, reason=reason) for label, reason in scan.failed)
+    """The watch-list entries `scan` could not read, labels without URL secrets, each logged as one warning with its reason."""
+    failures = tuple(ScanFailure(entry=without_url_secrets(label), reason=reason) for label, reason in scan.failed)
     for failure in failures:
         _logger.warning(
             "watch entry {entry} of knowledge base {knowledge_base!r} could not be scanned: {reason}",
@@ -99,11 +99,13 @@ def _scan_failures_of(scan: ScanReport, knowledge_base: str) -> tuple[ScanFailur
 
 
 def _counts_of(scan: ScanReport | None, sync: SyncReport) -> RefreshCounts:
-    """What one attempt's scan and sync brought in."""
+    """What one attempt's scan and sync brought in, each entry's label without URL secrets and labels that then match summed."""
+    requested_by_entry: dict[str, int] = {}
+    for label, count in scan.requested_by_entry.items() if scan is not None else ():
+        shown = without_url_secrets(label)
+        requested_by_entry[shown] = requested_by_entry.get(shown, 0) + count
     return RefreshCounts(
-        sources_created=sync.created,
-        requested_by_entry=dict(scan.requested_by_entry) if scan is not None else {},
-        created_by_connector=dict(sync.created_by_connector),
+        sources_created=sync.created, requested_by_entry=requested_by_entry, created_by_connector=dict(sync.created_by_connector)
     )
 
 
