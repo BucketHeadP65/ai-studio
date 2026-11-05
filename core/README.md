@@ -27,8 +27,9 @@ Outside code imports a slice through its `contracts` module, such as `core.ai.wo
 
 The workflow engine ships behind two extras, and `core.ai` never imports it on its own:
 
-- `core[workflows]` adds `pydantic-graph` and `pydantic-handlebars` for the vocabulary, the validator, the builder and
-  the adapters that need no server.
+- `core[workflows]` adds `pydantic-handlebars` for the vocabulary, the validator, the builder and the adapters that
+  need no server. The engine's graph library, `pydantic-graph`, is a main dependency, resolved to the patched copy in
+  `vendor/pydantic-graph`.
 - `core[workflows-temporal]` adds the Temporal SDK for the Temporal adapter as well.
 
 ## Develop

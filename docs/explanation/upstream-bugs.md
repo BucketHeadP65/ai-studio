@@ -479,7 +479,11 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   and `_is_fork_run_completed` on the real graph, then cut down to the graph below.
 - **What we did:** the stance refresh avoids the shape. `write_stances` reads `merge_work` instead of `list_changes`.
   `merge_work` already sits upstream of the rewrite judge `write_stances` waits on, so no join of `write_stances` holds
-  an item while `merge_work`'s join is finalized (`cafa27f9`).
+  an item while `merge_work`'s join is finalized (`cafa27f9`). Every Python project now runs pydantic-graph from
+  `vendor/pydantic-graph/`, which is 2.66.0 with pydantic/pydantic-ai#10426 applied. core declares it with an editable
+  path source, and every other project picks it up through core. `core/tests/unit/workflows/test_join_waits_for_every_branch.py`
+  runs the repro below and fails on stock 2.66.0. The folder goes with the first pydantic-graph release that contains the
+  pull request, and every project then points back at PyPI (the folder's README lists the steps).
 - **Upstream state:** present in 2.66.0, whose per-result loop still takes one snapshot of the active tasks for every
   join it finalizes (checked 2026-11-05). Open as pydantic/pydantic-ai#9629, fix in PR pydantic/pydantic-ai#10426. Checking
   each finalized join again against the live tasks plus the tasks this pass already dispatched, as the sweep does, fixes
@@ -650,7 +654,10 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Found:** 2026-11-05, chasing an intermittent `KeyError` in the stance refresh tests. Under load, three or four
   copies of the stance test files at once, 3 of 19 runs fired early, every one from a case whose rewrite map was empty.
   A tracer around `_get_completed_fork_runs` caught it, then it was cut down to the graph below.
-- **What we did:** nothing in the code yet. The fix is upstream and unreleased.
+- **What we did:** every Python project runs pydantic-graph from `vendor/pydantic-graph/`, which is 2.66.0 with
+  pydantic/pydantic-ai#10426 applied, the same copy as UB-17's. `core/tests/unit/workflows/test_join_waits_for_every_branch.py`
+  runs the repro below and fails on stock 2.66.0. The folder goes with the first pydantic-graph release that contains the
+  pull request, and every project then points back at PyPI.
 - **Upstream state:** present in 2.66.0. The repro below passes on pydantic/pydantic-ai#10426 applied to 2.66.0 (its
   import line merged by hand), which finalizes each join mid-run against the tasks running right now (checked
   2026-11-05). Under load, four copies of the three stance test files at once for five rounds, stock 2.66.0 failed 5 of

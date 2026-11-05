@@ -41,7 +41,7 @@ scripts/stack/stack.sh uninstall
 ## Working with it
 
 - Frontend changes are live: AI Factory Studio is the dev server, saving a file hot-reloads.
-- Backend changes (harness, studio, engram, core, connectors, the vendored fork, migrations) need
+- Backend changes (harness, studio, engram, core, connectors, `vendor/pydantic-graph`, migrations) need
   `stack.sh restart harness studio-api`. The running app keeps the old code until then.
 - `harness.sh` exports no environment. Every knob has a committed default in
   `harness/config/harness_settings.json`, and an export overrides one field of one section
