@@ -233,7 +233,7 @@ TD-46 onward came from the close of the code standard refactor on
   part vectors, and search has to fold a part's hit back onto its section.
 - **Found:** 2026-09-30, in the review of the change that splits a raw mirror's long section within the embed budget.
 
-## TD-81. A section body loses everything between two double percent signs, fenced text included
+## TD-82. A section body loses everything between two double percent signs, fenced text included
 
 - **Where:** `engram/src/engram/kb/domain/parser.py`, `_strip_obsidian_comments` (its regex `_OBSIDIAN_INLINE_COMMENT_RE`
   matches from one double percent sign to the next across lines), applied to every section body by `_section_body`.
