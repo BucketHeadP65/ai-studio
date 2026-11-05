@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge dropped, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 11
+version: 12
 step:
   name: write_stance_flags
   source: |
@@ -100,14 +100,14 @@ step:
         written.append(flag_id)
     removing = []
     for duplicate in grouped["duplicates"]:
-        removing.append({"flag_id": duplicate["flag_id"], "title": duplicate["title"], "reason": "The grouping found it the same idea as " + duplicate["kept"] + "."})
+        removing.append({"flag_id": duplicate["flag_id"], "title": duplicate["title"], "reason": "It repeats the idea of " + duplicate["kept"] + "."})
     for dropped in listed["dropped"]:
         if not dropped["dropped_by_judge"]:
             continue
         stance_id = dropped["stance_id"]
         name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
         flag_id = "flag.stance-" + name
-        reason = "The newest judge dropped its proposal: " + " ".join(dropped["reasons"])
+        reason = dropped["reasons"][0]
         if not flags_listed:
             removing.append({"flag_id": flag_id, "title": dropped["title"], "reason": reason, "unlisted": True})
         elif indexed.get(flag_id) == "pending":
@@ -134,7 +134,8 @@ step:
             refused_removals.append({"flag_id": flag_id, "title": title, "reason": "a flag of kind " + str(front.get("flag_kind")) + " holds this id, so it was left as it is"})
             continue
         if front.get("status") != "pending":
-            refused_removals.append({"flag_id": flag_id, "title": title, "reason": "its file is at " + str(front.get("status")) + ", not pending, so it was left as it is"})
+            if flag_id not in kept_decided:
+                kept_decided.append(flag_id)
             continue
         try:
             await remove_undecided_page(knowledge_base=collection, page_id=flag_id, reason=entry["reason"])
@@ -161,7 +162,7 @@ step:
           items: {type: string}
         kept_decided:
           type: array
-          description: The flag ids the owner already accepted, dismissed or completed, which were left as they are.
+          description: The flag ids the owner already accepted, dismissed or completed, which were left as they are, whether the run would have written them or removed them.
           items: {type: string}
         failed:
           type: array
@@ -276,7 +277,9 @@ findings from fewer than two digests. A drop the judge never read keeps its flag
 does not list at `pending` has nothing to remove for a dropped proposal. Before each removal it reads the flag's file
 with `read_page` and removes it with `remove_undecided_page` only while that file is a stance flag at `pending`, so a
 flag the owner decided is never removed, nor one this run wrote. Each removal is caught on its own. Every removed flag
-is answered in `removed` with its id, its title, the path its file was read from and why, since the base keeps no
-copy. Every flag it asked to remove and left as it is, because `read_page` refused it, another kind holds its id, its
-file is not at `pending`, `remove_undecided_page` refused it, or the flags could not be listed, is answered in
-`refused_removals` with why, for the step after it to fail the run on.
+is answered in `removed` with its id, its title, the path its file was read from and why, in one sentence that is also
+the reason `remove_undecided_page` is given: "It repeats the idea of" the flag a group keeps, or the judge's verdict.
+A flag whose file is no longer at `pending`, one the owner decided before the index caught up, is left as it is and
+answered in `kept_decided`, as a decided flag it would have written over is. Every other flag it asked to remove and
+left as it is, because `read_page` refused it, another kind holds its id, `remove_undecided_page` refused it, or the
+flags could not be listed, is answered in `refused_removals` with why, for the step after it to fail the run on.

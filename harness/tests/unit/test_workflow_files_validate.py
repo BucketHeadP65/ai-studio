@@ -619,7 +619,7 @@ _TOOL_ANSWERS: dict[str, object] = {
         "page_type": "flag",
         "title": "Old",
         "path": "Wiki/Flags/stance-old.md",
-        "reason": "The grouping found it the same idea as flag.stance-y.",
+        "reason": "It repeats the idea of flag.stance-y.",
         "indexed": "indexed clean",
     },
     "list_pages": [
@@ -861,7 +861,7 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
                 "flag_id": "flag.stance-old",
                 "title": "Old",
                 "path": "Wiki/Flags/stance-old.md",
-                "reason": "The grouping found it the same idea as flag.stance-y.",
+                "reason": "It repeats the idea of flag.stance-y.",
             }
         ],
         "refused_removals": [],
@@ -874,7 +874,7 @@ def _assert_stance_flag_program(ran: dict[str, object], called_by_step: _CalledB
     assert called_by_step["write_stance_flags"][4][1] == {
         "knowledge_base": "research",
         "page_id": "flag.stance-old",
-        "reason": "The grouping found it the same idea as flag.stance-y.",
+        "reason": "It repeats the idea of flag.stance-y.",
     }
     assert called_by_step["write_stance_flags"][0][1] == {"knowledge_base": "research", "page_type": "flag", "limit": 10000}
     assert called_by_step["write_stance_flags"][1][1] == {"knowledge_base": "research", "path": "Wiki/Flags/stance-y.md"}

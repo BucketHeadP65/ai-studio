@@ -36,7 +36,8 @@ backing worker and the rewrite judge. Last, one flag per idea: a proposal its ju
 listed stance, removes its pending flag, while a drop for the code checks, an unread or missing digest, a failed worker
 or judge, or a claim the judge left unanswered keeps it. A proposal the grouping call puts with a pending flag takes that flag's id and
 title and writes it in place, two proposals of one idea are backed once, and one proposal with two pending flags of
-its idea keeps the first and removes the other. A decided flag the grouping names is never removed, a group naming an
+its idea keeps the first and removes the other. A flag the owner decided before the index caught up is never removed
+and is named while the run succeeds, a group naming an
 id outside its input, an id twice or no proposal is refused and named, a refused removal fails the run after the rest
 lands with the writer's answer still recorded, flags that cannot be listed fail the run when a judge drop asked for a
 removal, and a failed grouping call leaves every proposal alone and says why.
@@ -2431,9 +2432,10 @@ async def test_a_proposal_its_judge_drops_removes_its_pending_flag(
             "flag_id": "flag.stance-agent-memory",
             "title": "Agent memory",
             "path": "Wiki/Flags/stance-agent-memory.md",
-            "reason": "The newest judge dropped its proposal: " + " ".join(reasons),
+            "reason": reasons[0],
         }
     ], "the card names the removed page by its id, title and path, since the base keeps no copy"
+    assert [removal["reason"] for removal in bases.removals] == [reasons[0]], "the tool is given the verdict, one sentence"
     assert result["refused_removals"] == []
     assert bases.flag_writes == []
     assert scripted.calls.count("group_proposals") == 0, "one proposal and no other pending flag leave nothing to group"
@@ -2570,28 +2572,44 @@ async def test_one_proposal_and_two_pending_flags_of_its_idea_keep_one_flag_and_
             "flag_id": "flag.stance-agent-recall",
             "title": "Agent recall",
             "path": "Wiki/Flags/stance-agent-recall.md",
-            "reason": "The grouping found it the same idea as flag.stance-memory-for-agents.",
+            "reason": "It repeats the idea of flag.stance-memory-for-agents.",
         }
     ]
+    assert [removal["reason"] for removal in bases.removals] == ["It repeats the idea of flag.stance-memory-for-agents."]
     assert set(bases.flags) == {"flag.stance-memory-for-agents", "flag.stance-reranking"}, "a flag of another idea is left alone"
-    assert _outcome(state) == "noop"
+    assert result["refused_removals"] == []
+    assert to_jsonable_python(state.values["check_removals"]) == result, "with nothing refused, the writer's answer passes through"
+    assert _outcome(state) == "noop", "and the run succeeds"
 
 
-async def test_a_decided_flag_the_grouping_names_is_refused_and_never_removed(sandbox: AsyncMonty) -> None:
+@pytest.mark.parametrize(
+    ("judge", "grouped", "written"),
+    [
+        pytest.param(
+            _every_finding_bears,
+            ["flag.stance-memory-for-agents", "stance.agent-memory", "flag.stance-agent-recall"],
+            ["flag.stance-memory-for-agents"],
+            id="named-by-the-grouping",
+        ),
+        pytest.param(_calls_it_a_repeat, ["stance.agent-memory", "flag.stance-agent-recall"], [], id="kept-for-a-proposal-its-judge-dropped"),
+    ],
+)
+async def test_a_flag_the_owner_decided_before_the_index_caught_up_is_left_alone_and_named(
+    sandbox: AsyncMonty, judge: Callable[[Backing], dict[str, object]], grouped: list[str], written: list[str]
+) -> None:
     flags = {"flag.stance-agent-recall": FlagFile(status="accepted", title="Agent recall"), "flag.stance-memory-for-agents": FlagFile(title="Memory for agents")}
-    bases = _flag_bases(flags=flags, indexed_status={"flag.stance-agent-recall": "pending"})
-    grouped = ["flag.stance-memory-for-agents", "stance.agent-memory", "flag.stance-agent-recall"]
-    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped))
+    bases = _flag_bases(flags=dict(flags), indexed_status={"flag.stance-agent-recall": "pending"})
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), same_ideas=_grouping(grouped), judge=judge)
 
-    state = await _run(sandbox, bases, scripted, changed="adr-1", raises=RuntimeError)
+    state = await _run(sandbox, bases, scripted, changed="adr-1")
 
     assert bases.removals == [], "the flag's own file says the owner decided it, so removal is never asked"
     assert bases.flags["flag.stance-agent-recall"].status == "accepted"
     result = _value(state, "write_stance_flags")
-    assert result["written"] == ["flag.stance-memory-for-agents"], "the rest still lands"
-    assert result["refused_removals"] == [
-        {"flag_id": "flag.stance-agent-recall", "title": "Agent recall", "reason": "its file is at accepted, not pending, so it was left as it is"}
-    ]
+    assert result["written"] == written
+    assert result["kept_decided"] == ["flag.stance-agent-recall"], "it is named with the flags the owner decided"
+    assert result["refused_removals"] == [], "the owner's decision is no refusal"
+    assert _outcome(state) == "noop", "and the run succeeds"
 
 
 @pytest.mark.parametrize(

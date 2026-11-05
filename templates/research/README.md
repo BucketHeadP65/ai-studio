@@ -50,9 +50,9 @@ from this template can register its own vocabulary for any research domain.
   flag is written, the run removes each pending flag a group found the same idea as the flag it kept, and the pending
   flag of each proposal its judge dropped, as a repeat of a listed stance or with findings that bear from fewer than
   two digests, reading each file first. A drop the judge never read, such as a failed worker or a digest the base
-  could not read, keeps the flag. The base
-  keeps no copy of a removed file, so the card names each by its id, title and path, and a refused removal fails the
-  run once everything else has landed. A proposal
+  could not read, keeps the flag, and so does a file you decided before the base was indexed again, which is named
+  with the flags you decided. The base keeps no copy of a removed file, so the card names each by its id, title and
+  path, and a refused removal fails the run once everything else has landed. A proposal
   whose worker changed its id or title, or added or left out a page, is left off. A run whose proposals fail keeps its
   rewrites: each is written to its file at once, and a knowledge base indexed once per run indexes them when the run
   ends. Under the opt-in Temporal engine writes are never held for the run, so even such a knowledge base indexes

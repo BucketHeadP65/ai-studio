@@ -13,7 +13,7 @@ uses:
   - st.back_proposal.v5
   - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v11
+  - st.write_stance_flags.v12
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as
@@ -1337,11 +1337,14 @@ flags, is the run's output.
 Once every flag is written, `write_stance_flags` removes, each in its own try, every pending flag `apply_groups` named
 under `duplicates`, and the pending flag of every proposal dropped as `dropped_by_judge` that the index lists at `pending`.
 It reads each one's file with `read_page` first and removes it with `remove_undecided_page` only while that file is a
-stance flag at `pending`, so a flag the owner decided is never removed, and neither is one this run wrote. The base
-keeps no copy of a removed file, so `removed` names each by its id, its title, the path it was read from and why, and
-the card shows it. Every flag it asked to remove and left as it is is named in `refused_removals` with why.
-`check_removals` passes the answer through as the run's output, and when `refused_removals` names any flag it fails the
-run after everything else landed, its error naming each refusal and each removed flag with its path.
+stance flag at `pending`, so a flag the owner decided is never removed, and neither is one this run wrote. A flag the
+index still lists at `pending` whose file the owner decided is left as it is and named in `kept_decided`. The base
+keeps no copy of a removed file, so `removed` names each by its id, its title, the path it was read from and why, in
+the one sentence `remove_undecided_page` was given, and the card shows it. Every other flag it asked to remove and
+left as it is is named in `refused_removals` with why.
+`check_removals` passes the answer through as the run's output, so the run succeeds, unless `refused_removals` names a
+flag. Then it fails the run after everything else landed, its error naming each refusal and each removed flag with its
+path.
 
 A run whose backing map or judge map aborts fails after every rewrite is written. Each rewrite is written to its file
 at once. A knowledge base indexed on each write indexes it then. One indexed once per run indexes the run's writes
