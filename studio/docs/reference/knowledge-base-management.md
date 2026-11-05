@@ -265,9 +265,9 @@ read, the Studio shows the refresh history only. `GET /api/knowledge-bases/{name
 for that key off the jobs table and projects the finished ones onto `RefreshRun` (`studio/src/studio/knowledge_base/refresh/domain.py`),
 answering the last 20 as `{refresh_runs}`, newest first. A record carries `started_at`, `finished_at`, `outcome`, `detail`, `trigger`, `counts` and `scan_failures`, timestamps RFC 3339 UTC. A `done` job reads as
 `outcome` `ok` carrying the handler's one-sentence detail (what the scan and the sync did, then pages indexed and embedded), or as
-`outcome` `partial` when its scan could not read a watch-list entry, or read one only partway. An `abandoned` job reads as `outcome` `failed` carrying its last error
+`outcome` `partial` when its scan could not read a watch-list entry, or stopped partway through one on a failure. An `abandoned` job reads as `outcome` `failed` carrying its last error
 verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it is over.
-`scan_failures` lists each watch-list entry the run could not scan, or scanned only partway, as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
+`scan_failures` lists each watch-list entry the run could not scan, or whose scan stopped partway on a failure, as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
 `reason` is one line, the scanner's message cut to its first line and to at most 300 characters, with every URL in it cut the way a label
 is (below). The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
 cut, so an account out of credits reads `xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits
