@@ -456,3 +456,26 @@ async def test_an_oversized_return_an_earlier_turn_recorded_is_filed_by_the_turn
     assert [(row.source, row.spans) for row in store.leads] == [
         ("record:turn-2", [Span(step=0, message=2, part=0), Span(step=0, message=5, part=0)])
     ]
+
+
+async def test_one_run_inspected_at_two_lengths_files_one_overflow_lead() -> None:
+    first = Step(messages=(question(), call("c1"), result("c1", "x" * 500)), ordinals=(0, 1, 2))
+    shrunk = Step(messages=(question(), answer("Short version.")), ordinals=(0, 3))
+    compacted = ModelResponse(parts=[CompactionPart(content="summary")], timestamp=AT)
+    later = Step(messages=(question(), answer("Short version."), compacted), ordinals=(0, 3, 4))
+    opens = Opens(run=Transcript(source="record:run", steps=(first, shrunk)))
+    store = FakeLeadsAndFindings()
+    watches = {"chat": Watch(name="chat", rules=("result_overflowed_context",), inspector="never")}
+    handler = InspectRunHandler(
+        watches=watches,
+        facts=ToolFacts(result_cap_chars=100),
+        loaders=TranscriptLoaders(by_key={"record": opens}),
+        store=store,
+        queue=FakeLeadQueue(),
+    )
+
+    await handler(InspectRun(source="record:run", watch="chat"), CONTEXT)
+    opens.by_locator["run"] = Transcript(source="record:run", steps=(first, shrunk, later))
+    await handler(InspectRun(source="record:run", watch="chat"), CONTEXT)
+
+    assert [row.spans for row in store.leads] == [[Span(step=0, message=2, part=0), Span(step=1, message=1, part=0)]]

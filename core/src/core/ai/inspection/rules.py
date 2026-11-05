@@ -223,7 +223,8 @@ class DuplicateCall(Evaluator[str, Inspected, None]):
 class ResultOverflowedContext(Evaluator[str, Inspected, None]):
     """A return over the cap, followed by a compaction or by a step that holds less than the one before.
 
-    The lead cites the return, then the compaction part or the first message the shrunk step added when there is one.
+    The lead cites the return, then whichever came first: the compaction part, or the first message the first shrunk step
+    added. A run read again after more steps cites the same spans.
     """
 
     cap_chars: int | None = None
@@ -292,19 +293,24 @@ def _compaction_after(transcript: Transcript, span: Span) -> bool:
 
 
 def _where_it_shrank(transcript: Transcript, span: Span) -> tuple[Span, ...]:
-    """The first compaction part after `span`, else the first message a later shrunk step added, or nothing to cite."""
-    for at, message in transcript.recorded():
-        for part_index, part in enumerate(message.parts):
-            here = Span(step=at.step, message=at.message, part=part_index)
-            if isinstance(part, CompactionPart) and _before(span, here):
-                return (here,)
+    """Where the history first shrank after `span`: an earlier compaction part, else the first shrunk step's first new message."""
+    compaction = next(
+        (
+            Span(step=at.step, message=at.message, part=index)
+            for at, message in transcript.recorded()
+            for index, part in enumerate(message.parts)
+            if isinstance(part, CompactionPart) and _before(span, Span(step=at.step, message=at.message, part=index))
+        ),
+        None,
+    )
     steps = transcript.steps
-    for index in range(span.step + 1, len(steps)):
-        if len(steps[index].messages) < len(steps[index - 1].messages):
-            added = next((at for at, _ in transcript.recorded() if at.step == index), None)
-            if added is not None:
-                return (added,)
-    return ()
+    shrunk = next(
+        (index for index in range(span.step + 1, len(steps)) if len(steps[index].messages) < len(steps[index - 1].messages)), None
+    )
+    if shrunk is None or (compaction is not None and compaction.step < shrunk):
+        return () if compaction is None else (compaction,)
+    added = next((at for at, _ in transcript.recorded() if at.step == shrunk), None)
+    return () if added is None else (added,)
 
 
 def _a_step_shrank(transcript: Transcript, span: Span) -> bool:
