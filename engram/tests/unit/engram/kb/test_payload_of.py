@@ -327,3 +327,15 @@ def test_text_before_the_h1_is_refused_naming_it() -> None:
 
     with pytest.raises(ValueError, match=r"holds text a payload cannot carry whole, first at 'An opening line\.'"):
         payload_of(text, source_path="note.md", spec=spec)
+
+
+def test_an_h1_named_like_the_claims_section_keeps_the_text_under_it() -> None:
+    spec = research_spec()
+    text = _with_title_heading(_rendered(_PAYLOAD), "# Findings\n\nWhat the talk found.\n\n## Background\n\nRecorded at a meetup.")
+
+    payload = payload_of(text, source_path="note.md", spec=spec)
+
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    assert sections[0] == {"heading": "Findings", "body": "What the talk found.\n\n## Background\n\nRecorded at a meetup.", "level": 1}
+    assert _rendered(payload) == text

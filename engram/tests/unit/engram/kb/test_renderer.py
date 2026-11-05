@@ -361,6 +361,18 @@ class TestCanonicalOrdering:
 
         assert rendered.split("---\n", 2)[2].startswith("\n# Sample\n\nAn introduction.\n\n## TL;DR\n\nshort\n\n## Approach\n")
 
+    def test_a_level_one_section_named_like_the_claims_section_never_holds_the_claims(self):
+        payload = AuthoringPayload(
+            frontmatter=_paper_frontmatter(),
+            sections=(AuthoringSection(heading="Findings", body="What the paper found.", level=1),),
+            claims=(AuthoringClaim(text="A.", loc="§1", kind="observation"),),
+            knowledge_base_schema=research_spec(),
+        )
+
+        rendered = render(payload, spec=research_spec())
+
+        assert rendered.split("---\n", 2)[2] == "\n# Findings\n\nWhat the paper found.\n\n## Findings\n\n- A. ^c1\n    - loc:: §1\n    - kind:: observation\n"
+
     def test_findings_emitted_when_claims_present_without_explicit_section(self):
         # Claims imply a Findings section even if the author didn't list one.
         payload = AuthoringPayload(

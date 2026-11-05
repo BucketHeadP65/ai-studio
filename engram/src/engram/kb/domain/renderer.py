@@ -220,7 +220,7 @@ def _carried_sections(headed: Sequence[Section], body: str, *, has_claims: bool,
         in_place = section.level != _H2_LEVEL or index > last_declared
         stays = section.canon is not None or (in_place and _renders_as_written(section, lines, spans, index))
         holder = sections[kept[-1]] if kept else None
-        can_hold = holder is not None and not (has_claims and _slug(holder.heading) == claim_section)
+        can_hold = holder is not None and not (has_claims and _holds_claims(holder.heading, holder.level, claim_section))
         if stays or not can_hold:
             kept.append(index)
     carried: list[JsonValue] = []
@@ -228,7 +228,7 @@ def _carried_sections(headed: Sequence[Section], body: str, *, has_claims: bool,
         section = sections[index]
         end = spans[kept[position + 1]][0] if position + 1 < len(kept) else len(lines)
         written = "\n".join(lines[spans[index][1] : end]).strip()
-        empty = has_claims and _slug(section.heading) == claim_section
+        empty = has_claims and _holds_claims(section.heading, section.level, claim_section)
         carried.append({"heading": section.heading, "body": "" if empty else written, "level": section.level})
     return carried
 
@@ -386,7 +386,7 @@ def _render_body(
         sections, has_claims=bool(claims), canon_order=canon_order, claim_section=claim_section, canonical_headings=canonical_headings
     )
     blocks = [
-        _render_section(heading, level, body, claims if _slug(heading) == claim_section else (), claim_grammar)
+        _render_section(heading, level, body, claims if _holds_claims(heading, level, claim_section) else (), claim_grammar)
         for heading, level, body in ordered
     ]
     return "\n" + "\n\n".join(blocks) + "\n"
@@ -402,7 +402,7 @@ def _order_sections(
 ) -> list[tuple[str, int, str]]:
     """Order sections canonically, adding an empty claims section when claims exist without one."""
     groups = _group_by_h2(sections)
-    if has_claims and claim_section is not None and not any(_slug(heading) == claim_section for (heading, _level), _children in groups):
+    if has_claims and claim_section is not None and not any(_holds_claims(heading, level, claim_section) for (heading, level), _children in groups):
         synthesized = canonical_headings.get(claim_section, heading_for_slug(claim_section))
         groups.append(((synthesized, _H2_LEVEL), []))
 
@@ -508,6 +508,11 @@ def _unit_link_str(link: UnitLink) -> str:
     if link.alias is not None:
         inner += f"|{link.alias}"
     return f"[[{inner}]]"
+
+
+def _holds_claims(heading: str, level: int, claim_section: str | None) -> bool:
+    """Whether a section is the claims section the renderer writes the claims under, which the title heading never is."""
+    return level != TITLE_LEVEL and _slug(heading) == claim_section
 
 
 def _slug(heading: str) -> str:
