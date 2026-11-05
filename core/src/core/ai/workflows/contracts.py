@@ -22,7 +22,7 @@ from core.ai.workflows.domain.fingerprint import (
     spec_identity,
     step_content_address,
 )
-from core.ai.workflows.domain.flags import FlagKind, MaintenanceFlag, flag_id, flag_to_write
+from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, FlagKind, MaintenanceFlag, flag_id, flag_to_write
 from core.ai.workflows.domain.identity import (
     CURRENT_STEP,
     ReviewedArtifacts,
@@ -148,6 +148,7 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "AUTOMATIC_RESOLVERS",
     "CURRENT_STEP",
     "DEFAULT_TASK_QUEUE",
     "JUDGE_NOTE_FALLBACK",

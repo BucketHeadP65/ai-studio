@@ -27,7 +27,7 @@ from core.ai.workflows.contracts import (
     Workflow,
     step_content_address,
 )
-from core.ai.workflows.infrastructure.library_collection import FLAGS_SQL, FlagWriteIncompleteWarning
+from core.ai.workflows.infrastructure.library_collection import FLAG_SQL, FLAGS_SQL, FlagWriteIncompleteWarning
 from tests.support.fakes.library_collection import FakeCollection
 
 TEXT = Shape(json_schema={"type": "string"})
@@ -45,6 +45,11 @@ DIGEST = {
 }
 EDITED = _digest("Read the whole source.", "Write one digest page.", "Quote every claim, briefly.")
 """A copy of `digest` that matches no saved version and is closest by line to v2."""
+
+AGAIN = _digest("Read the whole source.", "Write one digest page.", "Quote every claim, in full.")
+"""Another copy of `digest` that matches no saved version and is closest by line to v2."""
+
+RELATE = Briefing(name="relate", instructions="Link the digest page to every earlier page it builds on.", inputs={"source": TEXT}, output=TEXT)
 
 
 def _workflow(step: Briefing, *, name: str = "digest-sources", version: int = 1) -> Workflow:
@@ -409,3 +414,127 @@ async def test_a_resolution_the_ingest_refuses_warns_and_the_workflow_stays_save
     flag = await library.fetch_flag("mf.diverged.digest-sources.digest")
     assert flag is not None
     assert flag.status == "open", "the next save writes the resolution again"
+
+
+async def test_resolve_flag_reads_the_flag_page_once() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest)
+    flag_id = await library.put_flag(_flag())
+    assert flag_id is not None
+    store.sent.clear()
+
+    await library.resolve_flag(flag_id, by="owner", reason="Keep it.")
+
+    assert store.sent == [(FLAG_SQL, ("workflows", flag_id))]
+
+
+async def test_a_flag_the_library_resolved_opens_again_when_the_copy_diverges_again_and_a_persons_resolution_stays() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await _put(library, _workflow(EDITED))
+    await _put(library, _workflow(DIGEST[2], version=2))
+    matched = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert matched is not None
+    assert (matched.status, matched.resolved_by) == ("resolved", "library")
+
+    again = await _put(library, _workflow(AGAIN, version=3))
+
+    reopened = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert reopened is not None
+    assert (reopened.status, reopened.workflow, reopened.step_id) == ("open", again, "st.digest.v2"), "the same step version, opened again"
+    await library.resolve_flag("mf.diverged.digest-sources.digest", by="owner", reason="This copy stays.")
+    store.payloads.clear()
+
+    await _put(library, _workflow(AGAIN, version=4))
+
+    assert _flag_payloads(store) == []
+    kept = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert kept is not None
+    assert (kept.status, kept.resolved_by) == ("resolved", "owner")
+
+
+async def test_a_later_save_without_the_copy_resolves_the_diverged_flag_as_the_library() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await library.put_step(RELATE, version=1, title="Relate", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    await _put(library, _workflow(EDITED))
+
+    without = await _put(library, _workflow(RELATE, version=2))
+
+    flag = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert flag is not None
+    assert (flag.status, flag.resolved_by, flag.decision_reason) == ("resolved", "library", f"{without} holds no copy of digest.")
+
+
+async def test_a_save_reads_the_open_flags_once_and_resolves_without_reading_again() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await _put(library, _workflow(EDITED))
+    store.sent.clear()
+
+    await _put(library, _workflow(DIGEST[2], version=2))
+
+    flag_reads = [(sql, args) for sql, args in store.sent if sql in (FLAG_SQL, FLAGS_SQL)]
+    assert flag_reads == [(FLAGS_SQL, ("workflows", "open", "diverged_copy"))]
+
+
+async def test_a_lower_version_saved_after_a_higher_one_leaves_the_higher_ones_flag_open() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await library.put_step(RELATE, version=1, title="Relate", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    await _put(library, _workflow(EDITED, version=2))
+
+    await _put(library, _workflow(RELATE, version=1))
+
+    flag = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert flag is not None
+    assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v2")
+
+
+async def test_archiving_a_version_resolves_its_open_diverged_flags_and_no_other() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await _put(library, _workflow(EDITED))
+    await _put(library, _workflow(AGAIN, name="brief-sources", version=2))
+
+    await library.set_archived("wf.digest-sources.v1", archived=True)
+
+    archived = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    other = await library.fetch_flag("mf.diverged.brief-sources.digest")
+    assert archived is not None
+    assert other is not None
+    assert (archived.status, archived.resolved_by, archived.decision_reason) == ("resolved", "library", "wf.digest-sources.v1 was archived.")
+    assert other.status == "open"
+
+
+async def test_an_archive_whose_resolution_fails_warns_and_archiving_again_resolves_it() -> None:
+    store = FakeCollection(prune=True)
+    library = await _library(store)
+    await _put(library, _workflow(EDITED))
+    store.refused_types = frozenset({"maintenance-flag"})
+
+    with pytest.warns(FlagWriteIncompleteWarning, match=r"mf\.diverged\.digest-sources\.digest"):
+        await library.set_archived("wf.digest-sources.v1", archived=True)
+
+    assert "archived_at" in store.pages["wf.digest-sources.v1"]["frontmatter"], "the archive stands"
+    store.refused_types = frozenset()
+    await library.set_archived("wf.digest-sources.v1", archived=True)
+    flag = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert flag is not None
+    assert flag.status == "resolved"
+
+
+async def test_a_diverged_copy_holding_double_percent_pairs_gets_its_flag_with_each_pair_split() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest)
+    percent = _digest("Report coverage as 50%% of sources.", "Quote every claim.", "End with 100%% done.")
+    edited = _digest("Report coverage as 50%% of sources.", "Quote every claim, briefly.", "End with 100%% done.")
+    await library.put_step(percent, version=1, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+
+    await _put(library, _workflow(edited))
+
+    flag = await library.fetch_flag("mf.diverged.digest-sources.digest")
+    assert flag is not None
+    assert "%%" not in flag.evidence
+    assert "50% % of sources" in flag.evidence
+    assert "writes each double percent sign as % %" in flag.evidence

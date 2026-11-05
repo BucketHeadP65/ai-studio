@@ -45,7 +45,7 @@ from core.ai.workflows.contracts import (
     intent_issues,
 )
 from core.ai.workflows.domain.presentation import RecordOwnerReviewAction, SaveNoteAction
-from core.ai.workflows.infrastructure.library_collection import CATALOG_COUNT_SQL, LIVE_VERSIONS_SQL, collection_toolset
+from core.ai.workflows.infrastructure.library_collection import CATALOG_COUNT_SQL, FLAGS_SQL, LIVE_VERSIONS_SQL, collection_toolset
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -54,7 +54,7 @@ if TYPE_CHECKING:
 
 
 class FakeRows:
-    """Records every statement and its arguments; answers with rows a test scripted."""
+    """Records every statement and its arguments, answers with rows a test scripted, and holds no maintenance flag."""
 
     def __init__(self, *, rows: Sequence[Mapping[str, Any]] = (), value: str | Mapping[str, Any] | None = None) -> None:
         self.rows = rows
@@ -63,7 +63,7 @@ class FakeRows:
 
     async def fetch(self, sql: str, /, *args: object) -> Sequence[Mapping[str, Any]]:
         self.sent.append((sql, args))
-        return self.rows
+        return [] if sql == FLAGS_SQL else self.rows
 
     async def fetchval(self, sql: str, /, *args: object) -> str | Mapping[str, Any] | None:
         self.sent.append((sql, args))

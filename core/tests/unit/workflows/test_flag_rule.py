@@ -1,7 +1,7 @@
 """Every writer of a maintenance flag follows one rule, read from the page under the flag's id before it writes.
 
-No page writes the flag open. An open page takes the new evidence. A resolved page keeps the owner's decision for the
-same step version and opens again for another one.
+No page writes the flag open. An open page takes the new evidence. A resolved page keeps a person's decision for the
+same step version and opens again for another one. A page an automatic resolver resolved opens again on any new flag.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from core.ai.workflows.contracts import MaintenanceFlag, flag_id, flag_to_write
+from core.ai.workflows.contracts import AUTOMATIC_RESOLVERS, MaintenanceFlag, flag_id, flag_to_write
 
 RAISED = datetime(2026, 11, 5, 9, 0, tzinfo=UTC)
 
@@ -34,8 +34,8 @@ def _flag(**changes: object) -> MaintenanceFlag:
     return MaintenanceFlag.model_validate(fields)
 
 
-def _resolved(flag: MaintenanceFlag) -> MaintenanceFlag:
-    return flag.model_copy(update={"status": "resolved", "resolved_by": "owner", "decision_reason": "The copy is right for this workflow."})
+def _resolved(flag: MaintenanceFlag, by: str = "owner") -> MaintenanceFlag:
+    return flag.model_copy(update={"status": "resolved", "resolved_by": by, "decision_reason": "The copy is right for this workflow."})
 
 
 def test_no_stored_page_writes_the_new_flag_open() -> None:
@@ -59,6 +59,17 @@ def test_a_resolved_page_with_the_same_step_hash_is_left_resolved() -> None:
     stored = _resolved(_flag())
     new = _flag(evidence="The same divergence, written again by the next save.", raised_at=RAISED + timedelta(days=1))
     assert flag_to_write(stored, new) is None, "the owner already decided this step version"
+
+
+def test_the_automatic_resolvers_are_the_library_and_step_maintenance() -> None:
+    assert frozenset({"library", "agent:step-maintenance"}) == AUTOMATIC_RESOLVERS
+
+
+@pytest.mark.parametrize("by", ["library", "agent:step-maintenance"])
+def test_a_page_an_automatic_resolver_resolved_opens_again_for_the_same_step_version(by: str) -> None:
+    stored = _resolved(_flag(), by=by)
+    new = _flag(evidence="The copy diverged from st.digest.v3 again.", raised_at=RAISED + timedelta(days=1))
+    assert flag_to_write(stored, new) == new, "a condition that cleared on its own is no decision"
 
 
 def test_a_resolved_page_with_another_step_hash_opens_again_with_the_new_evidence() -> None:
@@ -111,15 +122,28 @@ def test_a_flag_refuses_a_field_it_does_not_hold() -> None:
     [
         "Two consumers split.\n\n## Drafted step\n\nname: digest",
         "Two consumers split.\n\n### Drafted step",
-        "# A title in the body",
-        "Two consumers split.\n---\nname: digest",
+        "name: digest\nversion: 3\n---\n\nThe drafted step's text.",
         "Two consumers split.\n\n```yaml\nname: digest\n",
     ],
-    ids=["level 2 heading", "level 3 heading", "level 1 heading", "setext heading", "fence left open"],
+    ids=["level 2 heading", "level 3 heading", "setext level 2 heading, a step file's frontmatter close", "fence left open"],
 )
 def test_a_flag_refuses_text_its_page_would_cut_into_another_section(field: str, body: str) -> None:
-    with pytest.raises(ValidationError, match="fenced block"):
+    with pytest.raises(ValidationError, match=r"fenced block") as refused:
         _flag(**{field: body})
+    assert "## " in str(refused.value)
+    assert "`---` line under text" in str(refused.value)
+
+
+@pytest.mark.parametrize("field", ["evidence", "proposed_change"])
+@pytest.mark.parametrize(
+    "body",
+    ["Coverage is 50%% of sources and 100%% when done.", "```text\n%% a note %%\n```"],
+    ids=["a pair in prose", "a pair inside a fence"],
+)
+def test_a_flag_refuses_a_pair_of_double_percent_signs_its_page_would_drop(field: str, body: str) -> None:
+    with pytest.raises(ValidationError, match="%%") as refused:
+        _flag(**{field: body})
+    assert "single %" in str(refused.value)
 
 
 @pytest.mark.parametrize(
@@ -127,10 +151,13 @@ def test_a_flag_refuses_text_its_page_would_cut_into_another_section(field: str,
     [
         "```markdown\n## Drafted step\n\nname: digest\n---\n```",
         "#### A level 4 heading stays in the text",
+        "# A level 1 heading stays in the text",
+        "A setext level 1 heading\n===\n\nstays in the text.",
+        "Coverage is 50%% of sources.",
         "- research-digest adopted\n- source-remove kept",
         "",
     ],
-    ids=["heading inside a fence", "level 4 heading", "list", "empty"],
+    ids=["heading inside a fence", "level 4 heading", "level 1 heading", "setext level 1 heading", "one double percent", "list", "empty"],
 )
 def test_a_flag_keeps_text_that_stays_one_section(body: str) -> None:
     assert _flag(proposed_change=body).proposed_change == body

@@ -1,7 +1,7 @@
 """A maintenance flag: one page in the library that asks the owner to decide something step maintenance could not.
 
 A flag lives under a stable id, so the next writer finds its own page. Every writer reads that page first and follows
-`flag_to_write`, so a flag the owner resolved stays resolved for the same step version.
+`flag_to_write`, so a flag a person resolved stays resolved for the same step version.
 """
 
 from __future__ import annotations
@@ -38,10 +38,20 @@ _SHORT_KINDS: Mapping[FlagKind, str] = {
     "repository_change": "change",
 }
 
+AUTOMATIC_RESOLVERS = frozenset({"library", "agent:step-maintenance"})
+"""Who resolves a flag on their own when its condition clears: a save, and a step maintenance run.
+
+Their resolution is no decision, so the next flag for the same step version opens the page again."""
+
 _BACKTICK_RUN = re.compile(r"`+")
 
-_SECTION_BREAKS = frozenset({"h1", "h2", "h3"})
+_SECTION_BREAKS = frozenset({"h2", "h3"})
 """The headings a flag page splits its sections at."""
+
+_DOUBLE_PERCENT_PAIR = re.compile(r"%%.*?%%", re.DOTALL)
+"""What the page drops from a section, fenced text included: everything from one `%%` to the next."""
+
+_PERCENT_BEFORE_PERCENT = re.compile(r"%(?=%)")
 
 
 class MaintenanceFlag(BaseModel):
@@ -49,8 +59,9 @@ class MaintenanceFlag(BaseModel):
 
     A flag about one consumer names the consumer's workflow version id in `workflow`. A flag about a step leaves it
     empty. A field the flag does not hold is refused, and so is a `raised_at` without its offset. Evidence or a proposed
-    change holding a heading of level 1 to 3, or a code fence it leaves open, outside a fenced block is refused, because
-    the page would cut the text there. Both are kept without the whitespace at their edges, as the page keeps them.
+    change is refused when the page would cut it or drop part of it: a heading of level 2 or 3 outside a fenced block,
+    a code fence it leaves open, or two `%%` anywhere. Both are kept without the whitespace at their edges, as the page
+    keeps them.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -89,8 +100,16 @@ class MaintenanceFlag(BaseModel):
         tokens = MarkdownIt("commonmark").parse(f"{body}\n\n## end\n")
         if sum(token.type == "heading_open" and token.tag in _SECTION_BREAKS for token in tokens) != 1:
             msg = (
-                "holds a heading of level 1 to 3, or a code fence it leaves open, outside a fenced block, and the flag's "
-                "page would cut the text there. Put that text inside a closed fenced block, or use a heading of level 4 or deeper"
+                "holds a level 2 or 3 heading outside a fenced block, or a code fence it leaves open, and the flag's page "
+                "would cut the text there. A heading is a line starting with ## or ###, or a line of text with a `---` or "
+                "`===` line under it, so a `---` line under text, such as the line that closes a drafted step file's "
+                "frontmatter, is a heading too. Put such text inside a closed fenced block, or use a heading of level 4 or deeper"
+            )
+            raise ValueError(msg)
+        if _DOUBLE_PERCENT_PAIR.search(body):
+            msg = (
+                "holds two %% marks, and the flag's page drops everything from one %% to the next, fenced text included. "
+                "Write a single % in place of each %%, or put a space between the two % signs"
             )
             raise ValueError(msg)
         return body.strip()
@@ -117,9 +136,10 @@ def flag_to_write(stored: MaintenanceFlag | None, new: MaintenanceFlag) -> Maint
     """The flag a writer writes over the page under its id, or None to leave that page alone.
 
     No page gives the new flag open. An open page takes the new flag, unless it already holds the same flag apart from
-    `raised_at`. A resolved page whose `step_hash` matches the new flag's is left alone, because the owner already
-    decided that step version. A resolved page whose `step_hash` differs opens again with the new flag. A writer never
-    writes a resolution of its own: the flag it hands is written open.
+    `raised_at`. A page a person resolved, whose `step_hash` matches the new flag's, is left alone, because the person
+    already decided that step version. A resolved page whose `step_hash` differs opens again with the new flag, and so
+    does a page one of `AUTOMATIC_RESOLVERS` resolved, whatever its `step_hash`. A writer never writes a resolution of its
+    own: the flag it hands is written open.
 
     Args:
         stored: The flag the page holds now, or None when there is no page.
@@ -132,7 +152,8 @@ def flag_to_write(stored: MaintenanceFlag | None, new: MaintenanceFlag) -> Maint
     if stored is None:
         return opened
     if stored.status == "resolved":
-        return None if stored.step_hash == opened.step_hash else opened
+        decided = stored.resolved_by not in AUTOMATIC_RESOLVERS and stored.step_hash == opened.step_hash
+        return None if decided else opened
     return None if stored.model_copy(update={"raised_at": opened.raised_at}) == opened else opened
 
 
@@ -142,7 +163,8 @@ def diverged_copy_flag(
     """The `diverged_copy` flag a save raises for one diverged copy: about the version it diverged from, with the diff.
 
     Its evidence names that version and how it was found, then the unified diff of the canonical YAML of that version
-    and of the copy, in a fenced block.
+    and of the copy, in a fenced block. The diff writes each `%%` as `% %`, and says so, because the page drops the text
+    between two `%%`.
 
     Args:
         workflow: The saved workflow, which holds the copy.
@@ -173,6 +195,9 @@ def diverged_copy_flag(
             lineterm="",
         )
     )
+    split = _PERCENT_BEFORE_PERCENT.sub("% ", diff)
+    note = "" if split == diff else " The diff writes each double percent sign as % %, because the flag's page drops the text between two of them."
+    diff = split
     fence = "`" * max([3, *(len(run) + 1 for run in _BACKTICK_RUN.findall(diff))])
     return MaintenanceFlag(
         kind="diverged_copy",
@@ -187,7 +212,7 @@ def diverged_copy_flag(
         ),
         evidence=(
             f"{workflow_id} holds a copy of the reusable step {entry.step} that matches no saved version. It diverged from "
-            f"{version.step_id}, {basis}.\n\n{fence}diff\n{diff}\n{fence}"
+            f"{version.step_id}, {basis}.{note}\n\n{fence}diff\n{diff}\n{fence}"
         ),
         raised_by="library",
         raised_at=raised_at,

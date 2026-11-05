@@ -39,7 +39,7 @@ from core.ai.workflows.exceptions import FlagIdTakenError, FlagUnknownError, Lib
 from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from core.ai.embedding import QueryEmbedder
     from core.ai.workflows.internal_contracts import Ingest, Rows
@@ -68,9 +68,9 @@ class SupersessionIncompleteWarning(UserWarning):
 
 
 class FlagWriteIncompleteWarning(UserWarning):
-    """The workflow was saved, but a maintenance flag the save raises or resolves was not written.
+    """A workflow was saved or archived, but a maintenance flag that change raises or resolves was not written.
 
-    Saving the workflow again writes the flag.
+    Saving or archiving the workflow again writes the flag.
     """
 
 
@@ -331,6 +331,16 @@ def _flag_of(page: Mapping[str, Any]) -> MaintenanceFlag:
     except ValidationError as exc:
         msg = f"the maintenance flag {page['id']!r} does not parse: {exc}"
         raise LibraryError(msg) from exc
+
+
+def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived"]) -> None:
+    """Warn that `workflow_id` was saved or archived but `failure` happened to its flags, and that doing it again writes them."""
+    again = "Saving" if change == "saved" else "Archiving"
+    warnings.warn(
+        f"{change} {workflow_id!r}, but {failure} ({exc}). {again} the workflow again writes it.",
+        FlagWriteIncompleteWarning,
+        stacklevel=4,
+    )
 
 
 def _cases_text(cases: Mapping[str, JsonValue]) -> str:
@@ -688,7 +698,9 @@ class LibraryCollection:
 
         Of the keys held in their own columns, only the id, type, title, summary and status are written back, so a
         superseded page loses its `superseded_by` link. Archiving an archived page keeps its first `archived_at`,
-        and restoring a live one does nothing.
+        and restoring a live one does nothing. Archiving, again included, resolves as `library` each open
+        `diverged_copy` flag raised on this version, and a flag that is not written warns with
+        `FlagWriteIncompleteWarning`, the archive standing.
 
         Args:
             workflow_id: The page id.
@@ -704,17 +716,20 @@ class LibraryCollection:
         page = found[0]
         stored = page["frontmatter"]
         long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
-        if archived == (long_tail.get("archived_at") is not None):
-            return
+        if archived != (long_tail.get("archived_at") is not None):
+            if archived:
+                long_tail["archived_at"] = datetime.now(UTC).isoformat()
+            else:
+                long_tail.pop("archived_at", None)
+            try:
+                await self._rewrite(page, long_tail)
+            except Exception as exc:
+                msg = f"the collection refused to update the archive state of {workflow_id!r}: {exc}"
+                raise LibraryError(msg) from exc
         if archived:
-            long_tail["archived_at"] = datetime.now(UTC).isoformat()
-        else:
-            long_tail.pop("archived_at", None)
-        try:
-            await self._rewrite(page, long_tail)
-        except Exception as exc:
-            msg = f"the collection refused to update the archive state of {workflow_id!r}: {exc}"
-            raise LibraryError(msg) from exc
+            await self._resolve_open_diverged_flags(
+                workflow_id, lambda flag: flag.workflow == workflow_id, reason=lambda _: f"{workflow_id} was archived.", change="archived"
+            )
 
     async def archived(self, *, limit: int = 50) -> tuple[SavedWorkflow, ...]:
         """The archived workflow cards in this collection, newest archive first.
@@ -862,26 +877,55 @@ class LibraryCollection:
     async def _settle_diverged_flags(
         self, workflow: Workflow, workflow_id: str, record: Sequence[ConsumerEntry], versions: Mapping[str, Sequence[StepVersion]]
     ) -> None:
-        """Raise the flag of each diverged copy in `record` and resolve the open flag of each copy that matches, warning on each failure."""
+        """Raise the flag of each diverged copy in `record`, then resolve the open one of each step this save no longer holds diverged."""
         raised_at = datetime.now(UTC)
+        held = {entry.step: entry for entry in record}
         for entry in record:
-            diverged_id = flag_id("diverged_copy", entry.step, workflow.name)
+            if entry.version is not None or entry.diverged_from is None:
+                continue
             try:
-                if entry.version is None and entry.diverged_from is not None:
-                    version = {saved.version: saved for saved in versions[entry.step]}[entry.diverged_from]
-                    await self.put_flag(diverged_copy_flag(workflow, workflow_id, entry, version, raised_at=raised_at))
-                    continue
-                stored = await self.fetch_flag(diverged_id)
-                if stored is not None and stored.status == "open":
-                    reason = f"{workflow_id} holds {entry.step} v{entry.version}, a saved version, again."
-                    await self.resolve_flag(diverged_id, by="library", reason=reason)
+                version = {saved.version: saved for saved in versions[entry.step]}[entry.diverged_from]
+                await self.put_flag(diverged_copy_flag(workflow, workflow_id, entry, version, raised_at=raised_at))
             except Exception as exc:
-                warnings.warn(
-                    f"saved {workflow_id!r}, but the maintenance flag {diverged_id!r} was not written ({exc}). "
-                    f"Saving the workflow again writes it.",
-                    FlagWriteIncompleteWarning,
-                    stacklevel=3,
+                _warn_flag_not_written(
+                    workflow_id, f"the maintenance flag {flag_id('diverged_copy', entry.step, workflow.name)!r} was not written", exc, change="saved"
                 )
+
+        def settled_here(flag: MaintenanceFlag) -> bool:
+            raised_on = _VERSIONED_ID.match(flag.workflow)
+            on_this_name = raised_on is not None and raised_on["name"] == workflow.name and int(raised_on["version"]) <= workflow.version
+            still_diverged = flag.step in held and held[flag.step].version is None
+            return on_this_name and not still_diverged
+
+        def reason(flag: MaintenanceFlag) -> str:
+            entry = held.get(flag.step)
+            if entry is None:
+                return f"{workflow_id} holds no copy of {flag.step}."
+            return f"{workflow_id} holds {flag.step} v{entry.version}, a saved version, again."
+
+        await self._resolve_open_diverged_flags(workflow_id, settled_here, reason=reason, change="saved")
+
+    async def _resolve_open_diverged_flags(
+        self,
+        workflow_id: str,
+        settled: Callable[[MaintenanceFlag], bool],
+        *,
+        reason: Callable[[MaintenanceFlag], str],
+        change: Literal["saved", "archived"],
+    ) -> None:
+        """Resolve as `library` each open `diverged_copy` flag `settled` picks, read in one statement, warning on each failure."""
+        try:
+            open_flags = await self._flag_rows(status="open", kind="diverged_copy")
+        except Exception as exc:
+            _warn_flag_not_written(workflow_id, "its open diverged_copy flags were not read, so none was resolved", exc, change=change)
+            return
+        for open_id, flag in open_flags:
+            if not settled(flag):
+                continue
+            try:
+                await self._resolve(open_id, flag, by="library", reason=reason(flag))
+            except Exception as exc:
+                _warn_flag_not_written(workflow_id, f"the maintenance flag {open_id!r} was not written", exc, change=change)
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.
@@ -1028,11 +1072,10 @@ class LibraryCollection:
             LibraryError: If a flag page does not parse.
         """
         cards: list[FlagCard] = []
-        for page in await self._rows.fetch(FLAGS_SQL, self._collection, status, kind):
-            flag = _flag_of(page)
+        for listed_id, flag in await self._flag_rows(status=status, kind=kind):
             cards.append(
                 FlagCard(
-                    id=str(page["id"]),
+                    id=listed_id,
                     kind=flag.kind,
                     status=flag.status,
                     step=flag.step,
@@ -1045,6 +1088,10 @@ class LibraryCollection:
                 )
             )
         return tuple(cards)
+
+    async def _flag_rows(self, *, status: Literal["open", "resolved"] | None, kind: FlagKind | None) -> list[tuple[str, MaintenanceFlag]]:
+        """Each flag `FLAGS_SQL` answers for that status and kind, with its id, newest raised first."""
+        return [(str(page["id"]), _flag_of(page)) for page in await self._rows.fetch(FLAGS_SQL, self._collection, status, kind)]
 
     async def fetch_flag(self, flag_id: str) -> MaintenanceFlag | None:
         """The maintenance flag a page in this collection holds.
@@ -1086,7 +1133,11 @@ class LibraryCollection:
         if stored is None:
             msg = f"no maintenance flag {flag_id!r} in collection {self._collection!r}. List the flags to find its id."
             raise FlagUnknownError(msg)
-        await self._write_flag(flag_id, stored.model_copy(update={"status": "resolved", "resolved_by": by, "decision_reason": reason}))
+        await self._resolve(flag_id, stored, by=by, reason=reason)
+
+    async def _resolve(self, resolved_id: str, stored: MaintenanceFlag, *, by: str, reason: str) -> None:
+        """Write the flag `stored` holds back under `resolved_id`, resolved by `by` for `reason`, every other field kept."""
+        await self._write_flag(resolved_id, stored.model_copy(update={"status": "resolved", "resolved_by": by, "decision_reason": reason}))
 
     async def _write_flag(self, written_id: str, flag: MaintenanceFlag) -> None:
         """Ingest `flag` as the page `written_id`, its empty fields left out, its two sections always written."""

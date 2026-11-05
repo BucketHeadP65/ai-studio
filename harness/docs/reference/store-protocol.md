@@ -491,12 +491,14 @@ the library's write path validates every page against. `APP_WORKFLOW_KNOWLEDGE_B
 | `workflow` | the consumer's workflow version id, left out for a flag about a step |
 | `raised_by`, `raised_at` | `library` for a save, `agent:step-maintenance` for a run or a live trial, and when, ISO 8601 with its offset |
 | `resolved_by`, `decision_reason` | who resolved it and why, left out while it is open |
-| Evidence, Proposed change | the two sections. Proposed change is empty except for a `repository_change`. A heading of level 1 to 3, or a code fence left open, outside a fenced block is refused, because the page would cut the text there. Both are kept without the whitespace at their edges, which the page drops |
+| Evidence, Proposed change | the two sections. Proposed change is empty except for a `repository_change`. Text the page would cut or drop is refused: a level 2 or 3 heading outside a fenced block (a line starting with `##` or `###`, or a line of text with a `---` or `===` line under it, so the `---` that closes a drafted step file's frontmatter counts), a code fence left open, and two double percent signs anywhere, fenced text included, since the page drops everything from one double percent sign to the next (the Obsidian comment mark). Both are kept without the whitespace at their edges, which the page drops |
 
 Every writer reads the page under the flag's id first (`FLAG_SQL`) and follows one rule, `flag_to_write`: no page, it
 writes the flag open. An open page takes the new flag, and one that already holds it apart from `raised_at` is left
-alone. A resolved page whose `step_hash` matches is left resolved, because the owner already decided that step version.
-A resolved page whose `step_hash` differs opens again with the new evidence. A page of another type under the id is
+alone. A page a person or a coding agent resolved, whose `step_hash` matches, is left resolved, because they already
+decided that step version. A resolved page whose `step_hash` differs opens again with the new evidence. A page one of
+`AUTOMATIC_RESOLVERS` resolved (`library` and `agent:step-maintenance`, who resolve a flag when its condition clears)
+opens again on any new flag, because a cleared condition is no decision. A page of another type under the id is
 refused with `FlagIdTakenError`.
 
 | Verb | Does |
@@ -508,10 +510,15 @@ refused with `FlagIdTakenError`.
 
 `put` writes the `diverged_copy` flags itself. For each diverged copy its consumer record holds, it raises
 `mf.diverged.<workflow name>.<step>` about the version the copy diverged from, with that version, how it was found and
-the unified diff of `canonical_step_yaml` between that version and the copy in Evidence. For each copy that matches a
-version, it resolves the open `diverged_copy` flag of that step in that workflow, as `library`. A flag write that
-fails warns `FlagWriteIncompleteWarning`, the workflow stays saved, and saving it again writes the flag. So
-`flags(kind="diverged_copy", status="open")` lists every live diverged copy.
+the unified diff of `canonical_step_yaml` between that version and the copy in Evidence. The diff writes each double percent sign
+with a space between its two signs and says so. Then it reads the open `diverged_copy` flags once (`FLAGS_SQL`) and resolves, as `library`, each one
+raised on this workflow name at this version or a lower one whose step the new record no longer holds diverged: the
+reason names the version the copy matches now, or says the version holds no copy. Archiving a version, again
+included, resolves as `library` each open `diverged_copy` flag raised on that version, with the reason that it was
+archived. A flag write that fails warns `FlagWriteIncompleteWarning`, the save or the archive stands, and doing it
+again writes the flag. So `flags(kind="diverged_copy", status="open")` lists the diverged copies held by the newest
+save of each workflow name, archived versions left out. One case stays open until a person resolves it: an adaptation
+saved under a new name leaves the old name's open flag as it was.
 
 ---
 
@@ -880,7 +887,7 @@ neither pretends to be.
 | **put: status written** | `"draft"` | `"draft"` |
 | **put: supersession** | implicit, the previous version's file stays on disk. **no forward link is written** | explicit, the lineage's parent page, and every live lower version of the same name (lineage or not), is read back, rebuilt and re-ingested with `superseded_by: [[child]]`. `search`, `catalog` and `current` then read only pages nothing has superseded |
 | **put: consumer record** | not written. A folder library keeps no reusable steps | `reusable_steps` on the page: per inline step a reusable step of the same name has saved versions of, the version its content address matches, else the version it diverged from (the prior record, which is the page's own when the same version is saved again and the lineage parent's otherwise, else the closest by text). A decline in the prior record carries over while the copy is unchanged. One `STEP_PAGES_SQL` read for every inline step name. `consumers_of` answers the live pages whose record names a step (`CONSUMERS_SQL`, jsonb containment), and `record_decline` rewrites a live page's entry, refusing a superseded page whose link the reader cannot see |
-| **put: maintenance flags** | not written. A folder library keeps no flags | a `diverged_copy` flag per diverged copy the record holds, and the open one of each copy that matches a version again resolved as `library` (section 2.6). One `FLAG_SQL` read per entry |
+| **put: maintenance flags** | not written. A folder library keeps no flags | a `diverged_copy` flag per diverged copy the record holds, and the open one of each step the record no longer holds diverged resolved as `library` (section 2.6). One `FLAG_SQL` read per diverged copy, and one `FLAGS_SQL` read of the open `diverged_copy` flags, whose rows the resolutions write back without reading again |
 | **put: failure modes** | one write. It succeeds or raises | the page, then the links, then the flags, no transaction. Child first (foreign key), link second. A link failure warns `SupersessionIncompleteWarning` and a flag failure `FlagWriteIncompleteWarning`, and each still returns the child's id |
 | **Port vocabulary** | `find_files` / `read_file` / `write_file`, args `words` / `most` / `name` | `find_workflows` / `read_workflow` / `write_workflow`, args `task` / `most` / `workflow_id` |
 
