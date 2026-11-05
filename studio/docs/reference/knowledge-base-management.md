@@ -268,13 +268,16 @@ answering the last 20 as `{refresh_runs}`, newest first. A record carries `start
 `outcome` `partial` when its scan could not read a watch-list entry. An `abandoned` job reads as `outcome` `failed` carrying its last error
 verbatim, and a job still queued, running or waiting to retry has no record at all, so a run appears on the refresh history once it is over.
 `scan_failures` lists each watch-list entry the run could not scan as `{entry, reason}`: `entry` is the entry's label (`x:someone`) and
-`reason` is one line, the scanner's message cut to its first line, with no user part, query or fragment on any URL in it, and at most 300
-characters. The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
+`reason` is one line, the scanner's message cut to its first line and to at most 300 characters, with every URL in it cut the way a label
+is (below). The `x` scanner words an error status from xAI as the status, the model and the first sentence of the answer, with the team id
 cut, so an account out of credits reads `xAI answered HTTP 403 for grok-4-fast-non-reasoning: Your team has either used all available credits
 or reached its monthly spending limit.` It is empty for a run whose scan read every entry or that scanned nothing, and for an abandoned run.
-Every label that leaves the knowledge base (`entry`, the keys of `counts.requested_by_entry` the harness is sent, the warning and the
-`studio sync` print) has no user part, query or fragment on a URL in it (`without_url_secrets`), while the source queue's `found_via` keeps
-the label as written.
+Every label a refresh records, logs, forwards or prints (`entry`, the keys of `counts.requested_by_entry`, the warning, and the
+`studio sync` print and its dry-run list) goes through `without_url_secrets`: a URL's user part is dropped and the value of every query,
+fragment or `;` path parameter whose name holds a secret word (`token`, `key`, `auth`, `password`, `passwd`, `pwd`, `secret`, `sig`,
+`signature`, `session`, `sessionid`, `code`, `credential`, in any case) reads `***`. The rest of the URL stays, so two channel feeds that
+differ in `channel_id` keep labels of their own. The watch-list and source-queue routes, and the source queue's `found_via`, show the
+knowledge base's own settings as written, which is intended.
 `trigger` is `manual` for a run this route enqueued and `schedule` for one the ticker enqueued. `GET /api/knowledge-bases/{name}` surfaces
 only the newest record, as `last_refresh_run`, so the detail page can show it without a second fetch.
 
