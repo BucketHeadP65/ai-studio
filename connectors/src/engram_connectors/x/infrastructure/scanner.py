@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from datetime import timedelta
+from itertools import islice
 from typing import TYPE_CHECKING
 
 from core.ai.content_filter import content_filter_message
@@ -37,7 +38,8 @@ type ClaimantResolver = Callable[[Sequence[str]], Sequence[UrlClaimant]]
 _INSTRUCTIONS = (
     "You list what an X account posted. Use X search over the allowed handles. "
     "Search with the query `from:<handle>` alone. Never put a date operator such as `since:` or `until:` in the query, "
-    "because X search already keeps to the date window you were given. "
+    "because the date window you were given already bounds X search. "
+    "When a search answers a post from outside the window, return it too. "
     "Search more than once before you answer that there are no posts: search in Latest mode and in Top mode, "
     "and never repeat a search that found nothing. "
     "Return every post with substance in the window (a claim, a link, a thread), up to the number of posts the request asks for. "
@@ -50,10 +52,9 @@ _SLICE = timedelta(days=1)
 """How much of a scan's window one search run covers."""
 _FIRST_SCAN_WINDOW = timedelta(days=7)
 """How far back a first scan reaches."""
-# one X search answers at most 10 posts, and a Latest and a Top search together reach about 20 distinct ones,
-# so a slice answering 18 or more has likely hit that ceiling and left posts out
-_SPLIT_AT = 18
-"""A slice whose search answers this many posts or more is searched again as two halves."""
+# one slice is one model call, so this bounds what one scan costs, and a stamp three weeks old catches up over two scans
+_SLICES_PER_SCAN = 14
+"""The most one-day slices one scan searches."""
 
 
 def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: datetime, until: datetime) -> Agent[None, XScan]:
@@ -129,12 +130,12 @@ def _scan_failure(error: Exception) -> str:
 
 
 def _day_slices(start: datetime, end: datetime) -> Iterator[tuple[datetime, datetime]]:
-    """The window from `start` to `end` as one-day slices, newest first, the oldest one shorter when the window is not whole days."""
-    slice_end = end
-    while slice_end > start:
-        slice_start = max(slice_end - _SLICE, start)
+    """The window from `start` to `end` as one-day slices, oldest first, the newest one shorter when the window is not whole days."""
+    slice_start = start
+    while slice_start < end:
+        slice_end = min(slice_start + _SLICE, end)
         yield slice_start, slice_end
-        slice_end = slice_start
+        slice_start = slice_end
 
 
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
@@ -145,7 +146,7 @@ def _by_date_descending(post: XPost) -> tuple[bool, float]:
 
 
 class XScanner:
-    """`Scanner` for `x` feeds: one agent run per day of a scan's window, posts rendered into the source queue cache."""
+    """`Scanner` for `x` feeds: one agent run per day of a scan's window, oldest day first, posts rendered into the source queue cache."""
 
     def __init__(
         self,
@@ -221,20 +222,21 @@ class XScanner:
         return self._claimants
 
     async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
-        """List the posts by `entry.ref` since `since`, newest first, rendering each one to the cache.
+        """List the posts by `entry.ref` since `since`, rendering each one to the cache, and say how far the scan covered.
 
         The window runs from `since`, or from seven days back on a first scan, to now. It is searched one day at a time,
-        newest day first, and a day whose search answers 18 posts or more is searched again as two halves. The walk stops
-        once it holds `entry.max_items` posts, and the newest of them are kept. A post dated at or before `since` is
-        dropped. A post carrying no date is kept, since nothing says it is old.
+        oldest day first, for at most fourteen days. The walk stops after the day that brings it to `entry.max_items`
+        posts and keeps every post that day answered. A post dated at or before `since` is dropped. A post carrying no
+        date is kept, since nothing says it is old.
 
         Args:
-            entry: The watch-list entry whose `ref` is the handle and whose `max_items` caps the scan.
+            entry: The watch-list entry whose `ref` is the handle and whose `max_items` stops the walk.
             since: The date of the last scan, or `None` for a first scan.
 
         Returns:
-            One source per post, followed by one source per link that post carries. When a search fails after posts were
-            found, the scan answers those posts, covered up to the window's start, with one line saying why it stopped.
+            One source per post, newest first, each followed by one source per link it carries, with the end of the last
+            day searched when the walk stopped before now. When a search fails after posts were found, the posts found so
+            far, covered up to the end of the day before it, with one line saying why the scan stopped.
 
         Raises:
             ScanError: A search failed before any post was found, with one line saying why.
@@ -242,29 +244,21 @@ class XScanner:
         end = self._clock()
         start = since if since is not None else end - _FIRST_SCAN_WINDOW
         posts: dict[str, XPost] = {}
-        for slice_start, slice_end in _day_slices(start, end):
+        covered = start
+        for slice_start, slice_end in islice(_day_slices(start, end), _SLICES_PER_SCAN):
             try:
-                found = await self._posts_in_slice(entry, slice_start, slice_end, wanted=entry.max_items - len(posts))
+                found = await self._search(entry, slice_start, slice_end, wanted=entry.max_items - len(posts))
             except Exception as error:
                 if not posts:
                     raise ScanError(_scan_failure(error)) from error
-                return EntryScan(sources=self._sources(posts, entry.max_items), covered_until=start, failure=_scan_failure(error))
+                return EntryScan(sources=self._sources(posts), covered_until=covered, failure=_scan_failure(error))
             for post in found:
                 if since is None or post.date is None or post.date > since:
                     posts.setdefault(post.url, post)
+            covered = slice_end
             if len(posts) >= entry.max_items:
                 break
-        return EntryScan(sources=self._sources(posts, entry.max_items))
-
-    async def _posts_in_slice(self, entry: WatchEntry, start: datetime, end: datetime, *, wanted: int) -> list[XPost]:
-        """The posts one search run answers for a slice, together with both halves' posts when it answers `_SPLIT_AT` or more."""
-        posts = await self._search(entry, start, end, wanted=wanted)
-        if len(posts) < _SPLIT_AT:
-            return posts
-        middle = start + (end - start) / 2
-        newer = await self._search(entry, middle, end, wanted=wanted)
-        older = await self._search(entry, start, middle, wanted=wanted)
-        return [*posts, *newer, *older]
+        return EntryScan(sources=self._sources(posts), covered_until=None if covered >= end else covered)
 
     async def _search(self, entry: WatchEntry, start: datetime, end: datetime, *, wanted: int) -> list[XPost]:
         """The posts one agent run answers for the window from `start` to `end`."""
@@ -272,10 +266,10 @@ class XScanner:
         result = await agent.run(f"List every post by @{entry.ref} from {start.isoformat()} to {end.isoformat()}, up to {wanted} posts.")
         return result.output.posts
 
-    def _sources(self, posts: Mapping[str, XPost], cap: int) -> list[FoundSource]:
-        """Render the newest `cap` posts to the cache and answer one source per post, then one per link it carries."""
+    def _sources(self, posts: Mapping[str, XPost]) -> list[FoundSource]:
+        """Render every post to the cache and answer one source per post, newest first, then one per link it carries."""
         entries: list[FoundSource] = []
-        for post in sorted(posts.values(), key=_by_date_descending)[:cap]:
+        for post in sorted(posts.values(), key=_by_date_descending):
             _, key = classify_url(post.url, connectors=self._url_claimants())
             self._render(key, post)
             entries.append(FoundSource(url=post.url, title=post.text[:80], published=post.date))

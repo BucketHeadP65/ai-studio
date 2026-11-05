@@ -11,6 +11,7 @@ import pytest
 from engram.config import KnowledgeBaseSettings, SourceResources
 from engram.sources.contracts import (
     ScanError,
+    ScanReport,
     ScanWatchList,
     ScanWatchListHandler,
     SourceQueue,
@@ -135,7 +136,7 @@ async def test_a_post_becomes_an_entry_a_cache_file_and_one_entry_per_link(tmp_p
     assert "task list survives compaction" in body
     meta = (tmp_path / "cache" / "x-1234567890.meta.json").read_text(encoding="utf-8")
     assert '"converter":"x-post"' in meta.replace(" ", "")
-    assert factory.seen == [(["someone"], _NOW - timedelta(days=1), _NOW), (["someone"], since, _NOW - timedelta(days=1))]
+    assert factory.seen == [(["someone"], since, _NOW - timedelta(days=1)), (["someone"], _NOW - timedelta(days=1), _NOW)]
 
 
 async def test_a_post_with_no_links_yields_exactly_one_entry(tmp_path: Path) -> None:
@@ -148,14 +149,19 @@ async def test_a_post_with_no_links_yields_exactly_one_entry(tmp_path: Path) -> 
     assert entries[0].url == post.url
 
 
-async def test_the_post_cap_holds(tmp_path: Path) -> None:
+async def test_a_slice_that_reaches_the_cap_ends_the_walk_with_every_post_it_answered(tmp_path: Path) -> None:
     posts = [POST.model_copy(update={"url": f"https://x.com/someone/status/{n}"}) for n in range(5)]
-    scanner = _scanner(_AgentFactory(XScan(posts=posts)), cache_dir=tmp_path)
-    entries = (await scanner.scan(WatchEntry(scanner="x", ref="someone", max_items=2), since=None)).sources
-    assert len([e for e in entries if "/status/" in e.url]) == 2
+    factory = _AgentFactory(XScan(posts=posts))
+    scanner = _scanner(factory, cache_dir=tmp_path)
+
+    scan = await scanner.scan(WatchEntry(scanner="x", ref="someone", max_items=2), since=None)
+
+    assert len(factory.seen) == 1, "the first day already holds the cap"
+    assert len([e for e in scan.sources if "/status/" in e.url]) == 5, "a post past the cap inside a walked day is kept, not skipped"
+    assert scan.covered_until == _NOW - timedelta(days=6)
 
 
-async def test_the_cap_keeps_the_newest_posts_when_the_model_returns_them_out_of_order(tmp_path: Path) -> None:
+async def test_the_posts_come_back_newest_first_when_the_model_answers_them_out_of_order(tmp_path: Path) -> None:
     dated = [
         POST.model_copy(update={"url": f"https://x.com/someone/status/{n}", "date": datetime(2026, 8, 20 + n, 12, 0, tzinfo=UTC)})
         for n in range(5)
@@ -165,8 +171,7 @@ async def test_the_cap_keeps_the_newest_posts_when_the_model_returns_them_out_of
 
     entries = (await scanner.scan(WatchEntry(scanner="x", ref="someone", max_items=2), since=None)).sources
 
-    survivors = [e.url for e in entries if "/status/" in e.url]
-    assert survivors == [dated[4].url, dated[3].url]
+    assert [e.url for e in entries if "/status/" in e.url] == [post.url for post in reversed(dated)]
 
 
 async def test_a_post_older_than_the_stamp_is_dropped_and_an_undated_one_stays(tmp_path: Path) -> None:
@@ -312,7 +317,8 @@ async def test_the_scan_agent_tells_the_model_how_to_search_and_what_to_return()
     assert seen[0].instructions == (
         "You list what an X account posted. Use X search over the allowed handles. "
         "Search with the query `from:<handle>` alone. Never put a date operator such as `since:` or `until:` in the query, "
-        "because X search already keeps to the date window you were given. "
+        "because the date window you were given already bounds X search. "
+        "When a search answers a post from outside the window, return it too. "
         "Search more than once before you answer that there are no posts: search in Latest mode and in Top mode, "
         "and never repeat a search that found nothing. "
         "Return every post with substance in the window (a claim, a link, a thread), up to the number of posts the request asks for. "
@@ -377,82 +383,125 @@ def _newest_first(post: XPost) -> float:
     return -post.date.timestamp() if post.date is not None else 0.0
 
 
-def _days(count: int) -> list[tuple[datetime, datetime]]:
-    """The one-day slices back from `_NOW`, newest first."""
-    return [(_NOW - timedelta(days=day + 1), _NOW - timedelta(days=day)) for day in range(count)]
+def _days(start: datetime, count: int) -> list[tuple[datetime, datetime]]:
+    """The first `count` one-day slices from `start`, oldest first."""
+    return [(start + timedelta(days=day), start + timedelta(days=day + 1)) for day in range(count)]
 
 
-async def test_a_three_day_window_is_searched_one_day_at_a_time_newest_first(tmp_path: Path) -> None:
+async def test_a_three_day_window_is_searched_one_day_at_a_time_oldest_first(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
     posts = [_post_at(_NOW - timedelta(hours=hours), hours) for hours in (2, 30, 50)]
     timeline = _Timeline(posts)
 
-    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=_NOW - timedelta(days=3))
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
 
-    assert timeline.windows == _days(3)
-    assert [source.url for source in scan.sources] == [post.url for post in posts]
+    assert timeline.windows == _days(since, 3)
+    assert [source.url for source in scan.sources] == [post.url for post in posts], "answered newest first"
     assert (scan.covered_until, scan.failure) == (None, "")
 
 
-async def test_a_slice_answering_near_the_search_ceiling_is_searched_again_as_two_halves_once(tmp_path: Path) -> None:
-    newer_half = [_post_at(_NOW - timedelta(minutes=10 * (n + 1)), n) for n in range(22)]
-    older_half = [_post_at(_NOW - timedelta(hours=13 + n), 100 + n) for n in range(8)]
-    timeline = _Timeline([*newer_half, *older_half])
-    middle = _NOW - timedelta(hours=12)
+async def test_a_slice_answering_many_posts_is_searched_once(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=1)
+    timeline = _Timeline([_post_at(_NOW - timedelta(minutes=10 * (n + 1)), n) for n in range(25)])
 
-    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=150), since=_NOW - timedelta(days=1))
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=150), since=since)
 
-    assert timeline.windows == [(_NOW - timedelta(days=1), _NOW), (middle, _NOW), (_NOW - timedelta(days=1), middle)]
-    assert len(scan.sources) == 28, "the newer half still answers at its ceiling, and a half is never split again"
+    assert timeline.windows == _days(since, 1)
+    assert len(scan.sources) == 20, "the search's own ceiling"
 
 
-async def test_a_slice_answering_under_the_threshold_is_not_split(tmp_path: Path) -> None:
-    timeline = _Timeline([_post_at(_NOW - timedelta(minutes=10 * (n + 1)), n) for n in range(17)])
+async def test_the_walk_stops_at_fourteen_days_and_covers_up_to_the_last_one(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=16)
+    timeline = _Timeline([_post_at(since + timedelta(days=day, hours=12), day) for day in range(16)])
 
-    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=150), since=_NOW - timedelta(days=1))
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=150), since=since)
 
-    assert timeline.windows == _days(1)
-    assert len(scan.sources) == 17
-
-
-async def test_the_walk_stops_once_it_holds_the_entrys_cap_and_keeps_the_newest(tmp_path: Path) -> None:
-    posts = [_post_at(_NOW - timedelta(days=day, hours=hour + 1), 100 * day + hour) for day in range(3) for hour in range(10)]
-    timeline = _Timeline(posts)
-    entry = WatchEntry(scanner="x", ref="someone", max_items=15)
-
-    scan = await _scanner(timeline, cache_dir=tmp_path).scan(entry, since=_NOW - timedelta(days=3))
-
-    assert timeline.windows == _days(2), "the second day reaches the cap, so the third is never searched"
-    assert [source.url for source in scan.sources] == [post.url for post in posts[:15]]
-    assert scan.covered_until is None
+    assert timeline.windows == _days(since, 14)
+    assert len(scan.sources) == 14
+    assert (scan.covered_until, scan.failure) == (since + timedelta(days=14), "")
 
 
-async def test_a_slice_that_fails_ends_the_scan_with_what_it_found_and_covers_none_of_the_window(tmp_path: Path) -> None:
+async def test_the_walk_stops_at_the_day_that_reaches_the_cap_and_keeps_all_its_posts(tmp_path: Path) -> None:
     since = _NOW - timedelta(days=3)
-    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 1), _post_at(_NOW - timedelta(hours=50), 2)], fail_from=2)
+    posts = [_post_at(since + timedelta(days=day, hours=hour + 1), 100 * day + hour) for day in range(3) for hour in range(10)]
+    timeline = _Timeline(posts)
+
+    scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone", max_items=15), since=since)
+
+    assert timeline.windows == _days(since, 2), "the second day reaches the cap, so the third is never searched"
+    assert sorted(source.url for source in scan.sources) == sorted(post.url for post in posts[:20])
+    assert scan.covered_until == since + timedelta(days=2)
+
+
+async def test_a_slice_that_fails_ends_the_scan_covered_up_to_the_slice_before_it(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    timeline = _Timeline([_post_at(since + timedelta(hours=2), 1), _post_at(since + timedelta(hours=30), 2)], fail_from=3)
 
     scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=since)
 
-    assert timeline.windows == _days(2), "the failing day ends the walk"
-    assert [source.url for source in scan.sources] == ["https://x.com/someone/status/1"]
-    assert scan.covered_until == since, "the stretch just after the stamp was never searched"
+    assert timeline.windows == _days(since, 3), "the failing third day ends the walk"
+    assert [source.url for source in scan.sources] == ["https://x.com/someone/status/2", "https://x.com/someone/status/1"]
+    assert scan.covered_until == since + timedelta(days=2)
     assert scan.failure == "xAI answered HTTP 503 for grok-4-fast-non-reasoning: Service unavailable."
 
 
-async def test_after_a_slice_fails_the_entry_keeps_its_stamp_and_the_posts_found_are_queued(tmp_path: Path) -> None:
-    since = _NOW - timedelta(days=3)
+def _watch_list_stamped(tmp_path: Path, when: datetime) -> WatchListFile:
+    """A watch list holding the one entry `x:someone`, stamped at `when`."""
     watch_list = WatchListFile(tmp_path / "watch-list.yaml")
     watch_list.add("x", "someone")
-    watch_list.stamp("x", "someone", since)
+    watch_list.stamp("x", "someone", when)
+    return watch_list
+
+
+async def _refresh(tmp_path: Path, watch_list: WatchListFile, timeline: _Timeline) -> tuple[ScanReport, SourceQueue]:
+    """One watch-list scan with the X scanner over `timeline`, at `_NOW`, and the source queue it fed."""
     queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_declared_claimants((_FAKE_CONNECTOR,)))
-    timeline = _Timeline([_post_at(_NOW - timedelta(hours=2), 1)], fail_from=2)
-
     handler = ScanWatchListHandler(watch_list, {"x": _scanner(timeline, cache_dir=tmp_path / "cache")}, queue, clock=lambda: _NOW)
+    return await handler.handle(ScanWatchList()), queue
 
-    report = await handler.handle(ScanWatchList())
+
+async def test_after_a_slice_fails_the_entry_is_stamped_at_the_end_of_the_slice_before_it(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    watch_list = _watch_list_stamped(tmp_path, since)
+
+    report, queue = await _refresh(tmp_path, watch_list, _Timeline([_post_at(since + timedelta(hours=2), 1)], fail_from=2))
 
     assert [row.url for row in queue.entries()] == ["https://x.com/someone/status/1"]
     assert report.failed == (("x:someone", "xAI answered HTTP 503 for grok-4-fast-non-reasoning: Service unavailable."),)
+    assert watch_list.entries()[0].last_scanned == since + timedelta(days=1)
+
+
+async def test_a_budget_stopped_scan_stamps_the_end_of_its_last_day_and_the_next_one_continues_there(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=21)
+    watch_list = _watch_list_stamped(tmp_path, since)
+    timeline = _Timeline([_post_at(since + timedelta(days=day, hours=12), day) for day in range(21)])
+
+    await _refresh(tmp_path, watch_list, timeline)
+    first_stamp = watch_list.entries()[0].last_scanned
+    await _refresh(tmp_path, watch_list, timeline)
+
+    assert first_stamp == since + timedelta(days=14)
+    assert timeline.windows == _days(since, 21), "the second scan walks the last seven days"
+    assert watch_list.entries()[0].last_scanned == _NOW
+
+
+async def test_a_scan_of_the_whole_window_that_finds_nothing_keeps_the_stamp(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=3)
+    watch_list = _watch_list_stamped(tmp_path, since)
+
+    report, _ = await _refresh(tmp_path, watch_list, _Timeline([]))
+
+    assert (report.found, report.failed) == (0, ())
     assert watch_list.entries()[0].last_scanned == since
+
+
+async def test_a_budget_stopped_scan_that_finds_nothing_still_moves_the_stamp(tmp_path: Path) -> None:
+    since = _NOW - timedelta(days=20)
+    watch_list = _watch_list_stamped(tmp_path, since)
+
+    await _refresh(tmp_path, watch_list, _Timeline([]))
+
+    assert watch_list.entries()[0].last_scanned == since + timedelta(days=14), "a quiet account never re-walks the same fourteen days"
 
 
 async def test_a_first_scan_searches_the_last_seven_days_one_day_at_a_time(tmp_path: Path) -> None:
@@ -460,16 +509,17 @@ async def test_a_first_scan_searches_the_last_seven_days_one_day_at_a_time(tmp_p
 
     scan = await _scanner(timeline, cache_dir=tmp_path).scan(WatchEntry(scanner="x", ref="someone"), since=None)
 
-    assert timeline.windows == _days(7)
+    assert timeline.windows == _days(_NOW - timedelta(days=7), 7)
     assert [source.url for source in scan.sources] == ["https://x.com/someone/status/1"]
+    assert scan.covered_until is None
 
 
 async def test_a_first_scan_asks_each_day_of_the_last_seven_up_to_the_entrys_cap(tmp_path: Path) -> None:
     prompts = await _scan_prompts(tmp_path, WatchEntry(scanner="x", ref="someone", max_items=12), since=None)
 
     assert len(prompts) == 7
-    assert prompts[0] == "List every post by @someone from 2026-08-24T09:00:00+00:00 to 2026-08-25T09:00:00+00:00, up to 12 posts."
-    assert prompts[-1] == "List every post by @someone from 2026-08-18T09:00:00+00:00 to 2026-08-19T09:00:00+00:00, up to 12 posts."
+    assert prompts[0] == "List every post by @someone from 2026-08-18T09:00:00+00:00 to 2026-08-19T09:00:00+00:00, up to 12 posts."
+    assert prompts[-1] == "List every post by @someone from 2026-08-24T09:00:00+00:00 to 2026-08-25T09:00:00+00:00, up to 12 posts."
 
 
 def test_building_without_the_xai_settings_block_refuses_naming_it(tmp_path: Path) -> None:
