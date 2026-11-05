@@ -34,6 +34,26 @@ const CARD = {
     level: "machine-confirmed",
     runs_with_evidence: 1,
     failed_runs: 0,
+    total: {
+      runs_with_evidence: 1,
+      failed_runs: 0,
+      approved_by: [],
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+    versions: [
+      {
+        version: 1,
+        level: "machine-confirmed",
+        runs_with_evidence: 1,
+        failed_runs: 0,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+    ],
   },
   needs: [],
   missing: [],
@@ -110,6 +130,26 @@ function workflowFixture() {
       level: "machine-confirmed",
       runs_with_evidence: 1,
       failed_runs: 0,
+      total: {
+        runs_with_evidence: 1,
+        failed_runs: 0,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+      versions: [
+        {
+          version: 1,
+          level: "machine-confirmed",
+          runs_with_evidence: 1,
+          failed_runs: 0,
+          approved_by: [],
+          structural_grades: 0,
+          structural_mean: null,
+          structural_last: null,
+        },
+      ],
     },
   };
 }

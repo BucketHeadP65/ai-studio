@@ -14,6 +14,10 @@ import { Input } from "@/shared/ui/input";
 // approval. Shared by the library card and the workflow header, so the shape a chooser reads
 // and the shape an open artifact reads are never two implementations of the same three lines.
 //
+// Beside the level and the counts of the version it reads, the chip shows the runs with evidence
+// summed over every saved version, once there is more than one. That total never sets the level,
+// so a fresh version of a long trusted workflow reads as not verified with its history beside it.
+//
 // Whoever approves types their own name. This deployment has no accounts and no logins, so the
 // name is text, recorded as given and never filled in on anybody's behalf.
 
@@ -54,6 +58,7 @@ export function TrustChip({ workflowId, trust, onApproved }: TrustChipProps): Re
 
   const level = trust.level;
   const named = approveName.trim() !== "";
+  const totalRuns = trust.total.runs_with_evidence;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -70,6 +75,12 @@ export function TrustChip({ workflowId, trust, onApproved }: TrustChipProps): Re
         <Badge tone="danger">
           failed <span className="font-mono">{trust.failed_runs}</span>
         </Badge>
+      ) : null}
+      {trust.versions.length > 1 ? (
+        <span className="text-caption text-label-3">
+          total <span className="font-mono">{totalRuns}</span> {totalRuns === 1 ? "run" : "runs"}{" "}
+          across <span className="font-mono">{trust.versions.length}</span> versions
+        </span>
       ) : null}
       {level !== "approved" ? (
         <Button

@@ -158,6 +158,26 @@ const DETAIL: WorkflowDetail = {
     structural_grades: 0,
     structural_mean: null,
     structural_last: null,
+    total: {
+      runs_with_evidence: 6,
+      failed_runs: 0,
+      approved_by: [],
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+    versions: [
+      {
+        version: 1,
+        level: "machine-confirmed",
+        runs_with_evidence: 6,
+        failed_runs: 0,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+    ],
   },
   archived_at: null,
 };

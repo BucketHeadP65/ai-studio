@@ -117,17 +117,36 @@ export type WorkflowGraph = z.infer<typeof WorkflowGraphSchema>;
 
 // -- library -----------------------------------------------------------------
 
-export const TrustSchema = z.object({
-  level: z.string(),
+// The counts one trust record holds, for one version or summed over every version.
+export const TrustCountsSchema = z.object({
   runs_with_evidence: z.number(),
   failed_runs: z.number(),
-  // Who approved this exact version, in the order they did. Empty until an approval lands.
+  // Who approved, in the order they did. Empty until an approval lands.
   approved_by: z.array(z.string()),
-  // Reliable and right are different claims: `runs_with_evidence` says the artifact ran;
+  // Reliable and right are different claims. `runs_with_evidence` says the artifact ran, and
   // these say whether anything measured what it produced.
   structural_grades: z.number().int().nonnegative(),
   structural_mean: z.number().nullable(),
   structural_last: z.number().nullable(),
+});
+
+export type TrustCounts = z.infer<typeof TrustCountsSchema>;
+
+// One saved version's own level and counts.
+export const VersionTrustSchema = TrustCountsSchema.extend({
+  version: z.number().int(),
+  level: z.string(),
+});
+
+export type VersionTrust = z.infer<typeof VersionTrustSchema>;
+
+// The level and the counts beside it are the version this answer is about. `total` sums every
+// saved version of the workflow's name (live, superseded and archived) and never sets the level.
+// `versions` lists each counted version, lowest first, and is empty for an unreadable workflow.
+export const TrustSchema = TrustCountsSchema.extend({
+  level: z.string(),
+  total: TrustCountsSchema,
+  versions: z.array(VersionTrustSchema),
 });
 
 export type Trust = z.infer<typeof TrustSchema>;

@@ -95,6 +95,36 @@ const DETAIL: WorkflowDetail = {
     structural_grades: 0,
     structural_mean: null,
     structural_last: null,
+    total: {
+      runs_with_evidence: 9,
+      failed_runs: 1,
+      approved_by: [],
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+    versions: [
+      {
+        version: 4,
+        level: "machine-confirmed",
+        runs_with_evidence: 7,
+        failed_runs: 1,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+      {
+        version: 5,
+        level: "machine-confirmed",
+        runs_with_evidence: 2,
+        failed_runs: 0,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+    ],
   },
 };
 
@@ -706,6 +736,18 @@ describe("WorkflowPage", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(screen.queryByText("Completed")).not.toBeInTheDocument());
+  });
+
+  it("shows the total over every saved version beside the level in the header", async () => {
+    mountApi();
+    render(<WorkflowPage />);
+
+    const total = await screen.findByText(
+      (_content, element) => element?.textContent === "total 9 runs across 2 versions",
+    );
+    const chip = total.parentElement;
+    expect(chip).not.toBeNull();
+    if (chip !== null) expect(within(chip).getByText("confirmed by runs")).toBeInTheDocument();
   });
 
   it("names the run it is showing by the run's own title", async () => {

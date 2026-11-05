@@ -41,6 +41,26 @@ function trust(overrides: Partial<WorkflowDetail["trust"]> = {}): WorkflowDetail
     structural_grades: 0,
     structural_mean: null,
     structural_last: null,
+    total: {
+      runs_with_evidence: 3,
+      failed_runs: 1,
+      approved_by: [],
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+    versions: [
+      {
+        version: 1,
+        level: "machine-confirmed",
+        runs_with_evidence: 3,
+        failed_runs: 1,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+    ],
     ...overrides,
   };
 }

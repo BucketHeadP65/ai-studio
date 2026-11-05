@@ -14,6 +14,7 @@ import type {
   Readiness,
   ReadinessField,
   Trust,
+  VersionTrust,
   WorkflowDetail,
   WorkflowGraph,
 } from "@/api/studio-types";
@@ -24,7 +25,7 @@ import { CollapsibleCard } from "@/components/workflows/collapsible-card";
 import { FieldFinding, ReadinessNotice } from "@/components/workflows/readiness-findings";
 import { SchemaTable } from "@/components/workflows/schema-table";
 import { StepSpine, stepRowId } from "@/components/workflows/step-spine";
-import { TrustChip } from "@/components/workflows/trust-chip";
+import { TRUST_LABEL, TrustChip } from "@/components/workflows/trust-chip";
 import { useDeliberateLaunch } from "@/components/workflows/use-launch";
 import { type Orientation, WorkflowCanvas } from "@/components/workflows/workflow-canvas";
 import { levels, shapeCounts } from "@/components/workflows/workflow-order";
@@ -38,7 +39,8 @@ import { Textarea } from "@/shared/ui/textarea";
 
 // The whole "what it does" page body: what this workflow is (its own description, applicability,
 // shape, and what it carries or leans on this app for), what it takes to start one, its steps in
-// order (`StepSpine`), and what a run of it hands back. Never a run's own history or state --
+// order (`StepSpine`), what a run of it hands back, and the trust each saved version of it earned
+// (`TrustByVersion`). Never a run's own history or state --
 // that reading stays the run inspector's, this page reads the artifact itself.
 
 export interface WorkflowAboutProps {
@@ -400,6 +402,69 @@ function ChipGroup({
   );
 }
 
+const TRUST_COLUMNS = ["Version", "Trust", "Runs completed", "Failed runs", "Approved by"];
+
+// Each saved version's own level and counts, lowest version first, with the version this page
+// reads marked. A row's level is that version's own, and no row sets another's.
+function TrustByVersion({
+  versions,
+  current,
+}: {
+  versions: VersionTrust[];
+  current: number;
+}): ReactElement {
+  return (
+    <CollapsibleCard
+      title="Trust by version"
+      aside={
+        <span className="text-caption text-label-3">{plural(versions.length, "version")}</span>
+      }
+      bodyClassName="px-5 py-4"
+    >
+      {versions.length === 0 ? (
+        <p className="text-body text-label-3">No saved version could be counted.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-line">
+          <table aria-label="Trust by version" className="w-full text-caption">
+            <thead>
+              <tr className="border-line border-b bg-well">
+                {TRUST_COLUMNS.map((column) => (
+                  <th
+                    key={column}
+                    className="px-3 py-1.5 text-left font-semibold text-label-3 text-micro uppercase tracking-caps"
+                  >
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {versions.map((entry) => (
+                <tr key={entry.version} className="border-line border-b last:border-b-0">
+                  <td className="px-3 py-1.5 text-label-1">
+                    <span className="font-mono">v{entry.version}</span>
+                    {entry.version === current ? (
+                      <span className="text-label-3"> (this version)</span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-1.5 text-label-2">
+                    {TRUST_LABEL[entry.level] ?? entry.level}
+                  </td>
+                  <td className="px-3 py-1.5 font-mono text-label-2">{entry.runs_with_evidence}</td>
+                  <td className="px-3 py-1.5 font-mono text-label-2">{entry.failed_runs}</td>
+                  <td className="px-3 py-1.5 text-label-2">
+                    {entry.approved_by.length > 0 ? entry.approved_by.join(", ") : "nobody"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </CollapsibleCard>
+  );
+}
+
 export function WorkflowAbout({ detail }: WorkflowAboutProps): ReactElement {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -707,6 +772,8 @@ export function WorkflowAbout({ detail }: WorkflowAboutProps): ReactElement {
             )}
           </CollapsibleCard>
         ) : null}
+
+        <TrustByVersion versions={detail.trust.versions} current={detail.version} />
       </div>
     </>
   );

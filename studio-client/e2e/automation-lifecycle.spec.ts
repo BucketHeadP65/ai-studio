@@ -156,6 +156,26 @@ const DETAIL: Wire<typeof WorkflowDetailSchema> = {
     structural_grades: 0,
     structural_mean: null,
     structural_last: null,
+    total: {
+      runs_with_evidence: 0,
+      failed_runs: 0,
+      approved_by: [],
+      structural_grades: 0,
+      structural_mean: null,
+      structural_last: null,
+    },
+    versions: [
+      {
+        version: 1,
+        level: "unverified",
+        runs_with_evidence: 0,
+        failed_runs: 0,
+        approved_by: [],
+        structural_grades: 0,
+        structural_mean: null,
+        structural_last: null,
+      },
+    ],
   },
   presentation: {
     purpose: "Keeps the queue moving.",
