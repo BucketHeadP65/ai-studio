@@ -9,6 +9,7 @@ test_proof_reuse.py`'s `_FakeRows`/`_FakeIngest`, which mirror core's own).
 from __future__ import annotations
 
 import json
+import shutil
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -475,3 +476,18 @@ def test_every_shipped_case_file_passes_the_check_the_import_runs() -> None:
             check_step_cases(step_id, yaml.safe_load(cases_file.read_text(encoding="utf-8")))
             checked.append(step_id)
     assert checked, "no shipped case file was found, so this test would pass vacuously"
+
+
+async def test_the_repo_docs_steps_import_with_the_cases_their_case_file_holds(tmp_path: Path) -> None:
+    source = REPO / "templates" / "repo-docs" / "workflows"
+    shutil.copytree(source / "steps", tmp_path / "steps")
+    shutil.copytree(source / "evals", tmp_path / "evals")
+    (tmp_path / "workflows").mkdir()
+    store = FakeCollection(collection="test-knowledge-base", prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    check_adrs = load_step_document((source / "steps" / "check-adrs.md").read_text(encoding="utf-8"))
+
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+
+    shipped = yaml.safe_load((source / "evals" / "check-adrs.yaml").read_text(encoding="utf-8"))
+    assert await library.fetch_step_cases(step_page_id("check_adrs", check_adrs.version)) == shipped
