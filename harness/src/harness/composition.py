@@ -479,14 +479,18 @@ async def _performed_on_a_line(state: StepConversationContinuation, call: TurnOn
     if resumed.settled is not None:
         return TypeAdapter(call.output_type).validate_python(resumed.settled.output)
     worker = call.build(_opened_with(resumed.messages, call.opening))
-    with call.baggage:
-        result = await worker.run(
-            call.prompt,
-            message_history=resumed.messages or None,
-            conversation_id=str(state.attempt.conversation_id),
-            usage_limits=call.usage_limits,
-            capabilities=[call.turns.persistence(state)],
-        )
+    with call.baggage, capture_run_messages() as messages:
+        try:
+            result = await worker.run(
+                call.prompt,
+                message_history=resumed.messages or None,
+                conversation_id=str(state.attempt.conversation_id),
+                usage_limits=call.usage_limits,
+                capabilities=[call.turns.persistence(state)],
+            )
+        except BaseException:
+            call.billed(messages[_given_length(resumed.messages) :])
+            raise
     call.billed(result.new_messages())
     await call.turns.settle(resumed, json_output(result.output, call.output_type))
     return result.output

@@ -37,7 +37,7 @@ from core.ai.workflows.contracts import (
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.temporal import continuing_step_conversation
 from pydantic_ai import UnexpectedModelBehavior
-from pydantic_ai.exceptions import ModelConnectionError
+from pydantic_ai.exceptions import ContentFilterError, ModelConnectionError
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart, UserPromptPart
 from pydantic_ai.models.function import DeltaToolCall, FunctionModel
 from pydantic_ai.usage import RequestUsage
@@ -58,6 +58,7 @@ from tests.support.fakes.step_store import FakeContinuationCheckpoints, FakeStep
 from tests.support.state import records_under
 from tests.support.streaming import streaming_function_model, usage_preserving_function_model
 from tests.support.tiers import tiers_under
+from tests.unit.test_turn_reconnects import FiledRows
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
@@ -942,6 +943,38 @@ async def test_a_later_turn_commits_its_output_and_moves_the_line_one_revision_o
     assert committed.ref.run_id == LATER_RUN, "the ref names the run this turn itself wrote"
     assert committed.output == A_DRAFT, "what is stored is the JSON the step's own output type validates"
     assert state.committed == committed.ref, "and the activity reads it back off the line it published"
+
+
+async def test_a_later_turn_the_record_carries_files_its_responses_in_the_spend_rows_when_it_fails(tmp_path: Path) -> None:
+    """The turn calls a tool it does not hold, then a content filter cuts its answer. Both were billed, so both are filed."""
+    _triage, draft, _polish = _sequence_tasks()
+    usage = RequestUsage(input_tokens=40, output_tokens=6)
+    calls: list[list[ModelMessage]] = []
+
+    def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        del info
+        calls.append(list(messages))
+        if len(calls) == 1:
+            return ModelResponse(parts=[ToolCallPart("no_such_tool", {}, tool_call_id="call_lost")], usage=usage)
+        return ModelResponse(parts=[], finish_reason="content_filter", usage=usage)
+
+    turns, _checkpoints = _a_carried_line()
+    active = ActiveRun()
+    active.run_id, active.workflow_id = LATER_RUN, "wf.digest-sequence"
+    ledger = FiledRows()
+    records = replace(records_under(tmp_path), spend=ledger)
+    environment = await build_environment(FunctionModel(function=respond), engram=fake_engram(), active=active, external_agents=dict, session_log=NoSessionLog(), custom=tmp_path / "custom", records=records, web_search=WebSearchSettings(), tiers=tiers_under(tmp_path), turns=turns)
+    assert environment.perform is not None
+    identity = StepIdentity(
+        node_id="digest_each",
+        item_key="0",
+        turn=TurnFacts(work="draft", index=1, turns=("triage", "draft", "polish"), each="item", tools=(), outputs=(str,)),
+    )
+
+    with performing_step(identity), continuing_step_conversation(_a_later_turn()), pytest.raises(ContentFilterError):
+        await environment.perform(draft, str, triage={"note": "worth a look"})
+
+    assert [(row.step, row.output_tokens) for row in ledger.rows] == [("draft", 6), ("draft", 6)], "nothing from the history it resumed"
 
 
 async def test_a_turn_that_already_committed_answers_without_calling_a_model(tmp_path: Path) -> None:
