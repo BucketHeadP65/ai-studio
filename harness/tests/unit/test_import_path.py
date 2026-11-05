@@ -131,15 +131,15 @@ class _FakeRows:
 
 
 class _FakeIngest:
-    """Records every payload `import_path` hands the store, in the order it hands them over."""
+    """Records every payload `import_path` hands the store, in the order it hands them over, and each event beside its page id."""
 
     def __init__(self) -> None:
         self.payloads: list[tuple[Mapping[str, Any], str]] = []
-        self.events: list[Event] = []
+        self.events: list[tuple[str, Event]] = []
 
     async def __call__(self, payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
         self.payloads.append((payload, collection))
-        self.events.extend(events)
+        self.events.extend((str(payload["frontmatter"]["id"]), event) for event in events)
 
 
 def _registry() -> StepRegistry:
@@ -186,10 +186,10 @@ async def test_an_import_of_new_step_versions_hands_one_event_per_step_and_none_
 
     await import_path(tmp_path, library=store, registry=_registry(), by="test:save")
 
-    assert all(isinstance(event, ReusableStepSaved) for event in ingest.events)
-    assert [(event.step_id, event.version, event.saved_by) for event in ingest.events if isinstance(event, ReusableStepSaved)] == [
-        ("st.step_a.v1", 1, "test:save"),
-        ("st.step_b.v1", 1, "test:save"),
+    assert [page for page, _ in ingest.events] == ["st.step_a.v1", "st.step_b.v1"], "the workflow's page carries no event"
+    assert [(page, event.step_id, event.version, event.saved_by) for page, event in ingest.events if isinstance(event, ReusableStepSaved)] == [
+        ("st.step_a.v1", "st.step_a.v1", 1, "test:save"),
+        ("st.step_b.v1", "st.step_b.v1", 1, "test:save"),
     ]
 
 

@@ -56,6 +56,8 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Mapping, Sequence
     from pathlib import Path
 
+    from core.ai.workflows.contracts import Ingest
+    from core.cqrs.contracts import Event
     from engram import RetrievalKnowledgeBase
     from engram.authoring.contracts import AuthoringTools
 
@@ -80,9 +82,9 @@ async def _fake_store_connection() -> _FakePool:
 
 
 @asynccontextmanager
-async def _fake_store_ingest() -> AsyncGenerator[object]:
-    async def ingest(payload: Mapping[str, object], *, collection: str) -> None:
-        del payload, collection
+async def _fake_store_ingest() -> AsyncGenerator[Ingest]:
+    async def ingest(payload: Mapping[str, object], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del payload, collection, events
 
     yield ingest
 
