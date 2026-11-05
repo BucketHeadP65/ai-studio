@@ -1,7 +1,7 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge dropped, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 12
+version: 13
 step:
   name: write_stance_flags
   source: |
@@ -107,7 +107,9 @@ step:
         stance_id = dropped["stance_id"]
         name = stance_id[len("stance."):] if stance_id.startswith("stance.") else stance_id
         flag_id = "flag.stance-" + name
-        reason = dropped["reasons"][0]
+        reason = "The judge found fewer than two digests with findings that bear."
+        if dropped["reasons"][0].startswith("The judge found it repeats the existing stance "):
+            reason = dropped["reasons"][0]
         if not flags_listed:
             removing.append({"flag_id": flag_id, "title": dropped["title"], "reason": reason, "unlisted": True})
         elif indexed.get(flag_id) == "pending":
@@ -278,7 +280,8 @@ does not list at `pending` has nothing to remove for a dropped proposal. Before 
 with `read_page` and removes it with `remove_undecided_page` only while that file is a stance flag at `pending`, so a
 flag the owner decided is never removed, nor one this run wrote. Each removal is caught on its own. Every removed flag
 is answered in `removed` with its id, its title, the path its file was read from and why, in one sentence that is also
-the reason `remove_undecided_page` is given: "It repeats the idea of" the flag a group keeps, or the judge's verdict.
+the reason `remove_undecided_page` is given: "It repeats the idea of" the flag a group keeps, "The judge found it repeats
+the existing stance" and the stance's id, or "The judge found fewer than two digests with findings that bear."
 A flag whose file is no longer at `pending`, one the owner decided before the index caught up, is left as it is and
 answered in `kept_decided`, as a decided flag it would have written over is. Every other flag it asked to remove and
 left as it is, because `read_page` refused it, another kind holds its id, `remove_undecided_page` refused it, or the

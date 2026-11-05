@@ -2409,14 +2409,14 @@ REPEAT = ["The judge found it repeats the existing stance stance.x."]
 
 
 @pytest.mark.parametrize(
-    ("judge", "reasons"),
+    ("judge", "reasons", "verdict"),
     [
-        pytest.param(_refusing("art.memory-survey#^c3"), WEAK, id="too-few-findings-bear"),
-        pytest.param(_calls_it_a_repeat, REPEAT, id="it-repeats-a-listed-stance"),
+        pytest.param(_refusing("art.memory-survey#^c3"), WEAK, "The judge found fewer than two digests with findings that bear.", id="too-few-findings-bear"),
+        pytest.param(_calls_it_a_repeat, REPEAT, "The judge found it repeats the existing stance stance.x.", id="it-repeats-a-listed-stance"),
     ],
 )
 async def test_a_proposal_its_judge_drops_removes_its_pending_flag(
-    sandbox: AsyncMonty, judge: Callable[[Backing], dict[str, object]], reasons: list[str]
+    sandbox: AsyncMonty, judge: Callable[[Backing], dict[str, object]], reasons: list[str], verdict: str
 ) -> None:
     bases = _flag_bases(flags={"flag.stance-agent-memory": FlagFile(title="Agent memory")})
     scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=judge)
@@ -2432,10 +2432,10 @@ async def test_a_proposal_its_judge_drops_removes_its_pending_flag(
             "flag_id": "flag.stance-agent-memory",
             "title": "Agent memory",
             "path": "Wiki/Flags/stance-agent-memory.md",
-            "reason": reasons[0],
+            "reason": verdict,
         }
     ], "the card names the removed page by its id, title and path, since the base keeps no copy"
-    assert [removal["reason"] for removal in bases.removals] == [reasons[0]], "the tool is given the verdict, one sentence"
+    assert [removal["reason"] for removal in bases.removals] == [verdict], "the tool is given the verdict, one sentence"
     assert result["refused_removals"] == []
     assert bases.flag_writes == []
     assert scripted.calls.count("group_proposals") == 0, "one proposal and no other pending flag leave nothing to group"
