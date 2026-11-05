@@ -1276,6 +1276,27 @@ async def test_three_backing_workers_failing_alike_fail_the_run_after_the_rewrit
     assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
 
 
+async def test_three_judge_items_failing_alike_fail_the_run_after_the_rewrites_are_written(sandbox: AsyncMonty) -> None:
+    bases = Bases(
+        records={"adr-x": _record("adr-x"), "adr-1": _record("adr-1"), "adr-2": _record("adr-2"), "adr-3": _record("adr-3")},
+        stances={"stance.x": _stance("x", record="adr-x")},
+        digests=DIGESTS,
+    )
+
+    def judge(_: Backing) -> dict[str, object]:
+        msg = "The next request would exceed the request_limit of 15"
+        raise UsageLimitExceeded(msg)
+
+    scripted = Scripted(place=_three_proposals, judge=judge)
+
+    state = await _run(sandbox, bases, scripted, changed="adr-x,adr-1,adr-2,adr-3", raises=RepeatedFailureError)
+
+    assert scripted.calls.count("judge_proposals") == 3
+    assert [write["path"] for write in bases.writes] == ["Wiki/Stances/x.md"], "the judged rewrite was written first"
+    assert _value(state, "write_stances") == {"written": ["stance.x"], "failed": []}
+    assert bases.flag_writes == [], "a broken judge writes no flag and the run fails instead of succeeding empty"
+
+
 @pytest.mark.parametrize(
     "altered",
     [

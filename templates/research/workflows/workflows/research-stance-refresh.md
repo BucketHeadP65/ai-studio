@@ -63,7 +63,7 @@ presentation:
     - {label: "Stance flags written, left as the owner decided them, and refused, with the stance proposals dropped and why, and the placements under no listed stance (recorded)", path: values.write_stance_flags}
 workflow:
   name: research-stance-refresh
-  version: 18
+  version: 19
   description: List the records pages that changed at a status that counts, place them against the stances in groups of five, name every placement under a stance the base does not list, rewrite each existing stance they change as its changes alone, judge every draft, merge each rewrite into the page as it was read and write it, then back every new stance they propose with the claims of the base that support or contest it, keep only the findings code confirms on the base's digests, judge each proposal alone, list every proposal left with findings that bear from two digests with its pages as placement made it and every dropped one with why, and write each listed one as a pending stance flag, drafting no stance and never writing a flag the owner decided.
   parameters:
     collection:
@@ -630,7 +630,7 @@ workflow:
         collection: {parameter: collection}
       max_parallel: 4
       on_error: skip
-      abort_after_repeats: null
+      abort_after_repeats: 3
     - kind: run
       id: list_proposals
       work: list_proposals
@@ -692,7 +692,9 @@ digests, and marks one whose findings all contest its position with `contests_on
 per backing, four at a time, and never judges the list as a whole. Each judge answers, per finding by its claim,
 whether it bears on the position as the title states it and one sentence on why, and for the proposal the id of an
 existing stance it repeats, or null. It reads with `read_page` and `search` and writes nothing. A judge item that
-fails is skipped, and no number of failures aborts the run. There is no redo: `back_proposals` runs once, and a weak
+fails is skipped and drops only its own proposal, while three judge items in a row failing with the same error abort
+the run as failed, after every rewrite is written, so a broken judge model never reads as a run with no proposals.
+There is no redo: `back_proposals` runs once, and a weak
 finding is dropped, not repaired. With no proposal the map runs nothing, so the proposals make no model call.
 
 `list_proposals` accounts for every proposal `merge_proposals` made, in this order. A proposal with no backing of the
@@ -724,9 +726,9 @@ a file already sits there, which is named in `failed` and left as it is. A write
 and never fails the run, and when the flags cannot be listed no flag is written. Its answer, with the dropped proposals
 as `dropped` and the placements `list_unplaced` named as `unplaced` beside the flags, is the run's output.
 
-A run whose backing map aborts fails after every rewrite is written. Each rewrite is written to its file at once. A
+A run whose backing map or judge map aborts fails after every rewrite is written. Each rewrite is written to its file at once. A
 knowledge base indexed on each write indexes it then. One indexed once per run indexes the run's writes when the run
 ends, fails or pauses, so under a `wait` gate policy a rewrite judge that cannot decide holds that index until the
 person answers. Under the opt-in Temporal engine writes are never held for the run, so even a knowledge base indexed
-once per run indexes after each write. Three consecutive identical failures in the placement, rewrite or backing map
+once per run indexes after each write. Three consecutive identical failures in any map, the judge map among them,
 abort the run as failed.
