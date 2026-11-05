@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import warnings
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pytest
@@ -18,7 +19,7 @@ from core.ai.workflows.domain.vocabulary import SameAs
 from pydantic import BaseModel
 from pydantic_ai.models.test import TestModel
 from pydantic_evals import Case, Dataset
-from pydantic_evals.evaluators import LLMJudge
+from pydantic_evals.evaluators import Evaluator, LLMJudge
 
 from harness.cli import _dataset_path
 from harness.domain.contracts import CaseResult
@@ -30,6 +31,8 @@ from harness.settings import CHECKOUT
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from pydantic_evals.evaluators import EvaluatorContext
 
 DATASET_PATH = CHECKOUT.parent / "templates" / "repo-docs" / "workflows" / "evals" / "check-adrs.yaml"
 
@@ -275,7 +278,7 @@ class TestReportFailedOverEveryEvaluator:
         report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
 
         assert report_failed(report) is True
-        assert case_result(report.cases[0]) == CaseResult(name="judged", passed=False, reason="LLMJudge: it names one")
+        assert case_result(report.cases[0]) == CaseResult(name="judged", passed=False, errored=False, reason="LLMJudge: it names one")
 
     async def test_a_case_no_evaluator_judged_failed(self) -> None:
         dataset = Dataset(name="probe", cases=[Case(name="unjudged", inputs={"drafts": [], "collection": "repo-docs"})])
@@ -285,13 +288,41 @@ class TestReportFailedOverEveryEvaluator:
         assert report_failed(report) is True
         assert case_result(report.cases[0]).reason == "no evaluator judged this case"
 
-    async def test_a_case_whose_step_raised_failed_and_names_the_error(self) -> None:
+    async def test_a_case_whose_step_raised_errored_and_names_the_error(self) -> None:
         dataset = Dataset(name="probe", cases=[Case(name="raises", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[OutcomeMatches()])
 
         report = await run_step_evals(dataset, RaisingPerform(), STEP)
 
         assert report_failed(report) is True
-        assert case_result(report.failures[0]) == CaseResult(name="raises", passed=False, reason="the step raised: RuntimeError: the model is unreachable")
+        assert case_result(report.failures[0]) == CaseResult(
+            name="raises", passed=False, errored=True, reason="errored before any evaluator judged it: RuntimeError: the model is unreachable"
+        )
+
+    async def test_a_case_whose_evaluator_raised_errored_and_names_the_evaluator(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="judged", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[UnreachableJudge()])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.cases[0]) == CaseResult(
+            name="judged", passed=False, errored=True, reason="errored while UnreachableJudge judged it: ConnectionError: the judge is unreachable"
+        )
+
+    async def test_a_case_no_evaluator_judged_failed_and_did_not_error(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="unjudged", inputs={"drafts": [], "collection": "repo-docs"})])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert case_result(report.cases[0]).errored is False
+
+
+@dataclass
+class UnreachableJudge(Evaluator):
+    """An evaluator whose model cannot be reached, so judging raises."""
+
+    def evaluate(self, ctx: EvaluatorContext) -> bool:
+        msg = "the judge is unreachable"
+        raise ConnectionError(msg)
 
 
 class RaisingPerform:

@@ -54,17 +54,25 @@ TWO_CASES: dict[str, JsonValue] = {
 
 
 class ScriptedPerform:
-    """A perform answering `outcome` for every case, recording one stand-in call per case as a write would."""
+    """A perform answering `outcome` for every case, recording one stand-in call per case as a write would.
 
-    def __init__(self, calls: StandInCalls, outcome: str = "approve") -> None:
+    A case whose first draft's slug is in `raising` raises instead, as a run whose model connection broke does.
+    """
+
+    def __init__(self, calls: StandInCalls, outcome: str = "approve", raising: frozenset[str] = frozenset()) -> None:
         self.stand_ins = calls
         self.outcome = outcome
+        self.raising = raising
         self.performed: list[dict[str, object]] = []
         self.output_types: list[type] = []
 
     async def __call__(self, task: Briefing, output_type: type, /, **inputs: object) -> object:
         self.performed.append(dict(inputs))
         self.output_types.append(output_type)
+        drafts = inputs.get("drafts")
+        if isinstance(drafts, list) and drafts and isinstance(drafts[0], dict) and drafts[0].get("slug") in self.raising:
+            msg = "the model connection broke"
+            raise ConnectionError(msg)
         self.stand_ins.append(StandInCall(tool="write_note", arguments={"knowledge_base": "research"}, answer="checked, not written: ok"))
         if isinstance(output_type, type) and issubclass(output_type, BaseModel):
             return output_type(outcome=self.outcome, feedback="a scripted verdict")
@@ -100,7 +108,10 @@ class TestPerformStepCases:
 
         assert report.step_id == "st.check_drafts.v3"
         assert report.step_hash == step_content_address(step)
-        assert [(result.name, result.passed) for result in report.results] == [("a sound draft", True), ("an empty draft", False)]
+        assert [(result.name, result.passed, result.errored) for result in report.results] == [
+            ("a sound draft", True, False),
+            ("an empty draft", False, False),
+        ]
         assert "'reject'" in report.results[1].reason
         assert report.stand_in_calls == 2, "the calls the list held before this run were counted"
         assert report.blocked_by is None
@@ -127,7 +138,7 @@ class TestPerformStepCases:
         assert perform.performed == []
         assert _files(tmp_path) == []
 
-    async def test_resolve_entities_blocks_a_case_run_because_it_creates_entity_pages(self, tmp_path: Path) -> None:
+    async def test_a_step_holding_resolve_entities_runs_its_cases_with_the_write_recorded(self, tmp_path: Path) -> None:
         calls: StandInCalls = []
         perform = ScriptedPerform(calls)
 
@@ -135,8 +146,55 @@ class TestPerformStepCases:
             _briefing(tools=("read_page", "resolve_entities")), "st.link.v1", TWO_CASES, StepRegistry(perform=perform), FileCaseReports(tmp_path), calls
         )
 
-        assert report.blocked_by == "resolve_entities"
+        assert report.blocked_by is None
+        assert len(perform.performed) == 2
+
+    async def test_a_report_with_an_errored_case_is_returned_and_not_kept_so_the_next_run_tries_again(self, tmp_path: Path) -> None:
+        calls: StandInCalls = []
+        perform = ScriptedPerform(calls, raising=frozenset({"two"}))
+        reports = FileCaseReports(tmp_path)
+
+        report = await perform_step_cases(_briefing(), "st.check_drafts.v3", TWO_CASES, StepRegistry(perform=perform), reports, calls)
+
+        errored = report.results[1]
+        assert (errored.name, errored.passed, errored.errored) == ("an empty draft", False, True)
+        assert errored.reason == "errored before any evaluator judged it: ConnectionError: the model connection broke"
+        assert report.results[0].errored is False
+        assert _files(tmp_path) == [], "a report holding a case that errored was kept"
+
+        again = ScriptedPerform(calls)
+        retried = await perform_step_cases(_briefing(), "st.check_drafts.v3", TWO_CASES, StepRegistry(perform=again), reports, calls)
+
+        assert len(again.performed) == 2, "the cases did not run again after an errored case"
+        assert [result.errored for result in retried.results] == [False, False]
+        assert len(_files(tmp_path)) == 1
+
+    @pytest.mark.parametrize(
+        "cases",
+        [
+            {
+                "cases": [{"name": "a sound draft", "inputs": {"drafts": []}}],
+                "evaluators": [{"LLMJudge": {"rubric": "The verdict names a reason."}}],
+            },
+            {
+                "cases": [
+                    {"name": "a sound draft", "inputs": {"drafts": []}, "evaluators": [{"LLMJudge": {"rubric": "The verdict names a reason."}}]}
+                ],
+            },
+        ],
+        ids=["for every case", "for one case"],
+    )
+    async def test_a_dataset_whose_llm_judge_names_no_model_is_refused_before_any_case_runs(
+        self, tmp_path: Path, cases: dict[str, JsonValue]
+    ) -> None:
+        calls: StandInCalls = []
+        perform = ScriptedPerform(calls)
+
+        with pytest.raises(CaseRunRefusedError, match="name a model this deployment's tiers can serve"):
+            await perform_step_cases(_briefing(), "st.check_drafts.v3", cases, StepRegistry(perform=perform), FileCaseReports(tmp_path), calls)
+
         assert perform.performed == []
+        assert _files(tmp_path) == []
 
     async def test_a_step_with_no_cases_reports_so_at_no_cost(self, tmp_path: Path) -> None:
         calls: StandInCalls = []
@@ -164,7 +222,7 @@ class TestPerformStepCases:
 
         assert run_code.ran == [{"pages": ["a", "b", "c"]}]
         assert run_code.output_types == [int]
-        assert report.results == (CaseResult(name="three pages", passed=True, reason="EqualsExpected: True"),)
+        assert report.results == (CaseResult(name="three pages", passed=True, errored=False, reason="EqualsExpected: True"),)
 
     async def test_a_briefing_whose_output_is_a_list_runs_on_that_list_type(self, tmp_path: Path) -> None:
         calls: StandInCalls = []

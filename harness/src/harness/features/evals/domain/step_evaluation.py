@@ -66,8 +66,8 @@ def bind_collection(dataset: Dataset, collection: str) -> None:
 def case_result(case: ReportCase | ReportCaseFailure) -> CaseResult:
     """How one case came out: passed when at least one evaluator judged it and every one passed it.
 
-    An assertion passes when it is true and a score when it is 1.0. A case whose step raised, whose evaluator raised, or
-    that no evaluator judged has failed.
+    An assertion passes when it is true and a score when it is 1.0. A case whose step or one of whose evaluators raised
+    errored, and its reason says `errored` and names the error. A case no evaluator judged failed.
 
     Args:
         case: A case of an evaluation report, run or failed.
@@ -76,16 +76,16 @@ def case_result(case: ReportCase | ReportCaseFailure) -> CaseResult:
         The case's result, its reason naming every evaluator's verdict or the error.
     """
     if isinstance(case, ReportCaseFailure):
-        return CaseResult(name=case.name, passed=False, reason=f"the step raised: {case.error_message}")
+        return CaseResult(name=case.name, passed=False, errored=True, reason=f"errored before any evaluator judged it: {case.error_message}")
     if case.evaluator_failures:
-        named = ". ".join(f"{failure.name} raised: {failure.error_message}" for failure in case.evaluator_failures)
-        return CaseResult(name=case.name, passed=False, reason=named)
+        named = ". ".join(f"errored while {failure.name} judged it: {failure.error_message}" for failure in case.evaluator_failures)
+        return CaseResult(name=case.name, passed=False, errored=True, reason=named)
     verdicts = [*case.assertions.values(), *case.scores.values()]
     if not verdicts:
-        return CaseResult(name=case.name, passed=False, reason="no evaluator judged this case")
+        return CaseResult(name=case.name, passed=False, errored=False, reason="no evaluator judged this case")
     passed = all(result.value is True for result in case.assertions.values()) and all(result.value == 1.0 for result in case.scores.values())
     reason = ". ".join(f"{result.name}: {result.reason or result.value}" for result in verdicts)
-    return CaseResult(name=case.name, passed=passed, reason=reason)
+    return CaseResult(name=case.name, passed=passed, errored=False, reason=reason)
 
 
 def report_failed(report: EvaluationReport) -> bool:

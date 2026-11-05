@@ -130,6 +130,32 @@ class TestStandInToolset:
         assert [call.tool for call in calls] == ["skip_digest"]
 
 
+    async def test_a_resolve_entities_call_is_recorded_and_creates_no_page(self) -> None:
+        surface = FakeWritingSurface()
+        calls: StandInCalls = []
+        arguments: dict[str, object] = {"knowledge_base": "research", "entities": [{"name": "Kestrel Labs", "entity_type": "org"}]}
+        agent = Agent(_calling("resolve_entities", arguments), toolsets=[stand_in_toolset(surface, calls)])
+
+        result = await agent.run("resolve the names")
+
+        assert surface.ran == [], "the stand-in reached the real resolve_entities"
+        assert [(call.tool, call.answer) for call in calls] == [("resolve_entities", "recorded, not done")]
+        assert _answers(result.all_messages(), "resolve_entities") == ["recorded, not done"]
+
+    def test_every_write_a_case_run_reaches_has_a_stand_in(self) -> None:
+        toolset = stand_in_toolset(FakeWritingSurface(), [])
+
+        assert set(toolset.tools) == {
+            "write_note",
+            "request_source",
+            "decide_page",
+            "skip_digest",
+            "resolve_note",
+            "remember_belief",
+            "resolve_entities",
+        }
+
+
 class TestStandInCaller:
     async def test_a_write_goes_to_its_stand_in_and_a_read_goes_to_the_surface(self) -> None:
         surface = FakeWritingSurface()

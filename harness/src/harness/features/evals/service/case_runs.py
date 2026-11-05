@@ -12,6 +12,7 @@ import json
 from typing import TYPE_CHECKING, get_type_hints
 
 from core.ai.workflows.contracts import AgentStep, Briefing, Program, Shape, build_type, step_content_address
+from pydantic_evals.evaluators import LLMJudge
 
 from harness.domain.contracts import CASE_RUN_TOOLS, CaseReport
 from harness.features.evals.domain.step_evaluation import CaseDataset, OutcomeMatches, case_result
@@ -42,9 +43,10 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
 
     A briefing's cases run through `registry.perform` and a program's through `registry.run_code`, one case at a time.
     Build `registry` with the same `calls` as its stand-ins, so every write the cases make is counted. A new report is
-    kept through `reports`, so the same step and cases never run twice. Nothing runs, and nothing is kept, for a step
-    with no cases, an agent step, a step whose output is another step's type, or a step holding a tool outside
-    `CASE_RUN_TOOLS`, which the report names in `blocked_by`.
+    kept through `reports`, so the same step and cases never run twice, unless a case errored: that report is returned
+    and not kept, so the cases run again next time. Nothing runs, and nothing is kept, for a step with no cases, an
+    agent step, a step whose output is another step's type, or a step holding a tool outside `CASE_RUN_TOOLS`, which
+    the report names in `blocked_by`.
 
     Args:
         step: The step whose cases run.
@@ -58,7 +60,8 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
         The case report.
 
     Raises:
-        CaseRunRefusedError: `registry` cannot perform a briefing, or cannot run a program, so the cases cannot run.
+        CaseRunRefusedError: `registry` cannot perform a briefing or run a program, or an `LLMJudge` in the dataset
+            names no model. Nothing has run.
     """
     report = CaseReport(
         step_id=step_id,
@@ -83,14 +86,27 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
 
     task = _case_task(step, step_id, output_type, registry)
     dataset = CaseDataset.from_dict(dict(cases), custom_evaluator_types=[OutcomeMatches], default_name=step.name)
+    _refuse_unnamed_judges(dataset, step_id)
     before = len(calls)
     evaluation = await dataset.evaluate(task, max_concurrency=1, progress=False)
     by_name = {result.name: result for result in (case_result(case) for case in (*evaluation.cases, *evaluation.failures))}
     report = report.model_copy(
         update={"results": tuple(by_name[case.name] for case in dataset.cases if case.name in by_name), "no_cases": False, "stand_in_calls": len(calls) - before}
     )
-    reports.put(report)
+    if not any(result.errored for result in report.results):
+        reports.put(report)
     return report
+
+
+def _refuse_unnamed_judges(dataset: CaseDataset, step_id: str) -> None:
+    """Refuse a dataset holding an `LLMJudge` that names no model, which would grade on pydantic-evals' own default."""
+    judged = [("every case", dataset.evaluators), *((f"case {case.name!r}", case.evaluators) for case in dataset.cases)]
+    if unnamed := [where for where, evaluators in judged if any(isinstance(each, LLMJudge) and each.model is None for each in evaluators)]:
+        msg = (
+            f"the cases of {step_id} cannot run: the LLMJudge for {', '.join(unnamed)} names no model, so it would grade on a "
+            f"model outside this deployment. Give it a `model`: name a model this deployment's tiers can serve."
+        )
+        raise CaseRunRefusedError(msg)
 
 
 def _case_task(step: Briefing | Program, step_id: str, output_type: type, registry: StepRegistry) -> Callable[[dict[str, JsonValue]], Awaitable[object]]:

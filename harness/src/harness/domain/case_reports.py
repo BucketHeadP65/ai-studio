@@ -14,15 +14,20 @@ class CaseResult(BaseModel):
     """The case's name, as its dataset gives it."""
     passed: bool
     """Whether every evaluator that judged the case passed it."""
+    errored: bool
+    """Whether the case errored: its run or an evaluator raised, as a broken model connection, a spend brake or a
+    provider error does. An errored case did not pass and says nothing against the step. A case an evaluator judged
+    and did not pass failed, and is not errored."""
     reason: str
-    """What the evaluators said, or why the case failed before any evaluator read it."""
+    """What the evaluators said, or, for an errored case, `errored` and the error that stopped it."""
 
 
 class CaseReport(BaseModel):
     """A step version's case report: every case's result, or why no case ran.
 
     `step_hash` and `cases_hash` are the content addresses of the step and of its dataset, which together name the
-    report. A report whose `blocked_by` names a tool, or whose `no_cases` is true, ran nothing.
+    report. A report whose `blocked_by` names a tool, or whose `no_cases` is true, ran nothing. A report holding an
+    errored case is never kept, so the cases run again next time.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

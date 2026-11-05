@@ -153,11 +153,12 @@ CASE_RUN_TOOLS: Mapping[str, CaseRunTreatment] = MappingProxyType(
         "skip_digest": "recorded_write",
         "resolve_note": "recorded_write",
         "remember_belief": "recorded_write",
+        "resolve_entities": "recorded_write",
     }
 )
 """Every tool a step's case run reaches, and how. A step holding any other tool gets no case run.
 
-`resolve_entities` is not here, because it creates entity pages."""
+`resolve_entities` is a recorded write, because it creates an entity page for each name that matches none."""
 
 
 @dataclass(frozen=True)

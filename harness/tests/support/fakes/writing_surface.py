@@ -54,12 +54,17 @@ class FakeWritingSurface:
             ran.append("request_source")
             return "requested"
 
+        def resolve_entities(knowledge_base: str, entities: list[dict[str, JsonValue]]) -> str:
+            """Resolve each name to its one entity page, creating a page for each name that matches none."""
+            ran.append("resolve_entities")
+            return '{"entities": []}'
+
         def search(query: str) -> str:
             """Ranked search over the knowledge base."""
             ran.append("search")
             return "paper.one :: a hit"
 
-        functions: list[Callable[..., str]] = [write_note, check_note, request_source, search]
+        functions: list[Callable[..., str]] = [write_note, check_note, request_source, resolve_entities, search]
         self.tools = FunctionToolset[object](functions)
         self._functions = {function.__name__: function for function in functions}
 
