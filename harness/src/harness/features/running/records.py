@@ -22,6 +22,7 @@ from harness.features.running.infrastructure.archive import FileRunArchive
 from harness.features.running.infrastructure.spend_log import FileSpendLog
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
     from core.ai.evaluation.contracts import OwnerReviewStore
@@ -46,6 +47,37 @@ class RunEndObserver(Protocol):
             evidence: What the run's ending recorded.
         """
         ...
+
+
+class RunEndObservers:
+    """Tells each of its observers about a run's ending, in their order. One that raises is logged, and the next is still told."""
+
+    def __init__(self, observers: Sequence[RunEndObserver]) -> None:
+        """Hold the observers, in the order each is told.
+
+        Args:
+            observers: Told one after the other about each run's ending.
+        """
+        self._observers = tuple(observers)
+
+    @property
+    def observers(self) -> tuple[RunEndObserver, ...]:
+        """The observers, in the order each is told."""
+        return self._observers
+
+    async def run_ended(self, evidence: RunEvidence) -> None:
+        """Tell every observer about the run's ending, logging each one that raises.
+
+        Args:
+            evidence: What the run's ending recorded.
+        """
+        for observer in self._observers:
+            try:
+                await observer.run_ended(evidence)
+            except Exception:
+                _logger.exception(
+                    "run_end_observer_failed: {observer} failed on the ending of {workflow}", observer=type(observer).__name__, workflow=evidence.workflow_id
+                )
 
 
 class ObservedEvidenceLog(FileEvidenceLog):

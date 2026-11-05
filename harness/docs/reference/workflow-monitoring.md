@@ -1231,6 +1231,9 @@ feedback to the step the gate reruns. A blank or whitespace-only note is replace
 budget before it answers is a `cannot_judge` too, so under `"auto"` it reruns the step the gate names with the budget
 stop as its note. The refusal spends one of the gate's reaches, so a judge that never decides ends the run at the
 gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in `gates_auto`.
+`gates_rejected` counts every rejection the run's gate decisions recorded, once each, whoever gave it: a judge's own
+plain rejection, a person's, an orchestrator's or a deadline's, on both engines (core's `gate_rejections`). A judge's
+`cannot_judge` is no rejection, and whoever answered in its place records a decision of its own.
 
 **The honesty rule, now three columns.** `gates_approved` means a person clicked approve. `gates_auto` means automode
 passed the gate with nobody asked. `gates_orchestrated` means this run's own orchestrator decided it: either because
@@ -1362,6 +1365,28 @@ fire ends when the gate's own `max_attempts` is spent, honestly attested, no sil
 tick while the schedule's previous fire is still live stamps `last_outcome: "missed (previous run still live)"` and
 is never queued. `POST .../run-now` shares this same firing path, so a fire an owner clicks and one the ticker takes
 leave identical session state and tick-log entries behind them.
+
+## What hears a run's ending
+
+Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells
+four parts in turn, and a part that fails is logged while the next is still told:
+
+1. **The arming** (`RunEndArming`, scheduling slice) arms every `after <workflow name>` schedule the run satisfies.
+2. **The live trial watch** (`LiveTrialWatch`, maintenance slice) reads a run of a consumer version on live trial, one
+   that carries a `live_trial` marker, by core's `live_trial_verdict` against the previous version's newest three
+   completed runs from the evidence log. Ignored runs change nothing, a run that failed anywhere but at a node running
+   the adopted step among them, and once three runs counted (the marker's `runs`)
+   the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
+   the previous version is live again, its consumer record declines the step version as reverted, a
+   `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
+   and the owner is told. A version that is no longer the newest live one of its name, because a person saved a newer
+   one, is never reverted.
+3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per id in
+   `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
+   `max_attempts`, which is how a run ends with nothing landed.
+4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
+   starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
+   status is failed tells the owner too, as a live trial reads a failed run. A run started by hand tells nobody.
 
 ## What this station does not do (v1)
 

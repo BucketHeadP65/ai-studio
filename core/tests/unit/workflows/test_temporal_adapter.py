@@ -50,7 +50,6 @@ from core.ai.workflows.contracts import (
     StepRegistry,
     TurnFacts,
     Workflow,
-    WorkflowState,
     build_graph,
     observed_outcome,
     performing_step,
@@ -626,16 +625,14 @@ def _automode_run_of(spec: Workflow) -> DurableWorkflowRun:
 
 
 async def test_under_automode_a_judge_that_cannot_decide_is_refused_in_the_judges_name() -> None:
-    """Automode decides nothing, so nobody passes what the judge could not judge, and the evidence counts a refusal."""
+    """Automode decides nothing, so nobody passes what the judge could not judge."""
     run = _automode_run_of(_draft_then_judge())
 
     decision = await run.review("check", "a draft", note="The drafts are empty.")
 
     assert decision == GateDecision(approve=False, feedback="The drafts are empty.", source="judge")
     assert run.waiting_at() is None, "nothing waits for a person"
-    evidence = run.evidence()
-    assert evidence.gates_rejected == {"check": 1}
-    assert evidence.gates_auto_approved == [], "automode passed nothing"
+    assert run.evidence().gates_auto_approved == [], "automode passed nothing"
 
 
 async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on() -> None:
@@ -672,7 +669,7 @@ async def test_under_automode_a_judge_that_never_decides_spends_the_gates_reache
     registry.register(check)
     spec = _draft_then_judge()
     run = _automode_run_of(spec)
-    state = WorkflowState(params={})
+    state = run._state
 
     with pytest.raises(RetryExhaustedError) as raised:
         await build_graph(spec, registry, approval=run).run(state=state)
@@ -681,8 +678,32 @@ async def test_under_automode_a_judge_that_never_decides_spends_the_gates_reache
     assert (raised.value.feedback.source, raised.value.feedback.feedback) == ("judge", JUDGE_NOTE_FALLBACK)
     assert len(drafted) == 3
     assert [(fact.source, fact.verdict) for fact in state.gate_decisions] == [("judge", "cannot_judge"), ("judge", "reject")] * 3
-    assert run.evidence().gates_rejected == {"check": 3}
+    assert run.evidence().gates_rejected == {"check": 3}, "each reach counts once, the cannot_judge beside its refusal is no second one"
     assert run.evidence().gates_auto_approved == []
+
+
+async def test_a_judges_own_rejections_are_counted_on_the_durable_engine() -> None:
+    """A judge that rejects twice and then approves never asks the approval hook, and the evidence still counts both."""
+    verdicts = iter(("reject", "reject", "approve"))
+
+    async def draft() -> str:
+        return "draft A"
+
+    async def check(value: str) -> _Unsure:
+        del value
+        return _Unsure(outcome=next(verdicts), feedback="Cite the source.")
+
+    registry = StepRegistry()
+    registry.register(draft)
+    registry.register(check)
+    spec = _draft_then_judge()
+    run = DurableWorkflowRun()
+    run._workflow = spec
+
+    assert await build_graph(spec, registry, approval=run).run(state=run._state) == "draft A"
+
+    assert [fact.verdict for fact in run._state.gate_decisions] == ["reject", "reject", "approve"]
+    assert run.evidence().gates_rejected == {"check": 2}
 
 
 async def test_a_gate_still_waits_for_a_person_when_automode_is_off() -> None:
@@ -870,7 +891,7 @@ async def test_a_gate_refused_by_signal_spends_its_reaches_and_keeps_the_signals
         nodes=(RunNode(id="draft", work="draft"), PersonGate(id="review", reviews=FromNode(node="draft"), rejected_to="draft")),
         output=FromNode(node="review"),
     )
-    state = WorkflowState(params={})
+    state = run._state
 
     with pytest.raises(RetryExhaustedError) as raised:
         await build_graph(spec, registry, approval=Signalled()).run(state=state)
@@ -879,7 +900,7 @@ async def test_a_gate_refused_by_signal_spends_its_reaches_and_keeps_the_signals
     assert raised.value.feedback.requested_repair == "cite the constraint"
     assert len(drafted) == 3
     assert [(fact.source, fact.verdict) for fact in state.gate_decisions] == [("person", "reject")] * 3
-    assert run.evidence().gates_rejected == {"review": 3}
+    assert run.evidence().gates_rejected == {"review": 3}, "a person's refusal heard through the signal counts once"
 
 
 def _a_turn(*, index: int = 0, item_key: str = "3") -> IdentityOnTheWire:

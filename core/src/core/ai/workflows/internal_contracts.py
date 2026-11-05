@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from core.ai.workflows.domain.flags import FlagKind, MaintenanceFlag
     from core.ai.workflows.domain.intent import WorkflowIntent
     from core.ai.workflows.domain.lineage import Lineage
+    from core.ai.workflows.domain.live_trial import LiveTrialMarker
     from core.ai.workflows.domain.presentation import WorkflowPresentation
     from core.ai.workflows.domain.run_events import ReviewedArtifactRef
     from core.ai.workflows.domain.vocabulary import AgentStep, Briefing, InlineStep, Program, Workflow
@@ -459,6 +460,84 @@ class MaintenanceFlags(Protocol):
             ValueError: `by` or `reason` is empty. Nothing is written.
             FlagUnknownError: No maintenance flag has that id. Nothing is written.
             LibraryError: The flag page does not parse, or the write fails.
+        """
+        ...
+
+
+@runtime_checkable
+class LiveTrialLibrary(Protocol):
+    """The library writes and the read of a live trial: save an adoption on live trial, read its marker, and revert it.
+
+    A library that keeps reusable steps answers it. A caller narrows a library with `isinstance`.
+    """
+
+    async def put(
+        self,
+        workflow: Workflow,
+        *,
+        title: str,
+        summary: str,
+        applicability: str,
+        provenance: Mapping[str, str],
+        fingerprint: WorkflowFingerprint | None = None,
+        lineage: Lineage | None = None,
+        presentation: WorkflowPresentation | None = None,
+        intent: WorkflowIntent | None = None,
+        live_trial: LiveTrialMarker | None = None,
+    ) -> str:
+        """Keep a workflow and return its id, as `WorkflowLibrary.put` does, with the live trial marker when one is given.
+
+        Args:
+            workflow: The workflow to keep.
+            title: The card's title.
+            summary: The card's one-sentence summary.
+            applicability: When to use the workflow and when not to.
+            provenance: Facts about who saved the workflow, such as `saved_by`.
+            fingerprint: The environment stamp to keep, or None.
+            lineage: The diff that produced this workflow, or None.
+            presentation: The author's words about the workflow, or None.
+            intent: What the person who wanted the automation asked for, or None.
+            live_trial: The marker an adoption on live trial carries, or None for any other save.
+
+        Returns:
+            The library's id for the workflow.
+
+        Raises:
+            LibraryError: The save is refused.
+            PresentationRefusedError: The presentation names an input or an artifact the workflow does not declare.
+        """
+        ...
+
+    async def fetch_live_trial(self, workflow_id: str) -> LiveTrialMarker | None:
+        """The live trial marker one workflow version carries.
+
+        Args:
+            workflow_id: A workflow version's id, or `wf.<name>` or a bare name for its newest live version.
+
+        Returns:
+            The marker, or None for a version saved without one.
+
+        Raises:
+            WorkflowUnknownError: No workflow has that id.
+            LibraryError: The marker on the page does not parse.
+        """
+        ...
+
+    async def revert(self, workflow_id: str) -> str:
+        """Undo an adoption: make the version's lineage parent live again, then archive the version.
+
+        The parent keeps every other key it holds. Nothing is written when the call is refused.
+
+        Args:
+            workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
+                its name.
+
+        Returns:
+            The parent's id, now the newest live version.
+
+        Raises:
+            LibraryError: `workflow_id` is not a workflow version id or not the newest live version of its name, it
+                carries no lineage parent, the parent is not there or is archived, or a write fails.
         """
         ...
 

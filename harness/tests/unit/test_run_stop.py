@@ -17,7 +17,17 @@ from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
-from core.ai.workflows.contracts import FromNode, FromParameter, ParameterSpec, PersonGate, RunEvidence, RunNode, StepRegistry, Workflow
+from core.ai.workflows.contracts import (
+    FromNode,
+    FromParameter,
+    JudgeGate,
+    ParameterSpec,
+    PersonGate,
+    RunEvidence,
+    RunNode,
+    StepRegistry,
+    Workflow,
+)
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
 from pydantic_ai.usage import RunUsage
@@ -144,6 +154,56 @@ async def test_stopping_after_an_automode_gate_writes_the_real_gates_auto_not_an
     assert record is not None
     assert record.gates_auto == ("approve",)
     assert "approve" not in record.gates_approved
+
+
+async def test_a_stopped_run_records_the_rejections_its_gates_received_before_the_stop(tmp_path: Path) -> None:
+    """A judge rejected once and then approved, and the run was stopped later: the ending counts that rejection."""
+    records = records_under(tmp_path)
+    hold = asyncio.Event()
+    verdicts = iter((False, True))
+
+    async def draft() -> str:
+        return "draft A"
+
+    async def check(value: str) -> bool:
+        del value
+        return next(verdicts)
+
+    async def publish(page: str) -> str:
+        await hold.wait()
+        return page
+
+    registry = StepRegistry()
+    for step in (draft, check, publish):
+        registry.register(step)
+    spec = Workflow(
+        name="judged-drafts",
+        version=1,
+        description="A drafting step, a judge over it, and a publish step held open so the stop lands after the judge.",
+        nodes=(
+            RunNode(id="drafted", work="draft"),
+            JudgeGate(id="check", work="check", reviews=FromNode(node="drafted"), rejected_to="drafted"),
+            RunNode(id="publish", work="publish", inputs={"page": FromNode(node="check")}),
+        ),
+        output=FromNode(node="publish"),
+    )
+    session = _session(registry, tmp_path)
+    service.launch(session, records=records, topics=FakeBroadcaster(), spec=spec, workflow_id="wf.judged-drafts.v1", params={})
+    for _ in range(500):
+        if "publish" in session.active.progress.running:
+            break
+        await asyncio.sleep(0.01)
+    else:
+        pytest.fail("the run never reached the held node after its judge")
+
+    assert await service.stop(session, records=records) is True
+
+    (evidence,) = [event for event in await records.evidence.events_for("wf.judged-drafts.v1") if isinstance(event, RunEvidence)]
+    assert evidence.gates_rejected == {"check": 1}
+    (archived,) = records.archive.recent(10)
+    record = records.archive.get(archived.run_id)
+    assert record is not None
+    assert record.gates_rejected == {"check": 1}
 
 
 async def test_stop_with_nothing_live_reports_false(registry: StepRegistry, tmp_path: Path) -> None:

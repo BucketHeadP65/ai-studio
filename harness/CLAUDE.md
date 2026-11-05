@@ -35,13 +35,14 @@ only shrink. The tiers, inward first:
   `docs/reference/session-journal.md`), `record` (the recall source over the conversation record, narrowed to one
   conversation). Code outside it imports `adapters.contracts`, and the composition roots also `adapters.wiring`.
 - `features/<slice>/`: authoring, browsing, projects, running, scheduling, selfauthoring, sessions,
-  terminal, plus evals and followme, which serve no routes, and inspection, which serves its own eight. A slice
+  terminal, plus evals, followme and maintenance, which serve no routes, and inspection, which serves its own eight. A slice
   reaches inward and into itself, never into another slice. A slice with routes carries a `controller.py` (its
   routes, one class, its own router and prefix) and a `wiring.py` (`REGISTRATIONS`, what the slice puts in the
   container).
 - `composition.py`, the one module that knows every slice: `harness_session`, `build_environment`.
 - `container.py`, the composition map: the sections, the adapters' leaves and every slice's
-  registrations, in one `create_container(settings)`.
+  registrations, in one `create_container(settings)`, plus the run-end observer, which tells the scheduler's arming,
+  the live trial watch, the maintenance run watch and the failed-fire notice about each run's ending, in that order.
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database

@@ -22,6 +22,7 @@ from core.cqrs.contracts import utcnow
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
+    from core.ai.workflows.domain.run_events import GateDecisionFact
     from core.ai.workflows.domain.vocabulary import Workflow
 
 
@@ -79,10 +80,11 @@ class RunEvidence(BaseModel):
     would clear is evidence, and still not a person's approval. The run itself counts like any
     other completed run. `gates_rejected` counts rejections by gate id, whoever refused."""
     gates_rejected: dict[str, int] = Field(default_factory=dict)
-    """How many times a person refused each gate before this run ended, by gate id.
+    """How many times each gate was rejected before this run ended, by gate id, counted by `gate_rejections`.
 
-    Recorded by the gate wiring, never by the model. A gate that timed out counts here too. Empty
-    means no gate was refused, or the runner did not record refusals, and the two read the same."""
+    Every rejection the run's gate decisions recorded counts once, whoever gave it: a judge, a person, an orchestrator
+    or a timeout. A judge's refusal under gate mode `auto` counts once, the same as its plain rejection. Empty means no
+    gate was rejected."""
     params: WorkflowArguments = Field(default_factory=dict)
     """What this run was given, as the JSON each parameter declares. A replay runs on these
     inputs."""
@@ -269,3 +271,22 @@ def orchestrated_gates(workflow: Workflow, values: Mapping[str, object]) -> tupl
         The ids of the approved orchestrator gates, in node order.
     """
     return tuple(node.id for node in workflow.nodes if node.kind == "orchestrator-gate" and node.id in values)
+
+
+def gate_rejections(decisions: Iterable[GateDecisionFact]) -> dict[str, int]:
+    """How many times each gate was rejected, counted from the decisions a run recorded, for `RunEvidence.gates_rejected`.
+
+    Each `reject` decision counts once. A judge's `cannot_judge` is not a rejection, and whoever answered in its place
+    records a decision of its own.
+
+    Args:
+        decisions: Every decision the run's gates received, in order.
+
+    Returns:
+        Gate id to rejection count. A gate never rejected does not appear.
+    """
+    counts: dict[str, int] = {}
+    for decision in decisions:
+        if decision.verdict == "reject":
+            counts[decision.gate_id] = counts.get(decision.gate_id, 0) + 1
+    return counts

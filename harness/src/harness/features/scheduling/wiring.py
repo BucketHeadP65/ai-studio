@@ -1,4 +1,4 @@
-"""What the scheduling slice registers: the scheduler over the stored schedules, and what hears each run's ending."""
+"""What the scheduling slice registers: the scheduler over the stored schedules, and the arming each run's ending tells."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from core.cqrs.contracts import TopicSink
 from wireup import injectable
 
 from harness.adapters.contracts import ScheduleDatabase
-from harness.features.running.contracts import RunEndObserver
 from harness.features.scheduling.infrastructure.postgres import PostgresSchedules
 from harness.features.scheduling.service import RunEndArming, Scheduler
 from harness.session import PooledSessions
@@ -28,18 +27,18 @@ def scheduler(database: ScheduleDatabase, topics: TopicSink) -> Scheduler:
 
 
 @injectable
-def run_end_observer(scheduler: Scheduler, sessions: PooledSessions) -> RunEndObserver:
-    """What hears each workflow run's ending: the scheduler, arming the schedules waiting for that workflow.
+def run_end_arming(scheduler: Scheduler, sessions: PooledSessions) -> RunEndArming:
+    """The arming each workflow run's ending tells, which arms the schedules waiting for that workflow.
 
     Args:
         scheduler: The scheduler the after-run schedules are armed through.
         sessions: The sessions this process holds, asked for only when a run ends.
 
     Returns:
-        The run-end observer.
+        The arming.
     """
     return RunEndArming(scheduler, sessions)
 
 
-REGISTRATIONS: list[object] = [scheduler, run_end_observer]
+REGISTRATIONS: list[object] = [scheduler, run_end_arming]
 """Everything this slice puts in the container, each under the type its consumers declare."""

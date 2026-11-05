@@ -20,6 +20,7 @@ CONVERTED = (
     "harness.domain",
     "harness.features.authoring",
     "harness.adapters",
+    "harness.features.maintenance",
 )
 """Every converted slice, by its dotted name. A slice joins when its conversion lands and never leaves."""
 DOCUMENTED: tuple[str, ...] = (

@@ -13,7 +13,7 @@ from core.ai.workflows.contract_port import WorkflowContract
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.document import SpecDocument, StepDocument, load_spec_document, load_step_document
 from core.ai.workflows.domain.events import ReusableStepSaved
-from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, approved_gates, orchestrated_gates, trust_level
+from core.ai.workflows.domain.evidence import Approval, Grade, RunEvidence, approved_gates, gate_rejections, orchestrated_gates, trust_level
 from core.ai.workflows.domain.fingerprint import (
     WorkflowFingerprint,
     canonical_step_yaml,
@@ -22,7 +22,7 @@ from core.ai.workflows.domain.fingerprint import (
     spec_identity,
     step_content_address,
 )
-from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, FlagKind, MaintenanceFlag, flag_id, flag_to_write
+from core.ai.workflows.domain.flags import AUTOMATIC_RESOLVERS, STEP_MAINTENANCE_AGENT, FlagKind, MaintenanceFlag, flag_id, flag_to_write
 from core.ai.workflows.domain.identity import (
     CURRENT_STEP,
     ReviewedArtifacts,
@@ -44,6 +44,7 @@ from core.ai.workflows.domain.lineage import (
     moved_nodes,
     prediction_record,
 )
+from core.ai.workflows.domain.live_trial import LiveTrialMarker, LiveTrialVerdict, live_trial_verdict
 from core.ai.workflows.domain.outcome import GateReview, MapBatch, Outcome, OutcomeStatus, WorkItemFact, observed_outcome
 from core.ai.workflows.domain.parameter_values import WorkflowArguments, normalize_arguments
 from core.ai.workflows.domain.presentation import (
@@ -120,6 +121,7 @@ from core.ai.workflows.internal_contracts import (
     ConsumerRecords,
     EvidenceLog,
     Ingest,
+    LiveTrialLibrary,
     MaintenanceFlags,
     OrchestratorDecider,
     PerformStep,
@@ -154,6 +156,7 @@ __all__ = [
     "JUDGE_NOTE_FALLBACK",
     "KNOWLEDGE_BASE_CONTROL",
     "NO_REUSABLE_STEPS",
+    "STEP_MAINTENANCE_AGENT",
     "AdaptationRefusedError",
     "AgentResolver",
     "AgentStep",
@@ -191,6 +194,9 @@ __all__ = [
     "LibraryCollection",
     "LibraryError",
     "Lineage",
+    "LiveTrialLibrary",
+    "LiveTrialMarker",
+    "LiveTrialVerdict",
     "MaintenanceFlag",
     "MaintenanceFlags",
     "MapBatch",
@@ -279,8 +285,10 @@ __all__ = [
     "fingerprint",
     "flag_id",
     "flag_to_write",
+    "gate_rejections",
     "grade",
     "intent_issues",
+    "live_trial_verdict",
     "load_spec_document",
     "load_step_document",
     "moved_nodes",

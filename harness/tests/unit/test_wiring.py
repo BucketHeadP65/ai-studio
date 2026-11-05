@@ -10,17 +10,23 @@ from typing import TYPE_CHECKING
 import pytest
 
 from core.ai.history.contracts import PoolDatabase, PostgresStepStore, RequestParametersSink
+from core.ai.workflows.contracts import Outcome, RunEvidence
 
 from harness import settings as _settings
+from harness.adapters.contracts import Notifier
 from harness.adapters.store import RecordDatabase, SessionsDatabase
 from harness.adapters.wiring import RecordPoolOpener
 from harness.container import WIRING_MODULES, create_container
 from harness.domain.ports import ConversationHistory, SessionTranscript
 from harness.features.authoring.internal_contracts import Chat
 from harness.features.authoring.service import ChatService
+from harness.features.maintenance.contracts import FailedFireNotice, LiveTrialWatch, MaintenanceRunWatch
+from harness.features.running.contracts import SCHEDULE_RUNNER_PREFIX, RunEndObserver, RunEndObservers
+from harness.features.scheduling.contracts import RunEndArming
 from harness.main import CONTROLLERS
 from harness.settings import HarnessSettings
-from tests.support.container import answering_from_memory, rooted_at
+from tests.support.container import IO_LEAVES, answering_from_memory, rooted_at
+from tests.support.fakes.owner_notifier import FakeOwnerNotifier
 from tests.support.fakes.pools import FakePool, FakeRecordDatabase, FakeRecordPool, FakeSessionsDatabase
 
 if TYPE_CHECKING:
@@ -35,7 +41,9 @@ CONTAINER_NAMES = frozenset(
 COMPOSITION_ROOTS = frozenset({"container.py", "main.py", "acp.py", "cli.py"})
 WIRING_FILES = frozenset({"adapters/wiring.py"}) | {
     f"features/{slice_name}/wiring.py"
-    for slice_name in ("authoring", "browsing", "inspection", "projects", "running", "scheduling", "selfauthoring", "sessions", "terminal")
+    for slice_name in (
+        "authoring", "browsing", "inspection", "maintenance", "projects", "running", "scheduling", "selfauthoring", "sessions", "terminal"
+    )
 }
 
 
@@ -247,6 +255,39 @@ class TestEveryWiringModuleIsListed:
             chat = await container.get(Chat)
 
         assert isinstance(chat, ChatService)
+        await container.close()
+
+
+class TestTheRunEndObserver:
+    """What hears each run's ending is one composite, its parts in the order each must be told."""
+
+    async def test_it_tells_the_arming_then_the_live_trial_watch_then_the_maintenance_run_watch_then_the_notice(self, tmp_path: Path) -> None:
+        container = create_container(rooted_at(HarnessSettings(), tmp_path))
+        with container.override(dict(IO_LEAVES)):
+            observer = await container.get(RunEndObserver)
+
+        assert isinstance(observer, RunEndObservers)
+        assert [type(part) for part in observer.observers] == [RunEndArming, LiveTrialWatch, MaintenanceRunWatch, FailedFireNotice]
+        await container.close()
+
+    async def test_the_notice_hears_a_failed_run_a_schedule_fired(self, tmp_path: Path) -> None:
+        container = create_container(rooted_at(HarnessSettings(), tmp_path))
+        notifier = FakeOwnerNotifier()
+        with container.override({**dict(IO_LEAVES), Notifier: notifier}):
+            observer = await container.get(RunEndObserver)
+            await observer.run_ended(
+                RunEvidence(
+                    workflow_id="wf.digest-sources.v4",
+                    spec_hash="abc",
+                    outcome="failed",
+                    result=Outcome(status="failed", summary="The digest step stopped with an error."),
+                    gates_auto=(),
+                    gates_orchestrated=(),
+                    runner=f"{SCHEDULE_RUNNER_PREFIX}7",
+                )
+            )
+
+        assert [title for title, _ in notifier.sent] == ["A scheduled run failed"]
         await container.close()
 
 
