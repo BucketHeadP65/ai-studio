@@ -699,6 +699,8 @@ async def test_a_step_a_content_filter_cut_fails_the_run_naming_the_category(tem
     assert isinstance(ended, ApplicationError)
     assert ended.type == CONTENT_FILTER_FAILURE, "the run's history says a content filter ended it"
     assert ended.message == "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium."
+    assert ended.details, "the response the filter cut travels as the failure's detail"
+    assert ModelMessagesTypeAdapter.validate_json(str(ended.details[0])) == [FILTERED_RESPONSE], "so the sentence was read from it"
 
 
 def _reported(failure: BaseException) -> str:
