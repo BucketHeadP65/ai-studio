@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import re
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from core.ai.content_filter import content_filter_message
+from core.cqrs.contracts import utcnow
 from core.files import atomic_write
-from engram.sources.contracts import FoundSource, ScanError, claimants_for, classify_url
+from engram.sources.contracts import EntryScan, FoundSource, ScanError, claimants_for, classify_url
 from pydantic_ai import Agent, NativeOutput
 from pydantic_ai.capabilities import XSearch
 from pydantic_ai.exceptions import ContentFilterError, ModelHTTPError, UnexpectedModelBehavior
@@ -17,7 +19,7 @@ from engram_connectors.x.domain import XScan, render_post
 from engram_connectors.xai import build_xai_model, xai_resource
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
     from datetime import datetime
     from pathlib import Path
 
@@ -27,8 +29,8 @@ if TYPE_CHECKING:
     from engram_connectors.x.domain import XPost
     from engram_connectors.xai import XaiResource
 
-type AgentFactory = Callable[[Sequence[str], datetime | None], Agent[None, XScan]]
-"""A function from the handles and the earliest date of a scan to the agent that runs it."""
+type AgentFactory = Callable[[Sequence[str], datetime, datetime], Agent[None, XScan]]
+"""A function from the handles and the start and end of one slice of a scan's window to the agent that searches that slice."""
 type ClaimantResolver = Callable[[Sequence[str]], Sequence[UrlClaimant]]
 """A function from declared connector names to the claimants that key a post's URL."""
 
@@ -44,16 +46,26 @@ _INSTRUCTIONS = (
     "Do not summarize. Copy the text."
 )
 
+_SLICE = timedelta(days=1)
+"""How much of a scan's window one search run covers."""
+_FIRST_SCAN_WINDOW = timedelta(days=7)
+"""How far back a first scan reaches."""
+# one X search answers at most 10 posts, and a Latest and a Top search together reach about 20 distinct ones,
+# so a slice answering 18 or more has likely hit that ceiling and left posts out
+_SPLIT_AT = 18
+"""A slice whose search answers this many posts or more is searched again as two halves."""
 
-def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: datetime | None) -> Agent[None, XScan]:
-    """Build a Grok agent with native X search bounded to `handles` and `since`.
+
+def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: datetime, until: datetime) -> Agent[None, XScan]:
+    """Build a Grok agent with native X search bounded to `handles` and the window from `since` to `until`.
 
     Only the first twenty handles are searched.
 
     Args:
         resource: The xAI connection the agent's model runs on.
         handles: The X handles the search may read, of which the first twenty are kept.
-        since: The earliest date the search covers, or `None` for no lower bound.
+        since: The earliest date the search covers.
+        until: The latest date the search covers.
 
     Returns:
         An agent whose structured output is an `XScan`.
@@ -64,20 +76,20 @@ def x_scan_agent(resource: XaiResource, *, handles: Sequence[str], since: dateti
         # an output tool would never be called: with X search running, Grok ends its answer with text
         output_type=NativeOutput(XScan),
         instructions=_INSTRUCTIONS,
-        capabilities=[XSearch(allowed_x_handles=list(handles)[:20], from_date=since)],
+        capabilities=[XSearch(allowed_x_handles=list(handles)[:20], from_date=since, to_date=until)],
     )
 
 
 def grok_agent_factory(resource: XaiResource) -> AgentFactory:
-    """Build the live agent factory over one xAI connection, which makes a fresh Grok agent per scan.
+    """Build the live agent factory over one xAI connection, which makes a fresh Grok agent per slice of a scan.
 
     Args:
         resource: The xAI connection every agent runs on.
 
     Returns:
-        A factory that takes the handles and the window of one scan.
+        A factory that takes the handles and the start and end of one slice.
     """
-    return lambda handles, since: x_scan_agent(resource, handles=handles, since=since)
+    return lambda handles, since, until: x_scan_agent(resource, handles=handles, since=since, until=until)
 
 
 _ID = re.compile(r"\s*\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
@@ -116,6 +128,15 @@ def _scan_failure(error: Exception) -> str:
     return _ID.sub("", line)
 
 
+def _day_slices(start: datetime, end: datetime) -> Iterator[tuple[datetime, datetime]]:
+    """The window from `start` to `end` as one-day slices, newest first, the oldest one shorter when the window is not whole days."""
+    slice_end = end
+    while slice_end > start:
+        slice_start = max(slice_end - _SLICE, start)
+        yield slice_start, slice_end
+        slice_end = slice_start
+
+
 def _by_date_descending(post: XPost) -> tuple[bool, float]:
     """Sort key for newest-first order: dated posts by descending timestamp, undated posts last."""
     if post.date is None:
@@ -124,7 +145,7 @@ def _by_date_descending(post: XPost) -> tuple[bool, float]:
 
 
 class XScanner:
-    """`Scanner` for `x` feeds: one agent run per handle, posts rendered into the source queue cache."""
+    """`Scanner` for `x` feeds: one agent run per day of a scan's window, posts rendered into the source queue cache."""
 
     def __init__(
         self,
@@ -133,9 +154,9 @@ class XScanner:
         cache_dir: Path,
         connectors: Sequence[str] = (),
         resolve_claimants: ClaimantResolver = claimants_for,
-        max_posts: int = 50,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
-        """Keep the agent factory, the cache folder, the connector names and the per-scan post cap.
+        """Keep the agent factory, the cache folder, the connector names and the clock.
 
         `connectors` are names, not claimants. They resolve on the first post a scan keys, not at
         construction, so nothing a knowledge base declares is imported until a scan classifies a URL.
@@ -146,14 +167,14 @@ class XScanner:
             cache_dir: The source queue cache folder each post is rendered into.
             connectors: The knowledge base's declared connector names, in its own order.
             resolve_claimants: Turns the connector names into the claimants that key a post's URL.
-            max_posts: The most posts one scan reports, before the entry's own cap applies.
+            clock: Timezone-aware "now", where every scan's window ends.
         """
         self._agent_factory = agent_factory
         self._cache_dir = cache_dir
         self._connectors = connectors
         self._resolve_claimants = resolve_claimants
         self._claimants: Sequence[UrlClaimant] | None = None
-        self._max_posts = max_posts
+        self._clock = clock
 
     @classmethod
     def build(
@@ -199,36 +220,62 @@ class XScanner:
             self._claimants = self._resolve_claimants(self._connectors)
         return self._claimants
 
-    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> list[FoundSource]:
+    async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
         """List the posts by `entry.ref` since `since`, newest first, rendering each one to the cache.
 
-        The model is asked for at most the scan's cap, the smaller of `max_posts` and `entry.max_items`.
-        A post dated at or before `since` is dropped after the cap, so a scan reports only what is new.
-        A post carrying no date is kept, since nothing says it is old.
+        The window runs from `since`, or from seven days back on a first scan, to now. It is searched one day at a time,
+        newest day first, and a day whose search answers 18 posts or more is searched again as two halves. The walk stops
+        once it holds `entry.max_items` posts, and the newest of them are kept. A post dated at or before `since` is
+        dropped. A post carrying no date is kept, since nothing says it is old.
 
         Args:
             entry: The watch-list entry whose `ref` is the handle and whose `max_items` caps the scan.
-            since: The date of the last scan, or `None` for a first scan. A first scan asks the model for the last seven
-                days and sets no lower bound on the search itself.
+            since: The date of the last scan, or `None` for a first scan.
 
         Returns:
-            One source per post, followed by one source per link that post carries.
+            One source per post, followed by one source per link that post carries. When a search fails after posts were
+            found, the scan answers those posts, covered up to the window's start, with one line saying why it stopped.
 
         Raises:
-            ScanError: The agent could not be built or its run failed, with one line saying why.
+            ScanError: A search failed before any post was found, with one line saying why.
         """
-        window = f" since {since.isoformat()}" if since is not None else " over the last seven days"
-        cap = min(self._max_posts, entry.max_items)
-        try:
-            agent = self._agent_factory([entry.ref], since)
-            result = await agent.run(f"List every post by @{entry.ref}{window}, up to {cap} posts.")
-        except Exception as error:
-            raise ScanError(_scan_failure(error)) from error
-        newest_first = sorted(result.output.posts, key=_by_date_descending)
+        end = self._clock()
+        start = since if since is not None else end - _FIRST_SCAN_WINDOW
+        posts: dict[str, XPost] = {}
+        for slice_start, slice_end in _day_slices(start, end):
+            try:
+                found = await self._posts_in_slice(entry, slice_start, slice_end, wanted=entry.max_items - len(posts))
+            except Exception as error:
+                if not posts:
+                    raise ScanError(_scan_failure(error)) from error
+                return EntryScan(sources=self._sources(posts, entry.max_items), covered_until=start, failure=_scan_failure(error))
+            for post in found:
+                if since is None or post.date is None or post.date > since:
+                    posts.setdefault(post.url, post)
+            if len(posts) >= entry.max_items:
+                break
+        return EntryScan(sources=self._sources(posts, entry.max_items))
+
+    async def _posts_in_slice(self, entry: WatchEntry, start: datetime, end: datetime, *, wanted: int) -> list[XPost]:
+        """The posts one search run answers for a slice, together with both halves' posts when it answers `_SPLIT_AT` or more."""
+        posts = await self._search(entry, start, end, wanted=wanted)
+        if len(posts) < _SPLIT_AT:
+            return posts
+        middle = start + (end - start) / 2
+        newer = await self._search(entry, middle, end, wanted=wanted)
+        older = await self._search(entry, start, middle, wanted=wanted)
+        return [*posts, *newer, *older]
+
+    async def _search(self, entry: WatchEntry, start: datetime, end: datetime, *, wanted: int) -> list[XPost]:
+        """The posts one agent run answers for the window from `start` to `end`."""
+        agent = self._agent_factory([entry.ref], start, end)
+        result = await agent.run(f"List every post by @{entry.ref} from {start.isoformat()} to {end.isoformat()}, up to {wanted} posts.")
+        return result.output.posts
+
+    def _sources(self, posts: Mapping[str, XPost], cap: int) -> list[FoundSource]:
+        """Render the newest `cap` posts to the cache and answer one source per post, then one per link it carries."""
         entries: list[FoundSource] = []
-        for post in newest_first[:cap]:
-            if since is not None and post.date is not None and post.date <= since:
-                continue
+        for post in sorted(posts.values(), key=_by_date_descending)[:cap]:
             _, key = classify_url(post.url, connectors=self._url_claimants())
             self._render(key, post)
             entries.append(FoundSource(url=post.url, title=post.text[:80], published=post.date))
