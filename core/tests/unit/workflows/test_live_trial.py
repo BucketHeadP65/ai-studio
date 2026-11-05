@@ -149,10 +149,18 @@ def test_a_status_that_ranks_with_one_of_the_baselines_counts() -> None:
     assert verdict.kind == "counts"
 
 
-def test_a_failed_run_whose_touched_nodes_all_produced_ranks_below_every_completed_run() -> None:
-    verdict = _verdict(_run(outcome="failed", status="unknown"), baseline=_baseline("unknown", "unknown", "unknown"))
+@pytest.mark.parametrize("baseline", [(), _baseline("succeeded", "succeeded", "succeeded")], ids=["no baseline", "a baseline"])
+def test_a_run_that_failed_outside_the_touched_nodes_is_ignored(baseline: tuple[RunEvidence, ...]) -> None:
+    verdict = _verdict(_run(outcome="failed", status="failed"), baseline=baseline)
 
-    assert verdict.kind == "worse"
+    assert verdict.kind == "ignored"
+    assert "outside" in verdict.reason
+
+
+def test_a_completed_run_whose_checked_status_is_failed_while_every_touched_node_produced_is_ignored() -> None:
+    verdict = _verdict(_run(status="failed"), baseline=_baseline("succeeded", "succeeded", "succeeded"))
+
+    assert verdict.kind == "ignored"
 
 
 def test_a_gate_rejected_more_times_than_in_any_baseline_run_is_worse_a_judges_rejections_included() -> None:

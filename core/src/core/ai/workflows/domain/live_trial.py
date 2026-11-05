@@ -1,7 +1,8 @@
 """The live trial: the next real runs of a consumer version step maintenance adopted, each read once when it ends.
 
-A run is ignored when it says nothing about the adopted step, failed when the step did not produce while everything it
-reads did, and worse when it did less well than the version the adoption replaced. Any other run counts. The rule reads
+A run is ignored when it says nothing about the adopted step, which a run that failed anywhere but at the step never
+does, failed when the step did not produce while everything it reads did, and worse when it did less well than the
+version the adoption replaced. Any other run counts. The rule reads
 only what the run and its grades recorded, and asks no model.
 """
 
@@ -71,11 +72,12 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
     """Read one ended run of a version on live trial as ignored, failed, worse or counting.
 
     A run a person stopped is ignored. A run whose outcome or checked status is failed is failed when a touched node
-    did not produce and every node it wires from did, and ignored when a node a touched node wires from produced
-    nothing. Against a baseline the run is worse when its checked status ranks below every one of the baseline's (a run
-    that failed ranks lowest), when a gate both versions hold was rejected more times than in any baseline run, or when
-    one of its structural grades is more than `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An
-    empty baseline makes only failed possible. Any other run counts.
+    did not produce and every node it wires from did. Any other failed run is ignored, baseline or not: a node a touched
+    node wires from produced nothing, or every touched node produced and the run failed elsewhere. Against a baseline a
+    run that did not fail is worse when its checked status ranks below every one of the baseline's, when a gate both
+    versions hold was rejected more times than in any baseline run, or when one of its structural grades is more than
+    `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible.
+    Any other run counts.
 
     Args:
         workflow: The version on live trial.
@@ -91,23 +93,22 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
     """
     if run.outcome == "stopped":
         return LiveTrialVerdict(kind="ignored", reason="A person stopped the run, so it says nothing about the step.")
-    run_failed = run.outcome == "failed" or run.result.status == "failed"
-    if run_failed and (verdict := _failed_at_a_touched_node(workflow, touched, run)) is not None:
-        return verdict
+    if run.outcome == "failed" or run.result.status == "failed":
+        return _failed_at_a_touched_node(workflow, touched, run)
     if not baseline:
         return LiveTrialVerdict(
             kind="counts", reason="The run did not fail at the adopted step, and the previous version has no completed run to compare it with."
         )
     return (
-        _ranked_below(run, baseline, failed=run.outcome == "failed")
+        _ranked_below(run, baseline)
         or _rejected_more(workflow, previous, run, baseline)
         or _graded_lower(run_grades, baseline_grades)
         or LiveTrialVerdict(kind="counts", reason=f"The run did as well as the previous version's last {len(baseline)} completed runs.")
     )
 
 
-def _failed_at_a_touched_node(workflow: Workflow, touched: Collection[str], run: RunEvidence) -> LiveTrialVerdict | None:
-    """Failed when a touched node alone did not produce, ignored when what it reads did not, None when every touched node produced."""
+def _failed_at_a_touched_node(workflow: Workflow, touched: Collection[str], run: RunEvidence) -> LiveTrialVerdict:
+    """Failed when a touched node alone did not produce, otherwise ignored."""
     upstream_of = {node.id: [wire.node for _, wire in wires_of(node) if isinstance(wire, FromNode)] for node in workflow.nodes}
     silent = [node_id for node_id in upstream_of if node_id in touched and node_id not in run.produced]
     for node_id in silent:
@@ -116,7 +117,9 @@ def _failed_at_a_touched_node(workflow: Workflow, touched: Collection[str], run:
                 kind="failed", reason=f"The run failed and {node_id}, which runs the adopted step, produced nothing while every node it reads produced."
             )
     if not silent:
-        return None
+        return LiveTrialVerdict(
+            kind="ignored", reason="The run failed outside the nodes that run the adopted step, so it says nothing about the step."
+        )
     node_id = silent[0]
     idle = ", ".join(source for source in upstream_of[node_id] if source not in run.produced)
     return LiveTrialVerdict(
@@ -124,15 +127,14 @@ def _failed_at_a_touched_node(workflow: Workflow, touched: Collection[str], run:
     )
 
 
-def _ranked_below(run: RunEvidence, baseline: Sequence[RunEvidence], *, failed: bool) -> LiveTrialVerdict | None:
+def _ranked_below(run: RunEvidence, baseline: Sequence[RunEvidence]) -> LiveTrialVerdict | None:
     """Worse when the run's checked status ranks below every baseline run's."""
-    rank = _RANKS["failed"] if failed else _RANKS[run.result.status]
-    if rank >= min(_RANKS[earlier.result.status] for earlier in baseline):
+    if _RANKS[run.result.status] >= min(_RANKS[earlier.result.status] for earlier in baseline):
         return None
-    status = "failed" if failed else run.result.status
     theirs = ", ".join(earlier.result.status for earlier in baseline)
     return LiveTrialVerdict(
-        kind="worse", reason=f"The run's checked status is {status}, below every one of the previous version's last completed runs ({theirs})."
+        kind="worse",
+        reason=f"The run's checked status is {run.result.status}, below every one of the previous version's last completed runs ({theirs}).",
     )
 
 

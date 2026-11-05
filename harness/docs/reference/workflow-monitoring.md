@@ -1374,7 +1374,8 @@ four parts in turn, and a part that fails is logged while the next is still told
 1. **The arming** (`RunEndArming`, scheduling slice) arms every `after <workflow name>` schedule the run satisfies.
 2. **The live trial watch** (`LiveTrialWatch`, maintenance slice) reads a run of a consumer version on live trial, one
    that carries a `live_trial` marker, by core's `live_trial_verdict` against the previous version's newest three
-   completed runs from the evidence log. Ignored runs change nothing, and once three runs counted (the marker's `runs`)
+   completed runs from the evidence log. Ignored runs change nothing, a run that failed anywhere but at a node running
+   the adopted step among them, and once three runs counted (the marker's `runs`)
    the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
    the previous version is live again, its consumer record declines the step version as reverted, a
    `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
