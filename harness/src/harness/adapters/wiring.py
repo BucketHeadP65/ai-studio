@@ -21,8 +21,8 @@ from core.ai.history.contracts import (
     RequestParametersSink,
     create_record_schema,
 )
-from core.cqrs.contracts import Broadcaster, PostgresWake, TopicSink, Wake
-from core.db import open_asyncpg_pool
+from core.cqrs.contracts import Broadcaster, PostgresOutbox, PostgresWake, TopicSink, Wake
+from core.db import build_engine, open_asyncpg_pool
 from core.observability import LoggingSettings, PriceUpdater, Tracing, get_logger
 from core.resolver import Resolver
 from core.settings import InfrastructureSettings, read_infrastructure
@@ -40,6 +40,7 @@ from harness.adapters.sessions import LiveSessions
 from harness.adapters.store import (
     RECORD_NAMESPACE,
     DatabaseBinding,
+    LibraryOutbox,
     RecordDatabase,
     ScheduleDatabase,
     SessionsDatabase,
@@ -49,6 +50,7 @@ from harness.adapters.store import (
     sessions_writer_dsn,
     ssl_terms,
     store_admin_dsn,
+    store_writer_dsn,
 )
 from harness.adapters.studio_http import StudioApi, studio_http_client
 from harness.adapters.topics import BroadcastTopics
@@ -194,6 +196,20 @@ async def schedule_database() -> AsyncIterator[ScheduleDatabase]:
         yield ScheduleDatabase(pool)
     finally:
         await pool.close()
+
+
+@injectable
+async def library_outbox() -> AsyncIterator[LibraryOutbox]:
+    """The outbox of the workflow library's database, over an engine disposed with the container.
+
+    Yields:
+        The library's outbox.
+    """
+    engine = build_engine(store_writer_dsn())
+    try:
+        yield LibraryOutbox(PostgresOutbox(engine))
+    finally:
+        await engine.dispose()
 
 
 @injectable
@@ -494,6 +510,7 @@ REGISTRATIONS: list[object] = [
     open_pool,
     record_database,
     schedule_database,
+    library_outbox,
     broadcaster,
     session_log,
     record_store,

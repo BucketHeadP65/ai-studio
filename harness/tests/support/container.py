@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from core.ai.history.contracts import RequestParametersSink
-from core.cqrs.contracts import Broadcaster, Wake
+from core.cqrs.contracts import Broadcaster, MemoryOutbox, Wake
 from core.observability import PriceUpdater, Tracing
 from core.settings import DatabaseSettings, InfrastructureSettings, LogfireSettings
 from fastapi import FastAPI
@@ -20,7 +20,7 @@ from pydantic_ai_harness.step_persistence import InMemoryStepStore
 
 from harness.adapters.logfire_query import Telemetry
 from harness.adapters.model_list import ModelList
-from harness.adapters.store import DatabaseBinding, RecordDatabase, ScheduleDatabase, SessionsDatabase
+from harness.adapters.store import DatabaseBinding, LibraryOutbox, RecordDatabase, ScheduleDatabase, SessionsDatabase
 from harness.domain.ports import ConversationHistory, SessionTranscript
 from harness.features.sessions.contracts import project_id_of
 from harness.features.sessions.internal_contracts import ProjectionPool
@@ -69,6 +69,7 @@ IO_LEAVES: tuple[tuple[type, object], ...] = (
     (RequestParametersSink, FakeRequestParametersSink()),
     (ProjectionPool, FakePool()),
     (ScheduleDatabase, FakeScheduleDatabase()),
+    (LibraryOutbox, LibraryOutbox(MemoryOutbox())),
     (ProjectIndex, FakeProjectIndex({A_PROJECT: CHECKOUT})),
     (DatabaseBinding, DatabaseBinding(description="two databases nobody opened", named=True)),
     (Wake, FakeWake()),
@@ -91,7 +92,9 @@ rather than `ModelListing`, because the container serves the merged list and its
 `ModelListing | None`, which is not a registration key. `SessionTranscript` is on the list for a
 third reason: the real one is the record, and a route test wants a store that answers rather than a
 fake pool recording the record's statements. `RecordDatabase` is on it for the first: without it the
-first route test to enter a lifespan opens the record's own pool onto `aifactory_sessions`.
+first route test to enter a lifespan opens the record's own pool onto `aifactory_sessions`. `LibraryOutbox` is on it
+for the first reason too: without it every test that enters a lifespan runs the library's event worker against the
+outbox of `engram_workflows`, closing the rows it finds there.
 """
 
 

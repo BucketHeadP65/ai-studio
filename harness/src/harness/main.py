@@ -46,14 +46,12 @@ from core.cqrs.contracts import (
     MessageBus,
     Outbox,
     PollingWake,
-    PostgresOutbox,
     TopicSink,
     Wake,
     Worker,
     change_frames,
     utcnow,
 )
-from core.db import build_engine
 from core.observability import PriceUpdater, Tracing, get_logger, start_price_updates, stop_tracing
 from core.wiring.contracts import ContainerResolver, resolver_of
 from fastapi import FastAPI, Request
@@ -65,12 +63,12 @@ from wireup.integration import fastapi as wireup_fastapi
 from harness import session as session_state
 from harness.adapters.contracts import (
     DEFAULT_TIERS,
+    LibraryOutbox,
     ModelList,
     ModelTiers,
     TierSetting,
     prune_ended_spill_folders,
     set_tier,
-    store_writer_dsn,
     stored_tiers,
 )
 from harness.composition import ensure_run_engine, restore_waiting_run, restore_waiting_runs, run_log_folders, serve_durable_runs
@@ -308,13 +306,6 @@ def library_event_worker(arming: StepChangeArming, outbox: Outbox, driving: Driv
     )
 
 
-def _library_events(stack: AsyncExitStack, scheduler: Scheduler, driving: Driving) -> Worker:
-    """The library event worker over an engine on the library's database, which `stack` disposes once the loops pushed after it stopped."""
-    engine = build_engine(store_writer_dsn())
-    stack.push_async_callback(engine.dispose)
-    return library_event_worker(StepChangeArming(scheduler, clock=driving.clock), PostgresOutbox(engine), driving)
-
-
 def _report_loop_exit(task: asyncio.Task[None]) -> None:
     """Log a background worker that stopped before the process did, which nothing restarts."""
     if task.cancelled():
@@ -505,7 +496,7 @@ def make_lifespan(container: AsyncContainer) -> Lifespan[FastAPI]:
                 timers,
                 *inspection_workers(inspecting, driving),
                 reconciliation_worker(inspecting, driving),
-                _library_events(stack, scheduler, driving),
+                library_event_worker(StepChangeArming(scheduler, clock=driving.clock), (await container.get(LibraryOutbox)).outbox, driving),
             )
             for name, worker in zip(names, workers, strict=True):
                 loop_task = asyncio.create_task(worker.run_forever(stop=stopping), name=f"{driving.name}:{name}")

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 from pathlib import Path
 
+from core.ai.workflows.contracts import ReusableStepSaved
+from core.cqrs.contracts import MemoryOutbox
 from core.observability import PriceUpdater, Tracing
 from core.resolver import Resolver
 
 import harness.container as container_module
 
+from harness.adapters.contracts import LibraryOutbox
 from harness.main import create_app
 from harness.settings import HarnessSettings
 from tests.support.fakes.prices import FakePriceUpdater
@@ -65,6 +69,25 @@ class TestTheLifespanStartsNothingOfItsOwn:
             assert not prices.stopped
 
         assert prices.stopped, "the price refresh outlived the application that started it"
+
+
+class TestTheLifespanReadsTheLibraryOutboxItWasHanded:
+    """The worker over the library's outbox reads the outbox the container answers, never one it opens itself."""
+
+    async def test_a_step_save_in_the_handed_outbox_is_delivered_and_the_loop_stops_with_the_app(self, tmp_path: Path) -> None:
+        outbox = MemoryOutbox()
+        event = ReusableStepSaved(step="digest_source", version=12, step_id="st.digest_source.v12", step_hash="sha256:0", saved_by="import")
+        await outbox.append([event])
+
+        async with a_served_client(state=tmp_path, answering={LibraryOutbox: LibraryOutbox(outbox)}):
+            for _ in range(500):
+                if outbox.closed:
+                    break
+                await asyncio.sleep(0.01)
+            assert outbox.closed == {event.event_id}, "the lifespan's worker never read the outbox it was handed"
+            assert any(task.get_name().endswith(":library-events") for task in asyncio.all_tasks())
+
+        assert not any(task.get_name().endswith(":library-events") for task in asyncio.all_tasks()), "the loop outlived the app"
 
 
 class TestNothingImportsAnApplicationFromTheModule:
