@@ -9,7 +9,8 @@ and `current` read only pages nothing has superseded. A reusable step version ho
 again with different content. A saved workflow version records, under `reusable_steps`, which saved version of each
 reusable step its copies match, and the save raises a maintenance flag for each copy that matches none. Maintenance
 flags are pages of their own, `mf.<short kind>.<workflow name>.<step>` or `mf.<short kind>.<step>`, written by one rule
-that keeps a resolved flag resolved for the same step version.
+that keeps a resolved flag resolved for the same step version. An adoption on live trial carries its marker under
+`live_trial`, and a revert makes the adopted version's lineage parent live again and archives the version.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, step_conte
 from core.ai.workflows.domain.flags import FlagKind, MaintenanceFlag, diverged_copy_flag, flag_id, flag_to_write
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage
+from core.ai.workflows.domain.live_trial import LiveTrialMarker
 from core.ai.workflows.domain.presentation import WorkflowPresentation, verify_presentation
 from core.ai.workflows.domain.vocabulary import InlineStep, Workflow
 from core.ai.workflows.exceptions import FlagIdTakenError, FlagUnknownError, LibraryError, StepVersionChangedError, WorkflowUnknownError
@@ -768,6 +770,7 @@ class LibraryCollection:
         lineage: Lineage | None = None,
         presentation: WorkflowPresentation | None = None,
         intent: WorkflowIntent | None = None,
+        live_trial: LiveTrialMarker | None = None,
     ) -> str:
         """Save the workflow as its own page, `wf.<name>.v<version>`, with status `draft`, and return the page id.
 
@@ -780,7 +783,8 @@ class LibraryCollection:
         `SupersessionIncompleteWarning`. Then each diverged copy raises its `diverged_copy` maintenance flag, about the
         version it diverged from with the diff in its evidence, and each copy that matches a version resolves the open
         `diverged_copy` flag of its step in this workflow, as `library`. A flag that is not written leaves the page
-        saved and warns with `FlagWriteIncompleteWarning`. A presentation and an intent are written only when given.
+        saved and warns with `FlagWriteIncompleteWarning`. A presentation, an intent and a live trial marker are written
+        only when given, so a save without a marker drops one the page held.
 
         Args:
             workflow: The workflow to save. Its name and version choose the page.
@@ -793,6 +797,7 @@ class LibraryCollection:
                 parent's consumer record is the prior record when this version is new.
             presentation: The author's words about the workflow, or None.
             intent: What the person who wanted the workflow asked for, or None.
+            live_trial: The marker of an adoption on live trial, written under `live_trial`, or None.
 
         Returns:
             The page id the workflow lives under.
@@ -831,6 +836,7 @@ class LibraryCollection:
             ("lineage", lineage),
             ("presentation", presentation),
             ("intent", intent),
+            ("live_trial", live_trial),
         )
         frontmatter.update({key: document.model_dump(mode="json") for key, document in optional if document is not None})
         if record:
@@ -926,6 +932,89 @@ class LibraryCollection:
                 await self._resolve(open_id, flag, by="library", reason=reason(flag))
             except Exception as exc:
                 _warn_flag_not_written(workflow_id, f"the maintenance flag {open_id!r} was not written", exc, change=change)
+
+    async def fetch_live_trial(self, workflow_id: str) -> LiveTrialMarker | None:
+        """The live trial marker one workflow version carries under `live_trial`.
+
+        Args:
+            workflow_id: A page id, `wf.<name>`, or a bare name for its newest live version.
+
+        Returns:
+            The marker, or None for a version saved without one.
+
+        Raises:
+            WorkflowUnknownError: If no page has that id.
+            LibraryError: If the marker on the page does not parse.
+        """
+        resolved = await self._resolved(workflow_id)
+        recorded = (await self._frontmatter(resolved, unknown=WorkflowUnknownError)).get("live_trial")
+        if recorded is None:
+            return None
+        try:
+            return LiveTrialMarker.model_validate(recorded)
+        except ValidationError as exc:
+            msg = f"the live trial marker on {resolved!r} does not parse: {exc}"
+            raise LibraryError(msg) from exc
+
+    async def revert(self, workflow_id: str) -> str:
+        """Undo an adoption: write its lineage parent back without `superseded_by`, then archive the version.
+
+        The parent is written first, every other key it holds kept, so a failed archive leaves both versions live with
+        this one still the newest, and the revert can be asked again. Nothing is written when the call is refused.
+
+        Args:
+            workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
+                its name.
+
+        Returns:
+            The parent's id, now the newest live version.
+
+        Raises:
+            LibraryError: If `workflow_id` is not a workflow version id or not the newest live version of its name, it
+                carries no lineage parent of the same name, the parent is not there, holds no workflow or is archived,
+                or the ingest refuses a write.
+        """
+        match = _VERSIONED_ID.match(workflow_id)
+        if match is None:
+            msg = f"{workflow_id!r} is not a workflow version id. A revert names one version, wf.<name>.v<version>. Nothing was written."
+            raise LibraryError(msg)
+        name = match["name"]
+        live = await self._live_versions(name)
+        newest = live[-1][1] if live else None
+        if newest != workflow_id:
+            msg = (
+                f"{workflow_id!r} is not the newest live version of {name!r} (the newest is {newest!r}), so it is not reverted. "
+                f"Nothing was written."
+            )
+            raise LibraryError(msg)
+        lineage = await self.fetch_lineage(workflow_id)
+        if lineage is None or lineage.parent_name != name:
+            msg = f"{workflow_id!r} carries no lineage parent of the same name to go back to, so it is not reverted. Nothing was written."
+            raise LibraryError(msg)
+        parent_id = page_id(name, lineage.parent_version)
+        found = await self._rows.fetch(PAGE_SQL, parent_id)
+        if not found:
+            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} is not in collection {self._collection!r}, so it is not reverted. Nothing was written."
+            raise LibraryError(msg)
+        parent = found[0]
+        stored = parent["frontmatter"]
+        long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
+        if "spec" not in long_tail:
+            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} holds no workflow, so it is not reverted. Nothing was written."
+            raise LibraryError(msg)
+        if long_tail.get("archived_at") is not None:
+            msg = (
+                f"the lineage parent {parent_id!r} of {workflow_id!r} is archived. Restore it, then revert {workflow_id!r} again. "
+                f"Nothing was written."
+            )
+            raise LibraryError(msg)
+        try:
+            await self._rewrite(parent, long_tail)
+        except Exception as exc:
+            msg = f"the collection refused to make {parent_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
+            raise LibraryError(msg) from exc
+        await self.set_archived(workflow_id, archived=True)
+        return parent_id
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.

@@ -520,6 +520,23 @@ again writes the flag. So `flags(kind="diverged_copy", status="open")` lists the
 save of each workflow name, archived versions left out. One case stays open until a person resolves it: an adaptation
 saved under a new name leaves the old name's open flag as it was.
 
+### 2.7 The live trial and the revert
+
+An adoption step maintenance lands is a new consumer version on live trial: it carries a `LiveTrialMarker` under the
+frontmatter key `live_trial` (the version it replaced, the step's name, the adopted step version's content address, and
+how many runs that count close the live trial, three unless it says otherwise). Only `LibraryCollection` keeps one,
+behind the `LiveTrialLibrary` port. `WorkflowLibrary.put` is unchanged.
+
+| Verb | Does |
+|---|---|
+| `put(workflow, ..., live_trial=)` | `WorkflowLibrary.put`, writing the marker when one is given. A save without one writes none, so saving the same version again drops it |
+| `fetch_live_trial(workflow_id)` | the marker a version carries, or None. A bare name reads its newest live version. A marker that does not parse is refused with `LibraryError` |
+| `revert(workflow_id)` | refuses with `LibraryError`, writing nothing, unless the id is a version id (`wf.<name>.v<n>`) that is the newest live version of its name and carries a lineage parent of the same name that is there, holds a workflow and is not archived. Then it writes the parent back without `superseded_by`, every other key kept, archives the version and answers the parent's id |
+
+The parent is written first, so a failed archive leaves both versions live with the reverted one still the newest, and
+the revert can be asked again. A person who saved a newer version of the consumer while the adoption was on live trial
+made the adoption no longer the newest live version, so a later bad run of it reverts nothing.
+
 ---
 
 ## 3. The invariants a conforming library must keep
@@ -888,6 +905,7 @@ neither pretends to be.
 | **put: supersession** | implicit, the previous version's file stays on disk. **no forward link is written** | explicit, the lineage's parent page, and every live lower version of the same name (lineage or not), is read back, rebuilt and re-ingested with `superseded_by: [[child]]`. `search`, `catalog` and `current` then read only pages nothing has superseded |
 | **put: consumer record** | not written. A folder library keeps no reusable steps | `reusable_steps` on the page: per inline step a reusable step of the same name has saved versions of, the version its content address matches, else the version it diverged from (the prior record, which is the page's own when the same version is saved again and the lineage parent's otherwise, else the closest by text). A decline in the prior record carries over while the copy is unchanged. One `STEP_PAGES_SQL` read for every inline step name. `consumers_of` answers the live pages whose record names a step (`CONSUMERS_SQL`, jsonb containment), and `record_decline` rewrites a live page's entry, refusing a superseded page whose link the reader cannot see |
 | **put: maintenance flags** | not written. A folder library keeps no flags | a `diverged_copy` flag per diverged copy the record holds, and the open one of each step the record no longer holds diverged resolved as `library` (section 2.6). One `FLAG_SQL` read per diverged copy, and one `FLAGS_SQL` read of the open `diverged_copy` flags, whose rows the resolutions write back without reading again |
+| **put: live trial** | not written. A folder library keeps no live trials | `live_trial` on the page when a marker is given, read by `fetch_live_trial`. `revert` writes the lineage parent back without its link, then archives the version (section 2.7) |
 | **put: failure modes** | one write. It succeeds or raises | the page, then the links, then the flags, no transaction. Child first (foreign key), link second. A link failure warns `SupersessionIncompleteWarning` and a flag failure `FlagWriteIncompleteWarning`, and each still returns the child's id |
 | **Port vocabulary** | `find_files` / `read_file` / `write_file`, args `words` / `most` / `name` | `find_workflows` / `read_workflow` / `write_workflow`, args `task` / `most` / `workflow_id` |
 

@@ -48,7 +48,7 @@ with workflow.unsafe.imports_passed_through():
     )
     from core.ai.workflows.automode import automode_refusal
     from core.ai.workflows.birth import shapes_of
-    from core.ai.workflows.domain.evidence import approved_gates
+    from core.ai.workflows.domain.evidence import approved_gates, gate_rejections
     from core.ai.workflows.domain.identity import (
         CURRENT_STEP,
         ReviewedArtifacts,
@@ -273,7 +273,7 @@ class RunEvidence(BaseModel):
 
     gates_approved: list[str]
     gates_rejected: dict[str, int] = Field(default_factory=dict)
-    """Refusals heard before this run ended, by gate id."""
+    """How many times each gate was rejected before this run ended, by gate id, counted from `gate_decisions`."""
     gates_auto_approved: list[str] = Field(default_factory=list)
     """Gates this run passed automatically, with nobody asked. They are never in `gates_approved`,
     so an automatic pass never counts as a person's approval."""
@@ -652,7 +652,6 @@ class DurableWorkflowRun:
 
     def __init__(self) -> None:
         self._verdicts: dict[str, GateDecision] = {}
-        self._refused: dict[str, int] = {}
         self._waiting: WaitingGate | None = None
         self._running = NodesInFlight()
         self._done: list[str] = []
@@ -705,16 +704,16 @@ class DurableWorkflowRun:
 
         Returns:
             The gates approved, rejected and passed automatically, the shapes produced, every gate
-            decision and every rejection owed a repair.
+            decision and every rejection owed a repair. Each rejection the gate decisions recorded
+            counts once in `gates_rejected`, a judge's own included.
         """
+        rejected = gate_rejections(self._state.gate_decisions)
         if self._workflow is None:
-            return RunEvidence(
-                gates_approved=[], gates_auto_approved=list(self._auto), gates_rejected=dict(self._refused), produced={}
-            )
+            return RunEvidence(gates_approved=[], gates_auto_approved=list(self._auto), gates_rejected=rejected, produced={})
         return RunEvidence(
             gates_approved=[gate for gate in approved_gates(self._workflow, self._state.values) if gate not in self._auto],
             gates_auto_approved=list(self._auto),
-            gates_rejected=dict(self._refused),
+            gates_rejected=rejected,
             produced=shapes_of(self._state.values),
             gate_decisions=list(self._state.gate_decisions),
             retry_feedback=dict(self._state.retry_feedback),
@@ -761,7 +760,7 @@ class DurableWorkflowRun:
         The run waits here as long as it takes and survives a worker dying meanwhile, because the
         wait is part of the workflow's history. Under gate mode `auto` the gate never waits. A person
         gate passes, and its id is recorded apart from the approvals so the evidence names what
-        decided it. A judge gate is refused as `automode_refusal` words it and counted as a refusal.
+        decided it. A judge gate is refused as `automode_refusal` words it, and the graph records that refusal.
 
         Args:
             gate_id: Which gate this is.
@@ -775,7 +774,6 @@ class DurableWorkflowRun:
         if self.gate_mode == "auto":
             refusal = automode_refusal(self._workflow, gate_id, note) if self._workflow is not None else None
             if refusal is not None:
-                self._refused[gate_id] = self._refused.get(gate_id, 0) + 1
                 return refusal
             if gate_id not in self._auto:
                 self._auto.append(gate_id)
@@ -785,11 +783,7 @@ class DurableWorkflowRun:
         self._waiting = None
         # Popped rather than read: a rejection re-runs the gate's target and asks again, and a
         # verdict left behind would answer the second question with the first answer.
-        verdict = self._verdicts.pop(gate_id)
-        if not verdict.approve:
-            # Refusals are evidence: a gate rejected and then approved must not read as waved through.
-            self._refused[gate_id] = self._refused.get(gate_id, 0) + 1
-        return verdict
+        return self._verdicts.pop(gate_id)
 
     def started(self, node_id: str) -> None:
         """Record that a node began.
