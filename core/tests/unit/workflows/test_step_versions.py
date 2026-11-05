@@ -15,6 +15,11 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from pydantic_ai.exceptions import ModelRetry
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import RunContext
+from pydantic_ai.usage import RunUsage
+
 from core.ai.workflows.contracts import (
     Briefing,
     LibraryCollection,
@@ -26,7 +31,14 @@ from core.ai.workflows.contracts import (
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
-from core.ai.workflows.infrastructure.library_collection import FETCH_SQL, LIVE_STEP_VERSIONS_SQL, PAGE_SQL, STEP_PAGES_SQL, SUPERSEDED_SQL
+from core.ai.workflows.infrastructure.library_collection import (
+    FETCH_SQL,
+    LIVE_STEP_VERSIONS_SQL,
+    PAGE_SQL,
+    STEP_PAGES_SQL,
+    SUPERSEDED_SQL,
+    collection_toolset,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -218,6 +230,9 @@ async def test_step_versions_answers_every_saved_version_with_its_content_addres
     assert [found.step_hash for found in versions] == [step_content_address(step) for step in (_digest(), v2, v10)]
     assert versions[0].step == _digest()
     assert {found.name for found in versions} == {"digest"}
+    assert store.pages["st.digest.v1"]["superseded"]
+    assert not store.pages["st.digest.v2"]["superseded"], "v2 was saved after v10, so it stays live beside it"
+    assert not store.pages["st.digest.v10"]["superseded"]
 
 
 async def test_step_versions_of_many_names_sends_one_statement_and_answers_each_name() -> None:
@@ -389,3 +404,64 @@ async def test_a_superseded_version_keeps_its_cases_and_its_supersession() -> No
     assert len(store.payloads) == written_so_far
     assert store.pages[step_id]["superseded"]
     assert await library.fetch_step_cases(step_id) == CASES_A
+
+
+async def test_a_case_value_edited_from_1_to_true_lands() -> None:
+    """`1 == True` in Python, so the cases are compared as the text the page keeps."""
+    store = FakeCollection()
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases={"x": 1})
+
+    await _save(library, _digest(), 1, cases={"x": True})
+
+    assert len(store.payloads) == 2
+    assert await library.fetch_step_cases(step_id) == {"x": True}
+    assert (await library.fetch_step_cases(step_id) or {})["x"] is True
+
+
+async def test_a_library_error_from_the_ingest_on_a_cases_update_keeps_its_own_words() -> None:
+    store = FakeCollection()
+    library = _library(store)
+    await _save(library, _digest(), 1, cases=CASES_A)
+
+    async def refusing(payload: Mapping[str, Any], *, collection: str) -> None:
+        del payload, collection
+        msg = "the page grammar refused the cases"
+        raise LibraryError(msg)
+
+    with pytest.raises(LibraryError) as refused:
+        await LibraryCollection(store, refusing).put_step(
+            _digest(), version=1, title="t", summary="s", applicability="a", provenance={"saved_by": "x"}, cases=CASES_B
+        )
+    assert str(refused.value) == "the page grammar refused the cases"
+
+
+async def test_the_save_step_tool_answers_a_changed_step_under_a_saved_version_with_the_next_move() -> None:
+    store = FakeCollection()
+    library = _library(store)
+    await _save(library, _digest(), 1)
+    toolset = collection_toolset(library)
+    ctx: RunContext[object] = RunContext(deps=None, model=TestModel(), usage=RunUsage())
+    tools = await toolset.get_tools(ctx)
+    changed = _digest("Read the whole source twice and write one digest page that quotes its claims.")
+
+    with pytest.raises(ModelRetry) as refused:
+        await toolset.call_tool(
+            "save_step",
+            {"title": "t", "summary": "s", "when": "a", "step": changed.model_dump(mode="json"), "version": 1, "by": "agent:test"},
+            ctx,
+            tools["save_step"],
+        )
+
+    assert refused.value.message == "st.digest.v1 already holds different content. Save it again with a higher version."
+    assert len(store.payloads) == 1
+
+
+async def test_fetch_step_cases_refuses_cases_text_that_is_not_json_and_names_the_step() -> None:
+    store = FakeCollection()
+    library = _library(store)
+    step_id = await _save(library, _digest(), 1, cases=CASES_A)
+    store.pages[step_id]["frontmatter"]["cases"] = "{not json"
+
+    with pytest.raises(LibraryError, match=r"st\.digest\.v1"):
+        await library.fetch_step_cases(step_id)

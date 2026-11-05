@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.toolsets import FunctionToolset
 
 from core.ai.workflows.contract_port import LibraryVocabulary
@@ -817,13 +818,10 @@ class LibraryCollection:
     ) -> str:
         """Save one reusable step version as its own page, `st.<name>.v<version>`, and return its id.
 
-        A version holds one step content, and a version that holds a different step is refused. Saving a version
-        whose step is unchanged writes nothing, unless the version is live and the cases given differ from its own.
-        Then only the cases are replaced in place: no new version, no supersession, and the version's content
-        address does not move.
-        After a new version is written, every live lower version of the name is linked forward to it with
-        `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
-        page saved and warns with `SupersessionIncompleteWarning`.
+        A version holds one step content and refuses a different one. Saving an unchanged step writes nothing, except
+        that a live version takes new cases in place, with no new version and no move of its content address. A new
+        version links every live lower version of the name forward to it, and a link that fails warns with
+        `SupersessionIncompleteWarning`. It assumes one writer at a time, such as an import or a CLI.
 
         Args:
             step: The step to save. Its name and `version` choose the page.
@@ -833,16 +831,15 @@ class LibraryCollection:
             applicability: When to use the step, written as the page's Applicability section. A version already
                 saved keeps its own.
             provenance: `saved_by` names who saved it.
-            cases: The step's cases, kept on the page as given and read back with `fetch_step_cases`. A save of a
-                live version replaces the cases it holds, and an empty mapping removes them. None keeps whatever cases
-                the version holds, and saves a new version without any. A superseded version keeps the cases it holds.
+            cases: The step's cases, read back with `fetch_step_cases`. An empty mapping removes them, and None keeps
+                whatever cases the version holds.
 
         Returns:
             The step's page id.
 
         Raises:
             StepVersionChangedError: If this version already holds a different step. Nothing is written.
-            LibraryError: If the ingest refuses the page.
+            LibraryError: If the ingest refuses the page or its new cases.
         """
         step_id = step_page_id(step.name, version)
         saved = await self._rows.fetch(PAGE_SQL, step_id)
@@ -886,7 +883,7 @@ class LibraryCollection:
         if cases is None:
             return
         held = long_tail.get("cases")
-        if (json.loads(held) if isinstance(held, str) else held) == (json.loads(_cases_text(cases)) if cases else None):
+        if (held == _cases_text(cases)) if cases else (held is None):
             return
         superseded = await self._rows.fetch(SUPERSEDED_SQL, step_id)
         if superseded and bool(superseded[0].get("superseded")):
@@ -909,12 +906,14 @@ class LibraryCollection:
                 },
                 collection=self._collection,
             )
+        except LibraryError:
+            raise
         except Exception as exc:
             msg = f"the collection refused to update the cases of {step_id!r}: {exc}"
             raise LibraryError(msg) from exc
 
     async def step_versions(self, name: str) -> tuple[StepVersion, ...]:
-        """Every saved version of one reusable step, live or superseded, lowest version first.
+        """Every saved version of one reusable step, live, superseded or archived, lowest version first.
 
         Args:
             name: The reusable step's name.
@@ -957,16 +956,19 @@ class LibraryCollection:
         return {name: tuple(sorted(versions, key=lambda saved: saved.version)) for name, versions in found.items()}
 
     async def fetch_step_cases(self, step_id: str) -> Mapping[str, JsonValue] | None:
-        """The cases one reusable step version carries, exactly as the save that wrote them gave them.
+        """The cases one reusable step version carries, as the save that wrote them gave them.
+
+        A live, superseded or archived version is answered alike.
 
         Args:
             step_id: The step version's page id, `st.<name>.v<version>`.
 
         Returns:
-            The cases, or None when the version was saved without them.
+            The cases, or None when the version holds none.
 
         Raises:
-            LibraryError: If no page has that id, the page carries no step, or its cases are not a JSON object.
+            LibraryError: If no page has that id, the page carries no reusable step, or its cases are not the JSON
+                text of an object.
         """
         document = await self._frontmatter(step_id, kind="step")
         if "step" not in document:
@@ -975,7 +977,11 @@ class LibraryCollection:
         stored = document.get("cases")
         if stored is None:
             return None
-        cases = json.loads(stored) if isinstance(stored, str) else None
+        try:
+            cases = json.loads(stored) if isinstance(stored, str) else None
+        except json.JSONDecodeError as exc:
+            msg = f"the cases on {step_id!r} are not JSON text ({exc}), the shape put_step writes"
+            raise LibraryError(msg) from exc
         if not isinstance(cases, Mapping):
             msg = f"the cases on {step_id!r} are not the JSON text of an object, the shape put_step writes"
             raise LibraryError(msg)
@@ -1069,10 +1075,17 @@ def collection_toolset(library: LibraryCollection) -> FunctionToolset[object]:
         return {"step": (await library.fetch_step(step_id)).model_dump(mode="json")}
 
     async def save_step(title: str, summary: str, when: str, step: dict[str, object], version: int, by: str) -> dict[str, object]:
-        """Save one reusable step as a page and report the id it now lives under."""
-        written = await library.put_step(
-            _STEP.validate_python(step), version=version, title=title, summary=summary, applicability=when, provenance={"saved_by": by}
-        )
+        """Save one reusable step as a page and report the id it now lives under.
+
+        A version that already holds a different step is refused. Save the step again with a higher version.
+        """
+        try:
+            written = await library.put_step(
+                _STEP.validate_python(step), version=version, title=title, summary=summary, applicability=when, provenance={"saved_by": by}
+            )
+        except StepVersionChangedError as exc:
+            msg = f"{exc.step_id} already holds different content. Save it again with a higher version."
+            raise ModelRetry(msg) from exc
         return {"saved": written}
 
     toolset.add_function(find_workflows, takes_ctx=False)

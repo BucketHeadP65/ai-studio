@@ -293,7 +293,7 @@ class StepVersionQueries(Protocol):
     """
 
     async def step_versions(self, name: str) -> tuple[StepVersion, ...]:
-        """Every saved version of one reusable step, live or superseded, lowest version first.
+        """Every saved version of one reusable step, live, superseded or archived, lowest version first.
 
         Args:
             name: The reusable step's name.
@@ -315,16 +315,19 @@ class StepVersionQueries(Protocol):
         ...
 
     async def fetch_step_cases(self, step_id: str) -> Mapping[str, JsonValue] | None:
-        """The cases one reusable step version carries, exactly as they were saved.
+        """The cases one reusable step version carries, as the save that wrote them gave them.
+
+        A live, superseded or archived version is answered alike.
 
         Args:
             step_id: The step version's id.
 
         Returns:
-            The cases, or None when the version was saved without them.
+            The cases, or None when the version holds none.
 
         Raises:
-            LibraryError: No reusable step has that id.
+            LibraryError: No page has that id, the page carries no reusable step, or its cases are not the JSON text
+                of an object.
         """
         ...
 
