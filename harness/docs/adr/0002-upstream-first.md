@@ -44,4 +44,5 @@ legitimate only when its design doc names the upstream gap it fills. Executed on
   upstream release, retired the day it does.
 - The unused upstream shelf (compaction beyond `WarnNearLimits`, guardrails, the prompt-injection defender, system reminders,
   planning, subagents) is the standing answer to those needs when they arise: adopt, never build.
-- The vendored `loop_detection` copy is deleted the day its upstream PR merges.
+- The vendored `loop_detection` copy is deleted the day its upstream PR merges. (Deleted on 2026-11-05. The pull request
+  closed unmerged, and its successor shipped as `DetectLoops` in pydantic-ai-harness, which every agent here now mounts.)

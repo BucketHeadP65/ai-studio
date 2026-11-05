@@ -7,7 +7,7 @@ The tiers, inward first: `domain/` (ports and contract vocabulary, imports nothi
 `features/<slice>` (a slice may reach inward and sideways into its own slice, never into another
 slice or outward), `composition` (the one module that knows every slice, the container,
 and every `wiring` module -- a wiring module says where a thing comes from, which is composition
-wherever it sits), and the entries (`main`, `acp`, `cli`). `vendor/` is third-party source and exempt.
+wherever it sits), and the entries (`main`, `acp`, `cli`).
 
 One rule stands beside the tiers: a slice's `ports` or `contracts` module is its published surface, so another
 slice's `controller` or `wiring` may declare it (a controller takes a peer's port instead of its
@@ -98,7 +98,7 @@ SANCTIONED: frozenset[tuple[str, str]] = frozenset(
 )
 
 
-PACKAGES = ("domain", "adapters", "features", "vendor")
+PACKAGES = ("domain", "adapters", "features")
 """Tiers that are a package: the module itself, or anything under it, belongs to that tier."""
 
 
@@ -146,11 +146,10 @@ REACHES = {
     "domain": {"domain"},
     "settings": {"domain"},
     "kernel": {"domain", "settings", "kernel"},
-    "adapters": {"domain", "settings", "adapters", "vendor"},
-    "features": {"domain", "settings", "kernel", "adapters", "vendor", "features"},
-    "composition": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition"},
-    "entries": {"domain", "settings", "kernel", "adapters", "vendor", "features", "composition"},
-    "vendor": {"vendor"},
+    "adapters": {"domain", "settings", "adapters"},
+    "features": {"domain", "settings", "kernel", "adapters", "features"},
+    "composition": {"domain", "settings", "kernel", "adapters", "features", "composition"},
+    "entries": {"domain", "settings", "kernel", "adapters", "features", "composition"},
 }
 """Which tiers each tier may reach, inward only. The rule the whole gate rests on."""
 
@@ -178,8 +177,6 @@ def _edges() -> set[tuple[str, str]]:
         rel = py.relative_to(SRC).with_suffix("")
         parts = [p for p in rel.parts if p != "__init__"]
         source = ".".join(parts)
-        if _tier(source) == "vendor":
-            continue
         for node in ast.walk(ast.parse(py.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom) and node.module:
                 if node.module == "harness":

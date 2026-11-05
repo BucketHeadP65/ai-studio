@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from pydantic_ai.messages import ModelMessage, ModelResponse, ModelResponseStreamEvent
     from pydantic_ai.models import ModelRequestParameters
     from pydantic_ai.models.function import DeltaToolCalls, FunctionDef
+    from pydantic_ai.profiles import ModelProfileSpec
     from pydantic_ai.settings import ModelSettings
     from pydantic_ai.tools import RunContext
 
@@ -56,8 +57,8 @@ def submit(text: str, **extras: object) -> dict[str, object]:
     }
 
 
-def streaming_function_model(function: FunctionDef) -> FunctionModel:
-    """A `FunctionModel` whose `stream_function` replays `function`'s own answer, once, as one chunk."""
+def streaming_function_model(function: FunctionDef, *, profile: ModelProfileSpec | None = None) -> FunctionModel:
+    """A `FunctionModel` whose `stream_function` replays `function`'s own answer, once, as one chunk, under `profile`."""
 
     async def stream_function(messages: list[ModelMessage], info: AgentInfo) -> AsyncIterator[str | DeltaToolCalls]:
         response = function(messages, info)
@@ -73,7 +74,7 @@ def streaming_function_model(function: FunctionDef) -> FunctionModel:
             return
         yield "".join(part.content for part in response.parts if isinstance(part, TextPart))
 
-    return FunctionModel(function=function, stream_function=stream_function)
+    return FunctionModel(function=function, stream_function=stream_function, profile=profile)
 
 
 @dataclass

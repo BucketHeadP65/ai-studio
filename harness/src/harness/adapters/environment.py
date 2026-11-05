@@ -22,6 +22,7 @@ from pydantic import TypeAdapter
 from pydantic_ai.capabilities import LocalWorkspace
 from pydantic_ai_harness._monty_exec import MontyExecutor
 from pydantic_ai_harness.compaction import WarnNearLimits
+from pydantic_ai_harness.detect_loops import DetectLoops
 from pydantic_ai_harness.shell import LLM_API_KEY_ENV_PATTERNS, Shell
 from pydantic_ai_harness.tool_output_limits import Band, LocalFileStore, OverflowStore, Spill, ToolOutputLimits, Truncate
 from pydantic_core import to_jsonable_python
@@ -30,7 +31,6 @@ from pydantic_monty import AsyncMonty, CollectString, MontyError, OSPolicy
 from harness import settings
 from harness.domain.contracts import NOT_IN_SANDBOX, PROGRAM_OUTPUT_LIMIT, SANDBOX, SHELL_TOOL
 from harness.settings import CHECKOUT, SPILL_DIR
-from harness.vendor.loop_detection import LoopDetection
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -247,7 +247,7 @@ def step_guards(budget: int, *, counts_program_calls: bool = False, direct_reads
         The loop guard, the request warning, the tool-call warning and the output limit, in that order.
     """
     return [
-        LoopDetection(on_loop="nudge"),
+        DetectLoops[object](),
         WarnNearLimits(max_iterations=budget),
         ToolCallLimitWarning[object](counts_program_calls=counts_program_calls),
         ToolOutputLimits(

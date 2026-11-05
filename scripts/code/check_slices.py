@@ -23,7 +23,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-SKIPPED_FOLDERS = frozenset({"__pycache__", ".venv", "vendor"})
+SKIPPED_FOLDERS = frozenset({"__pycache__", ".venv"})
 PUBLIC = frozenset({"contracts"})
 ASSEMBLY_REACH = frozenset({"contracts", "wiring", "controller", "infrastructure"})
 DATABASE_AND_NETWORK = ("sqlalchemy", "psycopg", "psycopg2", "asyncpg", "httpx", "requests", "aiohttp", "urllib.request")

@@ -44,7 +44,6 @@ def parsed_modules() -> dict[str, ast.Module]:
     return {
         path.relative_to(SRC).as_posix(): ast.parse(path.read_text(encoding="utf-8"))
         for path in sorted(SRC.rglob("*.py"))
-        if "vendor" not in path.parts
     }
 
 

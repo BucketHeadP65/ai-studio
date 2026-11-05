@@ -200,20 +200,6 @@ product concept, so the dialect it adds could live in `CodeMode`'s own instructi
   and a settlement that lands exactly once however a stream ends. Whether that belongs beside `SpendLimits` is
   upstream's call. The evaluation scope, the roles and the coverage manifest are ours and stay here.
 
-### UE-16. `LoopDetection` (harness): a copy of an upstream pull request that never merged
-
-- **What:** a capability that notices an agent stuck repeating itself (the same call again and again, the same failing
-  result, two calls alternating, or narration with no call) and asks the model to change approach. The authoring agent
-  mounts it with `on_loop="nudge"`.
-- **Where:** `harness/src/harness/vendor/loop_detection/`, a verbatim copy of pull request #336 on the old
-  pydantic/pydantic-ai-harness repository, taken before that pull request closed.
-- **Since:** 2026-08-01, the repository's first commit.
-- **Upstream candidate:** already proposed upstream. Pull request #336 closed unmerged on 2026-09-28, when
-  pydantic-ai-harness moved into the pydantic-ai repository. The idea continued as pydantic/pydantic-ai#9008 ("Add a
-  `DetectLoops` capability to interrupt repeated-action loops"), with #336 linked as its reference implementation, and
-  shipped as `pydantic_ai_harness.DetectLoops` in pydantic-ai-harness 0.63.0 (pydantic/pydantic-ai#11471). Replacing this
-  copy with `DetectLoops` is open work.
-
 ### UE-17. `PathGuardedShell` (core): a shell that refuses a command naming a denied path
 
 - **What:** pydantic-ai-harness's `Shell` guards a command by its executable, its operators and its environment, and has no path

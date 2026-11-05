@@ -27,7 +27,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import Capability, CombinedCapability, DynamicCapability, IncludeToolReturnSchemas, Toolset
 from pydantic_ai.models.anthropic import AnthropicCompaction
 from pydantic_ai.tools import DeferredToolRequests
-from pydantic_ai_harness import CodeMode
+from pydantic_ai_harness import CodeMode, DetectLoops
 from pydantic_ai_harness.compaction import ClearToolResults, DeduplicateFileReads, SummarizingCompaction, TieredCompaction, WarnNearLimits
 from pydantic_ai_harness.logfire import ManagedPrompt
 from pydantic_ai_harness.pydantic_ai_docs import PydanticAIDocs
@@ -82,7 +82,6 @@ from harness.features.sessions.contracts import CompactionConfig, FrictionFlaggi
 from harness.plugins import Switched
 from harness.session import Runtime, SessionContextUsage, SessionConversationSearch
 from harness.settings import CHECKOUT, SKILLS, WORKSPACE, StateSettings
-from harness.vendor.loop_detection import LoopDetection
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -478,7 +477,7 @@ def build_agent(
             ),
             CodeMode(tools=lambda _ctx, tool: _in_code_mode(tool.name, rides_sandbox)),
             SandboxDiscipline[Runtime](loads_capabilities=True, answers_a_person=True),
-            LoopDetection(on_loop="nudge"),
+            DetectLoops[Runtime](),
             # The project's context policy: escalating tiers, or the provider's own compaction.
             # `SessionContextUsage` must stay right after it, so its reading shows what the
             # compactor left.

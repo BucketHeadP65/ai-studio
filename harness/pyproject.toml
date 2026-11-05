@@ -131,11 +131,7 @@ filterwarnings = [
 
 [tool.ruff]
 src            = ["src"]
-# ``vendor`` holds third-party source taken verbatim from an unmerged upstream PR. It is
-# excluded from both format and validation so it stays byte-identical to what upstream has: the
-# whole point of vendoring it is to run THEIR code and be able to diff it, and a formatter
-# that reflows it turns "we tested the PR" into "we tested our edit of the PR".
-extend-exclude = [".venv", "src/harness/vendor"]
+extend-exclude = [".venv"]
 line-length    = 140
 indent-width   = 4
 fix            = false

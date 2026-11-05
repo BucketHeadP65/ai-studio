@@ -5,7 +5,7 @@ Usage:
     python3 scripts/code/check_docstrings.py [--vocabulary] PATH [PATH ...]
 
 A PATH is a Python file or a folder searched for Python files. Folders named `__pycache__`,
-`.venv`, `migrations` and `vendor` are skipped. Each finding prints as `path:line: message`.
+`.venv` and `migrations` are skipped. Each finding prints as `path:line: message`.
 The exit status is 1 when anything is found and 0 when nothing is.
 
 Standard library only, so it runs from any Python 3.13 without a virtual environment.
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "docs"))
 
 import validate_docs  # noqa: E402
 
-SKIPPED_FOLDERS = frozenset({"__pycache__", ".venv", "migrations", "vendor"})
+SKIPPED_FOLDERS = frozenset({"__pycache__", ".venv", "migrations"})
 ANY_SECTION = re.compile(r"^\s*(Args|Arguments|Returns|Yields|Raises|Attributes|Examples?|Notes?|Warnings?|Todo):\s*$", re.MULTILINE)
 ARGS_SECTION = re.compile(r"^\s*(Args|Arguments):\s*$", re.MULTILINE)
 ARGUMENT_NAME = re.compile(r"^(\s+)(\*{0,2}\w+)((?: \([^)]*\))?:)", re.MULTILINE)
