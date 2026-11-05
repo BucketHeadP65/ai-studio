@@ -20,8 +20,9 @@ if TYPE_CHECKING:
 
 
 async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scanner], queue: SourceQueue, *, now: datetime) -> ScanReport:
-    """Scan every entry, add unseen URLs to the queue, stamp the entries that scanned, report the ones that did not.
+    """Scan every entry, add unseen URLs to the queue, stamp the entries whose scan found a source, report the ones that failed.
 
+    An entry whose scan finds no source keeps its last stamp, so its next scan asks for the same window again.
     An entry's `scanner` is resolved against `scanners`, the names the host actually built. A name
     nothing there serves is that entry's own reported failure, naming what is available. Whatever
     a scanner raises is that entry's failure alone, so one unscannable entry never aborts the run,
@@ -32,7 +33,7 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
         watch_list: The knowledge base's watch-list file.
         scanners: The scanners the host built, by registered name.
         queue: The source queue new URLs land on.
-        now: The scan's time, stamped on rows and entries.
+        now: The scan's time, stamped on new rows and on every entry whose scan found a source.
 
     Returns:
         How many sources were found, how many rows were added in all and by each entry, and the entries that failed.
@@ -55,7 +56,8 @@ async def scan_watch_list(watch_list: WatchListFile, scanners: Mapping[str, Scan
         requested += added
         if added:
             requested_by_entry[entry.label] = requested_by_entry.get(entry.label, 0) + added
-        watch_list.stamp(entry.scanner, entry.ref, now)
+        if sources:
+            watch_list.stamp(entry.scanner, entry.ref, now)
     return ScanReport(found=found, requested=requested, failed=tuple(failed), requested_by_entry=requested_by_entry)
 
 

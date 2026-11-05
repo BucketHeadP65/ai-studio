@@ -65,6 +65,35 @@ async def test_a_later_scan_only_requests_entries_newer_than_the_stamp(tmp_path:
     assert scanner.since == [_NOW - timedelta(hours=3)]
 
 
+async def test_an_entry_whose_scan_finds_nothing_keeps_its_stamp_and_one_that_finds_a_source_is_stamped(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_BLOGS, "https://quiet.example.org/entry.xml")
+    watch_list.add(_BLOGS, "https://blog.example.org/entry.xml")
+    earlier = _NOW - timedelta(days=21)
+    watch_list.stamp(_BLOGS, "https://quiet.example.org/entry.xml", earlier)
+    watch_list.stamp(_BLOGS, "https://blog.example.org/entry.xml", earlier)
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    queue.add("https://blog.example.org/a")
+    scanner = FakeScanner(entries={"https://quiet.example.org/entry.xml": [], "https://blog.example.org/entry.xml": [_entry("https://blog.example.org/a", 1)]})
+
+    report = await scan_watch_list(watch_list, {_BLOGS: scanner}, queue, now=_NOW)
+
+    assert (report.found, report.requested, report.failed) == (1, 0, ())
+    stamps = {entry.ref: entry.last_scanned for entry in watch_list.entries()}
+    assert stamps["https://quiet.example.org/entry.xml"] == earlier, "an empty scan keeps the window open for the next one"
+    assert stamps["https://blog.example.org/entry.xml"] == _NOW, "a found source stamps the entry, even one already on the queue"
+
+
+async def test_a_first_scan_that_finds_nothing_leaves_the_entry_unstamped(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+
+    await scan_watch_list(watch_list, {_PODCAST: FakeScanner(entries={"someone": []})}, queue, now=_NOW)
+
+    assert watch_list.entries()[0].last_scanned is None
+
+
 async def test_a_feeds_whole_scan_lands_in_one_write_and_counts_only_the_new_rows(tmp_path: Path) -> None:
     watch_list = WatchListFile(tmp_path / "watch-list.yaml")
     watch_list.add(_BLOGS, "https://blog.example.org/entry.xml")

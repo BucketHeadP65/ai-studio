@@ -84,7 +84,7 @@ class WatchListFile:
             return True
 
     def stamp(self, scanner: str, ref: str, when: datetime) -> None:
-        """Record `when` as the entry's last successful scan.
+        """Record `when` as the time of the entry's last scan that found a source.
 
         Args:
             scanner: The entry's scanner name.
