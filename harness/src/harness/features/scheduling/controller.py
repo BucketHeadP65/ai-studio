@@ -53,6 +53,16 @@ def _no_such_schedule() -> JSONResponse:
     return JSONResponse({"ok": False, "message": UNKNOWN_SCHEDULE}, status_code=404)
 
 
+def _update_of(body: SchedulePatch) -> ScheduleUpdate:
+    """The change `body` asks for, where a null `capacity_key`, `capacity_limit` or `blackout` sent in it clears that setting."""
+    sent_null = {name for name in body.model_fields_set if getattr(body, name) is None}
+    return ScheduleUpdate(
+        **body.model_dump(),
+        clears_capacity=bool(sent_null & {"capacity_key", "capacity_limit"}),
+        clears_blackout="blackout" in sent_null,
+    )
+
+
 def _refusal(exc: Exception) -> JSONResponse:
     """The JSON refusal a scheduler error answers with."""
     match exc:
@@ -140,7 +150,7 @@ class SchedulingController:
                 session.library,
                 session.registry,
                 schedule_id,
-                ScheduleUpdate(**body.model_dump()),
+                _update_of(body),
                 names=self._run.knowledge_bases,
                 run_engine=self._run.run_settings.run_engine,
             )

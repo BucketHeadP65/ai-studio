@@ -60,6 +60,11 @@ class FakeSchedules:
             updates["next_run_at"] = None
         if changes.clears_pending_page_ids:
             updates["pending_page_ids"] = ()
+        if changes.clears_capacity:
+            updates["capacity_key"] = None
+            updates["capacity_limit"] = None
+        if changes.clears_blackout:
+            updates["blackout"] = None
         self.rows[schedule_id] = current.model_copy(update=updates)
         return True
 

@@ -40,7 +40,10 @@ class ScheduleIn(BaseModel):
 
 
 class SchedulePatch(BaseModel):
-    """A partial change to a schedule's settings. An absent field is not changed."""
+    """A partial change to a schedule's settings. An absent field is not changed.
+
+    A null `capacity_key`, `capacity_limit` or `blackout` clears that setting. A null anywhere else changes nothing.
+    """
 
     model_config = ConfigDict(use_attribute_docstrings=True)
 
@@ -55,11 +58,13 @@ class SchedulePatch(BaseModel):
     gate_mode: GateMode | None = None
     """`wait`, `orchestrate`, or `auto`."""
     capacity_key: str | None = None
-    """A name shared with other schedules to cap how many of them run at once."""
+    """A name shared with other schedules to cap how many of them run at once. Null clears it and `capacity_limit` together,
+    whatever else the patch sends for them."""
     capacity_limit: int | None = None
-    """How many schedules sharing `capacity_key` may run at once."""
+    """How many schedules sharing `capacity_key` may run at once. Null clears it and `capacity_key` together, whatever else the
+    patch sends for them."""
     blackout: str | None = None
-    """One or more `HH:MM-HH:MM` daily quiet hours, comma separated."""
+    """One or more `HH:MM-HH:MM` daily quiet hours, comma separated. Null clears them."""
     catch_up: bool | None = None
     """Fire once as soon as a held fire clears, instead of waiting for the next normal turn."""
 

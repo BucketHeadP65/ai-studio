@@ -355,7 +355,7 @@ class ScheduleUpdate(BaseModel):
 
     It covers the settings an owner edits, a next fire for a schedule that had none, and the pause stamp.
     The rest of the tick log is written by `stamp` alone.
-    `capacity_key`, `capacity_limit` and `blackout` can be replaced but never cleared back to `None`.
+    `clears_capacity` and `clears_blackout` clear those settings, since `None` there leaves them alone.
     `paused_at` is the one exception to the rule on `None`: it is saved as given whenever `enabled` is set.
     """
 
@@ -378,6 +378,11 @@ class ScheduleUpdate(BaseModel):
     clears_pending_page_ids: bool = False
     """Set when the change gives the schedule another cadence, unless both are on index over the same knowledge base: its pending
     changed pages are cleared in the same write."""
+    clears_capacity: bool = False
+    """Set to clear `capacity_key` and `capacity_limit` together, since one without the other caps nothing. Their values here are
+    then ignored."""
+    clears_blackout: bool = False
+    """Set to clear `blackout`. Its value here is then ignored."""
 
 
 ON_REFRESH_SUBSCRIBER = "schedules.on_refresh"

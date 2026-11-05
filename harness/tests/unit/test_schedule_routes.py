@@ -192,6 +192,32 @@ async def test_patch_updates_the_new_fields(registry: StepRegistry, tmp_path: Pa
         assert body["catch_up"] is True
 
 
+@pytest.mark.parametrize("cleared", [{"capacity_key": None}, {"capacity_limit": None}, {"capacity_key": None, "capacity_limit": None}])
+async def test_patch_sending_a_null_capacity_clears_the_key_and_the_limit(cleared: dict[str, None], registry: StepRegistry, tmp_path: Path) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule(capacity_key="pool-a", capacity_limit=2, blackout="01:00-02:00")
+    await schedules.insert(schedule)
+    async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), schedules, tmp_path, registry=registry) as (client, _):
+        patched = await client.patch(f"/api/schedules/{schedule.id}", json=cleared)
+
+        assert patched.status_code == 200
+        body = patched.json()["schedule"]
+        assert (body["capacity_key"], body["capacity_limit"]) == (None, None)
+        assert body["blackout"] == "01:00-02:00", "a field the patch did not send stays"
+
+
+async def test_patch_sending_a_null_blackout_clears_it_and_one_leaving_it_out_keeps_it(registry: StepRegistry, tmp_path: Path) -> None:
+    schedules = FakeSchedules()
+    schedule = _schedule(capacity_key="pool-a", capacity_limit=2, blackout="01:00-02:00")
+    await schedules.insert(schedule)
+    async with _studio(FakeWorkflowStore(specs={"wf-sales": _one_node_spec()}), schedules, tmp_path, registry=registry) as (client, _):
+        kept = (await client.patch(f"/api/schedules/{schedule.id}", json={"catch_up": True})).json()["schedule"]
+        cleared = (await client.patch(f"/api/schedules/{schedule.id}", json={"blackout": None})).json()["schedule"]
+
+    assert (kept["blackout"], kept["capacity_key"], kept["capacity_limit"]) == ("01:00-02:00", "pool-a", 2)
+    assert (cleared["blackout"], cleared["capacity_key"], cleared["capacity_limit"]) == (None, "pool-a", 2)
+
+
 async def test_patch_refuses_a_blackout_that_is_not_one(registry: StepRegistry, tmp_path: Path) -> None:
     schedules = FakeSchedules()
     schedule = _schedule()

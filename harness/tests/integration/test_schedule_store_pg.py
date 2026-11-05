@@ -278,6 +278,21 @@ async def test_update_that_clears_the_next_fire_writes_null(store: PostgresSched
     assert (fetched.cadence, fetched.next_run_at) == ("on refresh", None)
 
 
+async def test_update_that_clears_the_capacity_and_the_blackout_writes_null(store: PostgresSchedules) -> None:
+    held = _schedule(capacity_key="pool-a", capacity_limit=2, blackout="01:00-02:00")
+    await store.insert(held)
+
+    assert await store.update(held.id, ScheduleUpdate(clears_capacity=True)) is True
+    capacity_cleared = await store.get(held.id)
+    assert await store.update(held.id, ScheduleUpdate(clears_blackout=True)) is True
+    blackout_cleared = await store.get(held.id)
+
+    assert capacity_cleared is not None
+    assert blackout_cleared is not None
+    assert (capacity_cleared.capacity_key, capacity_cleared.capacity_limit, capacity_cleared.blackout) == (None, None, "01:00-02:00")
+    assert (blackout_cleared.capacity_key, blackout_cleared.capacity_limit, blackout_cleared.blackout) == (None, None, None)
+
+
 async def test_update_that_clears_the_pending_pages_writes_an_empty_array(store: PostgresSchedules) -> None:
     held = _schedule(cadence="on index notes", pending_page_ids=("note.a", "note.b"))
     await store.insert(held)

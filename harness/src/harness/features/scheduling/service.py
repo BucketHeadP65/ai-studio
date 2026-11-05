@@ -506,6 +506,7 @@ class Scheduler:
         A change to another cadence clears the changed pages the schedule collected, so none rides a fire of the new cadence.
         An on-index cadence over the same knowledge base keeps them, so a change of its quiet period alone loses no page.
         Turning the schedule off stamps it paused at `now`, and turning it on clears the stamp.
+        A change that asks to clear the capacity or the blackout writes them as none.
 
         Args:
             library: The workflow library the workflow is read from.
