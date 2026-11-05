@@ -1233,13 +1233,15 @@ were actually seen by a person, which passed themselves, and which this run's ow
 
 ```
 GET    /api/schedules                                                     -> {"schedules": [ScheduleOut, ...]}
-POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?}
+POST   /api/schedules            {"workflow_id", "arguments"?, "cadence", "gate_policy"?, "gate_mode"?,
+                                  "capacity_key"?, "capacity_limit"?, "blackout"?, "catch_up"?}
                                                                             -> {"schedule": ScheduleOut} (201) | 404 | 400
-PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?}
+PATCH  /api/schedules/{id}       {"workflow_id"?, "arguments"?, "cadence"?, "enabled"?, "gate_policy"?, "gate_mode"?,
+                                  "capacity_key"?, "capacity_limit"?, "blackout"?, "catch_up"?}
                                                                             -> {"schedule": ScheduleOut} | 404 | 400
 DELETE /api/schedules/{id}                                                 -> {"ok": true} | 404
 POST   /api/schedules/{id}/run-now                                        -> {"ok": true, "outcome": str} | 404
-POST   /api/schedules/preview    {"cadence": str}                         -> {"next": [iso8601, iso8601, iso8601]} | 400
+POST   /api/schedules/preview    {"cadence": str}                         -> {"next": [iso8601, iso8601, iso8601]} | {"next": []} | 400
 POST   /api/schedules/refresh-runs {"event_id", "knowledge_base", "sources_created"?, "requested_by_entry"?}
                                                                             -> {"repeat", "notified", "armed"} | 422 | 503
 POST   /api/schedules/index-runs {"event_id", "knowledge_base", "page_ids"}
@@ -1261,8 +1263,9 @@ its quiet period. The event id is recorded under `schedules.on_index` in the sam
 the same index answers `"repeat": true` and changes nothing. The event id is recorded even when no schedule matches.
 
 `ScheduleOut` is the schedule's own stored fields (`id`, `workflow_id`, `arguments`, `cadence`, `enabled`, `gate_policy`,
-`gate_mode`, `session_id`, `created_at`, `last_run_at`, `last_outcome`, `next_run_at`, and `pending_page_ids`, the changed
-pages an on-index schedule has collected for its next fire) plus
+`gate_mode`, `capacity_key`, `capacity_limit`, `blackout`, `catch_up`, `session_id`, `created_at`, `last_run_at`,
+`last_outcome`, `next_run_at`, `paused_at`, the moment a person last turned the schedule off or `null` while it is on, and
+`pending_page_ids`, the changed pages an on-index schedule has collected for its next fire) plus
 `live`: where its runner session's run stands right now (`"running" | "paused" | "waiting"`, or `null` when nothing is
 in flight), computed fresh off the session pool on every read, never stored. A schedule points at a workflow, not at
 one version of it: `workflow_id` in the listing, and the version a fire launches, is the newest live version of the
@@ -1272,6 +1275,15 @@ deployment that runs on Temporal, a `POST` or `PATCH` that sets `gate_mode` to `
 saying the durable engine has no orchestrated gate. A fire of a schedule already stored that way launches nothing and
 stamps `refused: ` and the words that save would get as its outcome, keeping its cadence.
 
+**Capacity, blackout and catch up** are three optional holds on a fire. Schedules that share a `capacity_key` run at most
+`capacity_limit` of their fires at once: a fire that finds that many of them running is held, stamped
+`held, capacity <key> is full`, and tries again on the next tick. `blackout` is one or more daily quiet hours,
+`HH:MM-HH:MM` in UTC and comma separated, a window that may cross midnight: a fire that comes due inside one is held,
+stamped `blacked out until HH:MM`. A held overlap or blackout fire skips to the cadence's next turn unless `catch_up` is
+on, which fires it once as soon as the hold clears and stamps it `caught up`. In a `PATCH`, a field left out is not
+changed, and a `null` sent for `capacity_key` or `capacity_limit` clears both, since one without the other caps nothing,
+and a `null` `blackout` clears it. A `null` sent for any other field changes nothing.
+
 `spend_today_usd` and `spend_week_usd` are `schedule_spend`'s own two figures (`features/running/spend.py`), computed
 fresh the same way as `live` rather than stored. Each counts only a fire whose spend record names this schedule's own
 runner (`"app:schedule:<id>"`): `spend_today_usd` sums since UTC midnight, `spend_week_usd` over the trailing seven
@@ -1279,7 +1291,8 @@ days, neither a calendar boundary.
 
 **Cadence** is an interval (`"every 30m"`, `"every 2h"`, `"every 1d"`), a 5-field cron expression (`"0 9 * * 1"`, parsed by `croniter`), `"on refresh"`, `"after <workflow name>"` or `"on index <knowledge base>"` with an optional `"quiet <N><s|m|h>"`: `POST /api/schedules` and `PATCH /api/schedules/{id}` refuse anything else in
 words, and `POST /api/schedules/preview` walks a candidate cadence forward three fires without storing anything, so a
-cadence can be checked before it is saved. `workflow_id` is revalidated against the process's own environment on
+cadence can be checked before it is saved. An event cadence never comes due by the clock, so its preview answers
+`{"next": []}`. `workflow_id` is revalidated against the process's own environment on
 create and on any patch that changes it. A schedule naming a workflow that does not check out here is refused, not
 saved broken. `arguments` are admitted against the named workflow's own parameters at the same moment, and stored as
 the JSON they were admitted as: see [Run arguments](#run-arguments-typed-json-admitted-once).
