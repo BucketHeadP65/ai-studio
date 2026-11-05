@@ -13,6 +13,8 @@ import asyncio
 
 from typing import TYPE_CHECKING, Any, cast
 
+import pytest
+
 from core.ai.workflows.contracts import JUDGE_NOTE_FALLBACK, FromNode, GateDecision, JudgeGate, RunNode, Workflow
 
 from harness.features.running.approval import ChatApproval
@@ -135,10 +137,11 @@ async def test_under_automode_a_judge_that_cannot_decide_sends_the_work_back_wit
     assert approval.session.active.pending is None, "nothing waits for a person"
 
 
-async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on(registry: StepRegistry) -> None:
+@pytest.mark.parametrize("note", ["", "  \n "])
+async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_the_rerun_can_act_on(registry: StepRegistry, note: str) -> None:
     approval = _approval(_judged(), registry, timeout=0.01, gate_mode="auto")
 
-    decision = await approval.review("check", "the draft")
+    decision = await approval.review("check", "the draft", note=note)
 
     assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
 

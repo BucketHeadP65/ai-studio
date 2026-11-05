@@ -46,6 +46,7 @@ with workflow.unsafe.imports_passed_through():
         ContinuationRef,
         ContinuationUnsafeReplayError,
     )
+    from core.ai.workflows.automode import automode_refusal
     from core.ai.workflows.birth import shapes_of
     from core.ai.workflows.domain.evidence import approved_gates
     from core.ai.workflows.domain.identity import (
@@ -59,7 +60,7 @@ with workflow.unsafe.imports_passed_through():
     from core.ai.workflows.domain.in_flight import NodesInFlight
     from core.ai.workflows.domain.parameter_values import WorkflowArguments
     from core.ai.workflows.domain.run_events import GateDecisionFact, RetryFeedback
-    from core.ai.workflows.domain.vocabulary import JUDGE_NOTE_FALLBACK, JudgeGate, PersonGate, Tier, Workflow
+    from core.ai.workflows.domain.vocabulary import PersonGate, Tier, Workflow
     from core.ai.workflows.exceptions import RetryExhaustedError
     from core.ai.workflows.graph_builder import GateDecision, WorkflowState, build_graph
 
@@ -760,8 +761,7 @@ class DurableWorkflowRun:
         The run waits here as long as it takes and survives a worker dying meanwhile, because the
         wait is part of the workflow's history. Under gate mode `auto` the gate never waits. A person
         gate passes, and its id is recorded apart from the approvals so the evidence names what
-        decided it. A judge gate reaches here only when its judge could not decide, and automode
-        refuses it in the judge's name with `note`, or `JUDGE_NOTE_FALLBACK` when the note is blank.
+        decided it. A judge gate is refused as `automode_refusal` words it and counted as a refusal.
 
         Args:
             gate_id: Which gate this is.
@@ -773,10 +773,10 @@ class DurableWorkflowRun:
             The person's verdict, an automatic approval, or the judge's refusal under gate mode `auto`.
         """
         if self.gate_mode == "auto":
-            if self._workflow is not None and any(isinstance(node, JudgeGate) and node.id == gate_id for node in self._workflow.nodes):
-                # The engine refuses a rejection credited to automode, so this one names the judge.
+            refusal = automode_refusal(self._workflow, gate_id, note) if self._workflow is not None else None
+            if refusal is not None:
                 self._refused[gate_id] = self._refused.get(gate_id, 0) + 1
-                return GateDecision(approve=False, feedback=note or JUDGE_NOTE_FALLBACK, source="judge")
+                return refusal
             if gate_id not in self._auto:
                 self._auto.append(gate_id)
             return GateDecision(approve=True, source="auto")

@@ -85,7 +85,10 @@ class Decision(BaseModel):
 
 
 class AutomodeRequest(BaseModel):
-    """Whether the live run's gates should pass themselves from here on, with nobody asked."""
+    """Whether the live run's person gates should pass themselves from here on, with nobody asked.
+
+    A judge that cannot decide sends the work back.
+    """
 
     on: bool
 

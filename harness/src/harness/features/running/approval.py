@@ -10,7 +10,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import JUDGE_NOTE_FALLBACK, DecisionSource, GateDecision, GateReached, JudgeGate, PersonGate
+from core.ai.workflows.contracts import DecisionSource, GateDecision, GateReached, JudgeGate, PersonGate, automode_refusal
 from core.ai.workflows.contracts import orchestrated_gates as _declared_orchestrated_gates
 from core.observability import get_logger
 
@@ -68,7 +68,7 @@ class ChatApproval:
     asker: GateAsker | None = None
     """The entry's own way of asking, where it has one. `None` is the browser: hold and wait."""
     decisions: dict[str, list[bool]] = field(default_factory=dict)
-    """Every verdict this run's gates received, per gate, in order."""
+    """Every verdict this run's gates received, per gate, in order, including a judge's refusal under automode."""
     _auto: dict[str, int] = field(default_factory=dict, init=False, repr=False)
     """How many times automode passed each gate, never counted in `decisions`."""
     _orchestrated: dict[str, int] = field(default_factory=dict, init=False, repr=False)
@@ -107,9 +107,8 @@ class ChatApproval:
         Tried in this order: automode, the entry's own asker, this run's own orchestrator under
         `gate_mode="orchestrate"`, then the browser. Automode and the gate mode are read live off the
         session, so a flip mid-run applies at the next gate. The orchestrator and the browser share
-        one wait and one timeout. A judge gate reaches here only when its judge could not decide, and
-        automode refuses it in the judge's name with `note` as the feedback, or `JUDGE_NOTE_FALLBACK`
-        when the note is blank. Automode passes every other gate.
+        one wait and one timeout. Automode refuses a judge gate as `automode_refusal` words it and
+        records the refusal in `decisions`. It passes every other gate.
 
         Args:
             gate_id: Which gate this is.
@@ -123,13 +122,11 @@ class ChatApproval:
             self.session.state,
             GateReached(run_id=self.session.active.run_id or "", workflow_id=self.session.active.workflow_id, gate_id=gate_id),
         )
-        gate = next((node for node in self.spec.nodes if isinstance(node, PersonGate | JudgeGate) and node.id == gate_id), None)
         if self.session.active.gate_mode == "auto":
-            if isinstance(gate, JudgeGate):
-                # The engine refuses a rejection credited to automode, so this one names the judge.
+            if (refusal := automode_refusal(self.spec, gate_id, note)) is not None:
                 self.decisions.setdefault(gate_id, []).append(False)
                 _logger.info("gate {gate} refused under automode, its judge could not decide", gate=gate_id)
-                return GateDecision(approve=False, feedback=note or JUDGE_NOTE_FALLBACK, source="judge")
+                return refusal
             self._auto[gate_id] = self._auto.get(gate_id, 0) + 1
             _logger.info("gate {gate} auto-approved, nobody asked", gate=gate_id)
             return GateDecision(approve=True, source="auto")
@@ -138,6 +135,7 @@ class ChatApproval:
             verdict = await self.asker.ask(gate_id, reviewing)
             self.decisions.setdefault(gate_id, []).append(verdict)
             return GateDecision(approve=verdict, source="person")
+        gate = next((node for node in self.spec.nodes if isinstance(node, PersonGate | JudgeGate) and node.id == gate_id), None)
         decide = self.session.registry.decide_gate
         decision: Coroutine[None, None, GateVerdict] | asyncio.Future[GateVerdict]
         if self.session.active.gate_mode == "orchestrate" and decide is not None:

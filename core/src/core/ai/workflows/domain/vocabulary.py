@@ -45,9 +45,6 @@ Verdict = Literal["approve", "reject", "cannot_judge"]
 """What a judge answers: release the value, send it back with feedback, or hand it to whoever answers the run's
 person gates. Under gate mode `auto` nobody does, so `cannot_judge` sends the value back with the judge's note."""
 
-JUDGE_NOTE_FALLBACK = "The judge could not decide and gave no reason. Rework the value so its judge can decide it."
-"""The feedback a `cannot_judge` refused under gate mode `auto` carries when the judge left no note."""
-
 
 class Budget(BaseModel):
     """What one performance of a step may spend, stated to the model before it starts."""

@@ -647,6 +647,14 @@ async def test_under_automode_a_judge_that_left_no_note_is_refused_with_words_th
     assert JUDGE_NOTE_FALLBACK.strip(), "a blank refusal tells the rerun step nothing"
 
 
+async def test_under_automode_a_judge_whose_note_is_only_whitespace_is_refused_with_the_fallback() -> None:
+    run = _automode_run_of(_draft_then_judge())
+
+    decision = await run.review("check", "a draft", note="  \n ")
+
+    assert decision == GateDecision(approve=False, feedback=JUDGE_NOTE_FALLBACK, source="judge")
+
+
 async def test_under_automode_a_judge_that_never_decides_spends_the_gates_reaches_on_the_durable_engine() -> None:
     """The durable loop end to end: each reach is the judge's own refusal, and the third ends the run with nothing passed."""
     drafted: list[str] = []

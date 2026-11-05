@@ -1225,11 +1225,12 @@ reviewer's own words appearing above the workflow in the gate card so the owner 
 `gate_mode="orchestrate"` this run's own orchestrator answers that escalation instead, the same conversion a
 `PersonGate` gets under that mode. Under `gate_mode="auto"` nobody answers in the judge's place, so the approval hook
 refuses the escalation in the judge's name, on both engines (`ChatApproval.review` in process,
-`DurableWorkflowRun.review` on Temporal). The judge's note goes back as the feedback to the step the gate reruns. A
-blank note is replaced by core's `JUDGE_NOTE_FALLBACK`, "The judge could not decide and gave no reason. Rework the
-value so its judge can decide it." The refusal spends one of the gate's reaches, so a judge that never decides ends
-the run at the gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in
-`gates_auto`.
+`DurableWorkflowRun.review` on Temporal, both through core's `automode_refusal`). The judge's note goes back as the
+feedback to the step the gate reruns. A blank or whitespace-only note is replaced by core's `JUDGE_NOTE_FALLBACK`,
+"The judge could not decide and gave no reason. Rework the value so its judge can decide it." A judge that runs out of
+budget before it answers is a `cannot_judge` too, so under `"auto"` it reruns the step the gate names with the budget
+stop as its note. The refusal spends one of the gate's reaches, so a judge that never decides ends the run at the
+gate's `max_attempts` with nothing passed. The refusal counts in `gates_rejected`, never in `gates_auto`.
 
 **The honesty rule, now three columns.** `gates_approved` means a person clicked approve. `gates_auto` means automode
 passed the gate with nobody asked. `gates_orchestrated` means this run's own orchestrator decided it: either because
