@@ -491,7 +491,7 @@ the library's write path validates every page against. `APP_WORKFLOW_KNOWLEDGE_B
 | `workflow` | the consumer's workflow version id, left out for a flag about a step |
 | `raised_by`, `raised_at` | `library` for a save, `agent:step-maintenance` for a run or a live trial, and when, ISO 8601 with its offset |
 | `resolved_by`, `decision_reason` | who resolved it and why, left out while it is open |
-| Evidence, Proposed change | the two sections. Proposed change is empty except for a `repository_change`. A heading of level 1 to 3, or a code fence left open, outside a fenced block is refused, because the page would cut the text there |
+| Evidence, Proposed change | the two sections. Proposed change is empty except for a `repository_change`. A heading of level 1 to 3, or a code fence left open, outside a fenced block is refused, because the page would cut the text there. Both are kept without the whitespace at their edges, which the page drops |
 
 Every writer reads the page under the flag's id first (`FLAG_SQL`) and follows one rule, `flag_to_write`: no page, it
 writes the flag open. An open page takes the new flag, and one that already holds it apart from `raised_at` is left

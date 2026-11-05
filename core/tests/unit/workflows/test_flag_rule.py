@@ -134,3 +134,10 @@ def test_a_flag_refuses_text_its_page_would_cut_into_another_section(field: str,
 )
 def test_a_flag_keeps_text_that_stays_one_section(body: str) -> None:
     assert _flag(proposed_change=body).proposed_change == body
+
+
+def test_a_flag_keeps_its_sections_without_the_whitespace_at_their_edges_as_its_page_does() -> None:
+    flag = _flag(evidence="\n\n  It diverged from st.digest.v3.\n", proposed_change="  Retype the output.   \n")
+    assert (flag.evidence, flag.proposed_change) == ("It diverged from st.digest.v3.", "Retype the output.")
+    again = _flag(evidence="It diverged from st.digest.v3.\n", proposed_change="Retype the output.", raised_at=RAISED + timedelta(days=1))
+    assert flag_to_write(flag, again) is None, "the same text read back from the page is the same flag"

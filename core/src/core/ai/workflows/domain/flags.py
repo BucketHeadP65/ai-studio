@@ -50,7 +50,7 @@ class MaintenanceFlag(BaseModel):
     A flag about one consumer names the consumer's workflow version id in `workflow`. A flag about a step leaves it
     empty. A field the flag does not hold is refused, and so is a `raised_at` without its offset. Evidence or a proposed
     change holding a heading of level 1 to 3, or a code fence it leaves open, outside a fenced block is refused, because
-    the page would cut the text there.
+    the page would cut the text there. Both are kept without the whitespace at their edges, as the page keeps them.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -93,7 +93,7 @@ class MaintenanceFlag(BaseModel):
                 "page would cut the text there. Put that text inside a closed fenced block, or use a heading of level 4 or deeper"
             )
             raise ValueError(msg)
-        return body
+        return body.strip()
 
 
 def flag_id(kind: FlagKind, step: str, workflow_name: str = "") -> str:
