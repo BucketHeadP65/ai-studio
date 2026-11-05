@@ -349,6 +349,9 @@ class ConsumerRecords(Protocol):
 
         Returns:
             One card per workflow version, carrying its record's entry for the step. Empty when no live version holds a copy.
+
+        Raises:
+            LibraryError: The record on one of those pages does not parse.
         """
         ...
 
