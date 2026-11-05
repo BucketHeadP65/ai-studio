@@ -102,8 +102,9 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
         The case report.
 
     Raises:
-        CaseRunRefusedError: `registry` cannot perform a briefing or run a program, two cases share a name, the
-            dataset declares report evaluators, or an `LLMJudge` in it names no model. Nothing has run.
+        CaseRunRefusedError: `registry` cannot perform a briefing or run a program, the cases do not load as a
+            dataset, two cases share a name, the dataset declares report evaluators, or an `LLMJudge` in it names no
+            model. Nothing has run.
     """
     report = CaseReport(
         step_id=step_id,
@@ -128,8 +129,7 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
         return report
 
     run = _runner(step, step_id, output_type, registry)
-    dataset = CaseDataset.from_dict(_named(cases, step_id), custom_evaluator_types=[OutcomeMatches], default_name=step.name)
-    _refuse_unjudgeable(dataset, step_id)
+    dataset = _dataset(cases, step_id)
     before = len(calls)
     outside = _outside_names()
     results: list[CaseResult] = []
@@ -159,6 +159,11 @@ def check_step_cases(step_id: str, cases: Mapping[str, JsonValue]) -> None:
     Raises:
         CaseRunRefusedError: The cases would not run. The message says what to change.
     """
+    _dataset(cases, step_id)
+
+
+def _dataset(cases: Mapping[str, JsonValue], step_id: str) -> CaseDataset:
+    """The cases as a dataset every case of which can run, each named, refused as `CaseRunRefusedError` otherwise."""
     try:
         dataset = CaseDataset.from_dict(_named(cases, step_id), custom_evaluator_types=[OutcomeMatches], default_name=step_id)
     except ValidationError as error:
@@ -170,6 +175,7 @@ def check_step_cases(step_id: str, cases: Mapping[str, JsonValue]) -> None:
         msg = f"the cases of {step_id} name an evaluator that does not load ({problems}). Fix the case file."
         raise CaseRunRefusedError(msg) from error
     _refuse_unjudgeable(dataset, step_id)
+    return dataset
 
 
 def _named(cases: Mapping[str, JsonValue], step_id: str) -> dict[str, JsonValue]:
