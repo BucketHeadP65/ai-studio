@@ -272,21 +272,31 @@ describe("WorkflowAbout", () => {
     expect(facts.getByText("Runs completed").nextElementSibling).toHaveTextContent("4");
   });
 
-  it("lists each saved version with its own level and counts, the version this page reads marked", () => {
+  it("lists each saved version with its own level and counts, then the total over all of them", () => {
     render(
       <WorkflowAbout
         detail={detailFixture({
           id: "wf.research-digest.v3",
           version: 3,
           trust: trust({
-            total: trustCounts({ runs_with_evidence: 35, failed_runs: 3, approved_by: ["owner"] }),
+            total: trustCounts({
+              runs_with_evidence: 35,
+              failed_runs: 3,
+              approved_by: ["owner"],
+              structural_grades: 6,
+            }),
             versions: [
               versionTrust(1, "approved", {
                 runs_with_evidence: 20,
                 failed_runs: 1,
                 approved_by: ["owner"],
+                structural_grades: 2,
               }),
-              versionTrust(2, "machine-confirmed", { runs_with_evidence: 15, failed_runs: 2 }),
+              versionTrust(2, "machine-confirmed", {
+                runs_with_evidence: 15,
+                failed_runs: 2,
+                structural_grades: 4,
+              }),
               versionTrust(3, "unverified"),
             ],
           }),
@@ -299,7 +309,14 @@ describe("WorkflowAbout", () => {
       within(table)
         .getAllByRole("columnheader")
         .map((header) => header.textContent),
-    ).toEqual(["Version", "Trust", "Runs completed", "Failed runs", "Approved by"]);
+    ).toEqual([
+      "Version",
+      "Trust",
+      "Runs completed",
+      "Failed runs",
+      "Structural grades",
+      "Approved by",
+    ]);
     const rows = within(table)
       .getAllByRole("row")
       .slice(1)
@@ -308,10 +325,12 @@ describe("WorkflowAbout", () => {
           .getAllByRole("cell")
           .map((cell) => cell.textContent),
       );
+    // The total row carries no level, because the total never sets one.
     expect(rows).toEqual([
-      ["v1", "approved", "20", "1", "owner"],
-      ["v2", "confirmed by runs", "15", "2", "nobody"],
-      ["v3 (this version)", "not verified", "0", "0", "nobody"],
+      ["v1", "approved", "20", "1", "2", "owner"],
+      ["v2", "confirmed by runs", "15", "2", "4", "nobody"],
+      ["v3 (this version)", "not verified", "0", "0", "0", "nobody"],
+      ["All versions", "", "35", "3", "6", "owner"],
     ]);
   });
 

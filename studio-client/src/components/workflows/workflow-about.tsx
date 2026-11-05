@@ -14,6 +14,7 @@ import type {
   Readiness,
   ReadinessField,
   Trust,
+  TrustCounts,
   VersionTrust,
   WorkflowDetail,
   WorkflowGraph,
@@ -402,15 +403,39 @@ function ChipGroup({
   );
 }
 
-const TRUST_COLUMNS = ["Version", "Trust", "Runs completed", "Failed runs", "Approved by"];
+const TRUST_COLUMNS = [
+  "Version",
+  "Trust",
+  "Runs completed",
+  "Failed runs",
+  "Structural grades",
+  "Approved by",
+];
+
+// The four count cells of one trust row, for a version or for the total.
+function TrustCountCells({ counts }: { counts: TrustCounts }): ReactElement {
+  return (
+    <>
+      <td className="px-3 py-1.5 font-mono text-label-2">{counts.runs_with_evidence}</td>
+      <td className="px-3 py-1.5 font-mono text-label-2">{counts.failed_runs}</td>
+      <td className="px-3 py-1.5 font-mono text-label-2">{counts.structural_grades}</td>
+      <td className="px-3 py-1.5 text-label-2">
+        {counts.approved_by.length > 0 ? counts.approved_by.join(", ") : "nobody"}
+      </td>
+    </>
+  );
+}
 
 // Each saved version's own level and counts, lowest version first, with the version this page
-// reads marked. A row's level is that version's own, and no row sets another's.
+// reads marked, then the total over all of them. A row's level is that version's own, no row sets
+// another's, and the total row has no level.
 function TrustByVersion({
   versions,
+  total,
   current,
 }: {
   versions: VersionTrust[];
+  total: TrustCounts;
   current: number;
 }): ReactElement {
   return (
@@ -450,14 +475,17 @@ function TrustByVersion({
                   <td className="px-3 py-1.5 text-label-2">
                     {TRUST_LABEL[entry.level] ?? entry.level}
                   </td>
-                  <td className="px-3 py-1.5 font-mono text-label-2">{entry.runs_with_evidence}</td>
-                  <td className="px-3 py-1.5 font-mono text-label-2">{entry.failed_runs}</td>
-                  <td className="px-3 py-1.5 text-label-2">
-                    {entry.approved_by.length > 0 ? entry.approved_by.join(", ") : "nobody"}
-                  </td>
+                  <TrustCountCells counts={entry} />
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-line border-t bg-well font-semibold">
+                <td className="px-3 py-1.5 text-label-1">All versions</td>
+                <td className="px-3 py-1.5" />
+                <TrustCountCells counts={total} />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -773,7 +801,11 @@ export function WorkflowAbout({ detail }: WorkflowAboutProps): ReactElement {
           </CollapsibleCard>
         ) : null}
 
-        <TrustByVersion versions={detail.trust.versions} current={detail.version} />
+        <TrustByVersion
+          versions={detail.trust.versions}
+          total={detail.trust.total}
+          current={detail.version}
+        />
       </div>
     </>
   );

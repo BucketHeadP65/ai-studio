@@ -557,7 +557,7 @@ answers zero counts, a zero `total` and an empty `versions` list.
 The Studio's trust chip (a library card, a workflow's own page, a run's header) shows `level` and the version's own
 counts, and beside them `total.runs_with_evidence` across the number of entries in `versions`, once there is more than
 one. A workflow's own page lists `versions` as a table, one row per version with its level, runs with evidence, failed
-runs and approvals.
+runs, structural grades and approvals, and a last row with the same counts from `total` and no level.
 
 **`recent_runs`** (the chat read) says both halves per line, `ran <outcome>, checked outcome <status> (n/m succeeded,
 …)`. **`run_values`** answers what the run recorded and is not a check
