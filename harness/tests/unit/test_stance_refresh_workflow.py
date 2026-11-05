@@ -1,9 +1,9 @@
 """The shipped stance-refresh workflow, run end to end off its own files.
 
 The graph and the steps come from the real documents under `templates/research/workflows`, never from a copy typed
-out here. The five model steps are scripted and no model is reached. The seven programs run for real in the
-sandbox, and every tool they call answers from a scripted records base and a scripted research base, so nothing
-reaches a real knowledge base.
+out here. The six model steps are scripted and no model is reached. Every program runs for real in the sandbox,
+and every tool it calls answers from a scripted records base and a scripted research base, so nothing reaches a real
+knowledge base.
 
 What the cases cover: a stance whose record changed is rewritten and written to its own path, a refresh answer that
 names Evidence or Alternatives, or carries no changes, fails the refresh step's own output type, the merge keeps every
@@ -38,7 +38,8 @@ the judge left unanswered keeps it. A proposal the grouping call puts with a pen
 title and writes it in place, two proposals of one idea are backed once, and one proposal with two pending flags of
 its idea keeps the first and removes the other. A decided flag the grouping names is never removed, a group naming an
 id outside its input, an id twice or no proposal is refused and named, a refused removal fails the run after the rest
-lands with the writer's answer still recorded, and a failed grouping call leaves every proposal alone and says why.
+lands with the writer's answer still recorded, flags that cannot be listed fail the run when a weak verdict asked for a
+removal, and a failed grouping call leaves every proposal alone and says why.
 """
 
 from __future__ import annotations
@@ -2663,6 +2664,25 @@ async def test_a_refused_removal_leaves_the_writers_answer_on_the_card(sandbox: 
     result = _value(state, "write_stance_flags")
     assert (result["written"], result["removed"]) == (["flag.stance-memory-for-agents"], [])
     assert [entry["flag_id"] for entry in to_jsonable_python(result["refused_removals"])] == ["flag.stance-agent-recall"]
+
+
+async def test_flags_that_cannot_be_listed_fail_the_run_when_a_weak_verdict_asks_for_a_removal(sandbox: AsyncMonty) -> None:
+    bases = _flag_bases()
+    bases.refuses_flag_listing = True
+    scripted = Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=_refusing("art.memory-survey#^c3"))
+
+    state = await _run(sandbox, bases, scripted, changed="adr-1", raises=RuntimeError)
+
+    listing = "no page_type 'flag' in knowledge base 'research', the page_types are paper, stance"
+    assert _value(state, "apply_groups")["not_grouped"] == "list_pages refused the pending flags, so every proposal stands alone: " + listing
+    assert _value(state, "write_stance_flags")["refused_removals"] == [
+        {
+            "flag_id": "flag.stance-agent-memory",
+            "title": "Agent memory",
+            "reason": "list_pages refused the flags, so its flag was not looked for: " + listing,
+        }
+    ], "the removal a weak verdict asked for is named, never skipped"
+    assert bases.removals == []
 
 
 async def test_a_failed_grouping_call_leaves_every_proposal_alone_and_says_why(sandbox: AsyncMonty) -> None:

@@ -13,7 +13,7 @@ uses:
   - st.back_proposal.v5
   - st.judge_proposal.v4
   - st.write_stances.v6
-  - st.write_stance_flags.v9
+  - st.write_stance_flags.v10
 presentation:
   purpose: >-
     Keep every stance page saying what the system does today. A stance holds the system's position on one topic as

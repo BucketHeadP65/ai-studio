@@ -1,19 +1,21 @@
 ---
 title: Write stance flags
 summary: Each listed stance proposal written as a pending flag page with its records pages and its findings, a flag the owner already decided left alone, and every refused write named rather than stopping the rest, then each pending flag the grouping found the same idea as another, and each one whose proposal the judge found weak, removed and named with its id, title and path, beside the dropped proposals, the digests the run could not read, the cited ids the base does not hold, and the placements under no listed stance.
-version: 9
+version: 10
 step:
   name: write_stance_flags
   source: |
     indexed = {}
     flags_listed = True
+    listing = ""
     refusal = ""
     try:
         for row in await list_pages(knowledge_base=collection, page_type="flag", limit=10000):
             indexed[row["page_id"]] = row["status"]
     except Exception as error:
         flags_listed = False
-        refusal = "list_pages refused the flags, so no flag was written: " + str(error)
+        listing = str(error)
+        refusal = "list_pages refused the flags, so no flag was written: " + listing
     written = []
     kept_decided = []
     failed = []
@@ -119,7 +121,7 @@ step:
             continue
         asked[flag_id] = True
         if entry.get("unlisted"):
-            refused_removals.append({"flag_id": flag_id, "title": entry["title"], "reason": "list_pages refused the flags, so its flag was not looked for: " + refusal})
+            refused_removals.append({"flag_id": flag_id, "title": entry["title"], "reason": "list_pages refused the flags, so its flag was not looked for: " + listing})
             continue
         try:
             page = await read_page(knowledge_base=collection, page_id=flag_id)
