@@ -70,6 +70,8 @@ exists are maintained only by running `step-maintenance` by hand with their ids.
 - A reusable step version saved while no on-step-change schedule exists is never maintained on its own.
 - A second worker over the same outbox, with other subscribers, would lose its events to this one. Any future reader
   of that outbox joins this worker's bus instead.
+- engram's index and incremental services record `PagesLoaded` and `CitingPagesChanged` in the outbox of the database
+  they index, so a knowledge base indexed in `engram_workflows` would have its rows closed undelivered by this worker.
 
 ## Options considered
 

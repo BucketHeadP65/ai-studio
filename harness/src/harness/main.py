@@ -273,17 +273,16 @@ def coordination_worker(pool: SessionPool, scheduler: Scheduler, run: RunCollabo
 
 
 LIBRARY_EVENT_POLL_SECONDS = 30.0
-"""How often, in seconds, the library's outbox is read for new reusable step versions. Nothing wakes its worker sooner, and a
-quiet period is minutes long."""
+"""How often, in seconds, the library event worker reads the outbox of the workflow library's database."""
 
 
 def library_event_worker(arming: StepChangeArming, outbox: Outbox, driving: Driving) -> Worker:
     """Build the worker that delivers the workflow library's outbox to the on-step-change arming.
 
-    It serves no job and runs no periodic. It reads `outbox` every `LIBRARY_EVENT_POLL_SECONDS`, since the wake in `driving`
-    listens on the sessions database. Every row is closed once the arming took it, an event no schedule waits for included.
-    A row whose arming fails stays in the outbox for the next pass, and any event type other than `ReusableStepSaved` is
-    closed undelivered, so this must be the only worker over that outbox.
+    You must make it the only worker over that outbox. It closes every event type other than `ReusableStepSaved` undelivered.
+    It serves no job, runs no periodic and reads `outbox` every `LIBRARY_EVENT_POLL_SECONDS`, never on the wake in `driving`.
+    A row is closed once the arming took it, an event no schedule waits for included, and a row whose arming fails stays in
+    the outbox for the next pass.
 
     Args:
         arming: What arms the on-step-change schedules.
