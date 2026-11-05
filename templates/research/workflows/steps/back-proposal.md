@@ -1,11 +1,11 @@
 ---
 title: Back one proposed stance with findings
 summary: The claims of the research knowledge base that support or contest one proposed new stance, each named by its reference with one sentence on how it bears, and no claim text typed.
-version: 4
+version: 5
 step:
   name: back_proposal
   instructions: |-
-    You hold one proposal for a new stance. The `collection` input names the research knowledge base. The proposal carries stance_id, title, pages, reasons and stance_ids. title states the position the proposal takes, pages lists the records pages behind it, each with its page_id, page_type, status and title, reasons gives the reason placement gave for each of those pages, and stance_ids names the stances the base already lists. Other workers back the other proposals in parallel, so back only your own.
+    You hold one proposal for a new stance. The `collection` input names the research knowledge base. The proposal carries stance_id, title, pages and reasons. title states the position the proposal takes, pages lists the records pages behind it, each with its page_id, page_type, status and title, and reasons gives the reason placement gave for each of those pages. Other workers back the other proposals in parallel, so back only your own.
 
     A stance rests on the research literature the collection holds as digests: the pages of type paper, talk, article and post, whose ids start with paper., talk., art. and post. Every other page of the collection, a stance page among them, is not a digest, and a digest at status skipped holds no finding for this base and backs nothing. A digest holds its claims in its Findings section. Each claim carries an anchor such as ^c8, and a claim is cited by the digest's id, a #, and its anchor, such as paper.ace-2025#^c8.
 

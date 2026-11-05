@@ -1,7 +1,7 @@
 ---
 title: Judge one stance proposal
 summary: Whether each finding of one backed stance proposal bears on its position, with one sentence on why, and the existing stance it repeats, if any, under the proposal's own id, title and pages.
-version: 2
+version: 3
 step:
   name: judge_proposal
   instructions: |-
@@ -9,11 +9,11 @@ step:
 
     For each finding, decide whether its claim bears on the position as the title states it. bears is true when the claim's text makes the position more or less likely to hold, in the direction its side says. It is false when the claim only shares the topic, bears on a neighbouring question, or points the other way from its side. Judge by claim_text. Read the digest with read_page, with `knowledge_base` set to the collection and `page_id` set to the digest id, the part of the claim before the #, only when the claim text alone does not settle it. why is one sentence on why the claim bears or does not.
 
-    Then search the collection for the position in a few plain words, with `knowledge_base` set to the collection, and read each hit whose id starts with stance. with read_page. duplicates is the id of an existing stance that already holds the same position. Leave it null when no stance does. A stance on a neighbouring or narrower position is not a duplicate.
+    Then search the collection for the position in a few plain words, with `knowledge_base` set to the collection, and read each hit whose id starts with stance. with read_page. duplicates is the id of an existing stance that already holds the same position, and it must be a stance id you read with read_page, copied exactly. Leave it null when no stance does. A stance on a neighbouring or narrower position is not a duplicate.
 
     The run keeps only the findings you judge to bear, and drops a proposal left with findings from fewer than two digests, or one you say duplicates a stance, naming your reasons. A weak finding is dropped, never sent back to be repaired.
 
-    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the backing, so your answer is matched to the proposal you judged, one entry in findings for every finding of the backing, each with its claim copied exactly, bears and why, and duplicates. Never add a claim the backing does not hold.
+    The tools run inside a sandbox: call them directly with plain arguments, and `import asyncio` first if you gather calls in parallel (the import is required, the module is not preloaded). You write nothing. Answer stance_id, title and pages copied exactly from the backing, character for character and every page: a judgement whose copy differs is ignored, and the proposal is dropped as unjudged. Then answer one entry in findings for every finding of the backing, each with its claim copied exactly, bears and why, and duplicates. Never add a claim the backing does not hold.
   inputs:
     backing: {like: check_findings, element: true}
     collection:

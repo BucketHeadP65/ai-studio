@@ -475,6 +475,9 @@ def _kept(stance_id: str, title: str, pages: list[Page], claims: list[str], *, c
 PLACED_ADR_1 = Reason(page_id="adr-1", reason="Papers argue for it.")
 """The reason a proposing placement gives for adr-1."""
 
+NO_VERDICT = "The judge gave no verdict: its judge item failed or was skipped, or its judge changed the proposal's id, title or pages."
+"""Why list_proposals drops a proposal no judgement of which matches it."""
+
 NO_BACKING = (
     "No backing of it passed the code checks: its worker failed, changed the proposal's id, title or pages, "
     "or cited claims from fewer than two digests the base holds."
@@ -1249,10 +1252,13 @@ def test_the_backing_worker_and_the_rewrite_judge_hold_budgets_that_fit_their_wo
     assert isinstance(check, Briefing)
     assert set(back.tools) == {"search", "fetch", "read_page"}
     assert "reviewer" not in back.instructions, "no reviewer sends a backing back"
+    assert "stance_ids" not in back.instructions, "the backing worker is not told about the listed stance ids"
     assert "judged once, alone" in back.instructions
     judge = steps["judge_proposal"]
     assert isinstance(judge, Briefing)
     assert set(judge.tools) == {"read_page", "search"}, "the proposal judge reads and writes nothing"
+    assert "a stance id you read with read_page" in judge.instructions
+    assert "is ignored" in judge.instructions, "the judge is told a changed copy is ignored"
     assert back.budget is not None
     assert (back.budget.requests, back.budget.tool_calls) == (20, 120)
     assert isinstance(back.output, Shape)
@@ -1837,9 +1843,11 @@ async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bear
     assert written["payload"]["frontmatter"]["id"] == "flag.stance-memory"
     assert written["payload"]["sections"][2]["body"] == (
         f"- [[paper.dense-retrieval#^c1]] supports: {HOW}\n- [[art.memory-survey#^c3]] supports: {HOW}\n\n"
-        "Refused by the judge:\n\n- [[talk.agent-loops#^c4]]: It only shares the topic."
+        "Left out:\n\n- `talk.agent-loops#^c4`: The judge says it does not bear: It only shares the topic."
     ), "the findings that bear, then each finding the judge refused with its reason"
-    assert _refused(state) == {"stance.memory": [{"claim": "talk.agent-loops#^c4", "why": "It only shares the topic."}]}
+    assert _refused(state) == {
+        "stance.memory": [{"claim": "talk.agent-loops#^c4", "why": "The judge says it does not bear: It only shares the topic."}]
+    }
     dropped = [
         {
             "stance_id": "stance.retrieval",
@@ -1850,11 +1858,7 @@ async def test_each_proposal_is_judged_alone_and_only_the_one_left_with_two_bear
             ],
         },
         {"stance_id": "stance.reranking", "title": "Reranking", "reasons": ["The judge found it repeats the existing stance stance.x."]},
-        {
-            "stance_id": "stance.routing",
-            "title": "Routing",
-            "reasons": ["The judge gave no verdict: its judge item failed or was skipped before it answered."],
-        },
+        {"stance_id": "stance.routing", "title": "Routing", "reasons": [NO_VERDICT]},
     ]
     assert _dropped(state) == dropped
     flags = _value(state, "write_stance_flags")
@@ -1929,7 +1933,7 @@ async def test_an_honest_proposal_whose_own_judge_failed_is_dropped_even_when_a_
 
     assert _proposals(state) == []
     assert [(proposal["stance_id"], proposal["reasons"]) for proposal in _dropped(state)] == [
-        ("stance.agent-memory", ["The judge gave no verdict: its judge item failed or was skipped before it answered."]),
+        ("stance.agent-memory", [NO_VERDICT]),
         ("stance.reranking", [NO_BACKING]),
     ]
 
@@ -2020,7 +2024,11 @@ async def test_a_claim_is_kept_only_when_every_judge_that_answered_it_says_it_be
     assert sorted(finding["claim"] for finding in _findings_of(listed)) == ["art.memory-survey#^c3", "talk.agent-loops#^c4"], (
         "one judge saying a shared claim bears does not outvote the other"
     )
-    assert _refused(state) == {"stance.agent-memory": [{"claim": "paper.dense-retrieval#^c1", "why": "It answers another question."}]}
+    assert _refused(state) == {
+        "stance.agent-memory": [
+            {"claim": "paper.dense-retrieval#^c1", "why": "The judge says it does not bear: It answers another question."}
+        ]
+    }
 
 
 async def test_a_judge_s_verdicts_are_matched_to_findings_by_claim_and_never_by_position(sandbox: AsyncMonty) -> None:
@@ -2039,7 +2047,9 @@ async def test_a_judge_s_verdicts_are_matched_to_findings_by_claim_and_never_by_
     state = await _run(sandbox, _flag_bases(), scripted, changed="adr-1")
 
     assert _proposals(state) == [MEMORY], "the verdicts arrive in reverse order and each still reaches its own claim"
-    assert _refused(state) == {"stance.agent-memory": [{"claim": "talk.agent-loops#^c4", "why": "It only shares the topic."}]}
+    assert _refused(state) == {
+        "stance.agent-memory": [{"claim": "talk.agent-loops#^c4", "why": "The judge says it does not bear: It only shares the topic."}]
+    }
 
 
 async def test_a_claim_the_judge_leaves_out_has_no_verdict_and_is_dropped(sandbox: AsyncMonty) -> None:
@@ -2054,3 +2064,96 @@ async def test_a_claim_the_judge_leaves_out_has_no_verdict_and_is_dropped(sandbo
     assert _proposals(state) == []
     reasons = ["Fewer than two digests are left with findings that bear.", "art.memory-survey#^c3 has no verdict from the judge."]
     assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons}]
+
+
+async def test_a_judge_that_rewords_its_copy_matches_nothing_and_the_reason_says_so(sandbox: AsyncMonty) -> None:
+    def judge(backing: Backing) -> dict[str, object]:
+        return {**_every_finding_bears(backing), "title": "Agent Memory"}
+
+    state = await _run(
+        sandbox, _flag_bases(), Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=judge), changed="adr-1"
+    )
+
+    assert _proposals(state) == []
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": [NO_VERDICT]}]
+
+
+@pytest.mark.parametrize("named", ["[[stance.x]]", "[[stance.x|X]]", "stance.x ", " [[ stance.x ]] "])
+async def test_a_duplicate_named_as_a_link_or_with_spaces_counts_as_its_bare_id(sandbox: AsyncMonty, named: str) -> None:
+    def judge(backing: Backing) -> dict[str, object]:
+        verdicts = [{"claim": finding["claim"], "bears": True, "why": "It measures it."} for finding in backing["findings"]]
+        return _judgement(backing, verdicts, duplicates=named)
+
+    state = await _run(
+        sandbox, _flag_bases(), Scripted(place=_proposing("stance.agent-memory", "Agent memory"), judge=judge), changed="adr-1"
+    )
+
+    assert _proposals(state) == []
+    reasons = ["The judge found it repeats the existing stance stance.x."]
+    assert _dropped(state) == [{"stance_id": "stance.agent-memory", "title": "Agent memory", "reasons": reasons}]
+
+
+@pytest.mark.parametrize("copy_says", ["refuses-c1", "names-a-duplicate"])
+async def test_a_copy_with_another_proposals_id_and_title_but_its_own_pages_never_touches_the_honest_proposal(
+    sandbox: AsyncMonty, copy_says: str
+) -> None:
+    def copy(proposal: Proposal) -> Mapping[str, object]:
+        copied = _as_handed(proposal)
+        return (
+            {**copied, "stance_id": "stance.agent-memory", "title": "Agent memory"}
+            if proposal["stance_id"] == "stance.reranking"
+            else copied
+        )
+
+    def judge(backing: Backing) -> dict[str, object]:
+        if backing["pages"] != [_listed("adr-2")]:
+            return _every_finding_bears(backing)
+        verdicts = [
+            {"claim": finding["claim"], "bears": copy_says != "refuses-c1" or not finding["claim"].endswith("#^c1"), "why": "Off topic."}
+            for finding in backing["findings"]
+        ]
+        return _judgement(backing, verdicts, duplicates="stance.x" if copy_says == "names-a-duplicate" else None)
+
+    scripted = Scripted(place=_two_proposals, back=_memory_or_other, copy=copy, judge=judge)
+
+    state = await _run(sandbox, _with_memory_and_reranking(), scripted, changed="adr-x,adr-1,adr-2")
+
+    assert _proposals(state) == [MEMORY], "a judgement whose page set differs counts for no proposal"
+    assert _refused(state) == {"stance.agent-memory": []}
+
+
+async def test_every_claim_a_kept_proposal_left_out_is_named_with_its_own_reason(sandbox: AsyncMonty) -> None:
+    def copy(proposal: Proposal) -> Mapping[str, object]:
+        copied = _as_handed(proposal)
+        taken = {"stance_id": "stance.agent-memory", "title": "Agent memory", "pages": [_listed("adr-1")]}
+        return {**copied, **taken} if proposal["stance_id"] == "stance.reranking" else copied
+
+    def back(proposal: Proposal) -> list[Finding]:
+        if proposal["stance_id"] == "stance.agent-memory":
+            return [*BACKED, _finding("talk.agent-loops#^c4"), _finding("paper.dense-retrieval#^c2")]
+        return [_finding("talk.agent-loops#^c4", "contests"), _finding("art.memory-survey#^c3")]
+
+    def judge(backing: Backing) -> dict[str, object]:
+        verdicts = [
+            {"claim": finding["claim"], "bears": True, "why": "It measures it."}
+            for finding in backing["findings"]
+            if not finding["claim"].endswith("#^c2")
+        ]
+        return _judgement(backing, verdicts)
+
+    bases = _with_memory_and_reranking()
+
+    state = await _run(sandbox, bases, Scripted(place=_two_proposals, back=back, copy=copy, judge=judge), changed="adr-x,adr-1,adr-2")
+
+    [listed] = _proposals(state)
+    assert sorted(finding["claim"] for finding in _findings_of(listed)) == ["art.memory-survey#^c3", "paper.dense-retrieval#^c1"]
+    refused: list[dict[str, str]] = to_jsonable_python(_refused(state)["stance.agent-memory"])
+    assert sorted((entry["claim"], entry["why"]) for entry in refused) == [
+        ("paper.dense-retrieval#^c2", "The judge gave it no verdict."),
+        ("talk.agent-loops#^c4", "Its backings gave it opposite sides."),
+    ]
+    [flag] = bases.flag_writes
+    evidence = flag["payload"]["sections"][2]["body"]
+    assert "- `paper.dense-retrieval#^c2`: The judge gave it no verdict." in evidence
+    assert "- `talk.agent-loops#^c4`: Its backings gave it opposite sides." in evidence
+    assert "[[talk.agent-loops#^c4]]" not in evidence, "a claim left out is never written as a link"
