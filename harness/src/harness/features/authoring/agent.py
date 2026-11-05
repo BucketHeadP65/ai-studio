@@ -167,8 +167,8 @@ CONTEXT_BOUND: tuple[str, ...] = (*ACTS, SANDBOX, *NOT_IN_SANDBOX, KNOWLEDGE_BAS
 """Tools whose return lands in this agent's context, the only ones the output limits may spill.
 
 Every other tool runs inside `CodeMode`, where a spill would replace a value mid-program with a
-notice and break the program. `load_capability` lands here too, and the output limits never reduce a
-load, whatever this list holds."""
+notice and break the program. `load_capability`'s return lands in this agent's context too. The list
+leaves it out, and the output limits never reduce a load either way."""
 
 def _shell_workspace_instructions() -> str:
     """The shell plugin's situating sentence, a function so it renders after the identity instructions."""
