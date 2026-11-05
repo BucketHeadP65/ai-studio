@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 import httpx
 
 from core.ai.history.contracts import RequestParametersSink
-from core.cqrs.contracts import Broadcaster, MemoryOutbox, Wake
+from core.cqrs.contracts import Broadcaster, JobsAndQueries, MemoryJobs, MemoryOutbox, Wake
+from core.db import build_engine
 from core.observability import PriceUpdater, Tracing
 from core.settings import DatabaseSettings, InfrastructureSettings, LogfireSettings
 from fastapi import FastAPI
@@ -21,7 +22,9 @@ from pydantic_ai_harness.step_persistence import InMemoryStepStore
 from harness.adapters.logfire_query import Telemetry
 from harness.adapters.model_list import ModelList
 from harness.adapters.store import DatabaseBinding, LibraryOutbox, RecordDatabase, ScheduleDatabase, SessionsDatabase
+from harness.adapters.wiring import RecordPoolOpener
 from harness.domain.ports import ConversationHistory, SessionTranscript
+from harness.features.inspection.infrastructure.postgres import InspectionDatabase, JobsEngine
 from harness.features.sessions.contracts import project_id_of
 from harness.features.sessions.internal_contracts import ProjectionPool
 from harness.main import create_app
@@ -30,7 +33,14 @@ from harness.settings import CHECKOUT, HarnessSettings, StateSettings
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.history import FakeConversationHistory
 from tests.support.fakes.model_listing import FakeModelListing
-from tests.support.fakes.pools import FakePool, FakeRecordDatabase, FakeScheduleDatabase, FakeSessionsDatabase
+from tests.support.fakes.pools import (
+    FakeInspectionDatabase,
+    FakePool,
+    FakeRecordDatabase,
+    FakeRecordPool,
+    FakeScheduleDatabase,
+    FakeSessionsDatabase,
+)
 from tests.support.fakes.prices import FakePriceUpdater
 from tests.support.fakes.projects import FakeProjectIndex
 from tests.support.fakes.request_parameters import FakeRequestParametersSink
@@ -70,6 +80,10 @@ IO_LEAVES: tuple[tuple[type, object], ...] = (
     (ProjectionPool, FakePool()),
     (ScheduleDatabase, FakeScheduleDatabase()),
     (LibraryOutbox, LibraryOutbox(MemoryOutbox())),
+    (RecordPoolOpener, FakeRecordPool(FakePool())),
+    (InspectionDatabase, FakeInspectionDatabase()),
+    (JobsEngine, JobsEngine(build_engine(AN_INFRASTRUCTURE.database.url))),
+    (JobsAndQueries, MemoryJobs()),
     (ProjectIndex, FakeProjectIndex({A_PROJECT: CHECKOUT})),
     (DatabaseBinding, DatabaseBinding(description="two databases nobody opened", named=True)),
     (Wake, FakeWake()),
@@ -94,7 +108,11 @@ third reason: the real one is the record, and a route test wants a store that an
 fake pool recording the record's statements. `RecordDatabase` is on it for the first: without it the
 first route test to enter a lifespan opens the record's own pool onto `aifactory_sessions`. `LibraryOutbox` is on it
 for the first reason too: without it every test that enters a lifespan runs the library's event worker against the
-outbox of `engram_workflows`, closing the rows it finds there.
+outbox of `engram_workflows`, closing the rows it finds there. `RecordPoolOpener`, `InspectionDatabase`, `JobsEngine` and
+`JobsAndQueries` are on it for the first reason as well: each is opened over the sessions database, where the inspection's
+workers would otherwise claim real jobs. `JobsEngine` answers an engine on `AN_INFRASTRUCTURE`'s host, which no name
+server resolves, so it never connects, and the jobs themselves are in memory. `test_test_container_reaches_no_database.py`
+fails when a registration that reaches a database is missing here.
 """
 
 

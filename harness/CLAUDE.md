@@ -83,7 +83,10 @@ One settings root, one container, three composition roots.
   field a controller stores that no route reads. `test_create_app.py` refuses a container the module
   keeps, so two applications never share one. `test_environment_names.py` reads `harness/` and
   `scripts/stack/` whole, decision records included, and refuses a retired environment name wherever
-  it appears.
+  it appears. `test_test_container_reaches_no_database.py` refuses a registration whose factory reaches a
+  database DSN and that `IO_LEAVES` (`tests/support/container.py`) does not answer, and a lifespan over
+  `IO_LEAVES` in which any registration holds a live DSN or a real pool. A new registration that opens a
+  database gets its double in `IO_LEAVES` in the same change.
 
 ## No knowledge base vocabulary here (binding)
 
