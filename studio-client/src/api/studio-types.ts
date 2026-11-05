@@ -555,9 +555,9 @@ export type Decided = z.infer<typeof DecidedSchema>;
 
 export const OkSchema = z.object({ ok: z.boolean() });
 
-// The live run's automatic-approval flag, flipped from the control strip while a run is
-// in flight -- gates it reaches from here on pass themselves, never counted as a human
-// approval.
+// The live run's automatic-approval flag, flipped from the control strip while a run is in
+// flight. Every person gate it reaches from here on passes itself, never counted as a person's
+// approval. A judge that cannot decide sends the work back.
 export const AutomodeSchema = z.object({ ok: z.boolean(), auto_approve: z.boolean() });
 export type Automode = z.infer<typeof AutomodeSchema>;
 
