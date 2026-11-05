@@ -2,8 +2,9 @@
 
 `IO_LEAVES` answers the container's I/O leaves for every route and lifespan test. A registration whose factory reaches a
 database DSN and is missing from it would open the database the settings file names, which on a developer's machine is
-the live one. The first check reads the factories' source and opens nothing, so it runs before anything is resolved. The
-second enters a lifespan over `IO_LEAVES`, resolves every registration, and walks what each holds.
+the live one. The first check reads the factories' source, a class's constructor and the lifespan's own body, and opens
+nothing, so it runs before anything is resolved. The second enters a lifespan over `IO_LEAVES`, resolves every
+registration, and walks what each holds.
 """
 
 from __future__ import annotations
@@ -15,14 +16,17 @@ import types
 import typing
 
 from collections.abc import AsyncGenerator, AsyncIterator, Generator, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import asyncpg
+import pytest
 
+from core.db import build_engine, open_asyncpg_pool
 from sqlalchemy.engine import URL
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 import harness.adapters.store as store_module
 
@@ -36,6 +40,7 @@ from harness.adapters.store import (
     store_writer_dsn,
 )
 from harness.container import WIRING_MODULES
+from harness.main import make_lifespan
 from tests.support.container import IO_LEAVES, an_app
 
 if TYPE_CHECKING:
@@ -43,11 +48,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 DSN_PRIMITIVES = frozenset(
-    name
-    for name, value in vars(store_module).items()
-    if inspect.isfunction(value) and value.__module__ == store_module.__name__ and name.endswith(("_dsn", "_pool", "_pool_terms", "_connection"))
+    {
+        *(
+            name
+            for name, value in vars(store_module).items()
+            if inspect.isfunction(value) and value.__module__ == store_module.__name__ and name.endswith(("_dsn", "_pool", "_pool_terms", "_connection"))
+        ),
+        "build_engine",
+        "open_asyncpg_pool",
+        "create_async_engine",
+        "create_pool",
+    }
 )
-"""Every function of the store adapter that derives a database DSN or opens a pool on one."""
+"""Every function of the store adapter that derives a database DSN or opens a pool on one, and the engine and pool builders
+of core, SQLAlchemy and asyncpg. `connect` and `read_infrastructure` stay out: both name things that open nothing."""
 
 LIVE_PORT = 5434
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -74,11 +88,12 @@ def _referenced(function: Callable[..., object]) -> list[tuple[str, object]]:
 
 
 def _path_to_a_database(function: Callable[..., object], seen: set[int], trail: tuple[str, ...] = ()) -> tuple[str, ...] | None:
-    """The chain of names from `function` to a DSN primitive, or `None` when its code never reaches one."""
-    if id(function) in seen or len(trail) > _TRAIL_DEPTH:
+    """The chain of names from `function` to a DSN primitive, or `None` when its code never reaches one. A class is read from its constructor."""
+    start = function.__init__ if inspect.isclass(function) else function
+    if id(start) in seen or len(trail) > _TRAIL_DEPTH:
         return None
-    seen.add(id(function))
-    for name, target in _referenced(function):
+    seen.add(id(start))
+    for name, target in _referenced(start):
         if name in DSN_PRIMITIVES:
             return (*trail, name)
         module = getattr(target, "__module__", "") or ""
@@ -104,17 +119,100 @@ def _registrations() -> list[tuple[object, Callable[..., object]]]:
     return [(_registered_type(factory), factory) for module in WIRING_MODULES for factory in module.REGISTRATIONS]
 
 
-def _unanswered_database_registrations() -> list[str]:
-    answered = {registered for registered, _ in IO_LEAVES}
-    return [
+def _unanswered(
+    registrations: list[tuple[object, Callable[..., object]]], *, answered: frozenset[object], lifespan: Callable[..., object] | None
+) -> list[str]:
+    """Every registration that reaches a database and is not answered, and the lifespan when its own body opens one."""
+    found = [
         f"{getattr(registered, '__name__', registered)} ({factory.__name__} reaches {' > '.join(path)})"
-        for registered, factory in _registrations()
+        for registered, factory in registrations
         if registered not in answered and (path := _path_to_a_database(factory, set())) is not None
     ]
+    if lifespan is not None and (path := _path_to_a_database(lifespan, set())) is not None:
+        found.append(f"the lifespan ({lifespan.__name__} reaches {' > '.join(path)})")
+    return found
+
+
+def _unanswered_database_registrations() -> list[str]:
+    return _unanswered(_registrations(), answered=frozenset(registered for registered, _ in IO_LEAVES), lifespan=make_lifespan)
 
 
 def test_every_registration_that_reaches_a_database_is_answered_by_the_test_leaves() -> None:
     assert _unanswered_database_registrations() == []
+
+
+# Shapes the scan must flag. None of them is ever called, so nothing is opened.
+
+_PROBE_URL = "postgresql://nobody@db.example/none"
+
+
+class _OpensAStorePoolWhenBuilt:
+    """A class registration whose constructor derives the store's DSN."""
+
+    def __init__(self) -> None:
+        self.dsn = store_writer_dsn()
+
+
+def _builds_a_core_engine() -> AsyncEngine:
+    return build_engine(_PROBE_URL)
+
+
+def _builds_a_sqlalchemy_engine() -> AsyncEngine:
+    return create_async_engine(_PROBE_URL)
+
+
+async def _opens_a_core_pool() -> asyncpg.Pool:
+    return await open_asyncpg_pool(_PROBE_URL, target="nowhere")
+
+
+async def _opens_an_asyncpg_pool() -> asyncpg.Pool:
+    return await asyncpg.create_pool(_PROBE_URL)
+
+
+def _lifespan_opening_an_engine(container: object) -> Callable[[object], AbstractAsyncContextManager[None]]:
+    """Shaped like `make_lifespan`: the database is opened inside the lifespan it returns."""
+    del container
+
+    @asynccontextmanager
+    async def lifespan(app: object) -> AsyncGenerator[None]:
+        del app
+        engine = build_engine(_PROBE_URL)
+        yield
+        await engine.dispose()
+
+    return lifespan
+
+
+def test_a_class_registration_is_scanned_from_its_constructor() -> None:
+    assert _unanswered([(_OpensAStorePoolWhenBuilt, _OpensAStorePoolWhenBuilt)], answered=frozenset(), lifespan=None) == [
+        "_OpensAStorePoolWhenBuilt (_OpensAStorePoolWhenBuilt reaches store_writer_dsn)"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("factory", "primitive"),
+    [
+        (_builds_a_core_engine, "build_engine"),
+        (_builds_a_sqlalchemy_engine, "create_async_engine"),
+        (_opens_a_core_pool, "open_asyncpg_pool"),
+        (_opens_an_asyncpg_pool, "create_pool"),
+    ],
+)
+def test_a_database_opened_outside_the_store_adapter_is_found(factory: Callable[..., object], primitive: str) -> None:
+    path = _path_to_a_database(factory, set())
+
+    assert path is not None
+    assert path[-1] == primitive
+
+
+def test_a_database_the_lifespan_opens_in_its_own_body_is_found() -> None:
+    assert _unanswered([], answered=frozenset(), lifespan=_lifespan_opening_an_engine) == [
+        "the lifespan (_lifespan_opening_an_engine reaches build_engine)"
+    ]
+
+
+def test_the_scan_starts_from_the_lifespan_the_application_enters() -> None:
+    assert _unanswered([], answered=frozenset(), lifespan=make_lifespan) == []
 
 
 @dataclass(frozen=True)
