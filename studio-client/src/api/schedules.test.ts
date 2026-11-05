@@ -36,6 +36,8 @@ interface RawSchedule {
   spend_week_usd: string;
   spend_today_unpriced: number;
   spend_week_unpriced: number;
+  pending_page_ids: string[];
+  pending_step_ids: string[];
 }
 
 function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
@@ -62,6 +64,8 @@ function scheduleFixture(overrides: Partial<RawSchedule> = {}): RawSchedule {
     spend_week_usd: "0",
     spend_today_unpriced: 0,
     spend_week_unpriced: 0,
+    pending_page_ids: [],
+    pending_step_ids: [],
     ...overrides,
   };
 }
@@ -79,6 +83,27 @@ describe("schedulesApi", () => {
     expect(schedules).toHaveLength(1);
     expect(schedules[0]?.workflow_id).toBe("wf-sales");
     expect(schedules[0]?.next_run_at).toBe("2026-08-23T10:30:00+00:00");
+  });
+
+  it("reads an on step change schedule that carries the steps it collected", async () => {
+    server.use(
+      http.get(`${BASE}/api/schedules`, () =>
+        HttpResponse.json({
+          schedules: [
+            scheduleFixture({
+              cadence: "on step change quiet 10m",
+              next_run_at: null,
+              pending_step_ids: ["st.digest_source.v12"],
+            }),
+          ],
+        }),
+      ),
+    );
+
+    const [schedule] = await schedulesApi.list();
+
+    expect(schedule?.cadence).toBe("on step change quiet 10m");
+    expect(schedule?.next_run_at).toBeNull();
   });
 
   it("refuses a row missing gate_mode, which every schedule row carries", async () => {

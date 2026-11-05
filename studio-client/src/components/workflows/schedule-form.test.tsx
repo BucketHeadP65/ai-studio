@@ -779,6 +779,31 @@ describe("ScheduleForm", () => {
     },
   );
 
+  it("explains the on step change event and does not warn that it needs a knowledge base", async () => {
+    mountApi();
+    render(
+      <ScheduleForm
+        open
+        workflowId="wf-sales"
+        submitting={false}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    await screen.findByLabelText("quarter");
+    await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+    expect(
+      screen.getByText(/runs once new reusable step versions are imported and 10 minutes pass/),
+    ).toBeInTheDocument();
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Event" }),
+      "on step change quiet 10m",
+    );
+
+    expect(screen.queryByText(/does not ask for a knowledge base/)).toBeNull();
+  });
+
   it("does not warn for an on index event, which names its own knowledge base", async () => {
     mountApi();
     render(
@@ -883,7 +908,13 @@ describe("ScheduleForm, editing a schedule", () => {
     expect(screen.getByRole("textbox", { name: "Cron expression" })).toHaveValue("0 9 * * 1");
   });
 
-  it.each(["on refresh", "after research-digest", "on index repo-docs quiet 30m"])(
+  it.each([
+    "on refresh",
+    "after research-digest",
+    "on index repo-docs quiet 30m",
+    "on step change",
+    "on step change quiet 10m",
+  ])(
     "puts the event cadence %s in the event box",
     async (cadence) => {
       mountApi();
