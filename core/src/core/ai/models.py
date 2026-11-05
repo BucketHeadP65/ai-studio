@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 
+from functools import cache
 from typing import TYPE_CHECKING
 
 import httpx2
@@ -227,6 +228,18 @@ def chat_http_client(*, wrapped: httpx2.AsyncBaseTransport | None = None, config
     return _SelfClosingAsyncClient(transport=transport, timeout=DEFAULT_TIMEOUT, follow_redirects=True)
 
 
+@cache
+def _entra_token() -> Callable[[], Awaitable[str]]:
+    """The one Entra ID bearer-token provider every Azure client shares, so a token is fetched once per lifetime, not per client."""
+    token_provider = get_bearer_token_provider(DefaultAzureCredential(), _COGNITIVE_SERVICES_SCOPE)
+
+    async def async_token_provider() -> str:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, token_provider)
+
+    return async_token_provider
+
+
 def create_azure_openai_client(
     endpoint: str, *, http_client: httpx2.AsyncClient | None = None, max_retries: int = DEFAULT_MAX_RETRIES
 ) -> AsyncOpenAI:
@@ -244,16 +257,10 @@ def create_azure_openai_client(
     Returns:
         The client, authenticated with an Entra ID bearer token.
     """
-    token_provider = get_bearer_token_provider(DefaultAzureCredential(), _COGNITIVE_SERVICES_SCOPE)
-
-    async def async_token_provider() -> str:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, token_provider)
-
     base_url = endpoint.rstrip("/")
     if not base_url.endswith("/openai/v1"):
         base_url = f"{base_url}/openai/v1"
-    return AsyncOpenAI(base_url=f"{base_url}/", api_key=async_token_provider, http_client=http_client, max_retries=max_retries)
+    return AsyncOpenAI(base_url=f"{base_url}/", api_key=_entra_token(), http_client=http_client, max_retries=max_retries)
 
 
 def create_azure_model(

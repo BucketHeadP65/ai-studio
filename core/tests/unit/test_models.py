@@ -92,3 +92,11 @@ def test_an_azure_model_on_the_chat_retry_client_leaves_retries_to_it_and_keeps_
     assert model.wrapped.client._client is http_client
     assert model.wrapped.client.max_retries == 0
     assert model.wrapped.client.timeout == DEFAULT_TIMEOUT
+
+
+def test_every_azure_client_shares_one_entra_token_provider() -> None:
+    """Clients built at once fetch their token through one provider, so the Azure CLI runs once per token lifetime."""
+    first = create_azure_openai_client("https://first.example")
+    second = create_azure_openai_client("https://second.example")
+
+    assert first._api_key_provider is second._api_key_provider
