@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
+from pydantic_ai.exceptions import ContentFilterError
 from pydantic_ai.messages import ToolCallPart
 from pydantic_ai.models.wrapper import WrapperModel
 from pydantic_ai.ui.vercel_ai.response_types import DataChunk
@@ -80,9 +81,10 @@ def to_chunk(step: StepUsage) -> DataChunk:
 class StepUsageTap(WrapperModel):
     """A model that records every response of the model it wraps into a list, in the order they finish.
 
-    Every request and streamed request passes through unchanged. Only a response that reaches a
-    clean exit is recorded. A request that raises, or a streamed one abandoned before its body
-    finishes, records nothing.
+    Every request and streamed request passes through unchanged. A response that reaches a clean
+    exit is recorded, and so is a streamed one that a content filter cut, which raises
+    `ContentFilterError` once its body exits. Any other request that raises, or a streamed one
+    abandoned before its body finishes, records nothing.
     """
 
     def __init__(self, wrapped: Model, sink: list[StepUsage]) -> None:
@@ -123,7 +125,7 @@ class StepUsageTap(WrapperModel):
         model_request_parameters: ModelRequestParameters,
         run_context: RunContext[Any] | None = None,
     ) -> AsyncGenerator[StreamedResponse]:
-        """The wrapped model's streamed answer, recorded into the sink once the caller's body exits cleanly.
+        """The wrapped model's streamed answer, recorded into the sink once the caller's body exits cleanly or a content filter cut it.
 
         Args:
             messages: The messages to send.
@@ -134,6 +136,12 @@ class StepUsageTap(WrapperModel):
         Yields:
             The wrapped model's streamed response.
         """
-        async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as response_stream:
-            yield response_stream
-        self._sink.append(step_usage_of(response_stream.get()))
+        opened: StreamedResponse | None = None
+        try:
+            async with self.wrapped.request_stream(messages, model_settings, model_request_parameters, run_context) as opened:
+                yield opened
+        except ContentFilterError:
+            if opened is not None:
+                self._sink.append(step_usage_of(opened.get()))
+            raise
+        self._sink.append(step_usage_of(opened.get()))

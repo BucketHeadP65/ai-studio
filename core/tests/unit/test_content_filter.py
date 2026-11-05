@@ -280,15 +280,27 @@ async def test_a_filtered_response_stays_in_the_run_history_with_its_usage(strea
     assert (response.usage.input_tokens, response.usage.output_tokens) == (120, 11)
 
 
-async def test_a_whole_filtered_response_reaches_a_model_that_wraps_the_guard() -> None:
+@pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
+async def test_a_filtered_response_reaches_a_model_that_wraps_the_guard(streamed: bool) -> None:
     answer = Answer(text=STOCK_REFUSAL, status="incomplete", incomplete_reason="content_filter")
     readings: list[StepUsage] = []
     agent = Agent(StepUsageTap(ContentFilterGuard(_responses_model(ScriptedResponses(answer))), readings), deps_type=type(None), output_type=PromptedOutput(Verdict))
 
     with pytest.raises(ContentFilterError):
-        await agent.run("Judge this.")
+        await agent.run("Judge this.", event_stream_handler=_ignore if streamed else None)
 
     assert len(readings) == 1, "the response's usage is recorded like any other response's"
+
+
+@pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
+async def test_a_refused_prompt_reaches_a_model_that_wraps_the_guard_as_its_error_alone(streamed: bool) -> None:
+    readings: list[StepUsage] = []
+    agent = Agent(StepUsageTap(ContentFilterGuard(_responses_model(RefusedPrompts(SELF_HARM_REFUSAL))), readings), deps_type=type(None), output_type=PromptedOutput(Verdict))
+
+    with pytest.raises(ContentFilterError):
+        await agent.run("Judge this.", event_stream_handler=_ignore if streamed else None)
+
+    assert readings == [], "a refused prompt was answered with no response, so nothing is recorded"
 
 
 @pytest.mark.parametrize("streamed", [True, False], ids=["streamed", "whole"])
