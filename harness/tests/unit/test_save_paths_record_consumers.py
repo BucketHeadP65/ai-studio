@@ -127,12 +127,22 @@ class FakeCollection:
 TEXT = Shape(json_schema={"type": "string"})
 
 
-def _digest(revision: str) -> Briefing:
-    return Briefing(name="digest", instructions=f"Read the whole source and write one digest page. {revision}", inputs={"source": TEXT}, output=TEXT)
+def _digest(*lines: str) -> Briefing:
+    return Briefing(name="digest", instructions="\n".join(lines), inputs={"source": TEXT}, output=TEXT)
 
 
-DIGEST = {1: _digest("Quote nothing."), 2: _digest("Quote every claim."), 3: _digest("Quote every claim and name its section.")}
+DIGEST = {
+    1: _digest("Read the whole source.", "Write one digest page.", "Quote nothing."),
+    2: _digest("Read the whole source.", "Write one digest page.", "Quote every claim."),
+    3: _digest("Read the whole source.", "Write one digest page with a section per claim.", "Quote every claim and name its section."),
+}
 """Three saved versions of the reusable step `digest`, each its own content."""
+
+EDITED = _digest("Read the whole source.", "Write one digest page.", "Quote every claim, briefly.")
+"""A copy of `digest` that matches no saved version and is closest by line to v2."""
+
+NEWER = _digest("Read the whole source twice.", "Write one digest page.", "Quote every claim.")
+"""A later version of `digest` the library does not hold, whose content address a consumer declines."""
 
 EXPECTED = [ConsumerEntry(step="digest", version=3, step_hash=step_content_address(DIGEST[3])).model_dump(mode="json")]
 """The consumer record every path writes: the copy matches `digest` v3."""
@@ -268,3 +278,38 @@ async def test_no_save_path_writes_uses(tmp_path: Path) -> None:
     await import_path(folder, library=LibraryCollection(store, store.ingest, collection=store.collection), registry=_registry(), by="test:import")
 
     assert [("uses" in payload["frontmatter"]) for payload in store.payloads if payload["frontmatter"]["type"] == "workflow"] == [False, False, False]
+
+
+async def test_importing_an_unchanged_version_again_keeps_its_decline_and_its_diverged_entry(tmp_path: Path) -> None:
+    """`harness import` saves every workflow file on every run, with no lineage, and must not forget what the page recorded."""
+    store = FakeCollection()
+    library = await _library(store)
+    port = _port(library)
+    await port._save(_ctx(), _spec_yaml(_workflow()), applicability="Use per source. Not for a batch.", uses=["st.digest.v3"])
+    await port._adapt(
+        _ctx(),
+        "wf.digest-sources.v1",
+        ops=[{"op": "replace_inline_step", "name": "digest", "with": EDITED.model_dump(mode="json")}],
+        applicability="Use per source. Not for a batch.",
+    )
+    await library.record_decline("wf.digest-sources.v2", step="digest", step_hash=step_content_address(NEWER), because="kept")
+    kept = await library.fetch_consumer_record("wf.digest-sources.v2")
+    assert kept == (
+        ConsumerEntry(
+            step="digest",
+            version=None,
+            step_hash=step_content_address(EDITED),
+            diverged_from=3,
+            diverged_basis="parent",
+            declined=step_content_address(NEWER),
+            declined_because="kept",
+        ),
+    )
+    folder = tmp_path / "import"
+    (folder / "workflows").mkdir(parents=True)
+    document = {"title": "Digest sources", "description": "Digest one source.", "workflow": (await library.fetch_workflow("wf.digest-sources.v2")).model_dump(mode="json")}
+    (folder / "workflows" / "digest-sources.md").write_text(f"---\n{yaml.safe_dump(document, sort_keys=False)}---\n\nUse per source. Not for a batch.\n", encoding="utf-8")
+
+    assert await import_path(folder, library=library, registry=_registry(), by="test:import") == ("wf.digest-sources.v2",)
+
+    assert await library.fetch_consumer_record("wf.digest-sources.v2") == kept

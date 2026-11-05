@@ -376,6 +376,54 @@ async def test_a_decline_carries_over_to_an_adaptation_that_keeps_the_copy() -> 
     assert (entry.declined, entry.declined_because) == (step_content_address(DIGEST[3]), "reverted")
 
 
+async def _declined_adaptation(library: LibraryCollection) -> tuple[Workflow, Lineage]:
+    """Save `digest-sources` v1 holding digest v3 and its adaptation v2 holding the edited copy, then decline NEWER on v2."""
+    parent = _workflow(DIGEST[3])
+    await _put(library, parent)
+    child, lineage = adapt(parent, ops=[{"op": "replace_inline_step", "name": "digest", "with": EDITED.model_dump(mode="json")}])
+    child_id = await _put(library, child, lineage=lineage)
+    await library.record_decline(child_id, step="digest", step_hash=step_content_address(NEWER), because="kept")
+    return child, lineage
+
+
+NEWER = _digest("Read the whole source twice.", "Write one digest page.", "Quote every claim.")
+"""A later version of `digest` no library here holds, whose content address a consumer declines."""
+
+KEPT = ConsumerEntry(
+    step="digest",
+    version=None,
+    step_hash=step_content_address(EDITED),
+    diverged_from=3,
+    diverged_basis="parent",
+    declined=step_content_address(NEWER),
+    declined_because="kept",
+)
+"""The entry v2 of `_declined_adaptation` holds: diverged from the v3 its parent recorded, declining NEWER."""
+
+
+async def test_saving_an_unchanged_version_again_with_no_lineage_keeps_its_decline_and_its_diverged_entry() -> None:
+    """The import saves every file again with no lineage: the page's own record is the prior one, not a fresh guess."""
+    store = FakeCollection()
+    library = await _library(store)
+    child, _ = await _declined_adaptation(library)
+    assert await library.fetch_consumer_record("wf.digest-sources.v2") == (KEPT,)
+
+    await _put(library, child)
+
+    assert await library.fetch_consumer_record("wf.digest-sources.v2") == (KEPT,)
+
+
+async def test_saving_a_version_again_reads_its_own_record_before_its_lineage_parent_s() -> None:
+    """A draft keeps its lineage, so a second Save of the same version names the parent: the page's own record still wins."""
+    store = FakeCollection()
+    library = await _library(store)
+    child, lineage = await _declined_adaptation(library)
+
+    await _put(library, child, lineage=lineage)
+
+    assert await library.fetch_consumer_record("wf.digest-sources.v2") == (KEPT,)
+
+
 def test_the_collection_answers_the_consumer_records_and_the_folder_library_is_still_a_library(tmp_path: Path) -> None:
     store = FakeCollection()
     assert isinstance(LibraryCollection(store, store.ingest), ConsumerRecords)

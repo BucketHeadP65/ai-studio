@@ -716,8 +716,9 @@ class LibraryCollection:
         """Save the workflow as its own page, `wf.<name>.v<version>`, with status `draft`, and return the page id.
 
         The page records under `reusable_steps` the consumer record of every inline step whose name a reusable step
-        has saved versions of, read against those versions and the lineage parent's record. After the page is
-        written, the lineage's parent and every live lower version of the same name are linked forward to it with
+        has saved versions of, read against those versions and the prior record. The prior record is the one the page
+        already holds when this version is saved again, else the lineage parent's, so a decline and a diverged copy's
+        version carry over while the copy is unchanged. After the page is written, the lineage's parent and every live lower version of the same name are linked forward to it with
         `superseded_by`, and a lower version saved after a higher one stays live. A link that fails leaves the new
         page saved and warns with `SupersessionIncompleteWarning`. A presentation and an intent are written only
         when given.
@@ -730,7 +731,7 @@ class LibraryCollection:
             provenance: `saved_by` names who saved it.
             fingerprint: The environment stamp to keep, or None.
             lineage: The adaptation that produced this workflow, or None. Its parent is linked forward, and its
-                parent's consumer record is read for the copies this version keeps or changed.
+                parent's consumer record is the prior record when this version is new.
             presentation: The author's words about the workflow, or None.
             intent: What the person who wanted the workflow asked for, or None.
 
@@ -738,7 +739,7 @@ class LibraryCollection:
             The page id the workflow lives under.
 
         Raises:
-            LibraryError: If this exact version already exists and is superseded, the parent's consumer record
+            LibraryError: If this exact version already exists and is superseded, the prior consumer record
                 does not parse, or the ingest refuses the page. The current version of anything still saves again
                 freely.
             PresentationRefusedError: If the presentation names an input or an artifact the
@@ -755,7 +756,7 @@ class LibraryCollection:
                 f"{workflow.name!r} and adapt that instead."
             )
             raise LibraryError(msg)
-        record = await self._consumer_record(workflow, lineage)
+        record = await self._consumer_record(workflow, workflow_id, lineage)
         frontmatter: dict[str, Any] = {
             "id": workflow_id,
             "type": PAGE_TYPE,
@@ -795,19 +796,21 @@ class LibraryCollection:
             await self._supersede(stale_id, by=workflow_id)
         return workflow_id
 
-    async def _consumer_record(self, workflow: Workflow, lineage: Lineage | None) -> tuple[ConsumerEntry, ...]:
-        """The consumer record a save of `workflow` writes, read against every saved version of its inline steps and its parent's record."""
+    async def _consumer_record(self, workflow: Workflow, workflow_id: str, lineage: Lineage | None) -> tuple[ConsumerEntry, ...]:
+        """The record a save of `workflow` at `workflow_id` writes: the page's own record is the prior one, else the lineage parent's."""
         if not workflow.inline:
             return ()
         versions = await self.step_versions_of([step.name for step in workflow.inline])
-        parent: tuple[ConsumerEntry, ...] = ()
-        if lineage is not None:
-            parent_id = page_id(lineage.parent_name, lineage.parent_version)
-            stored = await self._rows.fetchval(FETCH_SQL, parent_id)
-            if stored is not None:
-                document = stored if isinstance(stored, Mapping) else json.loads(stored)
-                parent = _consumer_entries(document.get("reusable_steps"), workflow_id=parent_id)
-        return consumer_record(workflow, versions, parent=parent)
+        prior_id = workflow_id
+        stored = await self._rows.fetchval(FETCH_SQL, prior_id)
+        if stored is None and lineage is not None:
+            prior_id = page_id(lineage.parent_name, lineage.parent_version)
+            stored = await self._rows.fetchval(FETCH_SQL, prior_id)
+        prior: tuple[ConsumerEntry, ...] = ()
+        if stored is not None:
+            document = stored if isinstance(stored, Mapping) else json.loads(stored)
+            prior = _consumer_entries(document.get("reusable_steps"), workflow_id=prior_id)
+        return consumer_record(workflow, versions, parent=prior)
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.

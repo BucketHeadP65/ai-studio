@@ -56,8 +56,8 @@ class ConsumerEntry(BaseModel):
     diverged_from: int | None = None
     """The saved version a diverged copy diverged from. None for a copy that matches a version."""
     diverged_basis: Literal["parent", "closest"] | None = None
-    """How `diverged_from` was found: `parent` when the parent version's record named it, `closest` when it is the
-    saved version closest to the copy by text."""
+    """How `diverged_from` was found: `parent` when the prior record named it (the record of an earlier save of the same
+    version, or of the parent version), `closest` when it is the saved version closest to the copy by text."""
     declined: str | None = None
     """The content address of a step version this consumer keeps its copy instead of."""
     declined_because: Literal["kept", "reverted"] | None = None
@@ -86,17 +86,18 @@ def consumer_record(
 ) -> tuple[ConsumerEntry, ...]:
     """The consumer record of `workflow`: one entry per inline step whose name a reusable step has saved versions of.
 
-    A copy equal to several saved versions names the highest. A diverged copy names the version the parent's entry
-    named: its `version`, or the version a diverged parent entry traced to its own parent. Otherwise it names the
+    A copy equal to several saved versions names the highest. A diverged copy names the version the prior entry
+    named: its `version`, or the version a diverged prior entry traced to its own parent. Otherwise it names the
     saved version whose canonical YAML is closest to the copy's by line, ties going to the higher version. A
-    parent entry's decline carries over while the copy's content address is unchanged, and is dropped once it
+    prior entry's decline carries over while the copy's content address is unchanged, and is dropped once it
     changed. The order of each sequence in `versions` does not matter.
 
     Args:
         workflow: The workflow being saved.
         versions: Every saved version of each reusable step, by step name. A name absent or mapped to an empty
             sequence has no saved versions.
-        parent: The consumer record of the version `workflow` derives from. Empty for a first version.
+        parent: The prior consumer record: the one this same version already holds when it is saved again, else the
+            record of the version `workflow` derives from. Empty for a first save.
 
     Returns:
         The entries, sorted by step name.
