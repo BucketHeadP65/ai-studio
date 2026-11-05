@@ -40,15 +40,19 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   Since 2026-10-01 the chat agent also keeps `load_capability` out of its output limits (`CONTEXT_BOUND` in
   `harness/src/harness/features/authoring/agent.py`), so a load always arrives whole, and
   `test_loading_the_capability_reveals_its_tool` checks that the tool is offered after the load, not only named. With the
-  upgrade to 0.66.0 the subclass and its test were removed, and the harness mounts the upstream `ToolOutputLimits`. The
-  load test stays as the regression check.
+  upgrade to 0.66.0 the subclass and its test were removed, and the harness mounts the upstream `ToolOutputLimits`. That
+  load test does not guard the fix: both harness mounts leave `load_capability` out of `tool_filter`, so it passes with
+  upstream's exemption emptied. `harness/tests/unit/test_output_limits_keep_a_load.py` is the regression check: the
+  repro below with `tool_filter='all'`, which fails with the exemption emptied.
 - **Upstream state:** fixed in pydantic-ai-harness 0.62.0 (pydantic/pydantic-ai#11446): `_EXEMPT_KINDS` returns a
   `load_capability` or `search_tools` return untouched, whatever `tool_filter` says. `_assemble` still rebuilds a reduced
   return of any other tool without `tools` (checked on 0.66.0), and no tool here returns `ToolReturn.tools`.
 - **Issue:** pydantic/pydantic-ai#9531, closed by #11446.
-- **Repro:** mount `ToolOutputLimits` with a band below the instructions' length and a capability with `defer_loading=True`
-  that brings a tool. Call `load_capability` on it, then the tool. The call is refused. With `tool_filter` excluding
-  `load_capability` it works.
+- **Repro:** mount `ToolOutputLimits` with `tool_filter='all'`, a band below the length of the load's return, and a
+  capability with `defer_loading=True` that brings a tool. Call `load_capability` on it, then the tool. Before 0.62 the
+  call is refused, and with `tool_filter` excluding `load_capability` it works. On 2.52 a load returned the
+  capability's instructions, so a band below their length was enough. On 2.66 a load returns a 79-character message
+  and the instructions follow apart from it, so the band must be shorter than that message.
 
 ## UB-2. The `PromptedOutput` preamble is injected as static instruction text, so it always sorts first
 
