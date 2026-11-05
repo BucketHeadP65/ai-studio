@@ -52,6 +52,7 @@ from core.ai.workflows.contracts import (
 )
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.temporal import (
+    CONTENT_FILTER_FAILURE,
     PERFORM_INLINE_STEP,
     REFUSED_CONTINUATION,
     IdentityOnTheWire,
@@ -65,7 +66,8 @@ from core.ai.workflows.infrastructure.temporal import (
 )
 from core.ai.workflows.infrastructure.temporal import bind as bind_registry
 from engram.testing.infrastructure.knowledge_base_db import pg  # noqa: F401 -- imported to be used as a pytest fixture, never called directly
-from pydantic_ai.messages import ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.exceptions import ContentFilterError
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, TextPart, UserPromptPart
 from pydantic_ai_harness.step_persistence import ToolEffectRecord
 from temporalio import activity
 from temporalio.client import WorkflowFailureError
@@ -637,6 +639,66 @@ async def test_a_refused_continuation_ends_the_run_instead_of_retrying_forever(t
     assert len(REFUSED) == 1, "one delivery, not an endless stream of them"
     assert REFUSED_CONTINUATION in _failure_types(failure.value), "the run's history names what ended it"
     assert "is still running under run 'run-elsewhere'" in _reported(failure.value), "the refusal's own words reach that history"
+
+
+FILTERED: list[str] = []
+"""Every activity id a content filter's refusal was delivered on, in order."""
+
+FILTERED_RESPONSE = ModelResponse(
+    parts=[],
+    finish_reason="content_filter",
+    provider_details={"finish_reason": "content_filter", "content_filter_result": {"self_harm": {"filtered": True, "severity": "medium"}}},
+)
+"""What an agent holds for an answer Azure's self-harm filter cut whole."""
+
+ONE_TRIAGE = Workflow(
+    name="triage-one-item",
+    version=1,
+    description="Triage one item with a briefing a content filter refuses.",
+    parameters={"item": ParameterSpec(description="the item", json_schema=ITEM_SCHEMA)},
+    inline=(TRIAGE,),
+    nodes=(RunNode(id="triage", work="triage", inputs={"item": FromParameter(parameter="item")}),),
+    output=FromNode(node="triage"),
+)
+
+
+def _filtered_registry() -> StepRegistry:
+    """A registry whose every briefing ends the way an agent ends when a content filter cut its answer whole."""
+
+    async def filtered(task: Briefing, output_type: type, /, **inputs: object) -> object:
+        del task, output_type, inputs
+        FILTERED.append(activity.info().activity_id)
+        msg = "Content filter triggered. Finish reason: 'content_filter'"
+        raise ContentFilterError(msg, body=ModelMessagesTypeAdapter.dump_json([FILTERED_RESPONSE]).decode())
+
+    return StepRegistry(perform=filtered)
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_a_step_a_content_filter_cut_fails_the_run_naming_the_category(temporal_client: Client) -> None:
+    """The run fails once, and the failure that ends it is the category sentence alone, with no response body after it.
+
+    Workflow code raises `ContentFilterError` again from the activity's failure, and the run turns it into a final
+    Temporal failure through `content_filter_message`, imported into the workflow sandbox. Left to Temporal's own
+    converter, the run's failure would read the error's whole text, its response body included.
+    """
+    FILTERED.clear()
+    queue = "test-content-filter"
+    async with _a_worker(temporal_client, queue, _filtered_registry()):
+        handle = await temporal_client.start_workflow(
+            DurableWorkflowRun.run,
+            RunRequest(spec=ONE_TRIAGE, params={"item": {"title": "quantum computing"}}, workflow_id="triage-one-item"),
+            id=f"run-content-filter-{uuid4().hex}",
+            task_queue=queue,
+        )
+        with pytest.raises(WorkflowFailureError) as failure:
+            await asyncio.wait_for(handle.result(), timeout=60)
+
+    ended = failure.value.cause
+    assert len(FILTERED) == 1, "one delivery: the refusal is never performed again"
+    assert isinstance(ended, ApplicationError)
+    assert ended.type == CONTENT_FILTER_FAILURE, "the run's history says a content filter ended it"
+    assert ended.message == "Content filter triggered. Finish reason: 'content_filter'. Filter results: self_harm filtered at severity medium."
 
 
 def _reported(failure: BaseException) -> str:
