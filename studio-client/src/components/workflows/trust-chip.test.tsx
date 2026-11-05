@@ -10,8 +10,8 @@ import { render } from "@/shared/test-support/render";
 import { TrustChip } from "./trust-chip";
 
 // The chip over one workflow's earned trust: the level in words, the count of runs behind a
-// machine-confirmed level, the names behind a approved one, the total over every saved version
-// beside them, and the one act that raises the level -- a person's own approval, through the
+// machine-confirmed level, the names behind an approved one, and the total over every saved
+// version beside them. The one act that raises the level is a person's own approval, through the
 // panel this chip opens and posts.
 
 const BASE = "http://studio.test";

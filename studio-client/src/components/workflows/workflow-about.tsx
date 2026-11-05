@@ -40,8 +40,8 @@ import { Textarea } from "@/shared/ui/textarea";
 // The whole "what it does" page body: what this workflow is (its own description, applicability,
 // shape, and what it carries or leans on this app for), what it takes to start one, its steps in
 // order (`StepSpine`), what a run of it hands back, and the trust each saved version of it earned
-// (`TrustByVersion`). Never a run's own history or state --
-// that reading stays the run inspector's, this page reads the artifact itself.
+// (`TrustByVersion`). It never shows a run's own history or state. That reading stays the run
+// inspector's, and this page reads the artifact itself.
 
 export interface WorkflowAboutProps {
   detail: WorkflowDetail;
