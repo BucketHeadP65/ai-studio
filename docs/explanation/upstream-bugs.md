@@ -483,7 +483,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **Upstream state:** present in 2.66.0, whose per-result loop still takes one snapshot of the active tasks for every
   join it finalizes (checked 2026-11-05). Open as pydantic/pydantic-ai#9629, fix in PR pydantic/pydantic-ai#10426. Checking
   each finalized join again against the live tasks plus the tasks this pass already dispatched, as the sweep does, fixes
-  the graph below and the stance refresh shape.
+  the graph below and the stance refresh shape. The same pull request fixes UB-22, an early fire behind a map over an
+  empty list.
 - **Issue:** pydantic/pydantic-ai#9629, filed by others with the same root cause. Nothing to file.
 - **Repro:** `src` broadcasts to `b`, `mid_join` and `tail_join`. `b` goes to `mid_join` and `last_join`. `mid_join`
   goes to `mid`, `mid` to `tail_join`, `tail_join` to `tail`, `tail` to `last_join`, `last_join` to `last`, and `last` to
@@ -628,6 +629,40 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `False` and `session.feed_run("getattr([1], 'append')")` raises `MontyRuntimeError: AttributeError: 'list' object has
   no attribute 'append'`. `session.feed_run('dir([1])')` raises `NameError: name 'dir' is not defined`. A class with a
   field `x` and a method `norm`, defined in the program, answers `hasattr(p, 'x')` and `hasattr(p, 'norm')` with `True`.
+
+## UB-22. A join behind a map over an empty list fires early when another branch of the same fork finishes first
+
+- **Library:** pydantic-graph 2.66.0 (`pydantic_graph/graph_builder.py`, `_GraphIterator._get_completed_fork_runs`).
+- **Symptom:** a node waiting on two producers starts with only one of them and runs again later with the other. In
+  the stance refresh, when the rewrite map got an empty list and the unrelated `list_unplaced` program finished after
+  it, `merge_proposals` and `write_stances` both started early in the same pass and failed with
+  `KeyError('write_stances')` or `KeyError('check_stances')`. In the plain graph below, `tail` is handed `['src']` and
+  then `['gather']`.
+- **Cause:** a map over an empty list gets its collect join opened at once (`downstream_join_id`), and that join waits
+  for the sweep that runs when no task is pending. When any other task finishes first, the check that runs after each
+  task result counts only the running tasks between a join and its fork. The open collect join upstream is not a
+  task, so the downstream join counts as complete and fires. The idle sweep skips a join while a join upstream of it is
+  still open. The per-result check does not.
+- **Related:** UB-17, another early fire from the per-result check, and UB-5, whose fix made the idle sweep re-read the
+  live tasks. The same open pull request fixes UB-17 and this one.
+- **Grade:** wrong results. A node runs on partial input, with no error from the graph. A workflow whose step reads
+  every input by name fails with `KeyError`, and one that does not runs twice on half its inputs.
+- **Found:** 2026-11-05, chasing an intermittent `KeyError` in the stance refresh tests. Under load, three or four
+  copies of the stance test files at once, 3 of 19 runs fired early, every one from a case whose rewrite map was empty.
+  A tracer around `_get_completed_fork_runs` caught it, then it was cut down to the graph below.
+- **What we did:** nothing in the code yet. The fix is upstream and unreleased.
+- **Upstream state:** present in 2.66.0. The repro below passes on pydantic/pydantic-ai#10426 applied to 2.66.0 (its
+  import line merged by hand), which finalizes each join mid-run against the tasks running right now (checked
+  2026-11-05). Under load, four copies of the three stance test files at once for five rounds, stock 2.66.0 failed 5 of
+  20 runs with `KeyError`, across six tests, some with a rewrite map that was not empty. With the pull request applied,
+  0 of 20 failed. The pull request is open, green on every check, last updated 2026-10-16, with one change request from
+  the review bot.
+- **Issue:** covered by pydantic/pydantic-ai#9629's fix. Nothing to file.
+- **Repro:** `src` goes to `over`, `side` and `tail_join`. `over` returns `[]` and maps it through `each` into
+  `map_collect` (`add_mapping_edge(..., downstream_join_id="map_collect")`), `map_collect` goes to `gather`, `gather` to
+  `tail_join`, `tail_join` to `tail`. `side` sleeps 50 ms. `tail` and `side` go to `last_join`, then `last`, then the end.
+  Each join collects its items into a list. `tail` is handed `['src']`, then `['gather']`, where it should be handed
+  `['gather', 'src']` once.
 
 ## Upstream changes that required adaptation (not bugs)
 
