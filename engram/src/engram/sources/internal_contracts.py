@@ -231,8 +231,9 @@ class Scanner(Protocol):
     async def scan(self, entry: WatchEntry, *, since: datetime | None) -> EntryScan:
         """Sources newer than `since`, in publication order (by convention newest first), and how far the scan covered.
 
-        A scanner caps at `entry.max_items`, keeping the head of that order. A scanner that stops partway answers the
-        sources it found, the time it covered up to and why it stopped.
+        A scanner caps at `entry.max_items`, keeping the head of that order. A scanner that covers its window in parts
+        and answers the time it covered up to stops at the first part that brings it to `entry.max_items`, and answers
+        every source it found up to that time. A scanner that stops partway also answers why it stopped.
 
         Args:
             entry: The watch entry to read.

@@ -126,6 +126,20 @@ async def test_a_scan_covering_its_window_only_partway_is_stamped_where_its_cove
     assert watch_list.entries()[0].last_scanned == covered
 
 
+async def test_a_scan_that_found_nothing_but_covered_part_of_its_window_moves_the_stamp_there(tmp_path: Path) -> None:
+    watch_list = WatchListFile(tmp_path / "watch-list.yaml")
+    watch_list.add(_PODCAST, "someone")
+    watch_list.stamp(_PODCAST, "someone", _NOW - timedelta(days=21))
+    queue = SourceQueue(tmp_path / "source-queue.yaml", connectors=_PROVIDERS)
+    covered = _NOW - timedelta(days=7)
+    scanner = FakeScanner(entries={"someone": []}, covered_until={"someone": covered})
+
+    report = await scan_watch_list(watch_list, {_PODCAST: scanner}, queue, now=_NOW)
+
+    assert (report.found, report.failed) == (0, ())
+    assert watch_list.entries()[0].last_scanned == covered, "a quiet stretch the scan walked is not asked for again"
+
+
 async def test_a_feeds_whole_scan_lands_in_one_write_and_counts_only_the_new_rows(tmp_path: Path) -> None:
     watch_list = WatchListFile(tmp_path / "watch-list.yaml")
     watch_list.add(_BLOGS, "https://blog.example.org/entry.xml")
