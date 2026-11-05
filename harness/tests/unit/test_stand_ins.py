@@ -20,6 +20,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from pydantic_monty import AsyncMonty
 
 from harness.adapters.contracts import StandInCall, stand_in_caller, stand_in_toolset
+from harness.domain.contracts import CASE_RUN_TOOLS
 from tests.support.environment import fake_plugins, world_over
 from tests.support.fakes.writing_surface import CHECKED, FakeWritingSurface
 from tests.support.streaming import streaming_function_model
@@ -204,6 +205,54 @@ async def sandbox() -> AsyncIterator[AsyncMonty]:
     """A fresh worker pool, entered on the test's own event loop."""
     async with AsyncMonty(request_timeout=30.0) as pool:
         yield pool
+
+
+OUTSIDE_THE_TABLE = ("remove_source_artifacts", "write_policy", "source_queue_decide", "run_command")
+"""Tools that act and have no stand-in, so a case run never reaches them."""
+
+
+class TestAStandInRegistryServesNoRealWrite:
+    async def test_it_grants_only_the_tools_a_case_run_reaches_and_runs_no_agent_step(self, tmp_path: Path) -> None:
+        model = streaming_function_model(_program_then_answer(WRITING))
+        real = await world_over(model, engram=FakeWritingSurface(), state=tmp_path / "real")
+        stood_in = await world_over(model, engram=FakeWritingSurface(), stand_ins=[], state=tmp_path / "stood-in")
+
+        assert set(OUTSIDE_THE_TABLE) <= set(real.grants), "the surface no longer offers the tools this test is about"
+        assert not set(OUTSIDE_THE_TABLE) & set(stood_in.grants)
+        assert set(stood_in.grants) <= set(CASE_RUN_TOOLS)
+        assert real.run_agent is not None
+        assert stood_in.run_agent is None
+
+    async def test_a_briefing_holding_the_shell_is_offered_no_shell(self, tmp_path: Path) -> None:
+        offered: list[set[str]] = []
+
+        def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            offered.append({tool.name for tool in info.function_tools})
+            return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"note": "done"})])
+
+        real = await world_over(streaming_function_model(respond), engram=FakeWritingSurface(), state=tmp_path / "real")
+        stood_in = await world_over(streaming_function_model(respond), engram=FakeWritingSurface(), stand_ins=[], state=tmp_path / "stood-in")
+        assert real.perform is not None
+        assert stood_in.perform is not None
+
+        await real.perform(_briefing(("run_command", "search")), Note, question="list the files")
+        await stood_in.perform(_briefing(("run_command", "search")), Note, question="list the files")
+
+        assert "run_command" in offered[0], "the shell is no longer offered on the real path this test compares against"
+        assert "run_command" not in offered[1]
+
+    async def test_a_program_reaches_no_tool_outside_the_table(self, tmp_path: Path, sandbox: AsyncMonty) -> None:
+        surface = FakeWritingSurface()
+        registry = await world_over(streaming_function_model(_program_then_answer(WRITING)), engram=surface, stand_ins=[], sandbox=sandbox, state=tmp_path)
+        assert registry.run_code is not None
+        program = Program(
+            name="tidy", source="await write_policy(knowledge_base='research', rules={}, guidance='none')", output=Shape(json_schema={"type": "string"}), tools=("write_policy",)
+        )
+
+        with pytest.raises(RuntimeError, match="cannot reach"):
+            await registry.run_code(program, str)
+
+        assert surface.ran == []
 
 
 class TestBuildEnvironmentMountsStandIns:

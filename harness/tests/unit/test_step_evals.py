@@ -280,40 +280,39 @@ class TestReportFailedOverEveryEvaluator:
         assert report_failed(report) is True
         assert case_result(report.cases[0]) == CaseResult(name="judged", passed=False, errored=False, reason="LLMJudge: it names one")
 
-    async def test_a_case_no_evaluator_judged_failed(self) -> None:
-        dataset = Dataset(name="probe", cases=[Case(name="unjudged", inputs={"drafts": [], "collection": "repo-docs"})])
-
-        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
-
-        assert report_failed(report) is True
-        assert case_result(report.cases[0]).reason == "no evaluator judged this case"
-
-    async def test_a_case_whose_step_raised_errored_and_names_the_error(self) -> None:
-        dataset = Dataset(name="probe", cases=[Case(name="raises", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[OutcomeMatches()])
-
-        report = await run_step_evals(dataset, RaisingPerform(), STEP)
-
-        assert report_failed(report) is True
-        assert case_result(report.failures[0]) == CaseResult(
-            name="raises", passed=False, errored=True, reason="errored before any evaluator judged it: RuntimeError: the model is unreachable"
-        )
-
-    async def test_a_case_whose_evaluator_raised_errored_and_names_the_evaluator(self) -> None:
-        dataset = Dataset(name="probe", cases=[Case(name="judged", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[UnreachableJudge()])
-
-        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
-
-        assert report_failed(report) is True
-        assert case_result(report.cases[0]) == CaseResult(
-            name="judged", passed=False, errored=True, reason="errored while UnreachableJudge judged it: ConnectionError: the judge is unreachable"
-        )
-
     async def test_a_case_no_evaluator_judged_failed_and_did_not_error(self) -> None:
         dataset = Dataset(name="probe", cases=[Case(name="unjudged", inputs={"drafts": [], "collection": "repo-docs"})])
 
         report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
 
-        assert case_result(report.cases[0]).errored is False
+        assert report_failed(report) is True
+        assert case_result(report.cases[0]) == CaseResult(name="unjudged", passed=False, errored=False, reason="no evaluator judged this case")
+
+    async def test_a_step_that_raised_errored_only_for_a_cause_outside_it(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="raises", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[OutcomeMatches()])
+
+        report = await run_step_evals(dataset, RaisingPerform(), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.failures[0], outside=frozenset({"ConnectionError"})) == CaseResult(
+            name="raises", passed=False, errored=True, reason="errored before any evaluator judged it: ConnectionError: the model is unreachable"
+        )
+        assert case_result(report.failures[0]) == CaseResult(
+            name="raises", passed=False, errored=False, reason="the step raised: ConnectionError: the model is unreachable"
+        )
+
+    async def test_an_evaluator_that_raised_errored_the_case_only_for_a_cause_outside_the_step(self) -> None:
+        dataset = Dataset(name="probe", cases=[Case(name="judged", inputs={"drafts": [], "collection": "repo-docs"})], evaluators=[UnreachableJudge()])
+
+        report = await run_step_evals(dataset, FakePerform(outcome="approve"), STEP)
+
+        assert report_failed(report) is True
+        assert case_result(report.cases[0], outside=frozenset({"ConnectionError"})) == CaseResult(
+            name="judged", passed=False, errored=True, reason="errored while UnreachableJudge judged it: ConnectionError: the judge is unreachable"
+        )
+        assert case_result(report.cases[0]) == CaseResult(
+            name="judged", passed=False, errored=False, reason="UnreachableJudge raised: ConnectionError: the judge is unreachable"
+        )
 
 
 @dataclass
@@ -330,4 +329,4 @@ class RaisingPerform:
 
     async def __call__(self, task: Briefing, output_type: type, /, **inputs: object) -> object:
         msg = "the model is unreachable"
-        raise RuntimeError(msg)
+        raise ConnectionError(msg)

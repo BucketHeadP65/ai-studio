@@ -13,11 +13,12 @@ class CaseResult(BaseModel):
     name: str
     """The case's name, as its dataset gives it."""
     passed: bool
-    """Whether every evaluator that judged the case passed it."""
+    """Whether at least one evaluator judged the case and every one passed it."""
     errored: bool
-    """Whether the case errored: its run or an evaluator raised, as a broken model connection, a spend brake or a
-    provider error does. An errored case did not pass and says nothing against the step. A case an evaluator judged
-    and did not pass failed, and is not errored."""
+    """Whether the case errored: its run or an evaluator stopped for a cause outside the step, a model connection or
+    provider error, a timeout, or the deployment's spend limit. An errored case did not pass and says nothing against
+    the step. The step's own failure is not an error: a program that failed in the sandbox (a refused write included),
+    output retries run out, or the step going over its own usage limit."""
     reason: str
     """What the evaluators said, or, for an errored case, `errored` and the error that stopped it."""
 

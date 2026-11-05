@@ -63,29 +63,45 @@ def bind_collection(dataset: Dataset, collection: str) -> None:
             case.inputs = {**case.inputs, "collection": collection}
 
 
-def case_result(case: ReportCase | ReportCaseFailure) -> CaseResult:
+def case_result(case: ReportCase | ReportCaseFailure, *, outside: frozenset[str] = frozenset()) -> CaseResult:
     """How one case came out: passed when at least one evaluator judged it and every one passed it.
 
     An assertion passes when it is true and a score when it is 1.0. A case whose step or one of whose evaluators raised
-    errored, and its reason says `errored` and names the error. A case no evaluator judged failed.
+    an error whose class `outside` names errored, and its reason says `errored` and names the error. Any other raise is
+    the step's own failure, and so is a case no evaluator judged.
 
     Args:
         case: A case of an evaluation report, run or failed.
+        outside: The class names of the errors whose cause lies outside the step. Empty reads every raise as the
+            step's own failure.
 
     Returns:
         The case's result, its reason naming every evaluator's verdict or the error.
     """
     if isinstance(case, ReportCaseFailure):
-        return CaseResult(name=case.name, passed=False, errored=True, reason=f"errored before any evaluator judged it: {case.error_message}")
+        if _raised(case.error_message) in outside:
+            return CaseResult(name=case.name, passed=False, errored=True, reason=f"errored before any evaluator judged it: {case.error_message}")
+        return CaseResult(name=case.name, passed=False, errored=False, reason=f"the step raised: {case.error_message}")
     if case.evaluator_failures:
-        named = ". ".join(f"errored while {failure.name} judged it: {failure.error_message}" for failure in case.evaluator_failures)
-        return CaseResult(name=case.name, passed=False, errored=True, reason=named)
+        errored = any(_raised(failure.error_message) in outside for failure in case.evaluator_failures)
+        named = ". ".join(
+            f"errored while {failure.name} judged it: {failure.error_message}"
+            if _raised(failure.error_message) in outside
+            else f"{failure.name} raised: {failure.error_message}"
+            for failure in case.evaluator_failures
+        )
+        return CaseResult(name=case.name, passed=False, errored=errored, reason=named)
     verdicts = [*case.assertions.values(), *case.scores.values()]
     if not verdicts:
         return CaseResult(name=case.name, passed=False, errored=False, reason="no evaluator judged this case")
     passed = all(result.value is True for result in case.assertions.values()) and all(result.value == 1.0 for result in case.scores.values())
     reason = ". ".join(f"{result.name}: {result.reason or result.value}" for result in verdicts)
     return CaseResult(name=case.name, passed=passed, errored=False, reason=reason)
+
+
+def _raised(error_message: str) -> str:
+    """The class name of the error a report recorded as `<class name>: <message>`."""
+    return error_message.split(":", maxsplit=1)[0]
 
 
 def report_failed(report: EvaluationReport) -> bool:

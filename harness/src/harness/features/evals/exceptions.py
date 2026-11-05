@@ -12,7 +12,7 @@ class StepOutputReusesAnotherError(ValueError):
 
 
 class CaseRunRefusedError(RuntimeError):
-    """A step's cases were handed a registry that cannot run that kind of step, so no case ran."""
+    """A step's cases did not run: the registry cannot run that kind of step, or an `LLMJudge` in the dataset names no model."""
 
 
 class UnmeteredModelCallError(BudgetError):

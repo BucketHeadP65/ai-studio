@@ -59,12 +59,36 @@ class FakeWritingSurface:
             ran.append("resolve_entities")
             return '{"entities": []}'
 
+        def remove_source_artifacts(knowledge_base: str, source_id: str) -> str:
+            """Delete one source's mirror and the pages derived only from it."""
+            ran.append("remove_source_artifacts")
+            return "removed"
+
+        def write_policy(knowledge_base: str, rules: dict[str, JsonValue], guidance: str) -> str:
+            """Replace a knowledge base's source-queue policy on the owner's word."""
+            ran.append("write_policy")
+            return "policy written"
+
+        def source_queue_decide(knowledge_base: str, key: str, action: str, reason: str = "") -> str:
+            """Fetch or drop one source-queue row on the owner's word."""
+            ran.append("source_queue_decide")
+            return f"{key} decided"
+
         def search(query: str) -> str:
             """Ranked search over the knowledge base."""
             ran.append("search")
             return "paper.one :: a hit"
 
-        functions: list[Callable[..., str]] = [write_note, check_note, request_source, resolve_entities, search]
+        functions: list[Callable[..., str]] = [
+            write_note,
+            check_note,
+            request_source,
+            resolve_entities,
+            remove_source_artifacts,
+            write_policy,
+            source_queue_decide,
+            search,
+        ]
         self.tools = FunctionToolset[object](functions)
         self._functions = {function.__name__: function for function in functions}
 

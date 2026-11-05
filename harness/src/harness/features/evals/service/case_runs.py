@@ -11,10 +11,13 @@ import json
 
 from typing import TYPE_CHECKING, get_type_hints
 
-from core.ai.workflows.contracts import AgentStep, Briefing, Program, Shape, build_type, step_content_address
+from core.ai.workflows.contracts import AgentStep, Briefing, Program, Shape, StepIdentity, build_type, performing_step, step_content_address
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai_harness.spend import SpendLimitExceeded
+from pydantic_core import to_jsonable_python
 from pydantic_evals.evaluators import LLMJudge
 
-from harness.domain.contracts import CASE_RUN_TOOLS, CaseReport
+from harness.domain.contracts import CASE_RUN_TOOLS, CaseReport, CaseResult
 from harness.features.evals.domain.step_evaluation import CaseDataset, OutcomeMatches, case_result
 from harness.features.evals.exceptions import CaseRunRefusedError
 
@@ -30,6 +33,10 @@ if TYPE_CHECKING:
 _VALUE = "value"
 """The one field of the object a non-object output shape is wrapped in, so `build_type` builds its type."""
 
+_OUTSIDE_THE_STEP: tuple[type[BaseException], ...] = (ModelAPIError, TimeoutError, SpendLimitExceeded)
+"""The errors whose cause lies outside the step: a model connection or provider error, a timeout, and the deployment's
+spend limit. A case one of them stops errored. Every other raise is the step's own failure."""
+
 
 async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a separate term the caller sets)
     step: InlineStep,
@@ -41,12 +48,14 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
 ) -> CaseReport:
     """The case report for `step` and `cases`: the kept one, or a new one from running every case.
 
-    A briefing's cases run through `registry.perform` and a program's through `registry.run_code`, one case at a time.
-    Build `registry` with the same `calls` as its stand-ins, so every write the cases make is counted. A new report is
-    kept through `reports`, so the same step and cases never run twice, unless a case errored: that report is returned
-    and not kept, so the cases run again next time. Nothing runs, and nothing is kept, for a step with no cases, an
-    agent step, a step whose output is another step's type, or a step holding a tool outside `CASE_RUN_TOOLS`, which
-    the report names in `blocked_by`.
+    A briefing's cases run through `registry.perform` and a program's through `registry.run_code`, one case at a time,
+    each as a step of its own named `<step_id>#<case name>`, never as the step calling this. A case with no name is
+    named `Case <position>`, counted from 1. Build `registry` with the same `calls` as its stand-ins, so every write
+    the cases make is counted. A new report is kept through `reports`, so the same step and cases never run twice,
+    unless a case errored: that report is returned and not kept, so the cases run again next time. A kept report is
+    returned under `step_id`. Nothing runs, and nothing is kept, for a step with no cases, an agent step, a step whose
+    output is another step's type, or a step holding a tool outside `CASE_RUN_TOOLS` or outside `registry.grants`,
+    which the report names in `blocked_by`.
 
     Args:
         step: The step whose cases run.
@@ -75,24 +84,31 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
     if cases is None or not cases.get("cases"):
         return report
     if (kept := reports.get(report.step_hash, report.cases_hash)) is not None:
-        return kept
+        return kept.model_copy(update={"step_id": step_id})
     if isinstance(step, AgentStep):
         return report
-    if (blocked := next((tool for tool in step.tools if tool not in CASE_RUN_TOOLS), None)) is not None:
+    granted = frozenset(registry.grants)
+    if (blocked := next((tool for tool in step.tools if tool not in CASE_RUN_TOOLS or tool not in granted), None)) is not None:
         return report.model_copy(update={"no_cases": False, "blocked_by": blocked})
     output_type = _output_type(step)
     if output_type is None:
         return report
 
-    task = _case_task(step, step_id, output_type, registry)
+    run = _runner(step, step_id, output_type, registry)
     dataset = CaseDataset.from_dict(dict(cases), custom_evaluator_types=[OutcomeMatches], default_name=step.name)
+    for position, case in enumerate(dataset.cases, start=1):
+        case.name = case.name or f"Case {position}"
     _refuse_unnamed_judges(dataset, step_id)
     before = len(calls)
-    evaluation = await dataset.evaluate(task, max_concurrency=1, progress=False)
-    by_name = {result.name: result for result in (case_result(case) for case in (*evaluation.cases, *evaluation.failures))}
-    report = report.model_copy(
-        update={"results": tuple(by_name[case.name] for case in dataset.cases if case.name in by_name), "no_cases": False, "stand_in_calls": len(calls) - before}
-    )
+    outside = _outside_names()
+    results: list[CaseResult] = []
+    for case in dataset.cases:
+        identity = StepIdentity(node_id=f"{step_id}#{case.name}", tier=step.tier if isinstance(step, Briefing) else None)
+        alone = CaseDataset(name=dataset.name, cases=[case], evaluators=dataset.evaluators)
+        evaluation = await alone.evaluate(_as_its_own_step(run, identity), progress=False)
+        (outcome,) = (*evaluation.cases, *evaluation.failures)
+        results.append(case_result(outcome, outside=outside))
+    report = report.model_copy(update={"results": tuple(results), "no_cases": False, "stand_in_calls": len(calls) - before})
     if not any(result.errored for result in report.results):
         reports.put(report)
     return report
@@ -102,15 +118,16 @@ def _refuse_unnamed_judges(dataset: CaseDataset, step_id: str) -> None:
     """Refuse a dataset holding an `LLMJudge` that names no model, which would grade on pydantic-evals' own default."""
     judged = [("every case", dataset.evaluators), *((f"case {case.name!r}", case.evaluators) for case in dataset.cases)]
     if unnamed := [where for where, evaluators in judged if any(isinstance(each, LLMJudge) and each.model is None for each in evaluators)]:
-        msg = (
-            f"the cases of {step_id} cannot run: the LLMJudge for {', '.join(unnamed)} names no model, so it would grade on a "
-            f"model outside this deployment. Give it a `model`: name a model this deployment's tiers can serve."
-        )
+        msg = f"the cases of {step_id} cannot run: the LLMJudge for {', '.join(unnamed)} names no model. Give it a `model`."
         raise CaseRunRefusedError(msg)
 
 
-def _case_task(step: Briefing | Program, step_id: str, output_type: type, registry: StepRegistry) -> Callable[[dict[str, JsonValue]], Awaitable[object]]:
-    """One case's run of `step` through the registry, refused before any case runs when the registry cannot run it."""
+type _Run = Callable[[dict[str, JsonValue]], Awaitable[object]]
+"""One run of the step on one case's inputs."""
+
+
+def _runner(step: Briefing | Program, step_id: str, output_type: type, registry: StepRegistry) -> _Run:
+    """How the registry runs `step` on one case's inputs, refused before any case runs when it cannot."""
     if isinstance(step, Briefing):
         if (perform := registry.perform) is None:
             msg = f"the cases of {step_id} cannot run: this registry performs no briefing"
@@ -130,9 +147,32 @@ def _case_task(step: Briefing | Program, step_id: str, output_type: type, regist
     return ran
 
 
+def _as_its_own_step(run: _Run, identity: StepIdentity) -> _Run:
+    """`run` performed under `identity`, so no case reads the identity of the step that started the case run."""
+
+    async def performed(inputs: dict[str, JsonValue]) -> object:
+        with performing_step(identity):
+            return await run(inputs)
+
+    return performed
+
+
+def _outside_names() -> frozenset[str]:
+    """The class names of every error whose cause lies outside the step, subclasses included, read when called."""
+    found: set[str] = set()
+    pending: list[type[BaseException]] = list(_OUTSIDE_THE_STEP)
+    while pending:
+        error = pending.pop()
+        if error.__name__ not in found:
+            found.add(error.__name__)
+            pending.extend(error.__subclasses__())
+    return frozenset(found)
+
+
 def _cases_address(cases: Mapping[str, JsonValue] | None) -> str:
     """The SHA-256 of the dataset's canonical JSON, so the same cases written two ways share one address."""
-    return hashlib.sha256(json.dumps(cases, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    canonical = json.dumps(to_jsonable_python(dict(cases)) if cases is not None else None, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _output_type(step: Briefing | Program) -> type | None:

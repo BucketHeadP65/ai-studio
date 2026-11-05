@@ -99,6 +99,7 @@ from harness.adapters.contracts import (
 )
 from harness.domain.contracts import (
     BRIEFING_ONLY_BUDGET,
+    CASE_RUN_TOOLS,
     DEFINED_STEP_BUDGET,
     JUDGE_TOOLS,
     NOT_FOR_STEPS,
@@ -549,6 +550,11 @@ def _stand_ins_over(
     return stand_in_toolset(engram, stand_ins, grounding=grounding), stand_in_caller(engram, stand_ins)
 
 
+def _within(names: Iterable[str], scope: frozenset[str] | None) -> tuple[str, ...]:
+    """`names` in order, narrowed to `scope` when there is one."""
+    return tuple(name for name in names if scope is None or name in scope)
+
+
 async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separate term the host sets, and the statements are the arms of run_defined_step)
     model: Model,
     *,
@@ -613,8 +619,8 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
             wrapper is mounted only by a caller that is measuring what a run spends.
         stand_ins: Where the write tools' stand-ins record the calls they answered. A list mounts each write tool's
             stand-in under the tool's own name, in place of the real tool, for a briefing's grant and for a
-            program's calls, so a step's case run lands nothing. A worker step still holds the real tools. `None`
-            mounts the real tools.
+            program's calls, so a step's case run lands nothing. Such a registry grants, mounts and reaches only the
+            tools in `CASE_RUN_TOOLS`, never the shell, and runs no agent step. `None` mounts the real tools.
 
     Returns:
         The registry of steps a session executes, with the owner's active custom steps loaded.
@@ -622,9 +628,11 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     active = active if active is not None else ActiveRun()
     # Derived rather than typed out, so a retrieval tool added to engram becomes grantable without
     # a change here. `describe_schema` is grantable like any read.
-    reads = tuple(tool.name for tool in await engram.list_tools() if tool.name not in NOT_FOR_STEPS)
+    scope = frozenset(CASE_RUN_TOOLS) if stand_ins is not None else None
+    """The only tools a stand-in registry grants, mounts or reaches. `None` narrows nothing."""
+    reads = _within((tool.name for tool in await engram.list_tools() if tool.name not in NOT_FOR_STEPS), scope)
     grounding = GROUNDING_TOOLS if plugins is not None else ()
-    grantable = (*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding)
+    grantable = _within((*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding), scope)
     """What a declared step may ask for by name: the server's reads, the shell it acts with, web
     search, and the grounding tools and `skip_digest` when this environment has plugins."""
 
@@ -676,7 +684,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         budget = limits.requests if limits is not None else default_budget
         tool_calls = limits.tool_calls if limits is not None else None
         usage_limits = UsageLimits(request_limit=budget, tool_calls_limit=tool_calls)
-        granted = frozenset(turn.tools) if turn is not None else frozenset(task.tools)
+        granted = frozenset(_within(turn.tools if turn is not None else task.tools, scope))
         toolsets = _step_toolsets(granted)
         if turn is None:
             key = conversation_key(identity, task.name)
@@ -859,7 +867,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
         perform=run_defined_step,
         grants=grantable,
         run_code=code_runner(sandbox, reads=reads, call=program_calls) if sandbox is not None else None,
-        run_agent=run_agent_step,
+        run_agent=run_agent_step if scope is None else None,
         resolve_agent=_resolve_stored_agent,
         capability_grants=capability_grants_for(promoted),
         judge_tools=frozenset(JUDGE_TOOLS) & frozenset(grantable),
