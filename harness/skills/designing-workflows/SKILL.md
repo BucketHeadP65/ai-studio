@@ -169,7 +169,9 @@ not hold is caught before it lands, and a long reproduction is where a model ref
 
 A deterministic landing step writes what was already validated, and still catches each item's refusal instead of dying
 on the first: land every writable item, then fail the run naming each refusal. Nothing is silently dropped, and work
-refused at landing shows up again on the next pass's pending list.
+refused at landing shows up again on the next pass's pending list. A step that raises leaves no answer on the run's
+record, so the landing step returns everything it did, refusals included, and a small check after it fails the run
+when there were refusals.
 
 **Name what a step could not read.** A step that reads a set of sources lists each source it could not read, with the
 reason, apart from the sources it read and found nothing in. A source that failed to load and is counted as saying
