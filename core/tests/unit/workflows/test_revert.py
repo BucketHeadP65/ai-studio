@@ -383,3 +383,26 @@ async def test_a_save_of_equal_content_over_a_version_on_live_trial_still_saves(
 
     assert saved == "wf.digest-sources.v2"
     assert store.written("wf.digest-sources.v2")["title"] == "Digest sources, renamed"
+
+
+async def test_an_equal_re_save_of_a_version_on_live_trial_without_a_marker_keeps_the_stored_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    same = await library.fetch_workflow("wf.digest-sources.v2")
+
+    await library.put(same, title="Digest sources, renamed", summary="s", applicability="a", provenance={"saved_by": "owner:studio"})
+
+    assert store.written("wf.digest-sources.v2")["title"] == "Digest sources, renamed"
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == MARKER, "a card-only re-save never ends a live trial"
+
+
+async def test_an_equal_re_save_of_a_version_on_live_trial_with_a_marker_writes_that_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    same = await library.fetch_workflow("wf.digest-sources.v2")
+    longer = LiveTrialMarker(previous="wf.digest-sources.v1", steps=MARKER.steps, runs=5)
+
+    await library.put(same, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, live_trial=longer)
+
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == longer
+

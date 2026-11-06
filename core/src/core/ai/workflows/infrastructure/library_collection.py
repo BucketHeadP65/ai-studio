@@ -358,6 +358,26 @@ def _flag_of(page: Mapping[str, Any]) -> MaintenanceFlag:
         raise LibraryError(msg) from exc
 
 
+def _holds(stored: Mapping[str, JsonValue], workflow: Workflow) -> bool:
+    """Whether the frontmatter `stored` holds `workflow` by content address. A stored workflow that does not read holds nothing."""
+    try:
+        held = Workflow.model_validate(stored.get("spec"))
+    except ValidationError:
+        return False
+    return spec_identity(held) == spec_identity(workflow)
+
+
+def _marker_of(recorded: JsonValue, *, workflow_id: str) -> LiveTrialMarker | None:
+    """The live trial marker a page records, or None, refused naming the page when it does not parse."""
+    if recorded is None:
+        return None
+    try:
+        return LiveTrialMarker.model_validate(recorded)
+    except ValidationError as exc:
+        msg = f"the live trial marker on {workflow_id!r} does not parse: {exc}"
+        raise LibraryError(msg) from exc
+
+
 def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived", "restored"]) -> None:
     """Warn that `workflow_id` was saved, archived or made live again by a revert but `failure` happened to its flags, and what writes them."""
     again = "Archiving" if change == "archived" else "Saving"
@@ -879,7 +899,8 @@ class LibraryCollection:
         version it diverged from with the diff in its evidence, and each copy that matches a version resolves the open
         `diverged_copy` flag of its step in this workflow, as `library`. A flag that is not written leaves the page
         saved and warns with `FlagWriteIncompleteWarning`. A presentation, an intent and a live trial marker are written
-        only when given, so a save without a marker drops one the page held.
+        only when given, so a save without a marker drops one the page held, except that a save of equal content over a
+        version on live trial keeps its stored marker.
 
         Args:
             workflow: The workflow to save. Its name and version choose the page.
@@ -892,7 +913,8 @@ class LibraryCollection:
                 parent's consumer record is the prior record when this version is new.
             presentation: The author's words about the workflow, or None.
             intent: What the person who wanted the workflow asked for, or None.
-            live_trial: The marker of an adoption on live trial, written under `live_trial`, or None.
+            live_trial: The marker of an adoption on live trial, written under `live_trial`, or None, which keeps the
+                stored marker of a version on live trial saved again with equal content.
 
         Returns:
             The page id the workflow lives under.
@@ -924,14 +946,17 @@ class LibraryCollection:
                 f"{workflow.name!r}."
             )
             raise LibraryError(msg)
-        if existing and bool(existing[0].get("live_trial")) and not await self._holds(workflow_id, workflow):
-            free = await next_version(workflow.name, above=workflow.version, versions=self)
-            msg = (
-                f"{workflow_id!r} is on live trial, and saving other content under its number would write over the version "
-                f"its live trial runs. A new version number is needed: save it as version {free}, one above the highest saved "
-                f"version of {workflow.name!r}."
-            )
-            raise LibraryError(msg)
+        if existing and bool(existing[0].get("live_trial")):
+            stored = await self._frontmatter(workflow_id)
+            if not _holds(stored, workflow):
+                free = await next_version(workflow.name, above=workflow.version, versions=self)
+                msg = (
+                    f"{workflow_id!r} is on live trial, and saving other content under its number would write over the version "
+                    f"its live trial runs. A new version number is needed: save it as version {free}, one above the highest "
+                    f"saved version of {workflow.name!r}."
+                )
+                raise LibraryError(msg)
+            live_trial = live_trial or _marker_of(stored.get("live_trial"), workflow_id=workflow_id)
         record, versions = await self._consumer_record(workflow, workflow_id, lineage)
         frontmatter: dict[str, Any] = {
             "id": workflow_id,
@@ -973,16 +998,6 @@ class LibraryCollection:
             await self._supersede(stale_id, by=workflow_id)
         await self._settle_diverged_flags(workflow, workflow_id, record, versions, change="saved")
         return workflow_id
-
-    async def _holds(self, workflow_id: str, workflow: Workflow) -> bool:
-        """Whether the page at `workflow_id` holds `workflow` by content address. A stored workflow that does not read holds nothing."""
-        stored = await self._rows.fetchval(FETCH_SQL, workflow_id)
-        document = stored if isinstance(stored, Mapping) or stored is None else json.loads(stored)
-        try:
-            held = Workflow.model_validate((document or {}).get("spec"))
-        except ValidationError:
-            return False
-        return spec_identity(held) == spec_identity(workflow)
 
     async def _consumer_record(
         self, workflow: Workflow, workflow_id: str, lineage: Lineage | None
@@ -1075,14 +1090,7 @@ class LibraryCollection:
             LibraryError: If the marker on the page does not parse.
         """
         resolved = await self._resolved(workflow_id)
-        recorded = (await self._frontmatter(resolved, unknown=WorkflowUnknownError)).get("live_trial")
-        if recorded is None:
-            return None
-        try:
-            return LiveTrialMarker.model_validate(recorded)
-        except ValidationError as exc:
-            msg = f"the live trial marker on {resolved!r} does not parse: {exc}"
-            raise LibraryError(msg) from exc
+        return _marker_of((await self._frontmatter(resolved, unknown=WorkflowUnknownError)).get("live_trial"), workflow_id=resolved)
 
     async def revert(self, workflow_id: str) -> str:
         """Undo an adoption on live trial: write the version its marker names as previous back without `superseded_by`, then archive it.
