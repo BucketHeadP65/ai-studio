@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from harness.features.maintenance.domain import change_line
+
 if TYPE_CHECKING:
     from harness.features.maintenance.domain import LandingReport
 
@@ -11,8 +13,8 @@ if TYPE_CHECKING:
 class LandingRefusedError(RuntimeError):
     """A landing that refused one or more planned changes, after landing every other one.
 
-    `report` holds every change's outcome, the refused ones with why. The message names each refused consumer with its
-    reason and each change that landed.
+    `report` holds every change's outcome, the refused ones with why. The message says every change in one line each: the
+    new version of each adoption now on live trial, the step, each flagged or refused pair's reason and any note.
     """
 
     def __init__(self, report: LandingReport) -> None:
@@ -21,11 +23,7 @@ class LandingRefusedError(RuntimeError):
         Args:
             report: The landing's report, holding at least one refused change.
         """
-        refused = [change for change in report.changes if change.outcome == "refused"]
-        landed = [change for change in report.changes if change.outcome != "refused"]
-        said = [f"{change.workflow_id} with {change.step_id} was refused: {change.reason.rstrip('. ')}." for change in refused]
-        message = f"step maintenance refused {len(refused)} of {len(report.changes)} planned changes. " + " ".join(said)
-        if landed:
-            message += " It landed " + ", ".join(f"{change.workflow_id} ({change.outcome})" for change in landed) + "."
-        super().__init__(message)
+        refused = sum(change.outcome == "refused" for change in report.changes)
+        lines = "\n".join(change_line(change) for change in report.changes)
+        super().__init__(f"step maintenance refused {refused} of {len(report.changes)} planned changes and landed the rest:\n{lines}")
         self.report = report

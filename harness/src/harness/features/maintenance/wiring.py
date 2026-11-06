@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import FileEvidenceLog
+from core.ai.workflows.contracts import FileEvidenceLog, StepRegistry, step_content_address
 from wireup import injectable
 
 from harness.adapters.contracts import Notifier
+from harness.domain.contracts import cases_address
 from harness.features.evals.contracts import CaseRunRefusedError, check_step_cases, perform_step_cases
 from harness.features.maintenance.service.failed_fires import FailedFireNotice
 from harness.features.maintenance.service.live_trial import LiveTrialWatch
@@ -19,7 +20,7 @@ from harness.settings import StateSettings
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 
-    from core.ai.workflows.contracts import InlineStep, StepRegistry
+    from core.ai.workflows.contracts import InlineStep
     from pydantic import JsonValue
 
     from harness.adapters.contracts import StandInCalls
@@ -108,6 +109,8 @@ class StepCaseRuns:
     async def perform(self, step: InlineStep, step_id: str, cases: Mapping[str, JsonValue] | None, calls: StandInCalls) -> CaseReport:
         """The case report of one step version, its cases performed through a stand-in registry built over `calls`.
 
+        A step with no cases, or whose report is kept, builds no registry.
+
         Args:
             step: The step version whose cases run.
             step_id: The step version's id, which the report names.
@@ -120,5 +123,7 @@ class StepCaseRuns:
         Raises:
             CaseRunRefusedError: The stand-in registry cannot perform the step. Nothing has run.
         """
-        registry = await self._stand_in_registry(calls)
-        return await perform_step_cases(step, step_id, cases, registry, self._reports, calls)
+        if cases is None or not cases.get("cases") or self._reports.get(step_content_address(step), cases_address(cases)) is not None:
+            # `perform_step_cases` answers these from the cases and the kept report alone, before it reads the registry.
+            return await perform_step_cases(step, step_id, cases, StepRegistry(), self._reports, calls)
+        return await perform_step_cases(step, step_id, cases, await self._stand_in_registry(calls), self._reports, calls)

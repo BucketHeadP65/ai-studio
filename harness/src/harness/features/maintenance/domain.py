@@ -11,6 +11,7 @@ import re
 from typing import Literal
 
 from core.ai.workflows.contracts import TrustLevel, WorkflowIntent, WorkflowPresentation
+from core.markdown import code_block
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from harness.domain.contracts import CaseReport
@@ -32,8 +33,6 @@ NOT_YET_DECIDED = "not yet decided"
 
 TrustName = Literal["unverified", "machine-confirmed", "approved"]
 """A trust level by name."""
-
-_BACKTICK_RUN = re.compile(r"`+")
 
 _PERCENT_BEFORE_PERCENT = re.compile(r"%(?=%)")
 
@@ -285,9 +284,7 @@ def fenced(text: str) -> str:
     Returns:
         The fenced block.
     """
-    split = _PERCENT_BEFORE_PERCENT.sub("% ", text)
-    fence = "`" * max([3, *(len(run) + 1 for run in _BACKTICK_RUN.findall(split))])
-    return f"{fence}text\n{split}\n{fence}"
+    return code_block(_PERCENT_BEFORE_PERCENT.sub("% ", text), info="text")
 
 
 def one_line(text: str) -> str:
@@ -302,3 +299,27 @@ def one_line(text: str) -> str:
         The line.
     """
     return _PERCENT_BEFORE_PERCENT.sub("% ", " ".join(text.replace("`", "").split()))
+
+
+def change_line(change: LandedChange) -> str:
+    """One landed change as the owner reads it: the consumer, the step version, what happened, the reason and any note.
+
+    An adoption names the new version now on live trial.
+
+    Args:
+        change: The landed change.
+
+    Returns:
+        The line.
+    """
+    match change.outcome:
+        case "adopted":
+            said = f"{change.saved_id} adopts {change.step_id} on live trial in place of {change.workflow_id}. {change.reason}"
+        case "kept":
+            said = f"{change.workflow_id} keeps its copy instead of {change.step_id}. {change.reason}"
+        case "flagged":
+            said = f"{change.workflow_id} waits for your decision on {change.step_id}. {change.reason}"
+        case "refused":
+            said = f"{change.workflow_id} was refused {change.step_id}: {change.reason}"
+    notes = f" ({', '.join(change.notes)})" if change.notes else ""
+    return f"{said}{notes}"

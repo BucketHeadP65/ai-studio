@@ -54,6 +54,7 @@ from harness.features.maintenance.domain import (
     PlannedChange,
     RepositoryChange,
     RepositoryVerdict,
+    change_line,
     changed_ids,
     fenced,
     one_line,
@@ -71,8 +72,9 @@ if TYPE_CHECKING:
 
 _logger = get_logger(__name__)
 
-_REFUSALS = (LibraryError, SaveRefusedError, AdaptationRefusedError, PresentationRefusedError)
-"""What refuses one planned change at landing: the library, the validation, the edit operations or the card's words."""
+_REFUSALS = (LibraryError, SaveRefusedError, ValueError, PresentationRefusedError)
+"""What refuses one planned change at landing: the library, the validation, an edit operation that does not apply (a
+malformed one included) or the card's words."""
 
 
 @dataclass(frozen=True)
@@ -159,8 +161,9 @@ class MaintenanceSteps:
     async def list_consumers(self, changed_step_ids: str) -> ConsumerList:
         """Every consumer whose copy of a changed step is behind it or diverged, at most twenty, with what the planner decides by.
 
-        A step named at more than one version is taken at its highest. A consumer whose copy matches that version or a
-        later one, or whose record declines it, is dropped and counted. The pairs past the cap are named for the next run.
+        Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
+        matches that version, or whose record declines it, is dropped and counted. The consumers past the cap are named
+        once each for the next run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
@@ -173,7 +176,8 @@ class MaintenanceSteps:
         """
         taken, left, dropped = await self._candidates(await self._changed(changed_step_ids))
         pairs = [await self._pair(candidate) for candidate in taken]
-        return ConsumerList(pairs=pairs, left_for_next_run=[candidate.card.workflow_id for candidate in left], dropped=dropped)
+        left_ids = list(dict.fromkeys(candidate.card.workflow_id for candidate in left))
+        return ConsumerList(pairs=pairs, left_for_next_run=left_ids, dropped=dropped)
 
     async def check_contracts(self, consumers: ConsumerList) -> list[ContractCheck]:
         """Each pair's contract check: whether the consumer validates with its copy replaced by the changed version.
@@ -290,7 +294,7 @@ class MaintenanceSteps:
         Returns:
             The notice's text and whether it went out.
         """
-        lines = [_said(change) for change in landed.changes]
+        lines = [change_line(change) for change in landed.changes]
         if landed.left_for_next_run:
             lines.append(f"Left for the next run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}.")
         if not lines:
@@ -357,12 +361,13 @@ class MaintenanceSteps:
     async def hand_over_repository_changes(
         self, report: str, disagreements: list[RepositoryChange], drafts: list[RepositoryChange], verdicts: list[RepositoryVerdict]
     ) -> HandOver:
-        """Write each draft its judge kept as a `repository_change` flag page, drop the rest with why, and tell the owner once.
+        """Write each draft its judge kept as a `repository_change` flag page, drop the rest with why, and tell the owner about the pages.
 
         A draft is matched to its verdict by step. A draft no verdict came for, and a step of `disagreements` no draft
         came for, is dropped and named. A kept draft's page, `mf.change.<step>`, holds the drafted step files and file
-        edits in its Proposed change section. A flag page or a notice that fails is said in the answer and never fails
-        the run. The answer carries `report` too, so the run's answer holds the whole report.
+        edits in its Proposed change section. The owner is told once, and only when a page was written. A flag page or a
+        notice that fails is said in the answer and never fails the run. The answer carries `report` too, so the run's
+        answer holds the whole report.
 
         Args:
             report: The owner's report of the landing, as `report_changes` answered it.
@@ -442,20 +447,16 @@ class MaintenanceSteps:
         return self._registry
 
     async def _changed(self, changed_step_ids: str) -> _Changed:
-        """Each changed step at its highest named version, by step name, refused when an id names no saved version."""
-        newest: dict[str, StepVersion] = {}
+        """Each named step at its newest saved version, by step name, refused when an id names no saved version."""
         saved_of: dict[str, tuple[StepVersion, ...]] = {}
         for step_id in changed_ids(changed_step_ids):
             name = (await self._library.fetch_step(step_id)).name
             saved = saved_of.get(name) or await self._library.step_versions(name)
-            saved_of[name] = saved
-            version = next((each for each in saved if each.step_id == step_id), None)
-            if version is None:
+            if not any(each.step_id == step_id for each in saved):
                 msg = f"{step_id} is not a saved version of the reusable step {name}"
                 raise LibraryError(msg)
-            if name not in newest or version.version > newest[name].version:
-                newest[name] = version
-        return tuple((newest[name], saved_of[name]) for name in sorted(newest))
+            saved_of[name] = saved
+        return tuple((max(saved_of[name], key=lambda each: each.version), saved_of[name]) for name in sorted(saved_of))
 
     async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], int]:
         """The behind or diverged consumers within the cap, those past it, and how many current or declined ones were dropped."""
@@ -518,7 +519,7 @@ class MaintenanceSteps:
         step = await self._library.fetch_step(step_id)
         try:
             candidate, _ = _adopted(workflow, step, extra_ops, evidence="")
-        except AdaptationRefusedError as exc:
+        except ValueError as exc:
             return ContractCheck(workflow_id=workflow_id, step_id=step_id, passed=False, issues=[str(exc)])
         report = validate(candidate, self._registered())
         issues = [f"[{issue.kind}] {issue.where}: {issue.detail}" for issue in report.issues]
@@ -546,10 +547,7 @@ class MaintenanceSteps:
         base = saved.get(change.workflow_id, change.workflow_id)
         try:
             step = await self._library.fetch_step(change.step_id)
-            newest = await self._library.current(base)
-            if newest != base:
-                msg = f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
-                raise LibraryError(msg)
+            await self._refuse_a_stale_pair(change, base, step)
             workflow = await self._library.fetch_workflow(base)
             if change.disposition == "adopt":
                 landed = await self._adopt(change, base, workflow, step)
@@ -563,12 +561,35 @@ class MaintenanceSteps:
         except _REFUSALS as exc:
             return _landed(change, "refused", str(exc))
 
+    async def _refuse_a_stale_pair(self, change: PlannedChange, base: str, step: InlineStep) -> None:
+        """Refuse a change whose step version is not the newest of its name, which the consumer declines, or whose consumer someone saved past."""
+        newest_step = max(await self._library.step_versions(step.name), key=lambda saved: saved.version)
+        if newest_step.step_id != change.step_id:
+            msg = f"{change.step_id} is not the newest version of {step.name}, {newest_step.step_id} is. The next run plans {newest_step.step_id}"
+            raise LibraryError(msg)
+        address = step_content_address(step)
+        if any(entry.step == step.name and entry.declined == address for entry in await self._library.fetch_consumer_record(base)):
+            msg = f"{base} declines {change.step_id}, so step maintenance leaves the pair alone until a newer version arrives"
+            raise LibraryError(msg)
+        newest = await self._library.current(base)
+        if newest != base:
+            msg = f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
+            raise LibraryError(msg)
+
     async def _adopt(self, change: PlannedChange, base: str, workflow: Workflow, step: InlineStep) -> LandedChange:
         """Save the consumer's next version with `step` on live trial, then resolve the pair's open consumer flag."""
         run = self._current_run()
         ran_in = f" in the run {run}" if run else ""
         evidence = f"Step maintenance adopted {change.step_id} in {base}{ran_in}. {change.reason}"
         child, lineage = _adopted(workflow, step, change.extra_ops, evidence=evidence)
+        expected = {**_inline_addresses(workflow), step.name: step_content_address(step)}
+        if (held := _inline_addresses(child)) != expected:
+            changed = sorted(name for name in expected.keys() | held.keys() if expected.get(name) != held.get(name))
+            msg = (
+                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. "
+                f"An adoption changes only the step it adopts, and its edits may rewire nodes and add parameters"
+            )
+            raise AdaptationRefusedError(msg)
         registry = self._registered()
         verify_savable(child, registry)
         try:
@@ -607,7 +628,7 @@ class MaintenanceSteps:
         return []
 
     async def _flag(self, change: PlannedChange, base: str, workflow: Workflow, step: InlineStep) -> LandedChange:
-        """Write the pair's consumer flag with its contract check and the planner's reason, answering a note when that fails."""
+        """Write the pair's consumer flag with its contract check and the planner's reason, with a note when it was not written."""
         check = await self._check(base, change.step_id, ())
         page = flag_id("consumer_flag", step.name, workflow.name)
         flag = MaintenanceFlag(
@@ -623,10 +644,12 @@ class MaintenanceSteps:
             raised_at=self._clock(),
         )
         try:
-            await self._library.put_flag(flag)
+            written = await self._library.put_flag(flag)
         except (LibraryError, ValueError) as exc:
             _logger.warning("{workflow} was flagged for {step_id}, and its flag {flag} was not written: {reason}", workflow=base, step_id=change.step_id, flag=page, reason=str(exc))
             return _landed(change, "flagged", change.reason, notes=[f"the flag {page} was not written: {exc}"])
+        if written is None:
+            return _landed(change, "flagged", change.reason, notes=[f"the flag {page} was already resolved for {change.step_id}, so it was left as it is"])
         return _landed(change, "flagged", change.reason)
 
     def _repository_flag(self, draft: RepositoryChange, verdict: RepositoryVerdict, step: InlineStep) -> MaintenanceFlag:
@@ -669,9 +692,20 @@ class MaintenanceSteps:
 
 
 def _adopted(workflow: Workflow, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]], *, evidence: str) -> tuple[Workflow, Lineage]:
-    """The consumer's next version with its copy replaced by `step`, then `extra_ops` applied, claiming that it completes."""
+    """The consumer's next version with its copy replaced by `step`, then `extra_ops` applied, refused as `AdaptationRefusedError`."""
     replace: dict[str, JsonValue] = {"op": "replace_inline_step", "name": step.name, "with": step.model_dump(mode="json")}
-    return adapt(workflow, ops=(replace, *extra_ops), evidence=evidence, predictions=(Prediction(claim="completes"),))
+    try:
+        return adapt(workflow, ops=(replace, *extra_ops), evidence=evidence, predictions=(Prediction(claim="completes"),))
+    except AdaptationRefusedError:
+        raise
+    except ValueError as exc:
+        msg = f"an edit operation does not apply: {exc}"
+        raise AdaptationRefusedError(msg) from exc
+
+
+def _inline_addresses(workflow: Workflow) -> dict[str, str]:
+    """Each inline step's content address, by step name."""
+    return {inline.name: step_content_address(inline) for inline in workflow.inline}
 
 
 def _nodes_running(workflow: Workflow, name: str) -> list[str]:
@@ -720,18 +754,3 @@ def _check_text(check: ContractCheck) -> str:
 def _sides_text(sides: Sequence[ConsumerSide]) -> str:
     """Each consumer on one side of a repository change with its outcome and the planner's reason, fenced."""
     return fenced("\n".join(f"{side.workflow_id} ({side.outcome}): {side.reason}" for side in sides))
-
-
-def _said(change: LandedChange) -> str:
-    """One landed change as the owner's notice says it."""
-    match change.outcome:
-        case "adopted":
-            said = f"{change.saved_id} adopts {change.step_id} on live trial in place of {change.workflow_id}. {change.reason}"
-        case "kept":
-            said = f"{change.workflow_id} keeps its copy instead of {change.step_id}. {change.reason}"
-        case "flagged":
-            said = f"{change.workflow_id} waits for your decision on {change.step_id}. {change.reason}"
-        case "refused":
-            said = f"{change.workflow_id} was refused {change.step_id}: {change.reason}"
-    notes = f" ({', '.join(change.notes)})" if change.notes else ""
-    return f"{said}{notes}"

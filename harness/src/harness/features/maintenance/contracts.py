@@ -22,6 +22,7 @@ from harness.features.maintenance.domain import (
     PlannedChange,
     RepositoryChange,
     RepositoryVerdict,
+    one_line,
 )
 from harness.features.maintenance.exceptions import LandingRefusedError
 from harness.features.maintenance.service.failed_fires import FailedFireNotice
@@ -53,4 +54,5 @@ __all__ = [
     "PlannedChange",
     "RepositoryChange",
     "RepositoryVerdict",
+    "one_line",
 ]
