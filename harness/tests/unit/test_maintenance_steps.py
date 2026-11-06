@@ -1097,3 +1097,38 @@ async def test_an_adoption_after_a_revert_is_numbered_above_the_archived_version
     trust = trust_across_versions(await world.log.history_for_any(spec_hashes=hashes.keys()), hashes, spec_identity(newest))
     assert trust.total.runs_with_evidence == 2, "the run of the archived version and the run of the version it replaced both count"
     assert dict(trust.versions).keys() == {1, 2, 3}
+
+
+async def test_a_refused_landing_tells_the_owner_once_what_landed_and_what_was_refused_before_it_fails(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    daily_id = await world.save(consumer("daily-digest", DIGEST[3]))
+    plan = await world.plan(
+        V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too."), daily_id: ("keep", "The daily tone stays.")}
+    )
+    world.store.refused_ids = frozenset({"wf.weekly-digest.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    ((title, message),) = world.notifier.sent
+    assert "refused" in title
+    assert f"wf.digest-sources.v2 adopts {V4} on live trial in place of {sources_id}." in message
+    assert f"{weekly_id} was refused {V4}" in message
+    assert f"{daily_id} keeps its copy instead of {V4}." in message
+    assert "The owner was told." in str(raised.value)
+
+
+async def test_a_landing_without_refusals_leaves_the_one_notice_to_report_changes(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+
+    landed = await _land(world, await world.plan(V4, {sources_id: ("adopt", "It fits.")}))
+
+    assert world.notifier.sent == []
+    await world.steps.report_changes(landed)
+    assert len(world.notifier.sent) == 1
+

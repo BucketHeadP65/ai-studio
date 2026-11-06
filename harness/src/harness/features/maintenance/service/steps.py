@@ -297,8 +297,8 @@ class MaintenanceSteps:
             What each change did, when nothing was refused.
 
         Raises:
-            LandingRefusedError: One or more changes were refused. Every other change landed, and the error's report
-                holds every outcome.
+            LandingRefusedError: One or more changes were refused. Every other change landed, the owner was sent one
+                notice saying every change with its reason, and the error's report holds every outcome.
         """
         merged = merged_plan(plan, decisions)
         outcomes: dict[int, LandedChange] = {index: change for index, change in enumerate(merged) if isinstance(change, LandedChange)}
@@ -320,8 +320,10 @@ class MaintenanceSteps:
                 outcomes[index] = await self._land(change, saved.get(change.workflow_id, change.workflow_id))
         changes = [outcomes[index] for index in range(len(merged))]
         report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
-        if any(change.outcome == "refused" for change in changes):
-            raise LandingRefusedError(report)
+        refused = sum(change.outcome == "refused" for change in changes)
+        if refused:
+            _, told = await self._tell_owner(f"Step maintenance refused {refused} of {len(changes)} planned changes", report)
+            raise LandingRefusedError(report, told=told)
         return report
 
     async def report_changes(self, landed: LandingReport) -> str:
@@ -335,18 +337,22 @@ class MaintenanceSteps:
         Returns:
             The notice's text and whether it went out.
         """
+        if not landed.changes and not landed.left_for_next_run:
+            return "Step maintenance changed nothing, so nobody was told."
+        message, told = await self._tell_owner(f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}", landed)
+        return f"{message}\n{told}"
+
+    async def _tell_owner(self, title: str, landed: LandingReport) -> tuple[str, str]:
+        """Send the owner one notice saying every change of `landed` and the consumers past the cap, and answer it and whether it went out."""
         lines = [change_line(change) for change in landed.changes]
         if landed.left_for_next_run:
             lines.append(f"Left for the next run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}.")
-        if not lines:
-            return "Step maintenance changed nothing, so nobody was told."
         message = "\n".join(lines)
-        title = f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}"
         try:
             delivered = await self._notifier.notify(title, message)
         except Exception as exc:  # noqa: BLE001 (a notice that fails is said in the answer, never raised into the run)
-            return f"{message}\nThe notice to the owner failed: {exc}"
-        return f"{message}\n{'The owner was told.' if delivered else 'The notice to the owner was not delivered.'}"
+            return message, f"The notice to the owner failed: {exc}"
+        return message, "The owner was told." if delivered else "The notice to the owner was not delivered."
 
     async def select_disagreements(self, landed: LandingReport, consumers: ConsumerList) -> list[RepositoryChange]:
         """One repository change to draft per changed step that some consumers adopted and others kept or flagged.
