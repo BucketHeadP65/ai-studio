@@ -145,3 +145,48 @@ class WorkflowNotLiveError(LibraryError):
         )
         self.workflow_id = workflow_id
         """The version the file names."""
+
+
+class WorkflowNameRepeatedError(LibraryError):
+    """Two workflow files of one folder hold the same workflow, so the import cannot tell which one to keep.
+
+    The message names both files and says to keep one.
+    """
+
+    def __init__(self, earlier: Path, later: Path, name: str) -> None:
+        """Name both files and the workflow, and say how to import the folder.
+
+        Args:
+            earlier: The file that comes first in sorted file order.
+            later: The file that comes after it.
+            name: The workflow both files hold.
+        """
+        super().__init__(
+            f"{earlier} and {later} both hold the workflow {name!r}. A folder holds one file per workflow. Keep one of "
+            f"them, then import again. Nothing was written."
+        )
+        self.files = (earlier, later)
+        """Both files, in sorted file order."""
+
+
+class WorkflowVersionUnreadableError(LibraryError):
+    """The library's copy of a workflow file's version no longer reads as a workflow, so the import cannot compare them.
+
+    The message names the file, the version and why the copy does not read, and says to raise the version.
+    """
+
+    def __init__(self, file: Path, workflow_id: str, reason: str) -> None:
+        """Name the file, the version and why its copy does not read, and say how to import the file.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the version the file names.
+            reason: Why the library's copy does not read, on one line.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id}, and the library's copy of that version no longer reads as a workflow ({reason}). "
+            f"Raise `version` in the workflow file above every version the library holds of it to save its content as a "
+            f"new version, then import again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The version the file names."""

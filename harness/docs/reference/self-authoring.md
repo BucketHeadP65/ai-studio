@@ -180,6 +180,11 @@ The import compares each workflow file whose version the library holds with that
   consumer record. Other content at an unchanged version refuses the whole folder with `WorkflowVersionChangedError`,
   and a changed title, description, body or presentation with `WorkflowCardChangedError`. Both say to raise `version`
   in the workflow file.
+- **A stored version that no longer reads.** When the library's copy of the file's version no longer validates as a
+  workflow, `WorkflowVersionUnreadableError` refuses the folder, naming the file and the version.
+
+Two workflow files of one workflow refuse the folder with `WorkflowNameRepeatedError`, naming both. `harness import`
+prints any of these refusals as one line and exits 1.
 
 ### A turn that only designs starts nothing
 

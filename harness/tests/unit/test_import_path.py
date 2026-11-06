@@ -46,11 +46,13 @@ from pydantic import TypeAdapter
 
 from harness.features.browsing.exceptions import (
     WorkflowCardChangedError,
+    WorkflowNameRepeatedError,
     WorkflowNotLiveError,
     WorkflowVersionChangedError,
     WorkflowVersionSupersededError,
+    WorkflowVersionUnreadableError,
 )
-from harness.features.browsing.importing import FolderImport, SkippedWorkflowFile, import_path
+from harness.features.browsing.importing import FolderImport, SkippedWorkflowFile, SkipReason, import_path
 from harness.features.evals.contracts import check_step_cases
 from tests.support.fakes.library_collection import FakeCollection, pruned
 
@@ -589,7 +591,7 @@ async def test_a_file_the_library_moved_past_by_step_maintenance_is_skipped_by_n
     imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert imported == FolderImport(
-        written=("st.step_b.v1", "wf.two-step.v1"), skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=3, reason="moved_past", newer_version=4),)
+        written=("st.step_b.v1", "wf.two-step.v1"), skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=3, reason="moved_past", newer_id="wf.say-x.v4", newer_version=4),)
     )
     assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["st.step_b.v1", "wf.two-step.v1"]
 
@@ -729,9 +731,61 @@ async def test_a_file_whose_version_the_library_archived_is_skipped_with_that_re
 
     assert imported == FolderImport(
         written=("st.step_b.v1", "wf.two-step.v1"),
-        skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=4, reason="archived", newer_version=None),),
+        skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=4, reason="archived", newer_id=None, newer_version=None),),
     )
     assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["st.step_b.v1", "wf.two-step.v1"]
     card = await library.fetch_card("wf.say-x.v4")
     assert card is not None
     assert card.archived_at is not None
+
+
+async def test_two_files_of_one_workflow_refuse_the_folder_before_its_first_write_naming_both(tmp_path: Path) -> None:
+    store, library = await _holding(STEP_A)
+    before = len(store.payloads)
+    _write(
+        tmp_path,
+        steps={"step-b.md": STEP_B},
+        workflows={"say-x.md": _say_x_file(_say_x(3, STEPS_A[1])), "say-x-newer.md": _say_x_file(_say_x(4, STEPS_A[1]))},
+    )
+
+    with pytest.raises(WorkflowNameRepeatedError, match=r"say-x-newer\.md and .*say-x\.md both hold the workflow 'say-x'") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert refused.value.files == (tmp_path / "workflows" / "say-x-newer.md", tmp_path / "workflows" / "say-x.md")
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+
+
+async def test_a_newer_version_whose_page_records_no_saved_by_refuses_the_folder_naming_the_file_and_the_next_step(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    del store.pages["wf.say-x.v4"]["frontmatter"]["saved_by"]
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(3, STEPS_A[1]))})
+
+    with pytest.raises(WorkflowVersionSupersededError, match=r"say-x\.md holds wf\.say-x\.v3.*wf\.say-x\.v4, saved by a writer its page does not record.*Bring the file up to wf\.say-x\.v4"):
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert len(store.payloads) == before
+
+
+async def test_a_stored_version_that_no_longer_reads_as_a_workflow_refuses_the_folder_naming_the_file_and_the_id(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    store.pages["wf.say-x.v4"]["frontmatter"]["spec"]["nodes"] = "no longer a list of nodes"
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[2]))})
+
+    with pytest.raises(WorkflowVersionUnreadableError, match=r"say-x\.md holds wf\.say-x\.v4.*no longer reads as a workflow.*nodes.*Raise `version`") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert refused.value.workflow_id == "wf.say-x.v4"
+    assert "\n" not in str(refused.value), "the refusal is one line"
+    assert len(store.payloads) == before
+
+
+@pytest.mark.parametrize(
+    ("reason", "newer_id", "newer_version"),
+    [("archived", "wf.say-x.v4", 4), ("archived", None, 4), ("moved_past", None, None), ("moved_past", "wf.say-x.v4", None)],
+    ids=["archived naming a newer version", "archived with a newer number", "moved past naming none", "moved past with no number"],
+)
+def test_a_skipped_file_names_a_newer_version_exactly_when_it_was_moved_past(reason: SkipReason, newer_id: str | None, newer_version: int | None) -> None:
+    with pytest.raises(ValueError, match="moved_past"):
+        SkippedWorkflowFile(file=Path("say-x.md"), version=3, reason=reason, newer_id=newer_id, newer_version=newer_version)

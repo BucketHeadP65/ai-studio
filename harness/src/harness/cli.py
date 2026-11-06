@@ -265,9 +265,12 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
         WorkflowCardChangedError: The library holds a workflow file's workflow at its version under other words.
         WorkflowVersionChangedError: The library holds a workflow file's version with other content.
         WorkflowNotLiveError: The library superseded a workflow file's version and archived every newer one.
+        WorkflowNameRepeatedError: Two workflow files hold the same workflow.
+        WorkflowVersionUnreadableError: The library's copy of a workflow file's version no longer reads as a workflow.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
             file is refused. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
+        LibraryError: A workflow names a `uses` step the library does not hold, or the library refuses a write.
     """
     from contextlib import AsyncExitStack  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
@@ -299,12 +302,18 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
 
     It prints each id the library holds from the folder, then each workflow file it skipped: one whose version the library
     archived, and one whose workflow step maintenance saved a newer version of, with the version to raise the file to.
+    A refusal prints as one line and exits 1.
     """
     import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
     from pathlib import Path  # noqa: PLC0415 (same)
 
-    imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
+    from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (same)
+
+    try:
+        imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
+    except LibraryError as refusal:
+        fail(" ".join(" ".join([str(refusal), *getattr(refusal, "__notes__", [])]).split()))
     for written in imported.written:
         typer.echo(written)
     for skipped in imported.skipped:

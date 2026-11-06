@@ -7,9 +7,11 @@ from harness.features.browsing.exceptions import (
     CardRefusedError,
     StepLockRefusedError,
     WorkflowCardChangedError,
+    WorkflowNameRepeatedError,
     WorkflowNotLiveError,
     WorkflowVersionChangedError,
     WorkflowVersionSupersededError,
+    WorkflowVersionUnreadableError,
 )
 from harness.features.browsing.importing import CaseCheck, FolderImport, SkippedWorkflowFile, SkipReason, import_path
 from harness.features.browsing.service import archive_workflow, redescribe_workflow, restore_workflow
@@ -26,9 +28,11 @@ __all__ = [
     "StepLockRefusedError",
     "WorkflowCardChangedError",
     "WorkflowCardPatch",
+    "WorkflowNameRepeatedError",
     "WorkflowNotLiveError",
     "WorkflowVersionChangedError",
     "WorkflowVersionSupersededError",
+    "WorkflowVersionUnreadableError",
     "archive_workflow",
     "import_path",
     "locked_steps",
