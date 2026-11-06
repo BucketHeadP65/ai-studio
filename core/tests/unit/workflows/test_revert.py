@@ -298,7 +298,6 @@ async def test_revert_raises_again_the_diverged_copy_flags_of_the_version_it_mak
     assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v1"), "the restored version still holds the diverged copy"
 
 
-
 async def _reverted_at_v4(store: FakeCollection) -> LibraryCollection:
     """A library holding `digest` v1 and v2 and the consumer at v3, whose adoption of `digest` v2 as v4 was reverted."""
     library = LibraryCollection(store, store.ingest, collection=store.collection)

@@ -1182,6 +1182,7 @@ async def test_a_landing_without_refusals_leaves_the_one_notice_to_report_change
     await world.steps.report_changes(landed)
     assert len(world.notifier.sent) == 1
 
+
 def _rejected_plan(step_id: str, *, raised_at: datetime = T0 - timedelta(days=1)) -> MaintenanceFlag:
     return MaintenanceFlag(
         kind="plan_rejected",
