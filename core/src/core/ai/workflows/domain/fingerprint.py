@@ -121,8 +121,9 @@ def drift(recorded: WorkflowFingerprint, current: WorkflowFingerprint) -> tuple[
             changed="agent {name!r} changed its stored document since this was saved",
         ),
     ]
-    if any(tool not in current.grants for tool in recorded.grants):
-        findings.append("the tools a declared step may ask for changed since this was saved")
+    findings.extend(
+        f"tool {tool!r} that this workflow's steps ask for is no longer granted here" for tool in recorded.grants if tool not in current.grants
+    )
     for key, value in recorded.environment.items():
         if key not in current.environment:
             findings.append(f"environment stamp {key!r} was {value!r} at save time. The environment now does not report it")

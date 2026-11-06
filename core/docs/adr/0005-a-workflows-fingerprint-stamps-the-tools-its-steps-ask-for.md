@@ -38,8 +38,9 @@ program or an agent step) that the registry grants, sorted, each once.
 - At fetch the current stamp is computed from the same workflow against the registry now, so a tool the registry no
   longer grants is left out of it. The recorded stamp and the current stamp are never both read off the workflow
   alone, or drift could never fire.
-- `drift` reports a tool the recorded stamp holds and the current stamp lacks. A tool granted now that the recorded
-  stamp does not hold is not drift, the rule steps and agents already follow.
+- `drift` reports each tool the recorded stamp holds and the current stamp lacks in a finding of its own that names
+  it, so a reader can check whether the workflow still needs that tool. A tool granted now that the recorded stamp
+  does not hold is not drift, the rule steps and agents already follow.
 - A stamp of a workflow whose steps ask for no tool holds the empty tuple. The library drops an empty list when it
   stores a page, so the field defaults to empty and a stamp stored without it reads back as asking for none.
 - No code reads the old shape. A stored stamp whose `grants` is still a digest string fails to parse, which every

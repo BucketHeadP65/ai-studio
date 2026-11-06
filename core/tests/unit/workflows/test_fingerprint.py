@@ -366,14 +366,26 @@ def test_a_tool_granted_after_the_save_is_not_drift() -> None:
     assert drift(recorded, current) == ()
 
 
-def test_a_tool_no_longer_granted_is_drift() -> None:
+def test_a_tool_no_longer_granted_is_drift_named_in_one_finding() -> None:
     workflow = _asking(_briefing())
     recorded = fingerprint(workflow, StepRegistry(grants=GRANTED))
 
     current = fingerprint(workflow, StepRegistry(grants=("search", "write")))
 
     assert current.grants == ("search",), "the current stamp keeps only what the host still grants"
-    assert drift(recorded, current) != ()
+    assert drift(recorded, current) == ("tool 'fetch' that this workflow's steps ask for is no longer granted here",)
+
+
+def test_each_tool_no_longer_granted_is_its_own_finding() -> None:
+    workflow = _asking(_briefing())
+    recorded = fingerprint(workflow, StepRegistry(grants=GRANTED))
+
+    findings = drift(recorded, fingerprint(workflow, StepRegistry(grants=("write",))))
+
+    assert findings == (
+        "tool 'fetch' that this workflow's steps ask for is no longer granted here",
+        "tool 'search' that this workflow's steps ask for is no longer granted here",
+    )
 
 
 def test_a_workflow_whose_steps_ask_for_no_tool_stamps_none_and_never_drifts_on_tools() -> None:

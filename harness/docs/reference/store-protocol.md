@@ -647,9 +647,9 @@ has no `to_fingerprint` adapter or the port has no registry.
 
 `drift` is asymmetric on purpose: only the recorded side is walked, because a step or a tool the
 current environment has and the workflow never depended on cannot stale it. Within the recorded
-side, absence *is* drift: a tool the stamp holds that the registry no longer grants is drift, and a
-recorded environment stamp the current environment does not report is reported as moved, not as
-unknown. The distinction is between "the workflow never said what
+side, absence *is* drift: a tool the stamp holds that the registry no longer grants is drift, one
+finding per tool that names it, and a recorded environment stamp the current environment does not
+report is reported as moved, not as unknown. The distinction is between "the workflow never said what
 it was" (unknown) and "the workflow said, and the environment no longer matches" (drift).
 
 **Test it:** `tests/unit/test_staleness.py::test_an_unstamped_artifact_reads_as_unknown`
