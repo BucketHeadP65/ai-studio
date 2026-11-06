@@ -90,14 +90,17 @@ into prose and re-parses it. See invariant I7.
 
 `WorkflowFingerprint` (`core/src/core/ai/workflows/domain/fingerprint.py`) records the environment a
 workflow was saved against: `steps` (each registered step the spec names, hashed by its
-introspected contract), `grants` (a hash of the tool names a declared step may draw on),
-and `world` (host-contributed stamps such as a model id, opaque to the module).
+introspected contract), `agents` (the stored document each string agent reference resolves to, hashed),
+`grants` (the name of each tool the workflow's inline steps ask for that the registry grants, sorted),
+and `environment` (host-contributed stamps such as a capability digest, opaque to the module).
+A tool the registry grants and no step asks for is not stamped, so granting one more tool moves no
+saved workflow.
 
-It is **derived, never declared**. `fingerprint(spec, registry, world=...)` reads
+It is **derived, never declared**. `fingerprint(spec, registry, environment=...)` reads
 everything off the registry at save time, so no workflow carries a hand-maintained
 requirements list that an author could forget to update. Steps the workflow *brings* are
 deliberately not stamped, they ride inside the workflow, so the environment cannot drift out
-from under them.
+from under them. The tools they ask for belong to the host, so each one is stamped by name.
 
 The same module owns a second hash answering a different question. `spec_identity(spec)` is
 a sha256 over the spec's canonical JSON, `mode="json"`, sorted keys, every field at its default
@@ -235,7 +238,7 @@ This is the table a library implementer should read first.
 | **Trust level** | nowhere | derived: `trust_level(history).level` |
 | **Prediction verdicts** | nowhere | derived: `grade(lineage, events, version=...)` |
 | **Adapter hit rate** | nowhere | derived: `prediction_record(outcomes).hit_rate` |
-| **Staleness** | nowhere | derived: `drift(recorded, fingerprint(spec, registry, world))` |
+| **Staleness** | nowhere | derived: `drift(recorded, fingerprint(spec, registry, environment))` |
 | **Fit** | nowhere | derived: the port's `_fit` against this run's registry |
 | **Birth verdict** | nowhere | derived: `check_birth(spec, registry, born)` |
 | **Carried trust** | nowhere | derived: `carried_trust(born, lineage)` |
@@ -642,10 +645,11 @@ no longer parses, both adapters catch `ValidationError` and return `None` rather
 partial stamp, on the stated ground that *a stamp that no longer parses is no stamp. Unknown, not fresh*. `_staleness` in `contract_port.py` returns `None` when the vocabulary
 has no `to_fingerprint` adapter or the port has no registry.
 
-`drift` is asymmetric on purpose: only the recorded side is walked, because a step the
+`drift` is asymmetric on purpose: only the recorded side is walked, because a step or a tool the
 current environment has and the workflow never depended on cannot stale it. Within the recorded
-side, absence *is* drift, a recorded environment stamp the current environment does not report is
-reported as moved, not as unknown. The distinction is between "the workflow never said what
+side, absence *is* drift: a tool the stamp holds that the registry no longer grants is drift, and a
+recorded environment stamp the current environment does not report is reported as moved, not as
+unknown. The distinction is between "the workflow never said what
 it was" (unknown) and "the workflow said, and the environment no longer matches" (drift).
 
 **Test it:** `tests/unit/test_staleness.py::test_an_unstamped_artifact_reads_as_unknown`

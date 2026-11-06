@@ -1,11 +1,12 @@
-"""The environment a workflow was saved against, hashed so a later fetch can report what moved.
+"""The environment a workflow was saved against, stamped so a later fetch can report what moved.
 
 Every stamp is read off the registry at save time and read again at fetch time. Nothing is declared by hand.
 
 Four things are stamped: the introspected contract of every registered step the workflow names, the agent
-document each string `agent` reference of an inline agent step resolves to, the tool names a declared step
-may ask for, and whatever stamps the host adds. An inline step and an inline agent document travel inside
-the workflow and are not stamped.
+document each string `agent` reference of an inline agent step resolves to, the name of each tool the workflow's
+inline steps ask for that the registry grants, and whatever stamps the host adds. An inline step and an inline
+agent document travel inside the workflow and are not stamped. A tool the registry grants and no inline step asks
+for is not stamped, so granting one more tool moves no stamp.
 
 `spec_identity` hashes the workflow itself rather than its environment, and evidence is filed under that hash.
 `step_content_address` hashes one reusable step the same way, and `canonical_step_yaml` writes the document it hashes
@@ -50,8 +51,10 @@ class WorkflowFingerprint(BaseModel):
 
     An `AgentStep` whose `agent` is an inline document is absent. A string reference names a document in
     a library that can change, and re-authoring or re-activating that name shows up as drift."""
-    grants: str
-    """A hash of the tool names a declared step may ask for here."""
+    grants: tuple[str, ...] = ()
+    """The name of each tool the workflow's inline steps ask for that the registry grants, sorted, each once.
+
+    Empty is a workflow whose steps ask for no tool. A stamp kept without this key holds it empty."""
     environment: dict[str, str] = {}
     """Stamps the host adds, such as capability versions. They are compared as opaque strings: equal is
     fresh, and a changed or missing stamp is drift."""
@@ -61,7 +64,8 @@ def fingerprint(workflow: Workflow, registry: StepRegistry, *, environment: Mapp
     """Stamp the environment this workflow would run against, right now.
 
     A string agent reference the registry cannot resolve now (deactivated, renamed, never authored) is
-    left out of `agents` rather than raised, exactly like a step that is no longer registered.
+    left out of `agents` rather than raised, exactly like a step that is no longer registered. A tool an
+    inline step asks for that the registry does not grant now is left out of `grants` the same way.
 
     Args:
         workflow: The workflow to stamp.
@@ -80,9 +84,8 @@ def fingerprint(workflow: Workflow, registry: StepRegistry, *, environment: Mapp
     steps = {name: _step_hash(impl) for name in named if (impl := registry.get(name)) is not None}
     string_refs = {task.name: task.agent for task in workflow.inline if isinstance(task, AgentStep) and isinstance(task.agent, str)}
     agents = {task_name: hashed for task_name, ref in string_refs.items() if (hashed := _agent_hash(ref, registry)) is not None}
-    return WorkflowFingerprint(
-        steps=steps, agents=agents, grants=_digest(sorted(registry.grants)), environment=dict(environment or {})
-    )
+    grants = tuple(sorted({tool for task in workflow.inline for tool in task.tools} & set(registry.grants)))
+    return WorkflowFingerprint(steps=steps, agents=agents, grants=grants, environment=dict(environment or {}))
 
 
 def _stale(recorded: Mapping[str, str], current: Mapping[str, str], *, missing: str, changed: str) -> list[str]:
@@ -99,7 +102,7 @@ def _stale(recorded: Mapping[str, str], current: Mapping[str, str], *, missing: 
 def drift(recorded: WorkflowFingerprint, current: WorkflowFingerprint) -> tuple[str, ...]:
     """Everything that moved between the environment a workflow was saved in and this one.
 
-    Only what `recorded` holds is compared. A step or stamp that only `current` has is not drift.
+    Only what `recorded` holds is compared. A step, tool or stamp that only `current` has is not drift.
 
     Args:
         recorded: The fingerprint saved with the workflow.
@@ -118,7 +121,7 @@ def drift(recorded: WorkflowFingerprint, current: WorkflowFingerprint) -> tuple[
             changed="agent {name!r} changed its stored document since this was saved",
         ),
     ]
-    if recorded.grants != current.grants:
+    if any(tool not in current.grants for tool in recorded.grants):
         findings.append("the tools a declared step may ask for changed since this was saved")
     for key, value in recorded.environment.items():
         if key not in current.environment:

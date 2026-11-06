@@ -1147,7 +1147,7 @@ against nothing, because a request is not a claim about the graph.
 
 Both live on the card, never on the spec. `spec_identity` hashes the workflow alone, so writing, rewriting or removing
 either changes no identity and orphans no evidence. Neither grants anything: an intent selects no work, names no tool,
-and leaves `StepRegistry.grants` and the fingerprint's grant digest exactly as they were. In a library they ride in the
+and leaves `StepRegistry.grants` and the fingerprint's grants exactly as they were. In a library they ride in the
 workflow page's own frontmatter under `presentation` and `intent`, and rewriting a card's prose (`redescribe`,
 archive, restore) leaves both where they are.
 

@@ -64,14 +64,14 @@ async def test_a_folder_redescribe_keeps_the_fingerprint_and_lineage_it_found(tm
         summary="s",
         applicability="a",
         provenance={"saved_by": "x"},
-        fingerprint=WorkflowFingerprint(steps={}, grants="1ad78e801fceeeb4", environment={}),
+        fingerprint=WorkflowFingerprint(steps={}, grants=("fetch", "search"), environment={}),
     )
 
     await store.redescribe("audit-a-claim@1", title="t2", summary="s2", applicability="a2")
 
     stamp = await store.fetch_fingerprint("audit-a-claim@1")
     assert stamp is not None
-    assert stamp.grants == "1ad78e801fceeeb4", "redescribing the card must not erase what save stamped"
+    assert stamp.grants == ("fetch", "search"), "redescribing the card must not erase what save stamped"
 
 
 async def test_a_folder_redescribe_of_an_unknown_id_raises_store_error(tmp_path: Path) -> None:

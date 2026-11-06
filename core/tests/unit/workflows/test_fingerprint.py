@@ -2,8 +2,8 @@
 
 Staleness is the empirically dominant failure mode of a store of intent: the environment drifts
 under the artifact, and nothing says so until a run fails strangely. The fingerprint makes
-drift mechanical -- hash the contract of every step the spec names, hash the grant surface,
-carry whatever stamps the host adds -- and `drift` names exactly what moved.
+drift mechanical. It hashes the contract of every step the spec names, names the tools its own
+steps ask for and carries whatever stamps the host adds, and `drift` names exactly what moved.
 
 What it deliberately is NOT: a declared precondition. Nothing here is typed by an author;
 everything is derived from the registry at save time and re-derived at fetch time, which is
@@ -19,13 +19,17 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pydantic import ValidationError
+
 from core.ai.workflows.contracts import (
     AgentResolver,
     AgentStep,
+    Briefing,
     FromNode,
     FromParameter,
     MapNode,
     ParameterSpec,
+    Program,
     RunNode,
     Shape,
     StepRegistry,
@@ -225,9 +229,10 @@ def test_fingerprint_round_trips_as_json(quarterly_report: Workflow, call_log: C
 
 # --- a node's own configuration is never stamped, only the steps it names --------------------
 
-_PINNED_CHAINED_MAP_FINGERPRINT = "7997ecc5305c9e2b91fd280d29ba391998991029c73994a95db61bfb62e3f43b"
+_PINNED_CHAINED_MAP_FINGERPRINT = "09d27c931887bd1d90dbb3832fd9ca0e989e3ccacc4c478b6e232b889c663a3f"
 """The digest of `fingerprint(_chained_map_spec(), _chained_map_registry())` under this pydantic
-and this grammar, pinned before `MapNode.on_error` existed. See the test."""
+and this grammar. It is the document pinned before `MapNode.on_error` existed with only `grants`
+moved from a digest to the empty tuple of tool names. See the test."""
 
 
 def test_a_maps_on_error_left_at_default_does_not_move_the_fingerprint() -> None:
@@ -311,3 +316,95 @@ def test_agents_round_trip_as_json() -> None:
     revived = WorkflowFingerprint.model_validate_json(stamped.model_dump_json())
     assert revived == stamped
     assert drift(revived, stamped) == ()
+
+
+# --- the tools the workflow's own steps ask for are stamped, by name ------------------------
+
+QUESTION = {"type": "string"}
+
+ANSWER = Shape(json_schema={"type": "string"})
+
+GRANTED = ("search", "fetch", "write")
+"""What the host grants at save in these tests: one tool more than the briefing asks for."""
+
+
+def _asking(*steps: Briefing | Program | AgentStep) -> Workflow:
+    """A workflow that runs each of `steps`, every one fed the question, and answers with the first."""
+    return Workflow(
+        name="answer-a-question",
+        version=1,
+        description="The workflow's own steps read sources and answer one question.",
+        parameters={"question": ParameterSpec(description="the question", json_schema=QUESTION)},
+        inline=steps,
+        nodes=tuple(RunNode(id=step.name, work=step.name, inputs={"question": FromParameter(parameter="question")}) for step in steps),
+        output=FromNode(node=steps[0].name),
+    )
+
+
+def _briefing(name: str = "answer", *, tools: tuple[str, ...] = ("search", "fetch")) -> Briefing:
+    return Briefing(
+        name=name,
+        instructions="Search for sources on the question, read the best ones and answer it in one paragraph.",
+        inputs={"question": Shape(json_schema=QUESTION)},
+        output=ANSWER,
+        tools=tools,
+    )
+
+
+def test_the_tools_a_briefing_asks_for_are_stamped_by_name_and_nothing_else_the_host_grants() -> None:
+    stamped = fingerprint(_asking(_briefing()), StepRegistry(grants=GRANTED))
+
+    assert stamped.grants == ("fetch", "search"), "sorted, and `write` is granted but no step asks for it"
+
+
+def test_a_tool_granted_after_the_save_is_not_drift() -> None:
+    workflow = _asking(_briefing())
+    recorded = fingerprint(workflow, StepRegistry(grants=GRANTED))
+
+    current = fingerprint(workflow, StepRegistry(grants=(*GRANTED, "check_change")))
+
+    assert drift(recorded, current) == ()
+
+
+def test_a_tool_no_longer_granted_is_drift() -> None:
+    workflow = _asking(_briefing())
+    recorded = fingerprint(workflow, StepRegistry(grants=GRANTED))
+
+    current = fingerprint(workflow, StepRegistry(grants=("search", "write")))
+
+    assert current.grants == ("search",), "the current stamp keeps only what the host still grants"
+    assert drift(recorded, current) != ()
+
+
+def test_a_workflow_whose_steps_ask_for_no_tool_stamps_none_and_never_drifts_on_tools() -> None:
+    workflow = _asking(_briefing(tools=()))
+    recorded = fingerprint(workflow, StepRegistry(grants=GRANTED))
+
+    assert recorded.grants == ()
+    assert drift(recorded, fingerprint(workflow, StepRegistry())) == ()
+
+
+def test_a_stamp_holding_its_tools_as_one_string_does_not_parse() -> None:
+    with pytest.raises(ValidationError):
+        WorkflowFingerprint.model_validate({"grants": "1ad78e801fceeeb4"})
+
+
+def test_a_stamp_the_library_stored_without_tools_parses_as_asking_for_none() -> None:
+    """The library drops an empty list when it stores a page, so a stamp of no tools comes back without the key."""
+    assert WorkflowFingerprint.model_validate({"environment": {"model": "gpt-5.2"}}).grants == ()
+
+
+def test_the_tools_of_a_program_and_an_agent_step_are_stamped_once_each() -> None:
+    program = Program(name="count", source="len(question)", inputs={"question": Shape(json_schema=QUESTION)}, output=ANSWER, tools=("run_sql",))
+    worker = AgentStep(
+        name="weigh",
+        agent={"instructions": BRIEFING},
+        inputs={"question": Shape(json_schema=QUESTION)},
+        output=ANSWER,
+        tools=("describe_schema", "search"),
+    )
+    registry = StepRegistry(grants=(*GRANTED, "run_sql", "describe_schema"))
+
+    stamped = fingerprint(_asking(_briefing(), program, worker), registry)
+
+    assert stamped.grants == ("describe_schema", "fetch", "run_sql", "search")
