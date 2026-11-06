@@ -147,7 +147,7 @@ from core.ai.workflows.internal_contracts import (
 from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
-from core.ai.workflows.service import save, verify_savable, version_hashes
+from core.ai.workflows.service import next_version, save, verify_savable, version_hashes
 from core.ai.workflows.voice import process_instructions
 from core.lazy_imports import lazy_module_attributes
 
@@ -308,6 +308,7 @@ __all__ = [
     "load_spec_document",
     "load_step_document",
     "moved_nodes",
+    "next_version",
     "normalize_arguments",
     "observed_outcome",
     "orchestrated_gates",

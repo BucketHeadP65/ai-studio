@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import RunContext
+from pydantic_ai.usage import RunUsage
+
 from core.ai.workflows.contracts import (
     Briefing,
     FromNode,
@@ -21,12 +25,16 @@ from core.ai.workflows.contracts import (
     ParameterSpec,
     RunNode,
     Shape,
+    StepRegistry,
     Workflow,
+    WorkflowContract,
     WorkflowLibrary,
     adapt,
+    next_version,
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
+from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION, collection_toolset
 from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
@@ -288,3 +296,61 @@ async def test_revert_raises_again_the_diverged_copy_flags_of_the_version_it_mak
     flag = await library.fetch_flag("mf.diverged.digest-sources.summarize")
     assert flag is not None
     assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v1"), "the restored version still holds the diverged copy"
+
+
+
+async def _reverted_at_v4(store: FakeCollection) -> LibraryCollection:
+    """A library holding `digest` v1 and v2 and the consumer at v3, whose adoption of `digest` v2 as v4 was reverted."""
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version, step in DIGEST.items():
+        await library.put_step(step, version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    third = CONSUMER.model_copy(update={"version": 3})
+    await library.put(third, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "owner:cli"})
+    child, lineage = adapt(third, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    marker = LiveTrialMarker(previous="wf.digest-sources.v3", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=marker
+    )
+    assert await library.revert("wf.digest-sources.v4") == "wf.digest-sources.v3"
+    return library
+
+
+async def _never_run(task: Briefing, output_type: type, /, **inputs: object) -> object:  # pragma: no cover (saving never runs a step)
+    raise AssertionError
+
+
+async def test_the_next_version_is_one_above_every_saved_version_of_the_name_archived_ones_included() -> None:
+    library = await _reverted_at_v4(FakeCollection(prune=True))
+    restored = await library.fetch_workflow("wf.digest-sources.v3")
+
+    assert await next_version(restored, versions=library) == 5
+    assert await next_version(restored, versions=None) == 4, "without a read of the saved versions it is one above the workflow"
+    assert await next_version(CONSUMER.model_copy(update={"name": "digest-notes"}), versions=library) == 2, "a name with no saved version"
+
+
+async def test_adapt_workflow_after_a_revert_saves_the_next_free_version_and_leaves_the_archived_one_as_it_was() -> None:
+    store = FakeCollection(prune=True)
+    library = await _reverted_at_v4(store)
+    archived_before = dict(store.pages["wf.digest-sources.v4"]["frontmatter"])
+    port = WorkflowContract[None](
+        source=collection_toolset(library),
+        vocabulary=WORKFLOW_COLLECTION,
+        expose=(),
+        registry=StepRegistry(perform=_never_run),
+        saved_by="agent:test",
+        versions=library,
+    )
+
+    said = await port._adapt(
+        RunContext(deps=None, model=TestModel(), usage=RunUsage()),
+        "wf.digest-sources.v3",
+        ops=[{"op": "set_description", "to": "Digest one source, briefly."}],
+        applicability="Use per source. Not for a batch.",
+    )
+
+    assert said.startswith("adapted: wf.digest-sources.v3 -> wf.digest-sources.v5 (v5)"), said
+    lineage = await library.fetch_lineage("wf.digest-sources.v5")
+    assert lineage is not None
+    assert (lineage.parent_name, lineage.parent_version) == ("digest-sources", 3)
+    assert store.pages["wf.digest-sources.v4"]["frontmatter"] == archived_before
+    assert await library.current("wf.digest-sources.v3") == "wf.digest-sources.v5"

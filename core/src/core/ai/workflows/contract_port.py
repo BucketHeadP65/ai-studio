@@ -39,7 +39,7 @@ from core.ai.workflows.exceptions import AdaptationRefusedError, LibraryError, R
 from core.ai.workflows.internal_contracts import SaveGuard
 from core.ai.workflows.read_models import SavedWorkflow
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, SEARCH_STEPS_TOOL, copy_reusable_steps, fetch_reusable_step
-from core.ai.workflows.service import verify_savable, version_hashes
+from core.ai.workflows.service import next_version, verify_savable, version_hashes
 
 if TYPE_CHECKING:
     from pydantic import JsonValue
@@ -317,7 +317,9 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
     """The library's read of every saved version of a workflow name, if it has one.
 
     When set beside `evidence_log`, a trust line also states the total over every saved version, read through the
-    host's fetch tool, when the name has more than one. `None` keeps each line to the version it shows."""
+    host's fetch tool, when the name has more than one. When set, `adapt_workflow` numbers the child one above every
+    saved version of its name, archived ones included. `None` keeps each trust line to the version it shows and numbers
+    the child one above its parent."""
     save_requires_approval: bool = False
     """Mark the save tool as requiring approval, for hosts whose protocol can ask.
 
@@ -767,6 +769,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
         except AdaptationRefusedError as exc:
             return f"the diff was refused, and nothing was applied: {exc}\nFix the op and call {ADAPT_TOOL} again."
         try:
+            child = await self._numbered(child, parent)
             stored_at = await self._verified_write(
                 ctx,
                 child,
@@ -791,6 +794,14 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
             f"forward, and {carried} still carries its parent's run evidence. The child itself is "
             f"provisional until it has been run and recorded.{claimed}"
         )
+
+    async def _numbered(self, child: Workflow, parent: Workflow) -> Workflow:
+        """`child` numbered one above `parent` and every saved version of its name, refused when those cannot be read."""
+        try:
+            return child.model_copy(update={"version": await next_version(parent, versions=self.versions)})
+        except LibraryError as exc:
+            msg = f"REFUSED. Nothing was written. The saved versions of {parent.name!r} could not be read: {exc}"
+            raise _WriteRefusedError(msg) from exc
 
     async def _verified_write(
         self,

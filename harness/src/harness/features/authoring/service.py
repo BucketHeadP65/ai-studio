@@ -28,9 +28,11 @@ from core.ai.workflows.contracts import (
     Workflow,
     WorkflowIntent,
     WorkflowLibrary,
+    WorkflowVersionQueries,
     adapt,
     intent_issues,
     moved_nodes,
+    next_version,
     prepare,
     save,
 )
@@ -186,7 +188,8 @@ async def adapt_saved(
     """Adapt a saved workflow into a child draft by typed edits, and return the lineage they produced.
 
     The parent is never written to. The lineage must travel with the child to the library.
-    The child inherits the parent's card, the author's words and the intent.
+    The child inherits the parent's card, the author's words and the intent. It is numbered one above every saved
+    version of its name, archived ones included, when the library lists them, else one above the parent.
 
     Args:
         workflow_id: The saved workflow to adapt.
@@ -201,9 +204,12 @@ async def adapt_saved(
     Raises:
         AdaptationRefusedError: If any op names something that is not there. Every op is checked before
             any is applied, so no half-adapted workflow exists.
+        LibraryError: If the library cannot read the parent or the saved versions of its name.
     """
     workflow = await library.fetch_workflow(workflow_id)
     child, lineage = adapt(workflow, ops=tuple(ops), evidence=evidence, predictions=tuple(predictions))
+    versions = library if isinstance(library, WorkflowVersionQueries) else None
+    child = child.model_copy(update={"version": await next_version(workflow, versions=versions)})
     card = await _card(library, workflow_id)
     return (
         Draft(

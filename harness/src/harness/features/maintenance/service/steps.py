@@ -29,6 +29,7 @@ from core.ai.workflows.contracts import (
     canonical_step_yaml,
     fingerprint,
     flag_id,
+    next_version,
     spec_identity,
     step_content_address,
     trust_across_versions,
@@ -697,7 +698,7 @@ class MaintenanceSteps:
             reasons = " ".join(f"{change.step_id}: {change.reason}" for change, _ in adopted)
             evidence = f"Step maintenance adopted {', '.join(change.step_id for change, _ in adopted)} in {base}{ran_in}. {reasons}"
         child, lineage = _adopted(workflow, [(step, change.extra_ops) for change, step in adopted], evidence=evidence)
-        child = child.model_copy(update={"version": await self._next_version(workflow.name)})
+        child = child.model_copy(update={"version": await next_version(workflow, versions=self._library)})
         registry = self._registered()
         verify_savable(child, registry)
         try:
@@ -770,10 +771,6 @@ class MaintenanceSteps:
             _logger.warning("a plan for {step_id} landed, and the open flag {flag} was not resolved: {reason}", step_id=step_id, flag=page, reason=str(exc))
             return f"the open flag {page} was not resolved: {exc}"
         return None
-
-    async def _next_version(self, name: str) -> int:
-        """One above the highest saved version of the workflow `name`, archived and superseded ones included."""
-        return max(version for version, _ in await self._library.versions(name)) + 1
 
     async def _resolve_consumer_flag(self, workflow_name: str, step_name: str, saved_id: str, step_id: str) -> list[str]:
         """Resolve the pair's open consumer flag as settled by the adoption, answering a note when that fails."""
