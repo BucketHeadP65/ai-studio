@@ -148,3 +148,30 @@ async def test_a_run_that_did_not_fail_or_was_started_by_hand_asks_no_schedule()
     await notice.run_ended(_ended(runner="app:harness"))
 
     assert schedules.asked == []
+
+
+async def test_a_fire_no_on_step_change_schedule_takes_back_names_its_steps_for_a_run_by_hand() -> None:
+    notifier = FakeOwnerNotifier()
+    ended = _ended(runner="app:schedule:7", workflow_id="wf.step-maintenance.v1").model_copy(
+        update={"params": {"changed_step_ids": "st.a.v2,st.b.v2"}}
+    )
+
+    await FailedFireNotice("app:schedule:", notifier, FakeStepSchedules(answer=None)).run_ended(ended)
+
+    ((_, message),) = notifier.sent
+    assert message.splitlines()[1:] == [
+        (
+            "Not put back, because no on-step-change schedule takes them back: st.a.v2, st.b.v2. "
+            "Run wf.step-maintenance.v1 by hand with changed_step_ids st.a.v2,st.b.v2 to plan them."
+        )
+    ]
+
+
+async def test_a_raising_put_back_for_a_fire_with_no_changed_steps_keeps_the_notice_as_it_was() -> None:
+    notifier = FakeOwnerNotifier()
+    schedules = FakeStepSchedules(failure=RuntimeError("the schedule store is down"))
+
+    await FailedFireNotice("app:schedule:", notifier, schedules).run_ended(_ended(runner="app:schedule:7"))
+
+    ((_, message),) = notifier.sent
+    assert message == "wf.digest-sources.v4, fired by schedule 7, ended failed. The digest step stopped with an error."

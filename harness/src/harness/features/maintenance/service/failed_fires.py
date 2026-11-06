@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from core.observability import get_logger
 
-from harness.features.maintenance.domain import CHANGED_STEPS
+from harness.features.maintenance.domain import CHANGED_STEPS, changed_ids
 
 if TYPE_CHECKING:
     from core.ai.workflows.contracts import RunEvidence
@@ -23,6 +23,9 @@ _NOT_PUT_BACK: dict[NotPutBack, str] = {
     "schedule_paused": "the schedule is paused",
 }
 """Why a failed fire's changed steps were not put back, in the words the notice says it."""
+
+_NO_STEP_SCHEDULE = "no on-step-change schedule takes them back"
+"""Why the changed steps of a fire no on-step-change schedule answers for were not put back: its schedule is gone or waits for something else."""
 
 
 class FailedFireNotice:
@@ -55,7 +58,9 @@ class FailedFireNotice:
     async def run_ended(self, evidence: RunEvidence) -> None:
         """Tell the owner when the run was a schedule's fire and ended failed, with what became of its changed steps.
 
-        A put back that raises is said in the notice, and the owner is still told.
+        The changed steps are the ones the run was given in `changed_step_ids`. When no on-step-change schedule answers
+        for the fire, they are named as needing a run by hand. A put back that raises is said in the notice for a run
+        given changed steps, and the owner is still told.
 
         Args:
             evidence: What the run's ending recorded.
@@ -66,17 +71,22 @@ class FailedFireNotice:
             return
         schedule = evidence.runner.removeprefix(self._prefix)
         message = f"{evidence.workflow_id}, fired by schedule {schedule}, ended failed. {evidence.result.summary}"
+        given = evidence.params.get(CHANGED_STEPS)
+        fired = changed_ids(given) if isinstance(given, str) else ()
         try:
             steps = await self._schedules.put_back_steps(evidence)
         except Exception as exc:  # a failed put back is said in the notice and never keeps the owner from hearing of the failure
             _logger.exception("putting back the changed steps of {workflow} failed", workflow=evidence.workflow_id)
-            message += (
-                f"\nPutting its changed steps back failed: {exc}. Run {evidence.workflow_id} by hand with the "
-                f"{CHANGED_STEPS} it was fired with: {evidence.params.get(CHANGED_STEPS)}."
-            )
+            if fired:
+                message += (
+                    f"\nPutting its changed steps back failed: {exc}. Run {evidence.workflow_id} by hand with the "
+                    f"{CHANGED_STEPS} it was fired with: {','.join(fired)}."
+                )
         else:
             if steps is not None:
                 message += _steps_text(evidence.workflow_id, steps)
+            elif fired:
+                message += _by_hand_text(evidence.workflow_id, fired, _NO_STEP_SCHEDULE)
         await self._notifier.notify("A scheduled run failed", message)
 
 
@@ -86,9 +96,11 @@ def _steps_text(workflow_id: str, steps: FailedFireSteps) -> str:
     if steps.put_back:
         text += f"\nIt stopped with a provider error, so {', '.join(steps.put_back)} went back on the schedule, which fires again after its quiet period."
     if steps.by_hand:
-        because = "" if steps.why is None else f", because {_NOT_PUT_BACK[steps.why]}"
-        text += (
-            f"\nNot put back{because}: {', '.join(steps.by_hand)}. "
-            f"Run {workflow_id} by hand with {CHANGED_STEPS} {','.join(steps.by_hand)} to plan them."
-        )
+        text += _by_hand_text(workflow_id, steps.by_hand, None if steps.why is None else _NOT_PUT_BACK[steps.why])
     return text
+
+
+def _by_hand_text(workflow_id: str, step_ids: tuple[str, ...], because: str | None) -> str:
+    """The line naming the changed steps that need a run by hand, why they were not put back, and the run to start."""
+    reason = "" if because is None else f", because {because}"
+    return f"\nNot put back{reason}: {', '.join(step_ids)}. Run {workflow_id} by hand with {CHANGED_STEPS} {','.join(step_ids)} to plan them."

@@ -1512,8 +1512,10 @@ four parts in turn, and a part that fails is logged while the next is still told
    refusal, a validation error, a judge's last rejection, a map that aborted after repeated failures), a paused
    schedule, and a run on the durable engine, whose evidence never says provider error, put nothing back. The notice
    then names the ids put back and those that need a run by hand, with why and the run to start (`Run <workflow id> by
-   hand with changed_step_ids <ids> to plan them.`). A put back that raises is said in the notice, and the notice still
-   goes.
+   hand with changed_step_ids <ids> to plan them.`). When no on-step-change schedule answers for the fire, because its
+   schedule was deleted or its cadence moved off `on step change` during the run, the notice still names the run's
+   `changed_step_ids` as needing a run by hand. A put back that raises is said in the notice, with the run to start, for
+   a run given `changed_step_ids`, and the notice still goes.
 
 ## What this station does not do (v1)
 
