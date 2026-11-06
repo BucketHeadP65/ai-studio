@@ -25,6 +25,7 @@ from core.ai.workflows.contracts import (
     LibraryCollection,
     Lineage,
     LiveTrialMarker,
+    ParameterSpec,
     PresentationRefusedError,
     Program,
     ReusableStepSaved,
@@ -33,6 +34,7 @@ from core.ai.workflows.contracts import (
     StepRegistry,
     StepVersionChangedError,
     Workflow,
+    WorkflowFingerprint,
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
@@ -42,7 +44,12 @@ from core.ai.workflows.contracts import (
 )
 from pydantic import TypeAdapter
 
-from harness.features.browsing.exceptions import WorkflowCardChangedError, WorkflowVersionSupersededError
+from harness.features.browsing.exceptions import (
+    WorkflowCardChangedError,
+    WorkflowNotLiveError,
+    WorkflowVersionChangedError,
+    WorkflowVersionSupersededError,
+)
 from harness.features.browsing.importing import FolderImport, SkippedWorkflowFile, import_path
 from harness.features.evals.contracts import check_step_cases
 from tests.support.fakes.library_collection import FakeCollection, pruned
@@ -546,10 +553,16 @@ def _say_x_file(
     return f"---\n{yaml.safe_dump(document, sort_keys=False)}---\n\n{body}\n"
 
 
+def _stamp(workflow: Workflow, environment: Mapping[str, str] | None = None) -> WorkflowFingerprint:
+    """The stamp an import over `_registry()` with `environment` writes for `workflow`."""
+    return fingerprint(workflow, _registry(), environment=dict(environment or {}))
+
+
 async def _moved_past(saved_by: str) -> tuple[FakeCollection, LibraryCollection]:
     """A library holding `step_a` v1 to v3, `say-x` v3 with `step_a` v1, and `say-x` v4 adopting `step_a` v2, saved by `saved_by`.
 
-    v4 carries a lineage, a live trial marker and a decline of `step_a` v3, as an adoption does, and v3 is superseded.
+    v4 carries a lineage, a live trial marker, the stamp an import with no environment writes and a decline of `step_a`
+    v3, as an adoption does, and v3 is superseded.
     """
     store, library = await _holding(STEP_A, STEP_A_V2, STEP_A_V3)
     await library.put(_say_x(3, STEPS_A[1]), title="Say x", summary="Says x.", applicability=SAY_X_BODY, provenance={"saved_by": "owner:cli"})
@@ -559,6 +572,7 @@ async def _moved_past(saved_by: str) -> tuple[FakeCollection, LibraryCollection]
         summary="Says x.",
         applicability=SAY_X_BODY,
         provenance={"saved_by": saved_by},
+        fingerprint=_stamp(_say_x(4, STEPS_A[2])),
         lineage=ADOPTION,
         live_trial=LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2])),
     )
@@ -575,7 +589,7 @@ async def test_a_file_the_library_moved_past_by_step_maintenance_is_skipped_by_n
     imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert imported == FolderImport(
-        written=("st.step_b.v1", "wf.two-step.v1"), skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=3, newer_version=4),)
+        written=("st.step_b.v1", "wf.two-step.v1"), skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=3, reason="moved_past", newer_version=4),)
     )
     assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["st.step_b.v1", "wf.two-step.v1"]
 
@@ -629,3 +643,95 @@ async def test_a_file_whose_workflow_equals_the_stored_version_and_whose_words_d
 
     assert refused.value.fields == (named,)
     assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+
+
+async def _assert_adoption_kept(library: LibraryCollection) -> None:
+    """`say-x` v4 still carries the lineage, the live trial marker and the decline `_moved_past` gave it."""
+    assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
+    assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
+
+
+async def test_an_unchanged_file_whose_stored_stamp_differs_gets_only_the_new_stamp_and_keeps_its_adoption(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+    _write(tmp_path, steps={}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[2]))})
+    environment = {"model": "new-model"}
+
+    imported = await import_path(
+        tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT, environment=environment
+    )
+
+    assert imported == FolderImport(written=("wf.say-x.v4",), skipped=())
+    assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["wf.say-x.v4"]
+    assert await library.fetch_fingerprint("wf.say-x.v4") == _stamp(_say_x(4, STEPS_A[2]), environment)
+    assert await library.saved_by("wf.say-x.v4") == STEP_MAINTENANCE_AGENT, "the import's own name is not written over it"
+    await _assert_adoption_kept(library)
+
+
+async def test_a_file_whose_version_the_library_holds_with_other_content_refuses_the_folder_before_its_first_write(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[3]))})
+
+    with pytest.raises(WorkflowVersionChangedError, match=r"say-x\.md holds wf\.say-x\.v4.*other content.*Raise `version`") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert refused.value.workflow_id == "wf.say-x.v4"
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+    await _assert_adoption_kept(library)
+
+
+NULL_DEFAULT = Workflow(
+    name="say-x",
+    version=1,
+    description="Says x.",
+    parameters={"note": ParameterSpec(description="A note nobody reads.", json_schema={"type": "string", "default": None})},
+    inline=(STEPS_A[1],),
+    nodes=(RunNode(id="a", work="step_a"),),
+    output=FromNode(node="a"),
+)
+
+
+async def test_a_file_the_library_stores_without_its_null_values_imports_again_as_unchanged(tmp_path: Path) -> None:
+    store, library = await _holding(STEP_A)
+    _write(tmp_path, steps={}, workflows={"say-x.md": _say_x_file(NULL_DEFAULT)})
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+
+    imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported.written == ("wf.say-x.v1",)
+    assert len(store.payloads) == before, "the stored spec lost only the null the store drops, so the version is unchanged"
+
+
+async def test_a_superseded_file_whose_newer_versions_are_all_archived_refuses_the_folder_before_its_first_write(tmp_path: Path) -> None:
+    store, library = await _moved_past("human:owner")
+    await library.set_archived("wf.say-x.v4", archived=True)
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(3, STEPS_A[1]))})
+
+    with pytest.raises(WorkflowNotLiveError, match=r"say-x\.md holds wf\.say-x\.v3.*no newer version of it is live.*above 4") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert refused.value.workflow_id == "wf.say-x.v3"
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+
+
+async def test_a_file_whose_version_the_library_archived_is_skipped_with_that_reason_and_stays_archived(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    assert await library.revert("wf.say-x.v4") == "wf.say-x.v3"
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[2])), "two-step.md": WORKFLOW})
+
+    imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported == FolderImport(
+        written=("st.step_b.v1", "wf.two-step.v1"),
+        skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=4, reason="archived", newer_version=None),),
+    )
+    assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["st.step_b.v1", "wf.two-step.v1"]
+    card = await library.fetch_card("wf.say-x.v4")
+    assert card is not None
+    assert card.archived_at is not None

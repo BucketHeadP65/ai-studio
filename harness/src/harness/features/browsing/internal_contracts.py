@@ -75,12 +75,12 @@ class SavedVersionQueries(Protocol):
         ...
 
     async def fetch_card(self, workflow_id: str) -> SavedWorkflow | None:
-        """The card one version is saved under: its title, summary, applicability and presentation.
+        """The card one version is saved under: its title, summary, applicability, presentation and archive mark.
 
         Args:
-            workflow_id: A workflow version's id.
+            workflow_id: A workflow version's id, or a bare name for its newest live version.
 
         Returns:
-            The card, or None when no page has that id.
+            The card, or None when no page has that id, or no version of the bare name is live.
         """
         ...

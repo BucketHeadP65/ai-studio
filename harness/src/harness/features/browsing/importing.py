@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import yaml
 
 from core.ai.workflows.contracts import (
     DocumentError,
     StepVersionChangedError,
+    Workflow,
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
@@ -19,24 +20,21 @@ from core.ai.workflows.contracts import (
     verify_presentation,
     verify_savable,
 )
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from harness.features.browsing.exceptions import WorkflowCardChangedError, WorkflowVersionSupersededError
-from harness.features.browsing.step_locks import read_step_file
+from harness.features.browsing.exceptions import (
+    WorkflowCardChangedError,
+    WorkflowNotLiveError,
+    WorkflowVersionChangedError,
+    WorkflowVersionSupersededError,
+)
+from harness.features.browsing.step_locks import as_stored, read_step_file
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
     from pathlib import Path
 
-    from core.ai.workflows.contracts import (
-        InlineStep,
-        LibraryCollection,
-        SpecDocument,
-        StepDocument,
-        StepRegistry,
-        StepVersionQueries,
-        Workflow,
-    )
+    from core.ai.workflows.contracts import InlineStep, LibraryCollection, SpecDocument, StepDocument, StepRegistry, StepVersionQueries
 
     from harness.features.browsing.internal_contracts import SavedVersionQueries
 
@@ -53,15 +51,20 @@ _PRESENTATION = TypeAdapter(WorkflowPresentation | None)
 """Validates a workflow file's `presentation` frontmatter key: the author's own words, or none."""
 
 
+type SkipReason = Literal["moved_past", "archived"]
+"""Why the import wrote nothing for a workflow file: `moved_past_by` saved a newer version, or the library archived the file's version."""
+
+
 @dataclass(frozen=True)
 class SkippedWorkflowFile:
-    """A workflow file the import wrote nothing for, because the library holds a newer version saved by `moved_past_by`."""
+    """A workflow file the import wrote nothing for, and why."""
 
     file: Path
     version: int
     """The version the file declares."""
-    newer_version: int
-    """The library's newest live version of the workflow, the version to raise the file to."""
+    reason: SkipReason
+    newer_version: int | None
+    """The library's newest live version, the version to raise the file to, when the reason is `moved_past`. Otherwise None."""
 
 
 @dataclass(frozen=True)
@@ -73,7 +76,7 @@ class FolderImport:
 
     The reusable steps come first and then the workflows, each in sorted file order. A skipped file has no id here."""
     skipped: tuple[SkippedWorkflowFile, ...]
-    """Each workflow file skipped because the library holds a newer version saved by `moved_past_by`, in sorted file order."""
+    """Each workflow file the import wrote nothing for and why, in sorted file order."""
 
 
 @dataclass(frozen=True)
@@ -111,13 +114,15 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
     file there is saved with none, which removes any cases its version held. When it does not, every version keeps
     the cases it holds.
 
-    A workflow file whose version the library holds is compared with it before the first write. When the library's
-    newest live version of the workflow is higher, the file is skipped if `moved_past_by` saved that version, and
-    refuses the folder otherwise. When the library holds the file's workflow under the same title, description, body
-    and presentation, nothing is written for it, so the page keeps its lineage, its live trial marker and its consumer
-    record. The same workflow under other words refuses the folder.
+    A workflow file whose version the library holds is compared with it before the first write. An archived version is
+    skipped and stays archived. When the library's newest live version of the workflow is higher, the file is skipped if
+    `moved_past_by` saved that version, and refuses the folder otherwise. A superseded version with no newer live
+    version refuses the folder. Other content at the same version refuses the folder, and so does the same workflow
+    under another title, description, body or presentation. The same workflow under the same words is written only
+    when its stamp changed, and then only the stamp, so the page keeps its lineage, its live trial marker and its
+    consumer record.
 
-    Each workflow written is stamped with the fingerprint of the environment it was checked against,
+    Each workflow is stamped with the fingerprint of the environment it was checked against,
     exactly as a save to the library stamps one, so a later change to a step, an agent or a grant reads
     as drift here too.
 
@@ -145,6 +150,10 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
             than the file's, and someone other than `moved_past_by` saved it. Nothing is written.
         WorkflowCardChangedError: The library holds a workflow file's workflow at its version under another title,
             description, body or presentation. Nothing is written.
+        WorkflowVersionChangedError: The library holds a workflow file's version with other content, after the drop of
+            null values and empty lists and mappings the library applies. Nothing is written.
+        WorkflowNotLiveError: The library superseded a workflow file's version and no newer version is live. Nothing
+            is written.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
             file does not parse or `check_cases` refuses it. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
@@ -194,39 +203,42 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
     for ready_workflow, kept in zip(ready, held, strict=True):
         if isinstance(kept, SkippedWorkflowFile):
             continue
-        written.append(
-            kept
-            if kept is not None
-            else await library.put(
-                ready_workflow.workflow,
-                title=ready_workflow.title,
-                summary=ready_workflow.summary,
-                applicability=ready_workflow.applicability,
-                provenance={"saved_by": by},
-                fingerprint=fingerprint(ready_workflow.workflow, registry, environment=dict(environment or {})),
-                presentation=ready_workflow.presentation,
+        stamp = fingerprint(ready_workflow.workflow, registry, environment=dict(environment or {}))
+        if kept is None:
+            written.append(
+                await library.put(
+                    ready_workflow.workflow,
+                    title=ready_workflow.title,
+                    summary=ready_workflow.summary,
+                    applicability=ready_workflow.applicability,
+                    provenance={"saved_by": by},
+                    fingerprint=stamp,
+                    presentation=ready_workflow.presentation,
+                )
             )
-        )
+        else:
+            await library.restamp(kept, stamp)
+            written.append(kept)
     return FolderImport(written=tuple(written), skipped=tuple(kept for kept in held if isinstance(kept, SkippedWorkflowFile)))
 
 
 async def _held(ready: _ReadyWorkflow, library: SavedVersionQueries, *, moved_past_by: str) -> str | SkippedWorkflowFile | None:
-    """The id the library already holds the file under, the skip when `moved_past_by` moved past it, or None to write it."""
+    """The id of the unchanged version the library holds the file under, the skip, or None to write the file."""
     workflow = ready.workflow
     held_id = await library.locate(workflow.name, workflow.version)
-    if held_id is None:
+    card = None if held_id is None else await library.fetch_card(held_id)
+    if held_id is None or card is None:
         return None
-    newest_id = await library.current(held_id)
-    if newest_id != held_id:
-        newest_version = {version_id: version for version, version_id in await library.versions(workflow.name)}.get(newest_id, 0)
-        if newest_version > workflow.version:
-            saved_by = await library.saved_by(newest_id)
-            if saved_by == moved_past_by:
-                return SkippedWorkflowFile(file=ready.file, version=workflow.version, newer_version=newest_version)
-            raise WorkflowVersionSupersededError(ready.file, held_id, newest_id=newest_id, newest_version=newest_version, saved_by=saved_by)
-    card = await library.fetch_card(held_id)
-    if card is None or spec_identity(await library.fetch_workflow(held_id)) != spec_identity(workflow):
-        return None
+    if card.archived_at is not None:
+        return SkippedWorkflowFile(file=ready.file, version=workflow.version, reason="archived", newer_version=None)
+    if (moved_past := await _moved_past(ready, held_id, library, moved_past_by=moved_past_by)) is not None:
+        return moved_past
+    live = await library.fetch_card(workflow.name)
+    if live is None or live.id != held_id:
+        highest = max(version for version, _ in await library.versions(workflow.name))
+        raise WorkflowNotLiveError(ready.file, held_id, highest_version=highest)
+    if spec_identity(await library.fetch_workflow(held_id)) not in {spec_identity(workflow), _stored_address(workflow)}:
+        raise WorkflowVersionChangedError(ready.file, held_id)
     words = {
         "title": (ready.title, card.title),
         "description": (ready.summary, card.summary),
@@ -236,6 +248,28 @@ async def _held(ready: _ReadyWorkflow, library: SavedVersionQueries, *, moved_pa
     if differing := [name for name, (in_file, saved) in words.items() if in_file != saved]:
         raise WorkflowCardChangedError(ready.file, held_id, differing)
     return held_id
+
+
+async def _moved_past(ready: _ReadyWorkflow, held_id: str, library: SavedVersionQueries, *, moved_past_by: str) -> SkippedWorkflowFile | None:
+    """The skip when `moved_past_by` saved the newest live version above the file's, None when no live version is above it."""
+    newest_id = await library.current(held_id)
+    if newest_id == held_id:
+        return None
+    newest_version = {version_id: version for version, version_id in await library.versions(ready.workflow.name)}.get(newest_id, 0)
+    if newest_version <= ready.workflow.version:
+        return None
+    saved_by = await library.saved_by(newest_id)
+    if saved_by != moved_past_by:
+        raise WorkflowVersionSupersededError(ready.file, held_id, newest_id=newest_id, newest_version=newest_version, saved_by=saved_by)
+    return SkippedWorkflowFile(file=ready.file, version=ready.workflow.version, reason="moved_past", newer_version=newest_version)
+
+
+def _stored_address(workflow: Workflow) -> str | None:
+    """The content address of `workflow` as the library reads it back, or None when that no longer validates."""
+    try:
+        return spec_identity(Workflow.model_validate(as_stored(workflow.model_dump(mode="json"))))
+    except ValidationError:
+        return None
 
 
 def _step_cases(path: Path, document: StepDocument, check_cases: CaseCheck) -> Mapping[str, JsonValue] | None:

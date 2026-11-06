@@ -101,3 +101,47 @@ class WorkflowCardChangedError(LibraryError):
         """The version the file names."""
         self.fields = tuple(fields)
         """Each differing word, as the file names it."""
+
+
+class WorkflowVersionChangedError(LibraryError):
+    """A workflow file holds other content under a version the library holds, so the version would change in place.
+
+    The message names the file and the version and says to raise the version.
+    """
+
+    def __init__(self, file: Path, workflow_id: str) -> None:
+        """Name the file and the version, and say how to save the new content.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the version the file names.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id}, and the library holds that version with other content. The library keeps one "
+            f"workflow per version. Raise `version` in the workflow file and import again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The version the file names."""
+
+
+class WorkflowNotLiveError(LibraryError):
+    """A workflow file names a version the library superseded, and no newer version of its workflow is live.
+
+    The message names the file and the version and says how to import the file.
+    """
+
+    def __init__(self, file: Path, workflow_id: str, *, highest_version: int) -> None:
+        """Name the file and the version, and say how to import the file.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the version the file names.
+            highest_version: The highest version of the workflow the library holds, live, superseded or archived.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id}, which the library has superseded, and no newer version of it is live because "
+            f"the newer ones are archived. Restore the newer version in the library, or raise `version` in the file above "
+            f"{highest_version} to save its content as a new version, then import again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The version the file names."""

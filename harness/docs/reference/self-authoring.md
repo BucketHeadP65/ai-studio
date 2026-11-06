@@ -167,14 +167,19 @@ when a step file in the repository no longer matches its folder's lock, so every
 
 The import compares each workflow file whose version the library holds with that version before it writes anything.
 
+- **An archived version.** The import writes nothing for the file, the version stays archived, and it prints
+  `skipped <file> (version <n>)` saying the library archived it.
 - **A version the library moved past.** When the newest live version of the workflow is higher than the file's and
   step maintenance (`agent:step-maintenance`) saved it, the import writes nothing for the file and prints
   `skipped <file> (version <n>)` with the version to raise the file to. The rest of the folder is written. When anyone
-  else saved the newer version, `WorkflowVersionSupersededError` refuses the whole folder.
-- **The same version, unchanged.** When the library holds the file's workflow (the same content address) under the
-  same title, description, body and presentation, the import writes nothing for it, so the page keeps its lineage,
-  its live trial marker and its consumer record. A changed title, description, body or presentation at an unchanged
-  version refuses the whole folder with `WorkflowCardChangedError`, which says to raise `version` in the workflow file.
+  else saved the newer version, `WorkflowVersionSupersededError` refuses the whole folder. When the file's version is
+  superseded and every newer version is archived, `WorkflowNotLiveError` refuses it.
+- **The same version, unchanged.** When the library holds the file's workflow (the same content address, after the
+  library drops null values and empty lists and mappings) under the same title, description, body and presentation,
+  the import writes only a changed environment stamp, so the page keeps its lineage, its live trial marker and its
+  consumer record. Other content at an unchanged version refuses the whole folder with `WorkflowVersionChangedError`,
+  and a changed title, description, body or presentation with `WorkflowCardChangedError`. Both say to raise `version`
+  in the workflow file.
 
 ### A turn that only designs starts nothing
 

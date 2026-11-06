@@ -243,8 +243,9 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
     """Open the library and the registry once and import the folder at `path` into the library.
 
     Each workflow is stamped with this host's environment and the registry it was checked against.
-    Each step's case file is checked as its case run would check it. A workflow file whose version step maintenance
-    moved past in the library is skipped. One refused file refuses the whole folder, and nothing is written.
+    Each step's case file is checked as its case run would check it. A workflow file whose version the library archived,
+    or whose version step maintenance moved past, is skipped. One refused file refuses the whole folder, and nothing is
+    written.
 
     Args:
         path: A folder holding `steps/` and `workflows/` files.
@@ -262,6 +263,8 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
         WorkflowVersionSupersededError: The library moved past a workflow file's version with a version step
             maintenance did not save.
         WorkflowCardChangedError: The library holds a workflow file's workflow at its version under other words.
+        WorkflowVersionChangedError: The library holds a workflow file's version with other content.
+        WorkflowNotLiveError: The library superseded a workflow file's version and archived every newer one.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
             file is refused. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
@@ -294,8 +297,8 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
 def import_files(path: str = typer.Argument(..., help="A directory holding steps/ and workflows/ files.")) -> None:
     """Import a folder of workflow and step files into the library, steps first, then the workflows that use them.
 
-    It prints each id the library holds from the folder, then each workflow file it skipped because step maintenance
-    saved a newer version of that workflow in the library, with the version to raise the file to.
+    It prints each id the library holds from the folder, then each workflow file it skipped: one whose version the library
+    archived, and one whose workflow step maintenance saved a newer version of, with the version to raise the file to.
     """
     import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
@@ -305,10 +308,13 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
     for written in imported.written:
         typer.echo(written)
     for skipped in imported.skipped:
-        typer.echo(
-            f"skipped {skipped.file} (version {skipped.version}): step maintenance saved version {skipped.newer_version} in the "
-            f"library. Raise the file to version {skipped.newer_version}."
-        )
+        if skipped.reason == "archived":
+            typer.echo(f"skipped {skipped.file} (version {skipped.version}): the library archived version {skipped.version}, so it stays archived.")
+        else:
+            typer.echo(
+                f"skipped {skipped.file} (version {skipped.version}): step maintenance saved version {skipped.newer_version} in the "
+                f"library. Raise the file to version {skipped.newer_version}."
+            )
 
 
 @steps_app.command(name="lock")

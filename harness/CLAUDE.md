@@ -143,7 +143,10 @@ no longer matches it, and the verb refuses a step whose content changed while it
 `harness import` refuses the same thing against the library, before it writes anything. The verb, the test and
 the import all refuse a step the library would read back different (one holding a null value or an empty list or
 mapping). The import also carries a step's cases from `evals/<step name with hyphens>.yaml` into the library and
-refuses a case file the step's case run would refuse.
+refuses a case file the step's case run would refuse. A changed workflow file (its workflow, title, description, body
+or presentation) needs a higher `version` too, or the import refuses the folder. The import skips and names a
+workflow file whose version the library archived, and one whose version step maintenance moved past, with the
+version to raise it to.
 
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes
