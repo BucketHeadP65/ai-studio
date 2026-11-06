@@ -159,10 +159,11 @@ A rejection sends the plan back to the planner with that feedback and re-runs ev
 plan is judged on evidence made after it. The third rejection ends the run with nothing landed, which raises a
 maintenance flag per changed step. The second pass reads the library and the evidence log again, and runs again the
 cases of a step version whose first case report held an errored case, since such a report is not kept, one model call
-per case. `land_changes` merges the approved decisions into the plan
-`prepare_plan` drafted, a change no decision names writing nothing so a later run for its step offers it again, then saves each adoption as the
-consumer's next version on live trial, declines each kept copy and flags each flagged pair, landing every writable
-change before it fails naming each refusal. Only then do `report_changes` and the repository
+per case. `land_changes` merges the approved decisions into the plan `prepare_plan` drafted, a change no decision
+names writing nothing so a later run for its step offers it again. It declines each kept copy, saves every adoption
+into one consumer as that consumer's one next version on a live trial covering each adopted step, and flags each
+flagged pair. It lands every writable change, and when it refused any it tells the owner in one notice what landed,
+was kept, flagged and refused before it fails naming each refusal. Only then do `report_changes` and the repository
 branch start: one drafter per step whose consumers split, one judge per draft, and the hand-over, which writes each
 kept draft as a maintenance flag for a coding agent and answers for the run.
 
