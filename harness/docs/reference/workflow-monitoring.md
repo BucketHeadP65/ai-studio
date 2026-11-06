@@ -1424,6 +1424,35 @@ refusal when it would not, saving nothing. It still checks any edit a drafted re
 wrote reaches a flag page inside a fenced block with each `%%` written `% %`, so a heading or a `%%` in a reason or a
 drafted file never cuts the page.
 
+## The step-maintenance workflow
+
+`harness/workflows/workflows/step-maintenance.md` (v1) puts the steps above in one graph. Its one parameter,
+`changed_step_ids`, is what the `on step change` schedule fires it with. Its four model steps are reusable steps in
+`harness/workflows/steps/`, each with its case file in `harness/workflows/evals/`:
+
+| Step | Node | What it does |
+|---|---|---|
+| `plan_changes` | `plan_changes`, orchestrator tier | The planner. It takes `draft` from `prepare_plan` and `consumers` from `list_consumers`, and answers in `prepare_plan`'s type with a disposition and a reason per change and the edits an adoption needs (`rewire`, `add_parameter`, `set_output`), after checking every adoption with `check_change`. A rejection reaches it as a user message carrying the plan it answered and the judge's feedback. |
+| `judge_plan` | `judge_plan`, judge gate, `max_attempts: 3`, `rejected_to: plan_changes` | Marks each change pass or fail against its consumer's goal and the evidence, one feedback line per change, and answers approve, reject or cannot judge. An empty plan is approved when no consumer needs a change. Under gate mode `auto` a cannot judge is a rejection. |
+| `draft_repository_change` | the map `draft_repository_changes` over `select_disagreements`, `on_error: skip` | One drafter per step whose consumers split, drafting a parameter the consumers set differently or a split into two steps, checked with `check_change`. |
+| `judge_repository_change` | the map `judge_repository_changes` over the drafts, `on_error: skip` | One judge per draft, apart from the drafter, answering keep or drop with its reason. |
+
+The order: `list_consumers`, then `check_contracts` beside `run_step_cases`, then `prepare_plan` and the planner. Once
+the plan exists, `pass_changed_ids` (a program) hands the run's own `changed_step_ids` to `relist_consumers`,
+`recheck_contracts` and `rerun_step_cases`, the same registered steps run again, and the judge reads their answers. A
+rejection re-runs only the planner and what follows it, and a node after the gate cannot wait on one the rejection does
+not re-run, so the judge's evidence is made again after each plan and never comes from the planner's copy (technical
+debt TD-83). Then `land_changes`, and only after it `report_changes`, `select_disagreements`, the two maps and
+`hand_over_repository_changes`, the workflow's output. The declared result names `land_changes` as its primary work and
+requires `judge_plan` decided by a judge, so a run whose landing refused anything never reads as succeeded.
+
+`judge-plan.yaml` is graded by `OutcomeMatches`, `judge-repository-change.yaml` by `Contains` on the verdict's
+`decision`, and `plan-changes.yaml` and `draft-repository-change.yaml` by `LLMJudge` rubrics naming the model
+`gateway/openai:gpt-5.4`. `harness evals run` performs only `judge_plan`'s cases today: the other three steps answer in a
+registered step's type (`like`), which that runner refuses, and a step maintenance case run gives them a report with no
+cases. The planner's cases call `check_change`, which reads the library the case run reads, so its consumers must be
+there.
+
 ## What hears a run's ending
 
 Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells

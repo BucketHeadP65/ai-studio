@@ -1,0 +1,294 @@
+cases:
+- name: one consumer gains from the new version and the other loses what it is for
+  inputs:
+    draft:
+      changes:
+      - workflow_id: wf.meeting-actions.v1
+        step_id: st.extract_actions.v3
+        disposition: keep
+        reason: not yet decided
+        extra_ops: []
+        check:
+          workflow_id: wf.meeting-actions.v1
+          step_id: st.extract_actions.v3
+          passed: true
+          issues: []
+        cases:
+        - step_id: st.extract_actions.v3
+          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+        - step_id: st.extract_actions.v2
+          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+      - workflow_id: wf.standup-actions.v1
+        step_id: st.extract_actions.v3
+        disposition: keep
+        reason: not yet decided
+        extra_ops: []
+        check:
+          workflow_id: wf.standup-actions.v1
+          step_id: st.extract_actions.v3
+          passed: true
+          issues: []
+        cases:
+        - step_id: st.extract_actions.v3
+          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+        - step_id: st.extract_actions.v2
+          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+      left_for_next_run: []
+    consumers:
+      pairs:
+      - workflow_id: wf.meeting-actions.v1
+        workflow: meeting-actions
+        title: Meeting actions
+        step: extract_actions
+        step_id: st.extract_actions.v3
+        step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
+        state: behind
+        held_step_id: st.extract_actions.v2
+        nodes:
+        - extract
+        diff: |-
+          --- wf.meeting-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Send the team each meeting's action items with who owns each one, so every item has someone to chase it.
+          produces: One message to the team listing each action item and its owner.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: After each meeting, tell the team what was agreed and who is doing it.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+        trust_level: machine-confirmed
+        trust:
+          runs_with_evidence: 4
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: '2026-11-02T08:00:00Z'
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+        total_trust:
+          runs_with_evidence: 4
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: '2026-11-02T08:00:00Z'
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+      - workflow_id: wf.standup-actions.v1
+        workflow: standup-actions
+        title: Standup actions
+        step: extract_actions
+        step_id: st.extract_actions.v3
+        step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
+        state: behind
+        held_step_id: st.extract_actions.v2
+        nodes:
+        - extract
+        diff: |-
+          --- wf.standup-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Keep every action item raised in the daily standup, owned or not, so nothing raised is lost before the
+            weekly review.
+          produces: A running list of every item raised at standup, owned or not.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: Keep a list of everything raised at standup so the weekly review can give the unowned ones an owner.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+        trust_level: unverified
+        trust:
+          runs_with_evidence: 0
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: null
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+        total_trust:
+          runs_with_evidence: 0
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: null
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+      left_for_next_run: []
+      dropped: 0
+  evaluators:
+  - LLMJudge:
+      rubric: The plan holds two changes, in the draft's order. wf.standup-actions.v1 is keep or flag, never adopt, and its
+        reason says the new version leaves out items nobody owns, which the standup list must keep. wf.meeting-actions.v1
+        is adopt, with a reason naming the owners the team message needs, or flag with a reason saying check_change could
+        not check it. No reason says "not yet decided". workflow_id, step_id, check, cases and left_for_next_run are exactly
+        as in the draft, and no change carries extra_ops.
+      model: gateway/openai:gpt-5.4
+      include_input: true
+- name: the new version needs an input the consumer's node does not have
+  inputs:
+    draft:
+      changes:
+      - workflow_id: wf.board-actions.v1
+        step_id: st.extract_actions.v3
+        disposition: keep
+        reason: not yet decided
+        extra_ops: []
+        check:
+          workflow_id: wf.board-actions.v1
+          step_id: st.extract_actions.v3
+          passed: false
+          issues:
+          - '[input_mismatch] extract: work ''extract_actions'' requires unwired inputs: attendees'
+        cases:
+        - step_id: st.extract_actions.v3
+          step_hash: a7928a87f71cb79e18449ea5477216d8120d4811a5b84e90936bd15b13c24ee5
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+        - step_id: st.extract_actions.v2
+          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
+          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+          results: []
+          blocked_by: null
+          no_cases: true
+          stand_in_calls: 0
+          refused: null
+      left_for_next_run: []
+    consumers:
+      pairs:
+      - workflow_id: wf.board-actions.v1
+        workflow: board-actions
+        title: Board actions
+        step: extract_actions
+        step_id: st.extract_actions.v3
+        step_hash: a7928a87f71cb79e18449ea5477216d8120d4811a5b84e90936bd15b13c24ee5
+        state: behind
+        held_step_id: st.extract_actions.v2
+        nodes:
+        - extract
+        diff: |-
+          --- wf.board-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -1,8 +1,11 @@
+           inputs:
+          +  attendees:
+          +    json_schema:
+          +      type: string
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and the attendee list and list every action item agreed, one line each, naming its owner from the attendees.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: List the follow-ups the board agreed, each with its owner, for the minutes.
+          produces: The follow-up list the minutes carry.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: Pull the board's follow-ups out of the meeting transcript for the minutes.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+        trust_level: machine-confirmed
+        trust:
+          runs_with_evidence: 2
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: '2026-11-02T08:00:00Z'
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+        total_trust:
+          runs_with_evidence: 2
+          unconfirmed_runs: 0
+          failed_runs: 0
+          last_evidence_at: '2026-11-02T08:00:00Z'
+          approved_by: []
+          structural_grades: 0
+          structural_mean: null
+          structural_last: null
+      left_for_next_run: []
+      dropped: 0
+  evaluators:
+  - LLMJudge:
+      rubric: The plan holds one change, for wf.board-actions.v1, and it is flag or keep, never adopt, because the new version
+        needs an attendees input the consumer's node does not take, and an adoption may only rewire an input the node already
+        has, add a parameter or set the output. Its reason says what the owner has to decide or what the consumer keeps. workflow_id,
+        step_id, check, cases and left_for_next_run are exactly as in the draft.
+      model: gateway/openai:gpt-5.4
+      include_input: true

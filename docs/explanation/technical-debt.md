@@ -249,3 +249,22 @@ TD-46 onward came from the close of the code standard refactor on
 - **Paying it off:** strip comments only outside fenced blocks and inline code, from the markdown-it tokens the parser already
   builds, and keep the trailing whitespace strip apart from it.
 - **Found:** 2026-11-05, in the review of the change that writes maintenance flags into the library.
+
+## TD-83. The plan judge's evidence is read a second time after the planner
+
+- **Where:** `harness/workflows/workflows/step-maintenance.md` (`pass_changed_ids`, `relist_consumers`,
+  `recheck_contracts`, `rerun_step_cases`) and the validator's rule in `core/src/core/ai/workflows/domain/validator.py`
+  (`_check_rewinds_into_joins`).
+- **What is wrong:** a gate's rejection re-runs `rejected_to` and everything after it, and the validator refuses a node
+  behind the gate that waits on a producer the rewind would not re-run, because that wait would never be met again. The
+  plan judge must send its rejection to the planner, so it cannot read the evidence from `list_consumers`,
+  `check_contracts` and `run_step_cases`, which come before the planner. The workflow runs those three steps a second time
+  after the planner, from the run's own `changed_step_ids`, and the judge reads that second pass.
+- **Why it is debt:** the evidence is computed twice per attempt for no reason but the rewind rule, and the graph carries
+  four nodes, one of them a program, that exist only to satisfy it.
+- **Cost while it stands:** one extra pass of library and evidence log reads per judge attempt, three at most, and no
+  model call, since a kept case report is not run again. A person saving a consumer between the two passes makes the
+  judge see a pair the plan lacks, so it rejects, and the landing would have refused that pair anyway.
+- **Paying it off:** let a rewind reuse the kept outputs of the producers outside the rewound region when it re-enters a
+  wait, then wire the judge straight from the three evidence nodes and delete the second pass.
+- **Found:** 2026-11-06, writing the `step-maintenance` workflow, whose plan judge the validator refused.

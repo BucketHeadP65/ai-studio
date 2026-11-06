@@ -39,6 +39,7 @@ from harness.adapters.environment import code_runner
 from harness.domain.ports import JUDGE_TOOLS
 from harness.features.selfauthoring.skills_plugin import registry_skill_names
 from tests.support.grants import app_grants, app_reads
+from tests.support.maintenance import register_maintenance_steps
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Collection, Mapping
@@ -64,6 +65,7 @@ WORKFLOWS = (
     "news-digest",
     "news-link",
     "news-relate",
+    "step-maintenance",
 )
 
 _WORKFLOW_DIR = {
@@ -78,8 +80,9 @@ _WORKFLOW_DIR = {
     "news-digest": NEWS_WORKFLOWS,
     "news-link": NEWS_WORKFLOWS,
     "news-relate": NEWS_WORKFLOWS,
+    "step-maintenance": WORKFLOW_FILES,
 }
-"""Where each shipped workflow's own directory lives: its template, or `harness/workflows` for the one that stays."""
+"""Where each shipped workflow's own directory lives: its template, or `harness/workflows` for the ones that stay."""
 
 
 def _step_documents() -> list[StepDocument]:
@@ -192,7 +195,7 @@ async def _decide_gate(gate_id: str, charge: str, value: object, /) -> GateDecis
 
 
 async def _registry(run_code: CodeRunner) -> StepRegistry:
-    """A registry offering exactly what this app offers, plus the one host step the library's workflows name."""
+    """A registry offering exactly what this app offers, the step maintenance steps, and the host step the library's workflows name."""
     grantable = await app_grants()
     registry = StepRegistry(
         perform=_perform,
@@ -206,6 +209,7 @@ async def _registry(run_code: CodeRunner) -> StepRegistry:
         return f"{written} in {collection}"
 
     registry.register(notify_owner, name="notify_owner", replay_safe=False)
+    register_maintenance_steps(registry)
     return registry
 
 
@@ -258,6 +262,10 @@ async def test_every_step_file_loads_and_asks_only_for_tools_this_app_offers() -
         "judge_proposal",
         "write_stances",
         "write_stance_flags",
+        "plan_changes",
+        "judge_plan",
+        "draft_repository_change",
+        "judge_repository_change",
     }
     offered = set(await app_grants())
     for step in steps.values():

@@ -1,0 +1,334 @@
+cases:
+- name: a parameter that lets each consumer keep what it is for
+  inputs:
+    draft:
+      step: extract_actions
+      step_id: st.extract_actions.v3
+      adopted:
+      - workflow_id: wf.meeting-actions.v1
+        outcome: adopted
+        reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.meeting-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Send the team each meeting's action items with who owns each one, so every item has someone to chase it.
+          produces: One message to the team listing each action item and its owner.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: After each meeting, tell the team what was agreed and who is doing it.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      kept:
+      - workflow_id: wf.standup-actions.v1
+        outcome: kept
+        reason: The new version leaves out items nobody owns, and the standup list must keep every item raised until the weekly
+          review gives it an owner.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.standup-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Keep every action item raised in the daily standup, owned or not, so nothing raised is lost before the
+            weekly review.
+          produces: A running list of every item raised at standup, owned or not.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: Keep a list of everything raised at standup so the weekly review can give the unowned ones an owner.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      proposal: Give extract_actions a keep_unowned parameter. wf.meeting-actions.v1 sets it false and keeps the owners its
+        team message is for. wf.standup-actions.v1 sets it true and keeps every item raised, unowned ones marked, so the weekly
+        review can give them an owner.
+      step_files:
+      - path: steps/extract-actions.md
+        text: |
+          ---
+          title: Extract action items
+          summary: Lists every action item a meeting agreed, with its owner and due date, keeping or leaving out items nobody owns.
+          version: 4
+          step:
+            name: extract_actions
+            instructions: |-
+              Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it
+              is due. When keep_unowned is true, keep an item nobody owns and mark it unowned. When it is false, leave it out.
+            inputs:
+              transcript: {json_schema: {type: string}}
+              keep_unowned: {json_schema: {type: boolean}}
+            output: {json_schema: {type: string}}
+          ---
+
+          Use to pull the action items out of one meeting's transcript. Set keep_unowned for a list that must keep every item raised.
+      file_edits:
+      - path: workflows/meeting-actions.md
+        text: |2
+            parameters:
+              keep_unowned:
+                description: Whether the list keeps an action item nobody owns.
+                json_schema: {type: boolean, default: false}
+                required: false
+            nodes:
+              - kind: run
+                id: extract
+                work: extract_actions
+                inputs: {transcript: {parameter: transcript}, keep_unowned: {parameter: keep_unowned}}
+      - path: workflows/standup-actions.md
+        text: |2
+            parameters:
+              keep_unowned:
+                description: Whether the list keeps an action item nobody owns.
+                json_schema: {type: boolean, default: true}
+                required: false
+            nodes:
+              - kind: run
+                id: extract
+                work: extract_actions
+                inputs: {transcript: {parameter: transcript}, keep_unowned: {parameter: keep_unowned}}
+  evaluators:
+  - Contains:
+      value:
+        decision: keep
+- name: a step file that does not do what the proposal says
+  inputs:
+    draft:
+      step: extract_actions
+      step_id: st.extract_actions.v3
+      adopted:
+      - workflow_id: wf.meeting-actions.v1
+        outcome: adopted
+        reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.meeting-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Send the team each meeting's action items with who owns each one, so every item has someone to chase it.
+          produces: One message to the team listing each action item and its owner.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: After each meeting, tell the team what was agreed and who is doing it.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      kept:
+      - workflow_id: wf.standup-actions.v1
+        outcome: kept
+        reason: The new version leaves out items nobody owns, and the standup list must keep every item raised until the weekly
+          review gives it an owner.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.standup-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Keep every action item raised in the daily standup, owned or not, so nothing raised is lost before the
+            weekly review.
+          produces: A running list of every item raised at standup, owned or not.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: Keep a list of everything raised at standup so the weekly review can give the unowned ones an owner.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      proposal: Give extract_actions a parameter so wf.standup-actions.v1 keeps every item raised and wf.meeting-actions.v1
+        names owners.
+      step_files:
+      - path: steps/extract-actions.md
+        text: |
+          ---
+          title: Extract action items
+          summary: Lists every action item a meeting agreed, with its owner and due date, keeping or leaving out items nobody owns.
+          version: 4
+          step:
+            name: extract_actions
+            instructions: |-
+              Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it
+              is due. Leave out an item nobody owns.
+            inputs:
+              transcript: {json_schema: {type: string}}
+              keep_unowned: {json_schema: {type: boolean}}
+            output: {json_schema: {type: string}}
+          ---
+
+          Use to pull the action items out of one meeting's transcript. Set keep_unowned for a list that must keep every item raised.
+      file_edits:
+      - path: workflows/meeting-actions.md
+        text: |2
+            parameters:
+              keep_unowned:
+                description: Whether the list keeps an action item nobody owns.
+                json_schema: {type: boolean, default: false}
+                required: false
+            nodes:
+              - kind: run
+                id: extract
+                work: extract_actions
+                inputs: {transcript: {parameter: transcript}, keep_unowned: {parameter: keep_unowned}}
+      - path: workflows/standup-actions.md
+        text: |2
+            parameters:
+              keep_unowned:
+                description: Whether the list keeps an action item nobody owns.
+                json_schema: {type: boolean, default: true}
+                required: false
+            nodes:
+              - kind: run
+                id: extract
+                work: extract_actions
+                inputs: {transcript: {parameter: transcript}, keep_unowned: {parameter: keep_unowned}}
+  evaluators:
+  - Contains:
+      value:
+        decision: drop
+- name: a draft with nothing drafted
+  inputs:
+    draft:
+      step: extract_actions
+      step_id: st.extract_actions.v3
+      adopted:
+      - workflow_id: wf.meeting-actions.v1
+        outcome: adopted
+        reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.meeting-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Send the team each meeting's action items with who owns each one, so every item has someone to chase it.
+          produces: One message to the team listing each action item and its owner.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: After each meeting, tell the team what was agreed and who is doing it.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      kept:
+      - workflow_id: wf.standup-actions.v1
+        outcome: kept
+        reason: The new version leaves out items nobody owns, and the standup list must keep every item raised until the weekly
+          review gives it an owner.
+        nodes:
+        - extract
+        diff: |-
+          --- wf.standup-actions.v1 extract_actions
+          +++ st.extract_actions.v3
+          @@ -2,7 +2,7 @@
+             transcript:
+               json_schema:
+                 type: string
+          -instructions: Read the meeting transcript and list every action item agreed, one line each.
+          +instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+           name: extract_actions
+           output:
+             json_schema:
+        presentation:
+          purpose: Keep every action item raised in the daily standup, owned or not, so nothing raised is lost before the
+            weekly review.
+          produces: A running list of every item raised at standup, owned or not.
+          owner_participation: ''
+          not_for: ''
+          inputs: []
+          result_fields: []
+          actions: []
+        intent:
+          request: Keep a list of everything raised at standup so the weekly review can give the unowned ones an owner.
+          expected_result: ''
+          success_example: ''
+          empty_input_behavior: ''
+          failure_behavior: ''
+          trigger: manual
+          assumptions: []
+      proposal: ''
+      step_files: []
+      file_edits: []
+  evaluators:
+  - Contains:
+      value:
+        decision: drop
