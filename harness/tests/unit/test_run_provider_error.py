@@ -21,6 +21,7 @@ from pydantic_ai.exceptions import (
 )
 from pydantic_ai.messages import RetryFeedbackCause, RetryFeedbackPart, RetryInfo
 
+from harness.features.maintenance.contracts import LandingRefusedError, LandingReport
 from harness.features.running import service
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.runtime import a_runtime
@@ -101,7 +102,11 @@ async def test_a_run_stopped_by_its_model_provider_says_so(tmp_path: Path, raise
         pytest.param(lambda: ModelHTTPError(401, "gpt"), id="HTTP 401"),
         pytest.param(lambda: _out_of_output_retries("validation_error"), id="output retries run out on a real answer"),
         pytest.param(lambda: UnexpectedModelBehavior("Exceeded maximum output retries (1)"), id="output retries with no cause"),
-        pytest.param(lambda: ValueError("the landing refused a change"), id="a refusal inside the run"),
+        pytest.param(lambda: ValueError("the change does not validate"), id="a validation error inside the run"),
+        pytest.param(
+            lambda: LandingRefusedError(LandingReport(changes=[], left_for_next_run=[], left_to_repository=[]), told="The owner was told."),
+            id="a landing refusal",
+        ),
     ],
 )
 async def test_a_run_that_failed_for_any_other_reason_is_no_provider_error(tmp_path: Path, raised: Callable[[], BaseException]) -> None:
