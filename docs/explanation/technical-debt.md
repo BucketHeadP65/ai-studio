@@ -307,3 +307,20 @@ TD-46 onward came from the close of the code standard refactor on
 - **Paying it off:** find the tests that leave spans open (bisect by running the unit tier with one integration module at
   a time) and end their spans, or shut logfire down in a session-scoped fixture before pytest closes its streams.
 - **Found:** 2026-11-06, the full suites at the close of the reusable step maintenance initiative.
+
+## TD-86. A failed step-maintenance fire drops the step versions it was fired for
+
+- **Where:** `harness/src/harness/features/scheduling/service.py`, which clears a schedule's pending step ids when it fires,
+  and `harness/src/harness/features/maintenance/service/failed_fires.py`, which tells the owner a scheduled run failed.
+- **What is wrong:** the `on step change` schedule clears the ids it collected the moment it fires. When that run fails for a
+  cause outside maintenance (a provider refusal, a lost connection), nothing plans those step versions again until a newer
+  version of the same step arrives or someone runs `step-maintenance` by hand with the ids. The failed-fire notice does not
+  name the ids.
+- **Why it is debt:** the schedule exists so no step version waits on a person, and one provider refusal undoes that.
+- **Cost while it stands:** the first live fire (2026-11-06, run `20261106T075142585876-9a873496`) failed when Azure's
+  content filter refused the plan judge's thinking-only reply as self harm at medium severity, on an empty plan. A run by
+  hand with the same ids completed (`20261106T075434434115-fd12b74a`).
+- **Paying it off:** put the fired ids back on the schedule when a fire ends failed for a cause outside the steps (the run's
+  failure is a model or connection error), once per id set, or have the failed-fire notice name the ids and the run to
+  start by hand.
+- **Found:** 2026-11-06, watching the first scheduled step-maintenance run.
