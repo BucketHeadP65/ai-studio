@@ -1438,9 +1438,10 @@ four parts in turn, and a part that fails is logged while the next is still told
    `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
    and the owner is told. A version that is no longer the newest live one of its name, because a person saved a newer
    one, is never reverted.
-3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per id in
-   `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
-   `max_attempts`, which is how a run ends with nothing landed.
+3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per step
+   named in `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
+   `max_attempts`, which is how a run ends with nothing landed. The flag is about the newest saved version of the step,
+   the version the run planned, whichever version the id names.
 4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
    starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
    status is failed tells the owner too, as a live trial reads a failed run. A run started by hand tells nobody.

@@ -60,6 +60,7 @@ from harness.features.maintenance.domain import (
     one_line,
 )
 from harness.features.maintenance.exceptions import LandingRefusedError
+from harness.features.maintenance.service.changed_steps import newest_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -448,15 +449,11 @@ class MaintenanceSteps:
 
     async def _changed(self, changed_step_ids: str) -> _Changed:
         """Each named step at its newest saved version, by step name, refused when an id names no saved version."""
-        saved_of: dict[str, tuple[StepVersion, ...]] = {}
+        taken: dict[str, tuple[StepVersion, tuple[StepVersion, ...]]] = {}
         for step_id in changed_ids(changed_step_ids):
-            name = (await self._library.fetch_step(step_id)).name
-            saved = saved_of.get(name) or await self._library.step_versions(name)
-            if not any(each.step_id == step_id for each in saved):
-                msg = f"{step_id} is not a saved version of the reusable step {name}"
-                raise LibraryError(msg)
-            saved_of[name] = saved
-        return tuple((max(saved_of[name], key=lambda each: each.version), saved_of[name]) for name in sorted(saved_of))
+            newest, saved = await newest_version(step_id, fetch_step=self._library.fetch_step, step_versions=self._library.step_versions)
+            taken[newest.name] = (newest, saved)
+        return tuple(taken[name] for name in sorted(taken))
 
     async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], int]:
         """The behind or diverged consumers within the cap, those past it, and how many current or declined ones were dropped."""
