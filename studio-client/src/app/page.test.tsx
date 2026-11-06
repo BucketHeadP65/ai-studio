@@ -4,9 +4,16 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it, vi } from "vitest";
 
 import type { RunView } from "@/api/sessions-types";
-import type { GraphNode, LibraryEntry, RunEnvelope, WorkflowGraph } from "@/api/studio-types";
+import type {
+  GraphNode,
+  LibraryEntry,
+  MaintenanceFlag,
+  RunEnvelope,
+  WorkflowGraph,
+} from "@/api/studio-types";
 import { server } from "@/shared/test-support/msw/server";
 import { render } from "@/shared/test-support/render";
+import { maintenanceFlag } from "@/test-support/factories/flags";
 import { singleVersionTrust } from "@/test-support/factories/trust";
 
 const routerPush = vi.fn();
@@ -17,8 +24,8 @@ vi.mock("next/navigation", () => ({
 // Imported after the mock so the cards see the mocked module.
 import HomePage from "./page";
 
-// Home's whole network surface: the live pool, the saved workflows, and the newest ended runs.
-// MSW errors on anything else, so a request this screen should not be making fails the test rather
+// Home's whole network surface: the live pool, the saved workflows, the newest ended runs, and the
+// library's open maintenance flags. MSW errors on anything else, so a request this screen should not be making fails the test rather
 // than reaching a backend. Setting a workflow up adds that workflow's own detail and the three
 // calls a launch makes, and nothing here fetches a graph for a card.
 
@@ -124,9 +131,11 @@ interface MountOptions {
   runs?: RunView[];
   recent?: RunEnvelope[];
   library?: LibraryEntry[];
+  flags?: MaintenanceFlag[];
   runsStatus?: number;
   recentStatus?: number;
   libraryStatus?: number;
+  flagsStatus?: number;
   graph?: WorkflowGraph;
 }
 
@@ -174,9 +183,20 @@ const DEFAULT_GRAPH: WorkflowGraph = {
   edges: [],
 };
 
-function mountApi(options: MountOptions = {}) {
+// Answers every read Home makes, and records the status each flags read asked for.
+function mountApi(options: MountOptions = {}): { flagStatuses: (string | null)[] } {
   const graph = options.graph ?? DEFAULT_GRAPH;
+  const flagStatuses: (string | null)[] = [];
   server.use(
+    http.get(`${BASE}/api/library/flags`, ({ request }) => {
+      flagStatuses.push(new URL(request.url).searchParams.get("status"));
+      return options.flagsStatus
+        ? HttpResponse.json(
+            { ok: false, message: "The flag page mf.diverged.weekly-sweep.compose does not parse." },
+            { status: options.flagsStatus },
+          )
+        : HttpResponse.json({ flags: options.flags ?? [] });
+    }),
     http.get(`${BASE}/api/runs`, () =>
       options.runsStatus
         ? HttpResponse.json({ detail: "the run pool is unreachable" }, { status: options.runsStatus })
@@ -196,6 +216,31 @@ function mountApi(options: MountOptions = {}) {
       HttpResponse.json(workflowDetail(String(params.id), graph)),
     ),
   );
+  return { flagStatuses };
+}
+
+// One run waiting at a gate, named so a test can find its card.
+function waitingRun(runTitle: string): RunView {
+  return runViewFixture({
+    started_at: "",
+    session_id: "s-gate",
+    run_title: runTitle,
+    state: "waiting",
+    waiting_at: "review",
+    gate: {
+      gate_id: "review",
+      workflow: "wf.weekly-sweep.v2",
+      reviewing: "{}",
+      rejection_reruns: "compose",
+    },
+  });
+}
+
+// The list item holding the text, narrowed rather than cast.
+function cardHolding(text: HTMLElement): HTMLElement {
+  const card = text.closest("li");
+  if (!(card instanceof HTMLElement)) throw new Error("the text sits in no card");
+  return card;
 }
 
 describe("Home names itself and leads with starting an automation", () => {
@@ -346,6 +391,7 @@ describe("Home says what an empty shelf is for", () => {
   });
 
   it("keeps every string it writes to plain punctuation and borrows no vocabulary", async () => {
+    const flag = maintenanceFlag({ proposed_change: "Add a length parameter to compose." });
     mountApi({
       library: [libraryEntryFixture({ summary: "" })],
       runs: [
@@ -366,13 +412,15 @@ describe("Home says what an empty shelf is for", () => {
         }),
       ],
       recent: [runEnvelopeFixture({ run_title: "The sweep before that" })],
+      flags: [flag],
     });
     const { container } = render(<HomePage />);
     await screen.findByText("The sweep before that");
+    await screen.findByText(flag.summary);
 
     // Everything a reader can read except what the backend supplied. Machine output is set in mono,
-    // and the values these fixtures stand in for (ids, run titles, a reviewed value) are the
-    // backend's words, not this screen's.
+    // and the values these fixtures stand in for (ids, run titles, a reviewed value, a flag's
+    // summary) are the backend's words, not this screen's.
     const supplied = new Set([
       "wf.weekly-sweep.v2",
       "Weekly sweep",
@@ -381,6 +429,7 @@ describe("Home says what an empty shelf is for", () => {
       "The sweep before it",
       "The sweep before that",
       "two sections, one thin",
+      flag.summary,
     ]);
     const strings = new Set<string>();
     for (const node of container.querySelectorAll("*")) {
@@ -596,5 +645,92 @@ describe("Home answers a waiting gate where it is read", () => {
 
     await vi.waitFor(() => expect(decided).toHaveLength(1));
     expect(decided[0]).toEqual({ approve: false, feedback: "the second section is thin" });
+  });
+});
+
+describe("Home lists the open maintenance flags under Needs your decision", () => {
+  it("reads the open flags and lists them after the runs waiting at a gate", async () => {
+    const flag = maintenanceFlag();
+    const { flagStatuses } = mountApi({ runs: [waitingRun("Last week's sweep")], flags: [flag] });
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    const run = await within(decisions).findByText("Last week's sweep");
+    const summary = await within(decisions).findByText(flag.summary);
+    expect(within(cardHolding(summary)).getByText("Diverged copy")).toBeInTheDocument();
+
+    // The run at a gate comes first, then the flag, so what holds a run up is read first.
+    expect(run.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(new Set(flagStatuses)).toEqual(new Set(["open"]));
+  });
+
+  it("writes the empty copy only when no run waits and no flag is open", async () => {
+    const flag = maintenanceFlag();
+    mountApi({ flags: [flag] });
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    expect(await within(decisions).findByText(flag.summary)).toBeInTheDocument();
+    expect(await screen.findByText("Nothing is running right now.")).toBeInTheDocument();
+    expect(within(decisions).queryByText("No decision is waiting.")).not.toBeInTheDocument();
+  });
+
+  it("alerts on a failed flags read on its own while the waiting runs still show", async () => {
+    mountApi({ runs: [waitingRun("Last week's sweep")], flagsStatus: 503 });
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    expect(await within(decisions).findByRole("alert")).toHaveTextContent(
+      "Could not read the flags waiting on you. The flag page mf.diverged.weekly-sweep.compose does not parse.",
+    );
+    expect(await within(decisions).findByText("Last week's sweep")).toBeInTheDocument();
+    expect(within(decisions).getAllByRole("alert")).toHaveLength(1);
+  });
+
+  it("never reads a failed flags read as nothing waiting", async () => {
+    mountApi({ flagsStatus: 503 });
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    expect(await within(decisions).findByRole("alert")).toHaveTextContent(
+      "Could not read the flags waiting on you.",
+    );
+    expect(await screen.findByText("Nothing is running right now.")).toBeInTheDocument();
+    expect(within(decisions).queryByText("No decision is waiting.")).not.toBeInTheDocument();
+  });
+
+  it("resolves a flag with a name and a reason, and the flag leaves once the list is read again", async () => {
+    const flag = maintenanceFlag();
+    mountApi({});
+    let open: MaintenanceFlag[] = [flag];
+    let reads = 0;
+    const posted: unknown[] = [];
+    server.use(
+      http.get(`${BASE}/api/library/flags`, () => {
+        reads += 1;
+        return HttpResponse.json({ flags: open });
+      }),
+      http.post(`${BASE}/api/library/flags/:flagId/resolve`, async ({ request }) => {
+        posted.push(await request.json());
+        open = [];
+        return HttpResponse.json({ ok: true, flag: { ...flag, status: "resolved" } });
+      }),
+    );
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    const card = cardHolding(await within(decisions).findByText(flag.summary));
+    await userEvent.click(within(card).getByRole("button", { name: "Resolve" }));
+    const dialog = await screen.findByRole("dialog", { name: "Resolve this flag" });
+    await userEvent.type(within(dialog).getByLabelText("Your name"), "Alex");
+    await userEvent.type(within(dialog).getByLabelText("Why"), "The sweep keeps its own wording.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Resolve" }));
+
+    await vi.waitFor(() =>
+      expect(within(decisions).queryByText(flag.summary)).not.toBeInTheDocument(),
+    );
+    expect(posted).toEqual([{ by: "Alex", reason: "The sweep keeps its own wording." }]);
+    expect(reads).toBe(2);
+    expect(within(decisions).getByText("No decision is waiting.")).toBeInTheDocument();
   });
 });

@@ -4,13 +4,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { type ReactElement, type ReactNode, useMemo, useState } from "react";
 
-import { runKeys } from "@/api/query-keys";
+import { flagKeys, runKeys } from "@/api/query-keys";
 import { launchWorkflowRun, sessionsApi } from "@/api/sessions";
 import type { RunView } from "@/api/sessions-types";
 import { studioApi, studioErrorMessage } from "@/api/studio";
-import type { LibraryEntry, RunEnvelope, RunIntent } from "@/api/studio-types";
+import type { LibraryEntry, MaintenanceFlag, RunEnvelope, RunIntent } from "@/api/studio-types";
 import { BeforeRunDialog } from "@/components/workflows/before-run-dialog";
 import { useNowTick } from "@/components/workflows/elapsed";
+import { FlagCard } from "@/components/workflows/flag-card";
 import { type FleetCard, RunCard } from "@/components/workflows/run-card";
 import { runName } from "@/lib/run-name";
 import { Button } from "@/shared/ui/button";
@@ -21,10 +22,10 @@ import { EmptyState } from "@/shared/ui/empty-state";
 // Chat is a station of its own and stays one press away, from the navigation and from the first
 // section here.
 //
-// Every read is bounded and already exists elsewhere in the app: the live pool whole (the backend
-// answers only runs in flight), the saved workflows once, and the newest ended runs at a fixed
-// size. Nothing here fetches a workflow's graph (a home full of cards would fetch one per card),
-// and the shape of a run belongs on the run's own page.
+// Every read is bounded: the live pool whole (the backend answers only runs in flight), the saved
+// workflows once, the newest ended runs at a fixed size, and the library's open maintenance flags.
+// Nothing here fetches a workflow's graph (a home full of cards would fetch one per card), and the
+// shape of a run belongs on the run's own page.
 //
 // A run is named by itself: the title its launch gave it, then the saved workflow's own card
 // title, then the workflow id. A session's title is never one of those.
@@ -136,6 +137,10 @@ export default function HomePage(): ReactElement {
     queryKey: runKeys.recentAtMost(RECENT_LIMIT),
     queryFn: () => studioApi.recentRuns(RECENT_LIMIT),
   });
+  const flagsQuery = useQuery({
+    queryKey: flagKeys.open,
+    queryFn: () => studioApi.flags(),
+  });
 
   // One failed read, stated in both sections it leaves unknown: an empty list and an unread one
   // are different answers, and only one of them means nothing is waiting.
@@ -146,6 +151,8 @@ export default function HomePage(): ReactElement {
   const paused = runs.filter((run) => run.state === "paused");
   const saved: LibraryEntry[] = libraryQuery.data ?? [];
   const recent: RunEnvelope[] = recentQuery.data ?? [];
+  const flagsError = flagsQuery.isError ? studioErrorMessage(flagsQuery.error) : null;
+  const flags: MaintenanceFlag[] = flagsQuery.data ?? [];
 
   // Ticking only while something is actually in flight: an ended run's duration stopped changing
   // when it ended.
@@ -320,22 +327,41 @@ export default function HomePage(): ReactElement {
           )}
         </Section>
 
+        {/* The runs waiting at a gate, then the open maintenance flags. Each read that failed says
+            so on its own, and the empty copy shows only once both answered with nothing. */}
         <Section id="home-decisions" title="Needs your decision">
           {liveError !== null ? (
             <Alert>Could not read what is waiting on you. {liveError}</Alert>
-          ) : decisionCards.length === 0 ? (
-            <EmptyState
-              title="No decision is waiting."
-              hint="When a run reaches a gate it stops here until you answer it."
-              className="rounded-lg border border-line border-dashed"
-            />
-          ) : (
+          ) : decisionCards.length > 0 ? (
             <ul className="flex flex-col gap-3">
               {decisionCards.map((entry) => (
                 <RunCard key={entry.key} card={entry.card} />
               ))}
             </ul>
-          )}
+          ) : null}
+          {flagsError !== null ? (
+            <Alert>Could not read the flags waiting on you. {flagsError}</Alert>
+          ) : flags.length > 0 ? (
+            <ul className="flex flex-col gap-3">
+              {flags.map((flag) => (
+                <FlagCard
+                  key={flag.id}
+                  flag={flag}
+                  onResolved={() => queryClient.invalidateQueries({ queryKey: flagKeys.open })}
+                />
+              ))}
+            </ul>
+          ) : null}
+          {liveError === null &&
+          flagsError === null &&
+          decisionCards.length === 0 &&
+          flags.length === 0 ? (
+            <EmptyState
+              title="No decision is waiting."
+              hint="When a run reaches a gate it stops here until you answer it."
+              className="rounded-lg border border-line border-dashed"
+            />
+          ) : null}
         </Section>
 
         <Section id="home-results" title="Recent results">

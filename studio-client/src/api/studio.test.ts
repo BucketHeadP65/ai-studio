@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ZodError } from "zod";
 
 import { server } from "@/shared/test-support/msw/server";
+import { maintenanceFlag } from "@/test-support/factories/flags";
 import {
   singleVersionTrust,
   trust,
@@ -571,5 +572,85 @@ describe("a refused save's own reading", () => {
     await studioApi.redescribeWorkflow("wf.x.v1", { title: "A better title" });
 
     expect(patched).toEqual({ title: "A better title" });
+  });
+});
+
+describe("the library's maintenance flags", () => {
+  it("reads the open flags, asking for status open, with their evidence", async () => {
+    const statuses: (string | null)[] = [];
+    const aboutAStep = maintenanceFlag({
+      id: "mf.change.compose",
+      kind: "repository_change",
+      workflow: "",
+      raised_at: "2026-11-05T09:00:00+02:00",
+      proposed_change: "Add a length parameter to compose.",
+    });
+    server.use(
+      http.get(`${BASE}/api/library/flags`, ({ request }) => {
+        statuses.push(new URL(request.url).searchParams.get("status"));
+        return HttpResponse.json({ flags: [maintenanceFlag(), aboutAStep] });
+      }),
+    );
+
+    const flags = await studioApi.flags();
+
+    expect(statuses).toEqual(["open"]);
+    expect(flags.map((flag) => [flag.id, flag.kind, flag.workflow])).toEqual([
+      ["mf.diverged.weekly-sweep.compose", "diverged_copy", "wf.weekly-sweep.v2"],
+      ["mf.change.compose", "repository_change", ""],
+    ]);
+    expect(flags[0].evidence).toContain("```diff");
+    expect(flags[1].proposed_change).toBe("Add a length parameter to compose.");
+  });
+
+  it("refuses a flag without its kind, naming the missing field", async () => {
+    const { kind: _kind, ...withoutKind } = maintenanceFlag();
+    server.use(
+      http.get(`${BASE}/api/library/flags`, () => HttpResponse.json({ flags: [withoutKind] })),
+    );
+
+    const refused = await studioApi.flags().then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(refused).toBeInstanceOf(ZodError);
+    const paths =
+      refused instanceof ZodError ? refused.issues.map((issue) => issue.path.join(".")) : [];
+    expect(paths).toEqual(["flags.0.kind"]);
+  });
+
+  it("refuses a flag raised at a time without its offset", async () => {
+    server.use(
+      http.get(`${BASE}/api/library/flags`, () =>
+        HttpResponse.json({ flags: [maintenanceFlag({ raised_at: "2026-11-05 11:00" })] }),
+      ),
+    );
+
+    await expect(studioApi.flags()).rejects.toThrow(ZodError);
+  });
+
+  it("resolves a flag by posting who and why, and answers the flag resolved", async () => {
+    const posted: { flagId: string; body: unknown }[] = [];
+    server.use(
+      http.post(`${BASE}/api/library/flags/:flagId/resolve`, async ({ params, request }) => {
+        posted.push({ flagId: String(params.flagId), body: await request.json() });
+        return HttpResponse.json({ ok: true, flag: maintenanceFlag({ status: "resolved" }) });
+      }),
+    );
+
+    const resolved = await studioApi.resolveFlag(
+      "mf.diverged.weekly-sweep.compose",
+      "Alex",
+      "The sweep keeps its own wording.",
+    );
+
+    expect(posted).toEqual([
+      {
+        flagId: "mf.diverged.weekly-sweep.compose",
+        body: { by: "Alex", reason: "The sweep keeps its own wording." },
+      },
+    ]);
+    expect(resolved.status).toBe("resolved");
   });
 });

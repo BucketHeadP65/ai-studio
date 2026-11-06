@@ -2,8 +2,9 @@
 
 The AI Factory Studio SPA (Next.js): five stations. Home (the root, `/`, and the product's landing screen: Start automation
 with the primary Create workflow action over the guided route at `/workflows/draft` and the saved workflows, each opening its
-setup dialog, then Active automations, Needs your decision, and Recent results, over the bounded live, library and recent-run
-reads), chat (the conversation center, sessions on the left, work on the right), projects (a project's files, skills, and notes, read and edited in place),
+setup dialog, then Active automations, Needs your decision (the runs waiting at a gate, then the library's open maintenance
+flags, each resolved there with a typed name and a reason), and Recent results, over the bounded live, library, recent-run
+and open-flag reads), chat (the conversation center, sessions on the left, work on the right), projects (a project's files, skills, and notes, read and edited in place),
 knowledge bases (every knowledge base the Studio knows, creation from the Studio, a terminal one click away inside any of
 them, and each knowledge base's own link graph on its detail page's Graph tab, `studio/docs/reference/knowledge-base-management.md`),
 and harness (the owner's control room: plugins, profile selection, and the review-and-activate surface over every custom
