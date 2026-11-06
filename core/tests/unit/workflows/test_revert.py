@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import RunContext
+from pydantic_ai.usage import RunUsage
+
 from core.ai.workflows.contracts import (
     Briefing,
     FromNode,
@@ -17,15 +21,20 @@ from core.ai.workflows.contracts import (
     LibraryError,
     LiveTrialLibrary,
     LiveTrialMarker,
+    LiveTrialStep,
     ParameterSpec,
     RunNode,
     Shape,
+    StepRegistry,
     Workflow,
+    WorkflowContract,
     WorkflowLibrary,
     adapt,
+    next_version,
     step_content_address,
 )
 from core.ai.workflows.infrastructure.folder import FolderLibrary
+from core.ai.workflows.infrastructure.library_collection import WORKFLOW_COLLECTION, collection_toolset
 from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
@@ -49,7 +58,11 @@ CONSUMER = Workflow(
     nodes=(RunNode(id="digest", work="digest", inputs={"source": FromParameter(parameter="source")}),),
     output=FromNode(node="digest"),
 )
-MARKER = LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash=step_content_address(DIGEST[2]))
+MARKER = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
+SUMMARIZE = {
+    1: Briefing(name="summarize", instructions="Summarize the digest page in three sentences for the weekly note.", inputs={"text": TEXT}, output=TEXT),
+    2: Briefing(name="summarize", instructions="Summarize the digest page in two sentences that name every claim.", inputs={"text": TEXT}, output=TEXT),
+}
 
 
 async def _adopted(store: FakeCollection) -> LibraryCollection:
@@ -121,16 +134,51 @@ async def test_revert_of_a_version_a_person_saved_past_raises_and_writes_nothing
     assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v3"
 
 
-async def test_revert_of_a_version_with_no_lineage_parent_raises_and_writes_nothing() -> None:
+async def test_revert_of_a_version_with_no_live_trial_marker_raises_and_writes_nothing() -> None:
     store = FakeCollection(prune=True)
-    library = LibraryCollection(store, store.ingest, collection=store.collection)
-    await library.put(CONSUMER, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "owner:cli"})
+    library = await _adopted(store)
+    person, lineage = adapt(await library.fetch_workflow("wf.digest-sources.v2"), ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
+    await library.put(person, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"}, lineage=lineage)
     written = len(store.payloads)
 
-    with pytest.raises(LibraryError, match="lineage"):
-        await library.revert("wf.digest-sources.v1")
+    with pytest.raises(LibraryError, match="live trial marker"):
+        await library.revert("wf.digest-sources.v3")
 
     assert len(store.payloads) == written
+
+
+async def test_revert_of_a_stacked_adoption_makes_the_marker_s_previous_version_live_and_leaves_the_version_between_superseded() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version in (1, 2):
+        await library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    first = CONSUMER.model_copy(
+        update={
+            "inline": (DIGEST[1], SUMMARIZE[1]),
+            "nodes": (*CONSUMER.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(first, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    between, lineage = adapt(first, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    await library.put(
+        between, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+    child, lineage = adapt(between, ops=[{"op": "replace_inline_step", "name": "summarize", "with": SUMMARIZE[2].model_dump(mode="json")}])
+    stacked = MARKER.with_steps((LiveTrialStep(step="summarize", step_hash=step_content_address(SUMMARIZE[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=stacked
+    )
+
+    restored = await library.revert("wf.digest-sources.v3")
+
+    assert restored == "wf.digest-sources.v1"
+    assert "archived_at" in store.pages["wf.digest-sources.v3"]["frontmatter"]
+    assert not store.pages["wf.digest-sources.v1"]["superseded"]
+    assert store.pages["wf.digest-sources.v2"]["superseded"], "the version between stays superseded"
+    assert "archived_at" not in store.pages["wf.digest-sources.v2"]["frontmatter"]
+    assert await library.current("wf.digest-sources.v3") == "wf.digest-sources.v1"
 
 
 @pytest.mark.parametrize("named", ["digest-sources", "wf.digest-sources"])
@@ -202,3 +250,189 @@ def test_the_collection_answers_the_live_trial_port_and_the_folder_library_does_
     assert isinstance(collection, LiveTrialLibrary)
     assert isinstance(collection, WorkflowLibrary)
     assert not isinstance(FolderLibrary(tmp_path), LiveTrialLibrary)
+
+
+async def test_a_save_over_an_archived_version_is_refused_naming_the_next_free_version_and_writes_nothing() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    await library.revert("wf.digest-sources.v2")
+    archived_before = dict(store.pages["wf.digest-sources.v2"]["frontmatter"])
+    written = len(store.payloads)
+    again, lineage = adapt(CONSUMER, ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
+
+    with pytest.raises(LibraryError, match=r"wf\.digest-sources\.v2") as refused:
+        await library.put(again, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"}, lineage=lineage)
+
+    assert "archived" in str(refused.value)
+    assert "version 3" in str(refused.value), "the refusal names the next free version number"
+    assert len(store.payloads) == written
+    assert store.pages["wf.digest-sources.v2"]["frontmatter"] == archived_before, "the archived version keeps its spec, lineage, marker and archived_at"
+    assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v1"
+
+
+async def test_revert_raises_again_the_diverged_copy_flags_of_the_version_it_makes_live() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version in (1, 2):
+        await library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    edited = SUMMARIZE[1].model_copy(update={"instructions": "Summarize the digest page in three sentences for the weekly note, plainly."})
+    consumer = CONSUMER.model_copy(
+        update={
+            "inline": (DIGEST[1], edited),
+            "nodes": (*CONSUMER.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(consumer, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    child, lineage = adapt(consumer, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+    flag = await library.fetch_flag("mf.diverged.digest-sources.summarize")
+    assert flag is not None
+    assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v2")
+
+    await library.revert("wf.digest-sources.v2")
+
+    flag = await library.fetch_flag("mf.diverged.digest-sources.summarize")
+    assert flag is not None
+    assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v1"), "the restored version still holds the diverged copy"
+
+
+async def _reverted_at_v4(store: FakeCollection) -> LibraryCollection:
+    """A library holding `digest` v1 and v2 and the consumer at v3, whose adoption of `digest` v2 as v4 was reverted."""
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version, step in DIGEST.items():
+        await library.put_step(step, version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    third = CONSUMER.model_copy(update={"version": 3})
+    await library.put(third, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "owner:cli"})
+    child, lineage = adapt(third, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    marker = LiveTrialMarker(previous="wf.digest-sources.v3", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=marker
+    )
+    assert await library.revert("wf.digest-sources.v4") == "wf.digest-sources.v3"
+    return library
+
+
+async def _never_run(task: Briefing, output_type: type, /, **inputs: object) -> object:  # pragma: no cover (saving never runs a step)
+    raise AssertionError
+
+
+async def test_the_next_version_is_one_above_every_saved_version_of_the_name_archived_ones_included() -> None:
+    library = await _reverted_at_v4(FakeCollection(prune=True))
+    restored = await library.fetch_workflow("wf.digest-sources.v3")
+
+    assert await next_version(restored.name, above=restored.version, versions=library) == 5
+    assert await next_version(restored.name, above=restored.version, versions=None) == 4, "without a read of the saved versions it is one above"
+    assert await next_version("digest-notes", above=1, versions=library) == 2, "a name with no saved version"
+
+
+async def test_adapt_workflow_after_a_revert_saves_the_next_free_version_and_leaves_the_archived_one_as_it_was() -> None:
+    store = FakeCollection(prune=True)
+    library = await _reverted_at_v4(store)
+    archived_before = dict(store.pages["wf.digest-sources.v4"]["frontmatter"])
+    port = WorkflowContract[None](
+        source=collection_toolset(library),
+        vocabulary=WORKFLOW_COLLECTION,
+        expose=(),
+        registry=StepRegistry(perform=_never_run),
+        saved_by="agent:test",
+        versions=library,
+    )
+
+    said = await port._adapt(
+        RunContext(deps=None, model=TestModel(), usage=RunUsage()),
+        "wf.digest-sources.v3",
+        ops=[{"op": "set_description", "to": "Digest one source, briefly."}],
+        applicability="Use per source. Not for a batch.",
+    )
+
+    assert said.startswith("adapted: wf.digest-sources.v3 -> wf.digest-sources.v5 (v5)"), said
+    lineage = await library.fetch_lineage("wf.digest-sources.v5")
+    assert lineage is not None
+    assert (lineage.parent_name, lineage.parent_version) == ("digest-sources", 3)
+    assert store.pages["wf.digest-sources.v4"]["frontmatter"] == archived_before
+    assert await library.current("wf.digest-sources.v3") == "wf.digest-sources.v5"
+
+
+async def test_a_save_of_other_content_over_a_version_on_live_trial_is_refused_naming_the_next_free_version_and_the_marker_stays() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    written = len(store.payloads)
+    other = (await library.fetch_workflow("wf.digest-sources.v2")).model_copy(update={"description": "Digest one source, briefly."})
+
+    with pytest.raises(LibraryError, match=r"wf\.digest-sources\.v2") as refused:
+        await library.put(other, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"})
+
+    assert "live trial" in str(refused.value)
+    assert "version 3" in str(refused.value), "the refusal names the next free version number"
+    assert len(store.payloads) == written
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == MARKER
+
+
+async def test_a_save_of_equal_content_over_a_version_on_live_trial_still_saves() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    same = await library.fetch_workflow("wf.digest-sources.v2")
+
+    saved = await library.put(
+        same, title="Digest sources, renamed", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, live_trial=MARKER
+    )
+
+    assert saved == "wf.digest-sources.v2"
+    assert store.written("wf.digest-sources.v2")["title"] == "Digest sources, renamed"
+
+
+async def test_an_equal_re_save_of_a_version_on_live_trial_without_a_marker_keeps_the_stored_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    same = await library.fetch_workflow("wf.digest-sources.v2")
+
+    await library.put(same, title="Digest sources, renamed", summary="s", applicability="a", provenance={"saved_by": "owner:studio"})
+
+    assert store.written("wf.digest-sources.v2")["title"] == "Digest sources, renamed"
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == MARKER, "a card-only re-save never ends a live trial"
+
+
+async def test_an_equal_re_save_of_a_version_on_live_trial_with_a_marker_writes_that_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    same = await library.fetch_workflow("wf.digest-sources.v2")
+    longer = LiveTrialMarker(previous="wf.digest-sources.v1", steps=MARKER.steps, runs=5)
+
+    await library.put(same, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, live_trial=longer)
+
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == longer
+
+async def test_a_revert_carries_onto_the_restored_version_the_declines_of_the_versions_it_retires_for_steps_off_the_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version in (1, 2):
+        await library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    first = CONSUMER.model_copy(
+        update={
+            "inline": (DIGEST[1], SUMMARIZE[1]),
+            "nodes": (*CONSUMER.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(first, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    between, lineage = adapt(first, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    await library.put(
+        between, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+    kept = step_content_address(SUMMARIZE[2])
+    await library.record_decline("wf.digest-sources.v2", step="summarize", step_hash=kept, because="kept")
+    await library.record_decline("wf.digest-sources.v2", step="digest", step_hash="a-later-digest", because="kept")
+    newest, lineage = adapt(between, ops=[{"op": "set_description", "to": "Digest one source, then summarize it."}])
+    await library.put(
+        newest, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+
+    assert await library.revert("wf.digest-sources.v3") == "wf.digest-sources.v1"
+
+    restored = {entry.step: (entry.declined, entry.declined_because) for entry in await library.fetch_consumer_record("wf.digest-sources.v1")}
+    assert restored == {"summarize": (kept, "kept"), "digest": (None, None)}, "a keep survives the revert, a step on the marker is not carried"

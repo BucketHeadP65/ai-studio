@@ -19,6 +19,7 @@ from core.ai.workflows.contracts import (
     FromParameter,
     LibraryCollection,
     LiveTrialMarker,
+    LiveTrialStep,
     MaintenanceFlag,
     Outcome,
     ParameterSpec,
@@ -34,6 +35,8 @@ from core.ai.workflows.contracts import (
     canonical_step_yaml,
     spec_identity,
     step_content_address,
+    trust_across_versions,
+    version_hashes,
 )
 
 from harness.domain.contracts import CaseReport, CaseResult, cases_address
@@ -46,6 +49,7 @@ from harness.features.maintenance.contracts import (
     LandedChange,
     LandingRefusedError,
     LandingReport,
+    LiveTrialWatch,
     MaintenancePlan,
     MaintenanceSteps,
     PlanDecision,
@@ -56,9 +60,12 @@ from harness.features.maintenance.contracts import (
     one_line,
 )
 from harness.features.maintenance.wiring import StepCaseRuns
+from harness.session import SessionPool
 from tests.support.fakes.case_runner import FakeCaseRunner
 from tests.support.fakes.library_collection import FakeCollection
 from tests.support.fakes.owner_notifier import FakeOwnerNotifier
+from tests.support.fakes.sessions import APool
+from tests.support.runtime import a_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -88,6 +95,8 @@ SUMMARIZE = {
 }
 V4 = "st.digest.v4"
 HASH4 = step_content_address(DIGEST[4])
+SUMMARIZE2 = "st.summarize.v2"
+SUMMARIZE2_HASH = step_content_address(SUMMARIZE[2])
 PRESENTATION = WorkflowPresentation(purpose="One weekly digest page per source.", produces="A digest page the owner reviews.")
 INTENT = WorkflowIntent(request="Digest each week's sources into one page each.")
 CASES: Mapping[str, JsonValue] = {"cases": [{"name": "quotes", "inputs": {"text": "A source."}}]}
@@ -432,7 +441,7 @@ async def test_land_changes_adopts_on_live_trial_declines_a_kept_copy_flags_a_fl
     assert outcomes == {sources_id: ("adopted", "wf.digest-sources.v2"), weekly_id: ("kept", ""), daily_id: ("flagged", "")}
     adopted = "wf.digest-sources.v2"
     assert world.store.written(adopted)["saved_by"] == STEP_MAINTENANCE_AGENT
-    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=sources_id, step="digest", step_hash=HASH4)
+    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4),))
     lineage = await world.library.fetch_lineage(adopted)
     assert lineage is not None
     assert (lineage.parent_name, lineage.parent_version, lineage.touched, lineage.predictions) == (
@@ -536,24 +545,188 @@ async def test_a_consumer_a_person_saved_past_since_the_listing_is_refused_and_t
     (refused,) = raised.value.report.changes
     assert refused.outcome == "refused"
     assert newer in refused.reason
+    assert f"run step-maintenance with {V4}" in refused.reason
     assert "landed" not in str(raised.value)
     assert world.store.written(newer)["saved_by"] == "owner:cli"
 
 
-async def test_two_changed_steps_adopted_in_one_consumer_land_one_after_the_other(tmp_path: Path) -> None:
+async def test_two_changed_steps_adopted_in_one_consumer_land_as_one_version_on_one_live_trial_covering_both(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     await world.save_summarize()
     sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
-    plan = await world.plan(f"{V4},st.summarize.v2", {sources_id: ("adopt", "It fits.")})
+    plan = await world.plan(f"{V4},{SUMMARIZE2}", {sources_id: ("adopt", "It fits.")})
 
     landed = await _land(world, plan)
 
-    assert [(change.step_id, change.saved_id) for change in landed.changes] == [(V4, "wf.digest-sources.v2"), ("st.summarize.v2", "wf.digest-sources.v3")]
-    second = await world.library.fetch_live_trial("wf.digest-sources.v3")
-    assert second == LiveTrialMarker(previous="wf.digest-sources.v2", step="summarize", step_hash=step_content_address(SUMMARIZE[2]))
-    child = await world.library.fetch_workflow("wf.digest-sources.v3")
-    assert sorted(step_content_address(step) for step in child.inline) == sorted([HASH4, step_content_address(SUMMARIZE[2])])
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        (V4, "adopted", "wf.digest-sources.v2"),
+        (SUMMARIZE2, "adopted", "wf.digest-sources.v2"),
+    ]
+    marker = await world.library.fetch_live_trial("wf.digest-sources.v2")
+    assert marker == LiveTrialMarker(
+        previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4), LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH))
+    )
+    lineage = await world.library.fetch_lineage("wf.digest-sources.v2")
+    assert lineage is not None
+    assert (lineage.parent_version, sorted(lineage.touched)) == (1, ["digest", "summarize"])
+    child = await world.library.fetch_workflow("wf.digest-sources.v2")
+    assert [step_content_address(step) for step in child.inline] == [HASH4, SUMMARIZE2_HASH]
+    assert await world.library.locate("digest-sources", 3) is None, "one landing saves one version per consumer"
+    told = await world.steps.report_changes(landed)
+    assert f"wf.digest-sources.v2 adopts {V4} on live trial in place of {sources_id}." in told
+    assert f"wf.digest-sources.v2 adopts {SUMMARIZE2} on live trial in place of {sources_id}." in told
+
+
+async def test_a_flag_drafted_before_an_adoption_into_the_same_consumer_lands_on_the_version_the_adoption_saved(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    consumers = await world.steps.list_consumers(f"{V4},{SUMMARIZE2}")
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(f"{V4},{SUMMARIZE2}"))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=sources_id, step_id=V4, disposition="flag", reason="Only the owner can say."),
+            PlanDecision(workflow_id=sources_id, step_id=SUMMARIZE2, disposition="adopt", reason="It names every claim."),
+        ]
+    )
+
+    landed = await world.steps.land_changes(draft, decisions)
+
+    assert [(change.step_id, change.outcome) for change in landed.changes] == [(V4, "flagged"), (SUMMARIZE2, "adopted")]
+    flag = await world.library.fetch_flag("mf.consumer.digest-sources.digest")
+    assert flag is not None
+    assert flag.workflow == "wf.digest-sources.v2", "the flag names the consumer's newest version, the one the adoption saved"
+
+
+async def test_a_kept_copy_landed_beside_an_adoption_into_the_same_consumer_stays_declined_after_the_adoption_is_reverted(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    consumers = await world.steps.list_consumers(f"{V4},{SUMMARIZE2}")
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(f"{V4},{SUMMARIZE2}"))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=sources_id, step_id=V4, disposition="keep", reason="The digest keeps its own tone."),
+            PlanDecision(workflow_id=sources_id, step_id=SUMMARIZE2, disposition="adopt", reason="It names every claim."),
+        ]
+    )
+
+    landed = await world.steps.land_changes(draft, decisions)
+
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        (V4, "kept", ""),
+        (SUMMARIZE2, "adopted", "wf.digest-sources.v2"),
+    ]
+    adopted = {entry.step: entry for entry in await world.library.fetch_consumer_record("wf.digest-sources.v2")}
+    assert (adopted["digest"].declined, adopted["digest"].declined_because) == (HASH4, "kept"), "the adopted version inherits the decline"
+    assert await world.library.revert("wf.digest-sources.v2") == sources_id
+    restored = {entry.step: entry for entry in await world.library.fetch_consumer_record(sources_id)}
+    assert (restored["digest"].declined, restored["digest"].declined_because) == (HASH4, "kept"), "the decline survives the revert"
+
+
+async def test_a_revert_of_an_adoption_stacked_beside_a_keep_restores_the_baseline_declining_the_kept_step_and_the_reverted_one(
+    tmp_path: Path,
+) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    await world.save_steps(5)
+    on_trial = "wf.digest-sources.v2"
+    changed = f"st.digest.v5,{SUMMARIZE2}"
+    consumers = await world.steps.list_consumers(changed)
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(changed))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=on_trial, step_id="st.digest.v5", disposition="adopt", reason="It dates each claim too."),
+            PlanDecision(workflow_id=on_trial, step_id=SUMMARIZE2, disposition="keep", reason="The weekly note keeps three sentences."),
+        ]
+    )
+    landed = await world.steps.land_changes(draft, decisions)
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        ("st.digest.v5", "adopted", "wf.digest-sources.v3"),
+        (SUMMARIZE2, "kept", ""),
+    ]
+    stacked = await world.library.fetch_workflow("wf.digest-sources.v3")
+    watch = LiveTrialWatch(APool(SessionPool(a_runtime(library=world.library))), world.log, world.notifier)
+    failed = _ran(stacked, "wf.digest-sources.v3", at=T0).model_copy(
+        update={"outcome": "failed", "result": Outcome(status="failed", summary="digest wrote nothing"), "produced": {}}
+    )
+    await world.log.append(failed)
+
+    await watch.run_ended(failed)
+
+    assert await world.library.current("wf.digest-sources.v3") == sources_id
+    restored = {entry.step: (entry.declined, entry.declined_because) for entry in await world.library.fetch_consumer_record(sources_id)}
+    assert restored == {
+        "digest": (step_content_address(DIGEST[5]), "reverted"),
+        "summarize": (SUMMARIZE2_HASH, "kept"),
+    }
+
+
+async def test_two_adoptions_into_one_consumer_whose_save_the_library_refuses_are_refused_together_each_naming_the_other(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    plan = await world.plan(f"{V4},{SUMMARIZE2}", {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    digest, summarize = raised.value.report.changes
+    assert (digest.outcome, summarize.outcome) == ("refused", "refused")
+    assert "refused the page wf.digest-sources.v2" in digest.reason
+    assert f"adopted together with {SUMMARIZE2}" in digest.reason
+    assert f"adopted together with {V4}" in summarize.reason
+    assert await world.library.current(sources_id) == sources_id
+
+
+async def test_an_adoption_into_a_version_still_on_live_trial_builds_on_it_keeps_its_baseline_and_carries_its_steps(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    on_trial = "wf.digest-sources.v2"
+    await world.log.append(_ran(await world.library.fetch_workflow(on_trial), on_trial, at=T0))
+
+    landed = await _land(world, await world.plan(SUMMARIZE2, {on_trial: ("adopt", "It names every claim.")}))
+
+    (change,) = landed.changes
+    assert (change.workflow_id, change.saved_id) == (on_trial, "wf.digest-sources.v3")
+    assert await world.library.fetch_live_trial("wf.digest-sources.v3") == LiveTrialMarker(
+        previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4), LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH))
+    )
+    lineage = await world.library.fetch_lineage("wf.digest-sources.v3")
+    assert lineage is not None
+    assert (lineage.parent_version, lineage.touched) == (2, ("summarize",))
+    assert f"wf.digest-sources.v3 adopts {SUMMARIZE2} on live trial in place of {on_trial}." in await world.steps.report_changes(landed)
+
+
+async def test_an_adoption_into_a_version_whose_live_trial_closed_starts_a_live_trial_of_its_own(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    closed = "wf.digest-sources.v2"
+    closed_workflow = await world.library.fetch_workflow(closed)
+    for hour in range(3):
+        await world.log.append(_ran(closed_workflow, closed, at=T0 + timedelta(hours=hour)))
+
+    landed = await _land(world, await world.plan(SUMMARIZE2, {closed: ("adopt", "It names every claim.")}))
+
+    (change,) = landed.changes
+    assert change.saved_id == "wf.digest-sources.v3"
+    assert await world.library.fetch_live_trial("wf.digest-sources.v3") == LiveTrialMarker(
+        previous=closed, steps=(LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH),)
+    )
 
 
 async def test_check_change_answers_the_validation_issues_of_an_op_that_breaks_the_wiring_and_saves_nothing(tmp_path: Path) -> None:
@@ -588,6 +761,7 @@ async def test_report_changes_tells_the_owner_once_what_changed_in_which_workflo
     assert "digest" in title
     for said in ("wf.digest-sources.v2", "It fits and quotes every claim.", "wf.weekly-digest.v1", "keeps its own tone", "wf.daily-digest.v1"):
         assert said in message
+    assert "run step-maintenance by hand with the same step ids" in message, "the owner reads how to take the consumers past the cap now"
     assert message in answer
 
 
@@ -682,7 +856,7 @@ async def test_plan_decisions_answers_no_decision_for_the_plan(tmp_path: Path) -
     assert decisions == PlanDecisions(decisions=[])
 
 
-async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_again_on_the_next_run(tmp_path: Path) -> None:
+async def test_a_drafted_change_no_decision_names_writes_nothing_and_the_owner_reads_when_it_is_offered_again(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
@@ -695,12 +869,14 @@ async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_
 
     assert [(change.workflow_id, change.outcome, change.reason) for change in landed.changes] == [
         (sources_id, "adopted", "It fits."),
-        (weekly_id, "undecided", "not decided, offered again on the next run"),
+        (weekly_id, "not_decided", "not decided, so nothing was written, and step maintenance offers it again when it next runs for its step"),
     ]
     (record,) = await world.library.fetch_consumer_record(weekly_id)
-    assert (record.declined, record.declined_because) == (None, None), "an undecided pair writes no decline"
+    assert (record.declined, record.declined_because) == (None, None), "a pair not decided writes no decline"
     assert [pair.workflow_id for pair in (await world.steps.list_consumers(V4)).pairs] == [weekly_id]
-    assert f"{weekly_id} with {V4} was not decided, offered again on the next run." in await world.steps.report_changes(landed)
+    told = await world.steps.report_changes(landed)
+    assert f"{weekly_id} with {V4} was not decided, so nothing was written" in told
+    assert f"with the step's next version, or when you run step-maintenance with {V4}." in told
 
 
 async def test_the_owner_s_line_starts_the_reason_after_its_period_with_a_capital(tmp_path: Path) -> None:
@@ -990,3 +1166,149 @@ async def test_check_change_says_the_landing_refuses_an_older_step_version_and_a
 
     assert "The landing refuses it as an adoption: st.digest.v3 is not the newest version of digest" in older
     assert f"The landing refuses it as an adoption: {weekly_id} declines {V4}" in declined
+
+
+async def test_an_adoption_after_a_revert_is_numbered_above_the_archived_version_which_keeps_its_marker_and_its_runs(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources = consumer("digest-sources", DIGEST[3])
+    sources_id = await world.save(sources)
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    live_trial_id = "wf.digest-sources.v2"
+    live_trial = await world.library.fetch_workflow(live_trial_id)
+    marker = await world.library.fetch_live_trial(live_trial_id)
+    await world.log.append(_ran(sources, sources_id, at=T0 - timedelta(days=1)))
+    await world.log.append(_ran(live_trial, live_trial_id, at=T0))
+    assert await world.library.revert(live_trial_id) == sources_id
+    await world.save_steps(5)
+
+    landed = await _land(world, await world.plan("st.digest.v5", {sources_id: ("adopt", "It dates each claim too.")}))
+
+    (change,) = landed.changes
+    assert (change.outcome, change.saved_id) == ("adopted", "wf.digest-sources.v3")
+    assert "archived_at" in world.store.pages[live_trial_id]["frontmatter"]
+    assert await world.library.fetch_workflow(live_trial_id) == live_trial
+    assert await world.library.fetch_live_trial(live_trial_id) == marker
+    newest = await world.library.fetch_workflow("wf.digest-sources.v3")
+    assert newest.inline == (DIGEST[5],)
+    hashes = await version_hashes(newest, versions=world.library, fetch_workflow=world.library.fetch_workflow)
+    trust = trust_across_versions(await world.log.history_for_any(spec_hashes=hashes.keys()), hashes, spec_identity(newest))
+    assert trust.total.runs_with_evidence == 2, "the run of the archived version and the run of the version it replaced both count"
+    assert dict(trust.versions).keys() == {1, 2, 3}
+
+
+async def test_a_refused_landing_tells_the_owner_once_what_landed_and_what_was_refused_before_it_fails(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    daily_id = await world.save(consumer("daily-digest", DIGEST[3]))
+    plan = await world.plan(
+        V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too."), daily_id: ("keep", "The daily tone stays.")}
+    )
+    world.store.refused_ids = frozenset({"wf.weekly-digest.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    ((title, message),) = world.notifier.sent
+    assert "refused" in title
+    assert f"wf.digest-sources.v2 adopts {V4} on live trial in place of {sources_id}." in message
+    assert f"{weekly_id} was refused {V4}" in message
+    assert f"{daily_id} keeps its copy instead of {V4}." in message
+    assert "The owner was told." in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("failure", "delivers", "said"),
+    [(ConnectionError("the notification centre is not running"), True, "The notice to the owner failed: the notification centre is not running"),
+     (None, False, "The notice to the owner was not delivered.")],
+    ids=["it raises", "it is not delivered"],
+)
+async def test_a_refused_landing_whose_notice_does_not_reach_the_owner_still_fails_and_says_so(
+    tmp_path: Path, failure: Exception | None, delivers: bool, said: str
+) -> None:
+    world = World(tmp_path)
+    world.notifier.failure = failure
+    world.notifier.delivers = delivers
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    assert len(world.notifier.sent) == 1
+    assert str(raised.value).endswith(said)
+
+
+async def test_a_landing_without_refusals_leaves_the_one_notice_to_report_changes(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+
+    landed = await _land(world, await world.plan(V4, {sources_id: ("adopt", "It fits.")}))
+
+    assert world.notifier.sent == []
+    await world.steps.report_changes(landed)
+    assert len(world.notifier.sent) == 1
+
+
+def _rejected_plan(step_id: str, *, raised_at: datetime = T0 - timedelta(days=1)) -> MaintenanceFlag:
+    return MaintenanceFlag(
+        kind="plan_rejected",
+        step="digest",
+        step_id=step_id,
+        step_hash=step_content_address(DIGEST[int(step_id.rsplit(".v", 1)[1])]),
+        title="Plan for digest rejected",
+        summary="Decide how the step reaches the workflows that hold digest.",
+        evidence="The judge rejected the plan three times.",
+        raised_by=STEP_MAINTENANCE_AGENT,
+        raised_at=raised_at,
+    )
+
+
+@pytest.mark.parametrize("disposition", ["adopt", "keep", "flag"])
+async def test_a_landing_for_a_step_resolves_the_open_plan_rejected_flag_of_an_earlier_version(tmp_path: Path, disposition: str) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan("st.digest.v3"))
+
+    await _land(world, await world.plan(V4, {sources_id: (disposition, "Decided.")}))
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert (flag.status, flag.resolved_by) == ("resolved", STEP_MAINTENANCE_AGENT)
+    assert V4 in flag.decision_reason
+
+
+async def test_a_landing_leaves_a_plan_rejected_flag_a_person_resolved_as_they_left_it(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan(V4))
+    await world.library.resolve_flag("mf.rejected.digest", by="owner", reason="I will handle digest by hand.")
+
+    await _land(world, await world.plan(V4, {sources_id: ("keep", "Decided.")}))
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert (flag.status, flag.resolved_by, flag.decision_reason) == ("resolved", "owner", "I will handle digest by hand.")
+
+
+async def test_a_landing_whose_every_change_was_refused_leaves_the_plan_rejected_flag_open(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan("st.digest.v3"))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError):
+        await _land(world, plan)
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert flag.status == "open"

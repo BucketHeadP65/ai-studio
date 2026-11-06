@@ -14,17 +14,19 @@ class LandingRefusedError(RuntimeError):
     """A landing that refused one or more planned changes, after landing every other one.
 
     `report` holds every change's outcome, the refused ones with why. The message says every change in one line each: the
-    new version of each adoption now on live trial, the step, each flagged or refused pair's reason and any note.
+    new version of each adoption now on live trial, the step, each flagged or refused pair's reason and any note, then
+    whether the owner was told.
     """
 
-    def __init__(self, report: LandingReport) -> None:
-        """Hold the landing's report and say what it refused and what it landed.
+    def __init__(self, report: LandingReport, *, told: str) -> None:
+        """Hold the landing's report and say what it refused, what it landed and whether the owner was told.
 
         Args:
             report: The landing's report, holding at least one refused change.
+            told: Whether the notice to the owner went out, as one sentence.
         """
         refused = sum(change.outcome == "refused" for change in report.changes)
         rest = " and landed the rest" if refused < len(report.changes) else ""
         lines = "\n".join(change_line(change) for change in report.changes)
-        super().__init__(f"step maintenance refused {refused} of {len(report.changes)} planned changes{rest}:\n{lines}")
+        super().__init__(f"step maintenance refused {refused} of {len(report.changes)} planned changes{rest}:\n{lines}\n{told}")
         self.report = report

@@ -26,7 +26,8 @@ CHANGED_STEPS = "changed_step_ids"
 """The step maintenance workflow's parameter: the changed step versions' ids, comma-separated."""
 
 PAIR_CAP = 20
-"""The most consumer pairs one step maintenance run takes. The rest wait for the next run."""
+"""The most consumer pairs one step maintenance run takes. The rest wait for a later run for their step: the step's next
+version, or a run of step maintenance by hand with its id."""
 
 ADOPTION_EDITS = frozenset({"rewire", "add_parameter", "set_output"})
 """The edit operations an adoption may carry beside its replaced step. Every other one is refused at landing, so a gate,
@@ -35,8 +36,8 @@ a charge or a node a model wrote never lands in a consumer."""
 NOT_DECIDED = "not decided"
 """The reason `prepare_plan` gives every planned change."""
 
-OFFERED_AGAIN = "not decided, offered again on the next run"
-"""The reason a drafted change no decision names lands with: nothing is written, so the next run offers it again."""
+OFFERED_AGAIN = "not decided, so nothing was written, and step maintenance offers it again when it next runs for its step"
+"""The reason a drafted change no decision names lands with: nothing is written, so a later run for its step offers it again."""
 
 TrustName = Literal["unverified", "machine-confirmed", "approved"]
 """A trust level by name."""
@@ -82,14 +83,15 @@ class ConsumerPair(BaseModel):
 
 
 class ConsumerList(BaseModel):
-    """The consumer pairs one step maintenance run takes, the consumers it leaves for the next run, and those it dropped."""
+    """The consumer pairs one step maintenance run takes, the consumers it leaves for a later run, and those it dropped."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     pairs: list[ConsumerPair]
     """At most `PAIR_CAP` behind or diverged pairs, by step name and then by consumer name."""
     left_for_next_run: list[str]
-    """The consumer workflow ids past the cap, which the next run takes."""
+    """The consumer workflow ids past the cap, which a later run for their step takes: the step's next version, or a run
+    by hand with its id."""
     dropped: list[str]
     """The consumer workflow ids whose pair was dropped because the copy is current or the consumer declined the changed
     version, each once."""
@@ -136,7 +138,7 @@ class PlannedChange(BaseModel):
 
 
 class MaintenancePlan(BaseModel):
-    """Every planned change of one step maintenance run, and the consumers it leaves for the next run."""
+    """Every planned change of one step maintenance run, and the consumers it leaves for a later run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -184,8 +186,8 @@ class LandedChange(BaseModel):
     step_id: str
     """The changed step version's id."""
     disposition: Literal["adopt", "keep", "flag"]
-    outcome: Literal["adopted", "kept", "flagged", "refused", "undecided"]
-    """`refused` when the library or the contract check refused the change, `undecided` when no decision named it. Neither
+    outcome: Literal["adopted", "kept", "flagged", "refused", "not_decided"]
+    """`refused` when the library or the contract check refused the change, `not_decided` when no decision named it. Neither
     writes anything."""
     reason: str
     """The planner's reason, or for a refused change why it was refused."""
@@ -196,7 +198,7 @@ class LandedChange(BaseModel):
 
 
 class LandingReport(BaseModel):
-    """What one landing did with every planned change, and the consumers it leaves for the next run."""
+    """What one landing did with every planned change, and the consumers it leaves for a later run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -346,7 +348,7 @@ def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[Planned
 
     Each decision is matched to the drafted change with the same workflow id and step id, and its disposition, reason
     and further edits replace the drafted ones. The drafted evidence stays. A drafted change no decision names is
-    undecided and writes nothing, so the next run offers it again. A drafted change decided more than once lands none of
+    not decided and writes nothing, so a later run for its step offers it again. A drafted change decided more than once lands none of
     its decisions, and a decision that names no drafted change is refused.
 
     Args:
@@ -354,7 +356,7 @@ def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[Planned
         decisions: The planner's decisions.
 
     Returns:
-        A change to land, an undecided change or a refusal for each drafted change, in the drafted plan's order, then a
+        A change to land, a change not decided or a refusal for each drafted change, in the drafted plan's order, then a
         refusal for each decision that names no drafted change.
     """
     by_pair: dict[tuple[str, str], list[PlanDecision]] = {}
@@ -369,7 +371,7 @@ def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[Planned
             (decision,) = decided
             merged.append(change.model_copy(update={"disposition": decision.disposition, "reason": decision.reason, "extra_ops": decision.extra_ops}))
         else:
-            merged.append(_landed_as(change, "undecided", OFFERED_AGAIN))
+            merged.append(_landed_as(change, "not_decided", OFFERED_AGAIN))
     merged.extend(_refused(decision, "it names no drafted change, so nothing landed for it") for decided in by_pair.values() for decision in decided)
     return merged
 
@@ -378,7 +380,7 @@ def _refused(decision: PlanDecision, reason: str) -> LandedChange:
     return _landed_as(decision, "refused", reason)
 
 
-def _landed_as(change: PlanDecision | PlannedChange, outcome: Literal["refused", "undecided"], reason: str) -> LandedChange:
+def _landed_as(change: PlanDecision | PlannedChange, outcome: Literal["refused", "not_decided"], reason: str) -> LandedChange:
     return LandedChange(
         workflow_id=change.workflow_id,
         step_id=change.step_id,
@@ -411,7 +413,10 @@ def change_line(change: LandedChange) -> str:
             said = f"{change.workflow_id} waits for your decision on {change.step_id}. {reason}"
         case "refused":
             said = f"{change.workflow_id} was refused {change.step_id}: {change.reason}"
-        case "undecided":
-            said = f"{change.workflow_id} with {change.step_id} was {change.reason}."
+        case "not_decided":
+            said = (
+                f"{change.workflow_id} with {change.step_id} was {change.reason}: with the step's next version, or when you run "
+                f"step-maintenance with {change.step_id}."
+            )
     notes = f" ({', '.join(change.notes)})" if change.notes else ""
     return f"{said}{notes}"

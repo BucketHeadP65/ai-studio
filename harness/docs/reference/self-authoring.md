@@ -167,8 +167,10 @@ when a step file in the repository no longer matches its folder's lock, so every
 
 The import compares each workflow file whose version the library holds with that version before it writes anything.
 
-- **An archived version.** The import writes nothing for the file, the version stays archived, and it prints
-  `skipped <file> (version <n>)` saying the library archived it.
+- **An archived version.** When the file holds the archived version's content, the import writes nothing for the
+  file, the version stays archived, and it prints `skipped <file> (version <n>)` saying the library archived it.
+  Other content at an archived version refuses the whole folder with `WorkflowVersionArchivedError`, naming the next
+  free version number to raise the file to, before anything is written.
 - **A version the library moved past.** When the newest live version of the workflow is higher than the file's and
   step maintenance (`agent:step-maintenance`) saved it, the import writes nothing for the file and prints
   `skipped <file> (version <n>)` naming the library's newer version, `wf.<name>.v<m>`. Bring the file up to that

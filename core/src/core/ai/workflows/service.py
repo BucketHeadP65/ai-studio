@@ -103,6 +103,27 @@ async def save(
     )
 
 
+async def next_version(name: str, *, above: int, versions: WorkflowVersionQueries | None) -> int:
+    """The version number a new version of the workflow `name` saves under: one above `above` and every saved version.
+
+    Archived and superseded versions count, so a new version never takes a number a saved version holds, and an
+    adaptation of a version a revert made live again never lands on the archived version above it.
+
+    Args:
+        name: The workflow's name.
+        above: The version the new one is made from, which it is numbered above even when the library holds none.
+        versions: The library's read of every saved version of a name. None numbers the new version one above `above`.
+
+    Returns:
+        The new version's number.
+
+    Raises:
+        LibraryError: The library cannot read the saved versions.
+    """
+    saved = await versions.versions(name) if versions is not None else ()
+    return max((above, *(version for version, _ in saved))) + 1
+
+
 async def version_hashes(
     workflow: Workflow, *, versions: WorkflowVersionQueries | None, fetch_workflow: Callable[[str], Awaitable[Workflow]]
 ) -> dict[str, int]:

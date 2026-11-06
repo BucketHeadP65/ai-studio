@@ -31,6 +31,7 @@ from core.ai.workflows.contracts import (
     LibraryError,
     Lineage,
     LiveTrialMarker,
+    LiveTrialStep,
     ParameterSpec,
     PresentationRefusedError,
     Program,
@@ -740,7 +741,7 @@ async def _adopted_audit(store: FakeCollection) -> LibraryCollection:
         provenance={"saved_by": "agent:step-maintenance"},
         fingerprint=OLD_STAMP,
         lineage=Lineage(parent_name="audit-a-claim", parent_version=1, ops=({"op": "set_description", "to": "x"},), touched=()),
-        live_trial=LiveTrialMarker(previous="wf.audit-a-claim.v1", step="weigh", step_hash="abc"),
+        live_trial=LiveTrialMarker(previous="wf.audit-a-claim.v1", steps=(LiveTrialStep(step="weigh", step_hash="abc"),)),
     )
     return library
 

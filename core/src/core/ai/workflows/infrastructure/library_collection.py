@@ -30,7 +30,7 @@ from pydantic_ai.toolsets import FunctionToolset
 from core.ai.workflows.contract_port import LibraryVocabulary
 from core.ai.workflows.domain.consumers import ConsumerEntry, StepVersion, consumer_record
 from core.ai.workflows.domain.events import ReusableStepSaved
-from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, step_content_address
+from core.ai.workflows.domain.fingerprint import WorkflowFingerprint, spec_identity, step_content_address
 from core.ai.workflows.domain.flags import FlagKind, MaintenanceFlag, diverged_copy_flag, flag_id, flag_to_write
 from core.ai.workflows.domain.intent import WorkflowIntent
 from core.ai.workflows.domain.lineage import Lineage
@@ -39,6 +39,7 @@ from core.ai.workflows.domain.presentation import WorkflowPresentation, verify_p
 from core.ai.workflows.domain.vocabulary import InlineStep, Workflow
 from core.ai.workflows.exceptions import FlagIdTakenError, FlagUnknownError, LibraryError, StepVersionChangedError, WorkflowUnknownError
 from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
+from core.ai.workflows.service import next_version
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -70,9 +71,9 @@ class SupersessionIncompleteWarning(UserWarning):
 
 
 class FlagWriteIncompleteWarning(UserWarning):
-    """A workflow was saved or archived, but a maintenance flag that change raises or resolves was not written.
+    """A workflow was saved, archived or made live again by a revert, but a maintenance flag that change raises or resolves was not written.
 
-    Saving or archiving the workflow again writes the flag.
+    Saving or archiving the workflow again writes the flag. For a version a revert made live, saving it again does.
     """
 
 
@@ -250,10 +251,14 @@ _FLAG_FIELDS = ("step", "step_id", "step_hash", "workflow", "raised_by", "raised
 """The flag fields a flag page keeps in its frontmatter under their own names. Its kind is kept as `flag_kind`."""
 
 
-SUPERSEDED_SQL = "select c.superseded from api.cards c where c.id = $1"
-"""Whether page `$1` already points at a successor.
+PAGE_STATE_SQL = (
+    "select c.superseded, c.frontmatter ? 'archived_at' as archived, c.frontmatter ? 'live_trial' as live_trial from api.cards c where c.id = $1"
+)
+"""Whether page `$1` already points at a successor, whether it is archived, and whether it carries a live trial marker.
 
-`api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good."""
+`api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good. An
+upsert of an archived page, or of a page on live trial with other content, would write another workflow over the one
+its runs ran."""
 
 SAVED_BY_SQL = """
 select c.frontmatter ->> 'saved_by' as saved_by
@@ -353,9 +358,43 @@ def _flag_of(page: Mapping[str, Any]) -> MaintenanceFlag:
         raise LibraryError(msg) from exc
 
 
-def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived"]) -> None:
-    """Warn that `workflow_id` was saved or archived but `failure` happened to its flags, and that doing it again writes them."""
-    again = "Saving" if change == "saved" else "Archiving"
+def _with_declines(long_tail: Mapping[str, Any], carried: Mapping[str, ConsumerEntry], *, workflow_id: str) -> dict[str, Any]:
+    """`long_tail` with each carried decline written onto its record's entry of the same step."""
+    record = _consumer_entries(long_tail.get("reusable_steps"), workflow_id=workflow_id)
+    declined = tuple(
+        entry.model_copy(update={"declined": carry.declined, "declined_because": carry.declined_because})
+        if (carry := carried.get(entry.step)) is not None
+        else entry
+        for entry in record
+    )
+    if declined == record:
+        return dict(long_tail)
+    return {**long_tail, "reusable_steps": [entry.model_dump(mode="json") for entry in declined]}
+
+
+def _holds(stored: Mapping[str, JsonValue], workflow: Workflow) -> bool:
+    """Whether the frontmatter `stored` holds `workflow` by content address. A stored workflow that does not read holds nothing."""
+    try:
+        held = Workflow.model_validate(stored.get("spec"))
+    except ValidationError:
+        return False
+    return spec_identity(held) == spec_identity(workflow)
+
+
+def _marker_of(recorded: JsonValue, *, workflow_id: str) -> LiveTrialMarker | None:
+    """The live trial marker a page records, or None, refused naming the page when it does not parse."""
+    if recorded is None:
+        return None
+    try:
+        return LiveTrialMarker.model_validate(recorded)
+    except ValidationError as exc:
+        msg = f"the live trial marker on {workflow_id!r} does not parse: {exc}"
+        raise LibraryError(msg) from exc
+
+
+def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived", "restored"]) -> None:
+    """Warn that `workflow_id` was saved, archived or made live again by a revert but `failure` happened to its flags, and what writes them."""
+    again = "Archiving" if change == "archived" else "Saving"
     warnings.warn(
         f"{change} {workflow_id!r}, but {failure} ({exc}). {again} the workflow again writes it.",
         FlagWriteIncompleteWarning,
@@ -675,7 +714,7 @@ class LibraryCollection:
             WorkflowUnknownError: If no workflow page has that id. Nothing is written.
             LibraryError: If the version is superseded, or the ingest refuses the write. Nothing is written in each case.
         """
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        superseded = await self._rows.fetch(PAGE_STATE_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
             msg = f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link, so it is not restamped."
             raise LibraryError(msg)
@@ -874,7 +913,8 @@ class LibraryCollection:
         version it diverged from with the diff in its evidence, and each copy that matches a version resolves the open
         `diverged_copy` flag of its step in this workflow, as `library`. A flag that is not written leaves the page
         saved and warns with `FlagWriteIncompleteWarning`. A presentation, an intent and a live trial marker are written
-        only when given, so a save without a marker drops one the page held.
+        only when given, so a save without a marker drops one the page held, except that a save of equal content over a
+        version on live trial keeps its stored marker.
 
         Args:
             workflow: The workflow to save. Its name and version choose the page.
@@ -887,22 +927,24 @@ class LibraryCollection:
                 parent's consumer record is the prior record when this version is new.
             presentation: The author's words about the workflow, or None.
             intent: What the person who wanted the workflow asked for, or None.
-            live_trial: The marker of an adoption on live trial, written under `live_trial`, or None.
+            live_trial: The marker of an adoption on live trial, written under `live_trial`, or None, which keeps the
+                stored marker of a version on live trial saved again with equal content.
 
         Returns:
             The page id the workflow lives under.
 
         Raises:
-            LibraryError: If this exact version already exists and is superseded, the prior consumer record
-                does not parse, or the ingest refuses the page. The current version of anything still saves again
-                freely.
+            LibraryError: If this exact version already exists and is superseded or archived, or is on live trial and
+                holds other content, the prior consumer record does not parse, or the ingest refuses the page. The
+                refusal of an archived version or one on live trial names the next free version number. The current
+                version of anything else still saves again freely.
             PresentationRefusedError: If the presentation names an input or an artifact the
                 workflow does not declare. Nothing is read or written in that case.
         """
         if presentation is not None:
             verify_presentation(workflow, presentation)
         workflow_id = page_id(workflow.name, workflow.version)
-        existing = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        existing = await self._rows.fetch(PAGE_STATE_SQL, workflow_id)
         if existing and bool(existing[0].get("superseded")):
             msg = (
                 f"{workflow_id!r} is already superseded by a later version. Saving it again would offer the stale "
@@ -910,6 +952,25 @@ class LibraryCollection:
                 f"{workflow.name!r} and adapt that instead."
             )
             raise LibraryError(msg)
+        if existing and bool(existing[0].get("archived")):
+            free = await next_version(workflow.name, above=workflow.version, versions=self)
+            msg = (
+                f"{workflow_id!r} is archived, and saving it again would write over the archived version, the workflow its "
+                f"runs ran. A new version number is needed: save it as version {free}, one above the highest saved version of "
+                f"{workflow.name!r}."
+            )
+            raise LibraryError(msg)
+        if existing and bool(existing[0].get("live_trial")):
+            stored = await self._frontmatter(workflow_id)
+            if not _holds(stored, workflow):
+                free = await next_version(workflow.name, above=workflow.version, versions=self)
+                msg = (
+                    f"{workflow_id!r} is on live trial, and saving other content under its number would write over the version "
+                    f"its live trial runs. A new version number is needed: save it as version {free}, one above the highest "
+                    f"saved version of {workflow.name!r}."
+                )
+                raise LibraryError(msg)
+            live_trial = live_trial or _marker_of(stored.get("live_trial"), workflow_id=workflow_id)
         record, versions = await self._consumer_record(workflow, workflow_id, lineage)
         frontmatter: dict[str, Any] = {
             "id": workflow_id,
@@ -949,7 +1010,7 @@ class LibraryCollection:
         )
         for stale_id in retired:
             await self._supersede(stale_id, by=workflow_id)
-        await self._settle_diverged_flags(workflow, workflow_id, record, versions)
+        await self._settle_diverged_flags(workflow, workflow_id, record, versions, change="saved")
         return workflow_id
 
     async def _consumer_record(
@@ -971,9 +1032,15 @@ class LibraryCollection:
         return consumer_record(workflow, versions, prior=prior), versions
 
     async def _settle_diverged_flags(
-        self, workflow: Workflow, workflow_id: str, record: Sequence[ConsumerEntry], versions: Mapping[str, Sequence[StepVersion]]
+        self,
+        workflow: Workflow,
+        workflow_id: str,
+        record: Sequence[ConsumerEntry],
+        versions: Mapping[str, Sequence[StepVersion]],
+        *,
+        change: Literal["saved", "restored"],
     ) -> None:
-        """Raise the flag of each diverged copy in `record`, then resolve the open one of each step this save no longer holds diverged."""
+        """Raise the flag of each diverged copy in `record`, then resolve the open one of each step this version no longer holds diverged."""
         raised_at = datetime.now(UTC)
         held = {entry.step: entry for entry in record}
         for entry in record:
@@ -984,7 +1051,7 @@ class LibraryCollection:
                 await self.put_flag(diverged_copy_flag(workflow, workflow_id, entry, version, raised_at=raised_at))
             except Exception as exc:
                 _warn_flag_not_written(
-                    workflow_id, f"the maintenance flag {flag_id('diverged_copy', entry.step, workflow.name)!r} was not written", exc, change="saved"
+                    workflow_id, f"the maintenance flag {flag_id('diverged_copy', entry.step, workflow.name)!r} was not written", exc, change=change
                 )
 
         def settled_here(flag: MaintenanceFlag) -> bool:
@@ -999,7 +1066,7 @@ class LibraryCollection:
                 return f"{workflow_id} holds no copy of {flag.step}."
             return f"{workflow_id} holds {flag.step} v{entry.version}, a saved version, again."
 
-        await self._resolve_open_diverged_flags(workflow_id, settled_here, reason=reason, change="saved")
+        await self._resolve_open_diverged_flags(workflow_id, settled_here, reason=reason, change=change)
 
     async def _resolve_open_diverged_flags(
         self,
@@ -1007,7 +1074,7 @@ class LibraryCollection:
         settled: Callable[[MaintenanceFlag], bool],
         *,
         reason: Callable[[MaintenanceFlag], str],
-        change: Literal["saved", "archived"],
+        change: Literal["saved", "archived", "restored"],
     ) -> None:
         """Resolve as `library` each open `diverged_copy` flag `settled` picks, read in one statement, warning on each failure."""
         try:
@@ -1037,32 +1104,33 @@ class LibraryCollection:
             LibraryError: If the marker on the page does not parse.
         """
         resolved = await self._resolved(workflow_id)
-        recorded = (await self._frontmatter(resolved, unknown=WorkflowUnknownError)).get("live_trial")
-        if recorded is None:
-            return None
-        try:
-            return LiveTrialMarker.model_validate(recorded)
-        except ValidationError as exc:
-            msg = f"the live trial marker on {resolved!r} does not parse: {exc}"
-            raise LibraryError(msg) from exc
+        return _marker_of((await self._frontmatter(resolved, unknown=WorkflowUnknownError)).get("live_trial"), workflow_id=resolved)
 
     async def revert(self, workflow_id: str) -> str:
-        """Undo an adoption: write its lineage parent back without `superseded_by`, then archive the version.
+        """Undo an adoption on live trial: write the version its marker names as previous back without `superseded_by`, then archive it.
 
-        The parent is written first, every other key it holds kept, so a failed archive leaves both versions live with
-        this one still the newest, and the revert can be asked again. Nothing is written when the call is refused.
+        The previous version is written first, every other key it holds kept, so a failed archive leaves both versions
+        live with this one still the newest, and the revert can be asked again. A version between the two stays
+        superseded. The previous version takes, in that same write, the newest decline the versions the revert retires
+        record (read along their lineages from this version back) for each step off the marker, so a revert undoes the
+        adoptions and keeps the keeps. Archiving resolves the open `diverged_copy` flags this version
+        raised, and then the previous version raises again, as `put` does, the flag of each diverged copy its record holds, warning with
+        `FlagWriteIncompleteWarning` when a flag is not written, the revert standing. Nothing is written when the call is
+        refused.
 
         Args:
             workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
-                its name.
+                its name and carry a live trial marker.
 
         Returns:
-            The parent's id, now the newest live version.
+            The previous version's id, now the newest live version.
 
         Raises:
             LibraryError: If `workflow_id` is not a workflow version id or not the newest live version of its name, it
-                carries no lineage parent of the same name, the parent is not there, holds no workflow or is archived,
-                or the ingest refuses a write. A refused archive says the parent is live again and to revert again.
+                carries no live trial marker or one that does not parse, the marker names no lower version of the same
+                name, that version is not there, holds no workflow or is archived, a consumer record it reads does not
+                parse, or the ingest refuses a write. A refused archive says the previous version is live again and to
+                revert again.
         """
         match = _VERSIONED_ID.match(workflow_id)
         if match is None:
@@ -1077,41 +1145,78 @@ class LibraryCollection:
                 f"Nothing was written."
             )
             raise LibraryError(msg)
-        lineage = await self.fetch_lineage(workflow_id)
-        if lineage is None or lineage.parent_name != name:
-            msg = f"{workflow_id!r} carries no lineage parent of the same name to go back to, so it is not reverted. Nothing was written."
+        marker = await self.fetch_live_trial(workflow_id)
+        if marker is None:
+            msg = f"{workflow_id!r} carries no live trial marker, so it is no adoption to undo and it is not reverted. Nothing was written."
             raise LibraryError(msg)
-        parent_id = page_id(name, lineage.parent_version)
-        found = await self._rows.fetch(PAGE_SQL, parent_id)
+        previous = _VERSIONED_ID.match(marker.previous)
+        if previous is None or previous["name"] != name or int(previous["version"]) >= int(match["version"]):
+            msg = (
+                f"the live trial marker of {workflow_id!r} names {marker.previous!r} as its previous version, which is no lower "
+                f"version of {name!r}, so it is not reverted. Nothing was written."
+            )
+            raise LibraryError(msg)
+        previous_id = marker.previous
+        found = await self._rows.fetch(PAGE_SQL, previous_id)
         if not found:
-            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} is not in collection {self._collection!r}, so it is not reverted. Nothing was written."
+            msg = f"the previous version {previous_id!r} of {workflow_id!r} is not in collection {self._collection!r}, so it is not reverted. Nothing was written."
             raise LibraryError(msg)
-        parent = found[0]
-        stored = parent["frontmatter"]
+        page = found[0]
+        stored = page["frontmatter"]
         long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
         if "spec" not in long_tail:
-            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} holds no workflow, so it is not reverted. Nothing was written."
+            msg = f"the previous version {previous_id!r} of {workflow_id!r} holds no workflow, so it is not reverted. Nothing was written."
             raise LibraryError(msg)
         if long_tail.get("archived_at") is not None:
             msg = (
-                f"the lineage parent {parent_id!r} of {workflow_id!r} is archived. Restore it, then revert {workflow_id!r} again. "
+                f"the previous version {previous_id!r} of {workflow_id!r} is archived. Restore it, then revert {workflow_id!r} again. "
                 f"Nothing was written."
             )
             raise LibraryError(msg)
+        carried = await self._retired_declines(workflow_id, name, above=int(previous["version"]), marker=marker)
         try:
-            await self._rewrite(parent, long_tail)
+            await self._rewrite(page, _with_declines(long_tail, carried, workflow_id=previous_id))
         except Exception as exc:
-            msg = f"the collection refused to make {parent_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
+            msg = f"the collection refused to make {previous_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
             raise LibraryError(msg) from exc
         try:
             await self.set_archived(workflow_id, archived=True)
         except LibraryError as exc:
             msg = (
-                f"{parent_id} is live again, and archiving {workflow_id} failed, so both are live and {workflow_id} is still "
+                f"{previous_id} is live again, and archiving {workflow_id} failed, so both are live and {workflow_id} is still "
                 f"the newest. Revert {workflow_id} again to finish: {exc}"
             )
             raise LibraryError(msg) from exc
-        return parent_id
+        await self._raise_diverged_flags_again(previous_id, long_tail)
+        return previous_id
+
+    async def _retired_declines(self, workflow_id: str, name: str, *, above: int, marker: LiveTrialMarker) -> dict[str, ConsumerEntry]:
+        """The newest decline of each step off the marker on the versions a revert retires, read along their lineages back to `above`."""
+        on_marker = {each.step for each in marker.steps}
+        carried: dict[str, ConsumerEntry] = {}
+        version_id: str | None = workflow_id
+        seen: set[str] = set()
+        while version_id is not None and version_id not in seen:
+            seen.add(version_id)
+            for entry in _consumer_entries((await self._frontmatter(version_id)).get("reusable_steps"), workflow_id=version_id):
+                if entry.declined is not None and entry.step not in on_marker:
+                    carried.setdefault(entry.step, entry)
+            lineage = await self.fetch_lineage(version_id)
+            if lineage is None or lineage.parent_name != name or lineage.parent_version <= above:
+                break
+            version_id = page_id(name, lineage.parent_version)
+        return carried
+
+    async def _raise_diverged_flags_again(self, workflow_id: str, long_tail: Mapping[str, Any]) -> None:
+        """Settle the diverged copy flags of a version a revert made live again, from its stored workflow and record."""
+        try:
+            workflow = Workflow.model_validate(long_tail["spec"])
+            record = _consumer_entries(long_tail.get("reusable_steps"), workflow_id=workflow_id)
+            versions = await self.step_versions_of([step.name for step in workflow.inline]) if workflow.inline else {}
+        except Exception as exc:
+            _warn_flag_not_written(workflow_id, "its diverged_copy flags were not read, so none was raised again", exc, change="restored")
+            return
+        await self._settle_diverged_flags(workflow, workflow_id, record, versions, change="restored")
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.
@@ -1172,7 +1277,7 @@ class LibraryCollection:
             LibraryError: If no page has that id, it is superseded, its record holds no copy of `step`, or the ingest
                 refuses the write. Nothing is written in each case.
         """
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        superseded = await self._rows.fetch(PAGE_STATE_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
             msg = (
                 f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link. "
@@ -1484,7 +1589,7 @@ class LibraryCollection:
         held = long_tail.get("cases")
         if (held == _cases_text(cases)) if cases else (held is None):
             return
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, step_id)
+        superseded = await self._rows.fetch(PAGE_STATE_SQL, step_id)
         if superseded and bool(superseded[0].get("superseded")):
             return
         long_tail.pop("cases", None)

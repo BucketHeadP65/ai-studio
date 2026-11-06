@@ -18,9 +18,9 @@ from core.ai.workflows.infrastructure.library_collection import (
     LIVE_STEP_VERSIONS_SQL,
     LIVE_VERSIONS_SQL,
     PAGE_SQL,
+    PAGE_STATE_SQL,
     SAVED_BY_SQL,
     STEP_PAGES_SQL,
-    SUPERSEDED_SQL,
 )
 from core.markdown import heading_slug
 
@@ -143,9 +143,18 @@ class FakeCollection:
             assert args[0] == self.collection
             held = self.pages.get(str(args[1]))
             return [{"saved_by": held["frontmatter"].get("saved_by")}] if held is not None and held["type"] == "workflow" else []
-        assert sql in (SUPERSEDED_SQL, PAGE_SQL), sql
-        page = self.pages.get(str(args[0]))
-        return [] if page is None else [{"superseded": page["superseded"]} if sql == SUPERSEDED_SQL else page]
+        assert sql in (PAGE_STATE_SQL, PAGE_SQL), sql
+        return self._page_rows(sql, self.pages.get(str(args[0])))
+
+    @staticmethod
+    def _page_rows(sql: str, page: Mapping[str, Any] | None) -> Sequence[Mapping[str, Any]]:
+        """Answer `PAGE_STATE_SQL` with whether the page is superseded, archived or on live trial, and `PAGE_SQL` with the page."""
+        if page is None:
+            return []
+        if sql == PAGE_STATE_SQL:
+            frontmatter = page["frontmatter"]
+            return [{"superseded": page["superseded"], "archived": "archived_at" in frontmatter, "live_trial": "live_trial" in frontmatter}]
+        return [page]
 
     def _flags(self, sql: str, args: tuple[object, ...]) -> Sequence[Mapping[str, Any]]:
         """Answer `FLAG_SQL` with the one page of that id, of any type, and `FLAGS_SQL` with the flag pages it filters, newest first."""

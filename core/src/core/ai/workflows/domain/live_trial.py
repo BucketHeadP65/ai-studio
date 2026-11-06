@@ -1,9 +1,10 @@
 """The live trial: the next real runs of a consumer version step maintenance adopted, each read once when it ends.
 
-A run is ignored when it says nothing about the adopted step, which a run that failed anywhere but at the step never
-does, failed when the step did not produce while everything it reads did, and worse when it did less well than the
-version the adoption replaced. Any other run counts. The rule reads
-only what the run and its grades recorded, and asks no model.
+A run is ignored when it says nothing about the adopted step, which a run that failed in execution anywhere but at the
+step never does, failed when it failed in execution and the step did not produce while everything it reads did, and
+worse when it did less well than the version the adoption replaced, a completed run whose checked status is failed
+ranking lowest. A completed run whose checked status is failed is ignored when that version has no completed run to
+rank it against. Any other run counts. The rule reads only what the run and its grades recorded, and asks no model.
 """
 
 from __future__ import annotations
@@ -12,13 +13,13 @@ import math
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.ai.workflows.domain.validator import wires_of
 from core.ai.workflows.domain.vocabulary import FromNode
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping, Sequence
+    from collections.abc import Collection, Iterable, Mapping, Sequence
 
     from core.ai.workflows.domain.evidence import Grade, RunEvidence
     from core.ai.workflows.domain.outcome import OutcomeStatus
@@ -33,19 +34,53 @@ _RANKS: Mapping[OutcomeStatus, int] = {"succeeded": 3, "noop": 3, "partial": 2, 
 _GATE_KINDS = frozenset({"gate", "judge", "orchestrator-gate"})
 
 
-class LiveTrialMarker(BaseModel):
-    """What a consumer version on live trial carries, under the frontmatter key `live_trial`."""
+class LiveTrialStep(BaseModel):
+    """One reusable step version a live trial covers."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    previous: str
-    """The consumer version the adoption replaced, `wf.<name>.v<version>`, whose runs are the baseline."""
     step: str
     """The reusable step's name."""
     step_hash: str
     """The content address of the step version adopted."""
+
+
+class LiveTrialMarker(BaseModel):
+    """What a consumer version on live trial carries, under the frontmatter key `live_trial`: every step on trial and the baseline.
+
+    A revert makes `previous` live again and declines every step the marker holds.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    previous: str
+    """The consumer version before the first adoption the live trial covers, `wf.<name>.v<version>`, whose runs are the
+    baseline and which a revert makes live again."""
+    steps: tuple[LiveTrialStep, ...] = Field(min_length=1)
+    """Every reusable step version on live trial, each step name once."""
     runs: int = Field(default=3, ge=1)
     """How many runs that count close the live trial."""
+
+    @model_validator(mode="after")
+    def _each_step_once(self) -> LiveTrialMarker:
+        names = [each.step for each in self.steps]
+        if repeated := sorted({name for name in names if names.count(name) > 1}):
+            msg = f"a live trial marker names each step once, and this one names {', '.join(repeated)} more than once"
+            raise ValueError(msg)
+        return self
+
+    def with_steps(self, added: Iterable[LiveTrialStep]) -> LiveTrialMarker:
+        """This marker with `added` after its steps, an earlier step of the same name replaced, and the same baseline.
+
+        Args:
+            added: The step versions a new adoption puts on live trial.
+
+        Returns:
+            The marker the new adoption carries.
+        """
+        adopted = tuple(added)
+        replaced = {each.step for each in adopted}
+        return LiveTrialMarker(previous=self.previous, steps=(*(each for each in self.steps if each.step not in replaced), *adopted), runs=self.runs)
 
 
 class LiveTrialVerdict(BaseModel):
@@ -71,13 +106,14 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
 ) -> LiveTrialVerdict:
     """Read one ended run of a version on live trial as ignored, failed, worse or counting.
 
-    A run a person stopped is ignored. A run whose outcome or checked status is failed is failed when a touched node
-    did not produce and every node it wires from did. Any other failed run is ignored, baseline or not: a node a touched
-    node wires from produced nothing, or every touched node produced and the run failed elsewhere. Against a baseline a
-    run that did not fail is worse when its checked status ranks below every one of the baseline's, when a gate both
-    versions hold was rejected more times than in any baseline run, or when one of its structural grades is more than
-    `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible.
-    Any other run counts.
+    A run a person stopped is ignored. A run whose outcome is failed, one that failed in execution, is failed when a
+    touched node did not produce and every node it wires from did. Any other such run is ignored, baseline or not: a
+    node a touched node wires from produced nothing, or every touched node produced and the run failed elsewhere. A
+    completed run is read against the baseline whatever its checked status, a failed one ranking lowest. Against a
+    baseline it is worse when its checked status ranks below every one of the baseline's, when a gate both versions
+    hold was rejected more times than in any baseline run, or when one of its structural grades is more than
+    `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible,
+    and with it a completed run whose checked status is failed is ignored. Any other run counts.
 
     Args:
         workflow: The version on live trial.
@@ -93,11 +129,16 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
     """
     if run.outcome == "stopped":
         return LiveTrialVerdict(kind="ignored", reason="A person stopped the run, so it says nothing about the step.")
-    if run.outcome == "failed" or run.result.status == "failed":
+    if run.outcome == "failed":
         return _failed_at_a_touched_node(workflow, touched, run)
+    if not baseline and run.result.status == "failed":
+        return LiveTrialVerdict(
+            kind="ignored",
+            reason="The run's checks failed, and the previous version has no completed run to compare it with, so it says nothing about the step.",
+        )
     if not baseline:
         return LiveTrialVerdict(
-            kind="counts", reason="The run did not fail at the adopted step, and the previous version has no completed run to compare it with."
+            kind="counts", reason="The run did not fail in execution, and the previous version has no completed run to compare it with."
         )
     return (
         _ranked_below(run, baseline)

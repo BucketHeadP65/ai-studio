@@ -3,7 +3,7 @@ id: adr-0023-reusable-step-changes-arm-step-maintenance
 type: adr
 title: A new reusable step version arms an on-step-change schedule through the library's outbox
 summary: 'Saving a reusable step version above every saved version of its name writes ReusableStepSaved into the outbox of engram_workflows in the same transaction as the page, a worker in the harness server drains that outbox and arms every on-step-change schedule, and the fire passes the collected step ids to the workflow parameter changed_step_ids'
-status: proposed
+status: accepted
 aliases:
 - adr-0023-reusable-step-changes-arm-step-maintenance
 app: root

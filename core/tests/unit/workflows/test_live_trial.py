@@ -13,6 +13,7 @@ from core.ai.workflows.contracts import (
     Grade,
     JudgeGate,
     LiveTrialMarker,
+    LiveTrialStep,
     LiveTrialVerdict,
     Outcome,
     ParameterSpec,
@@ -130,10 +131,26 @@ def test_a_touched_node_wired_only_from_parameters_that_did_not_produce_is_faile
     assert verdict.kind == "failed"
 
 
-def test_a_completed_run_whose_checked_status_is_failed_where_the_touched_node_did_not_produce_is_failed() -> None:
-    verdict = _verdict(_run(status="failed", produced={"fetch": "str"}), baseline=_baseline("succeeded"))
+@pytest.mark.parametrize("produced", [{"fetch": "str"}, EVERY_NODE], ids=["the touched node silent", "every node produced"])
+def test_a_completed_run_whose_checked_status_is_failed_ranks_below_a_baseline_that_did_not_fail_and_is_worse(produced: Mapping[str, str]) -> None:
+    verdict = _verdict(_run(status="failed", produced=produced), baseline=_baseline("succeeded", "partial", "unknown"))
 
-    assert verdict.kind == "failed"
+    assert verdict.kind == "worse"
+    assert "failed" in verdict.reason
+
+
+def test_a_completed_run_whose_checked_status_is_failed_counts_against_a_baseline_that_failed_too() -> None:
+    verdict = _verdict(_run(status="failed"), baseline=_baseline("failed", "failed"))
+
+    assert verdict.kind == "counts"
+
+
+@pytest.mark.parametrize("produced", [{"fetch": "str"}, EVERY_NODE], ids=["the touched node silent", "every node produced"])
+def test_a_completed_run_whose_checked_status_is_failed_is_ignored_without_a_baseline(produced: Mapping[str, str]) -> None:
+    verdict = _verdict(_run(status="failed", produced=produced))
+
+    assert verdict.kind == "ignored"
+    assert "no completed run" in verdict.reason
 
 
 def test_a_completed_partial_run_against_three_succeeded_runs_is_worse() -> None:
@@ -155,12 +172,6 @@ def test_a_run_that_failed_outside_the_touched_nodes_is_ignored(baseline: tuple[
 
     assert verdict.kind == "ignored"
     assert "outside" in verdict.reason
-
-
-def test_a_completed_run_whose_checked_status_is_failed_while_every_touched_node_produced_is_ignored() -> None:
-    verdict = _verdict(_run(status="failed"), baseline=_baseline("succeeded", "succeeded", "succeeded"))
-
-    assert verdict.kind == "ignored"
 
 
 def test_a_gate_rejected_more_times_than_in_any_baseline_run_is_worse_a_judges_rejections_included() -> None:
@@ -215,8 +226,27 @@ def test_an_empty_baseline_makes_only_failed_possible() -> None:
 
 
 def test_a_marker_counts_three_runs_unless_it_says_otherwise_and_refuses_none() -> None:
-    marker = LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash="abc")
+    marker = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"),))
 
     assert marker.runs == 3
     with pytest.raises(ValueError, match="greater than or equal to 1"):
-        LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash="abc", runs=0)
+        LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"),), runs=0)
+
+
+def test_a_marker_holds_at_least_one_step_and_each_step_once() -> None:
+    with pytest.raises(ValueError, match="at least 1"):
+        LiveTrialMarker(previous="wf.digest-sources.v1", steps=())
+    with pytest.raises(ValueError, match="digest"):
+        LiveTrialMarker(
+            previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"), LiveTrialStep(step="digest", step_hash="def"))
+        )
+
+
+def test_a_marker_with_steps_keeps_its_previous_puts_each_new_step_after_the_earlier_ones_and_replaces_an_earlier_step_of_the_same_name() -> None:
+    earlier = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="a"), LiveTrialStep(step="fetch", step_hash="b")))
+
+    stacked = earlier.with_steps((LiveTrialStep(step="summarize", step_hash="c"), LiveTrialStep(step="digest", step_hash="d")))
+
+    assert stacked.previous == "wf.digest-sources.v1"
+    assert [(each.step, each.step_hash) for each in stacked.steps] == [("fetch", "b"), ("summarize", "c"), ("digest", "d")]
+    assert stacked.runs == earlier.runs

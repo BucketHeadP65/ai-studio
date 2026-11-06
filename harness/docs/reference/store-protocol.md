@@ -47,7 +47,8 @@ what a library keeps and what a reader derives.
 pattern-constrained) and `version` (a `PositiveInt`). Together they identify a workflow.
 An adaptation is *the next version of the same name*, never a different name:
 `adapt` in `core/src/core/ai/workflows/domain/lineage.py` copies the parent with
-`version = spec.version + 1` and leaves `name` alone.
+`version = spec.version + 1` and leaves `name` alone. A host that lists every saved version renumbers the child
+one above all of them with `next_version`, so an adaptation never lands on an archived version or one on live trial.
 
 Identity is **not** the library's id. The id is an address the library mints and the caller
 reads back. See invariant I6. `name@version` is the identity. `wf.<name>.v<n>` and

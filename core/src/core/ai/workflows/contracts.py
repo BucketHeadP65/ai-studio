@@ -55,7 +55,7 @@ from core.ai.workflows.domain.lineage import (
     moved_nodes,
     prediction_record,
 )
-from core.ai.workflows.domain.live_trial import LiveTrialMarker, LiveTrialVerdict, live_trial_verdict
+from core.ai.workflows.domain.live_trial import LiveTrialMarker, LiveTrialStep, LiveTrialVerdict, live_trial_verdict
 from core.ai.workflows.domain.outcome import GateReview, MapBatch, Outcome, OutcomeStatus, WorkItemFact, observed_outcome
 from core.ai.workflows.domain.parameter_values import WorkflowArguments, normalize_arguments
 from core.ai.workflows.domain.presentation import (
@@ -147,7 +147,7 @@ from core.ai.workflows.internal_contracts import (
 from core.ai.workflows.read_models import ConsumerCard, FlagCard, SavedWorkflow
 from core.ai.workflows.registry import StepRegistry
 from core.ai.workflows.reusable_steps import NO_REUSABLE_STEPS, copy_reusable_steps
-from core.ai.workflows.service import save, verify_savable, version_hashes
+from core.ai.workflows.service import next_version, save, verify_savable, version_hashes
 from core.ai.workflows.voice import process_instructions
 from core.lazy_imports import lazy_module_attributes
 
@@ -208,6 +208,7 @@ __all__ = [
     "Lineage",
     "LiveTrialLibrary",
     "LiveTrialMarker",
+    "LiveTrialStep",
     "LiveTrialVerdict",
     "MaintenanceFlag",
     "MaintenanceFlags",
@@ -307,6 +308,7 @@ __all__ = [
     "load_spec_document",
     "load_step_document",
     "moved_nodes",
+    "next_version",
     "normalize_arguments",
     "observed_outcome",
     "orchestrated_gates",

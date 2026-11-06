@@ -25,6 +25,7 @@ from core.ai.workflows.contracts import (
     LibraryCollection,
     Lineage,
     LiveTrialMarker,
+    LiveTrialStep,
     ParameterSpec,
     PresentationRefusedError,
     Program,
@@ -48,6 +49,7 @@ from harness.features.browsing.exceptions import (
     WorkflowCardChangedError,
     WorkflowNameRepeatedError,
     WorkflowNotLiveError,
+    WorkflowVersionArchivedError,
     WorkflowVersionChangedError,
     WorkflowVersionSupersededError,
     WorkflowVersionUnreadableError,
@@ -578,7 +580,7 @@ async def _moved_past(saved_by: str) -> tuple[FakeCollection, LibraryCollection]
         provenance={"saved_by": saved_by},
         fingerprint=_stamp(_say_x(4, STEPS_A[2])),
         lineage=ADOPTION,
-        live_trial=LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2])),
+        live_trial=LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),)),
     )
     await library.record_decline("wf.say-x.v4", step="step_a", step_hash=step_content_address(STEPS_A[3]), because="kept")
     assert await library.current("wf.say-x.v3") == "wf.say-x.v4"
@@ -620,7 +622,7 @@ async def test_a_file_whose_workflow_and_words_equal_the_stored_version_writes_n
     assert imported == FolderImport(written=("wf.say-x.v4",), skipped=())
     assert len(store.payloads) == before, "the unchanged version writes nothing"
     assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
-    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),))
     (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
     assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
 
@@ -652,7 +654,7 @@ async def test_a_file_whose_workflow_equals_the_stored_version_and_whose_words_d
 async def _assert_adoption_kept(library: LibraryCollection) -> None:
     """`say-x` v4 still carries the lineage, the live trial marker and the decline `_moved_past` gave it."""
     assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
-    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),))
     (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
     assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
 
@@ -739,6 +741,21 @@ async def test_a_file_whose_version_the_library_archived_is_skipped_with_that_re
     card = await library.fetch_card("wf.say-x.v4")
     assert card is not None
     assert card.archived_at is not None
+
+
+async def test_a_file_holding_other_content_at_a_version_the_library_archived_refuses_the_folder_naming_the_next_free_version(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    assert await library.revert("wf.say-x.v4") == "wf.say-x.v3"
+    archived_before = dict(store.pages["wf.say-x.v4"]["frontmatter"])
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[3])), "two-step.md": WORKFLOW})
+
+    with pytest.raises(WorkflowVersionArchivedError, match=r"say-x\.md holds wf\.say-x\.v4.*archived.*to 5, one above every version") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert (refused.value.workflow_id, refused.value.next_version) == ("wf.say-x.v4", 5)
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+    assert store.pages["wf.say-x.v4"]["frontmatter"] == archived_before
 
 
 async def test_two_files_of_one_workflow_refuse_the_folder_before_its_first_write_naming_both(tmp_path: Path) -> None:

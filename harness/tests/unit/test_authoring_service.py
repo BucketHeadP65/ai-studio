@@ -20,8 +20,11 @@ from core.ai.workflows.contracts import (
     FromNode,
     FromParameter,
     JudgeGate,
+    LibraryCollection,
     LibraryError,
     Lineage,
+    LiveTrialMarker,
+    LiveTrialStep,
     MapNode,
     ParameterSpec,
     RunNode,
@@ -32,10 +35,12 @@ from core.ai.workflows.contracts import (
     WorkflowFingerprint,
     WorkflowIntent,
     WorkflowPresentation,
+    adapt,
     intent_issues,
     load_spec_document,
     prepare,
     referenced_steps,
+    step_content_address,
 )
 from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.folder import FOLDER, FolderLibrary, folder_toolset
@@ -64,6 +69,7 @@ from harness.settings import HarnessSettings, RunSettings, SelfAuthoringSettings
 from tests.conftest import CallLog, register_quarterly_steps
 from tests.support.authoring import a_controller, one_session
 from tests.support.fakes.broadcaster import FakeBroadcaster
+from tests.support.fakes.library_collection import FakeCollection
 from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.fakes.step_library import FakeStepLibrary
@@ -1190,3 +1196,78 @@ async def test_an_adaptation_of_a_parent_with_no_intent_invents_none(tmp_path: P
     child, _ = await adapt_saved(parent_id, ({"op": "set_description", "to": "Now with commentary."},), library=library)
 
     assert child.intent is None
+
+
+_SOURCE_TEXT = Shape(json_schema={"type": "string"})
+_DIGEST = {
+    1: Briefing(name="digest", instructions="Read the whole source and write one digest page.", inputs={"source": _SOURCE_TEXT}, output=_SOURCE_TEXT),
+    2: Briefing(
+        name="digest", instructions="Read the whole source and write one digest page that quotes each claim.", inputs={"source": _SOURCE_TEXT}, output=_SOURCE_TEXT
+    ),
+}
+
+
+async def test_an_adaptation_of_a_version_a_revert_made_live_is_numbered_above_the_archived_version() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version, step in _DIGEST.items():
+        await library.put_step(step, version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    third = Workflow(
+        name="digest-sources",
+        version=3,
+        description="Digest one source.",
+        parameters={"source": ParameterSpec(description="the source", json_schema={"type": "string"})},
+        inline=(_DIGEST[1],),
+        nodes=(RunNode(id="digest", work="digest", inputs={"source": FromParameter(parameter="source")}),),
+        output=FromNode(node="digest"),
+    )
+    await library.put(third, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "owner:cli"})
+    child, lineage = adapt(third, ops=[{"op": "replace_inline_step", "name": "digest", "with": _DIGEST[2].model_dump(mode="json")}])
+    marker = LiveTrialMarker(previous="wf.digest-sources.v3", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(_DIGEST[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=marker
+    )
+    assert await library.revert("wf.digest-sources.v4") == "wf.digest-sources.v3"
+
+    draft, adapted = await adapt_saved("wf.digest-sources.v3", [{"op": "set_description", "to": "Digest one source, briefly."}], library=library)
+
+    assert yaml.safe_load(draft.spec_yaml)["version"] == 5
+    assert (adapted.parent_name, adapted.parent_version) == ("digest-sources", 3)
+
+
+
+async def test_a_draft_made_before_an_adoption_saves_as_the_number_after_the_adoption_and_saving_it_again_keeps_that_number(
+    tmp_path: Path,
+) -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version, step in _DIGEST.items():
+        await library.put_step(step, version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    first = Workflow(
+        name="digest-sources",
+        version=1,
+        description="Digest one source.",
+        parameters={"source": ParameterSpec(description="the source", json_schema={"type": "string"})},
+        inline=(_DIGEST[1],),
+        nodes=(RunNode(id="digest", work="digest", inputs={"source": FromParameter(parameter="source")}),),
+        output=FromNode(node="digest"),
+    )
+    words = WorkflowPresentation(purpose="Digest one source.", produces="One digest page.", owner_participation="You read the page.", not_for="A batch.")
+    await library.put(
+        first, title="Digest sources", summary="Digest one source.", applicability="Use per source. Not for a batch.", provenance={"saved_by": "owner:cli"}, presentation=words
+    )
+    draft, _ = await adapt_saved("wf.digest-sources.v1", [{"op": "set_description", "to": "Digest one source, briefly."}], library=library)
+    assert yaml.safe_load(draft.spec_yaml)["version"] == 2
+    child, lineage = adapt(first, ops=[{"op": "replace_inline_step", "name": "digest", "with": _DIGEST[2].model_dump(mode="json")}])
+    marker = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(_DIGEST[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=marker
+    )
+    settings = SelfAuthoringSettings(custom_root=tmp_path / "custom")
+
+    saved = await save_draft(draft, library=library, registry=StepRegistry(perform=_never_performed), self_authoring=settings)
+
+    assert saved == "wf.digest-sources.v3"
+    assert await library.fetch_live_trial("wf.digest-sources.v2") == marker, "the adoption saved in between keeps its version and its marker"
+    assert await save_draft(draft, library=library, registry=StepRegistry(perform=_never_performed), self_authoring=settings) == "wf.digest-sources.v3"
+    assert await library.locate("digest-sources", 4) is None, "saving the same draft again keeps its number"

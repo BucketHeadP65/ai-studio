@@ -337,6 +337,7 @@ async def import_path_in_session(path: Path, *, by: str, open_library: LibraryOp
             maintenance did not save.
         WorkflowCardChangedError: The library holds a workflow file's workflow at its version under other words.
         WorkflowVersionChangedError: The library holds a workflow file's version with other content.
+        WorkflowVersionArchivedError: The library archived a workflow file's version with other content.
         WorkflowNotLiveError: The library superseded a workflow file's version and archived every newer one.
         WorkflowNameRepeatedError: Two workflow files hold the same workflow.
         WorkflowVersionUnreadableError: The library's copy of a workflow file's version no longer reads as a workflow.

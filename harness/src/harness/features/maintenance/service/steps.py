@@ -18,6 +18,7 @@ from core.ai.workflows.contracts import (
     JudgeGate,
     LibraryError,
     LiveTrialMarker,
+    LiveTrialStep,
     MaintenanceFlag,
     MapNode,
     Prediction,
@@ -28,6 +29,7 @@ from core.ai.workflows.contracts import (
     canonical_step_yaml,
     fingerprint,
     flag_id,
+    next_version,
     spec_identity,
     step_content_address,
     trust_across_versions,
@@ -64,6 +66,7 @@ from harness.features.maintenance.domain import (
 )
 from harness.features.maintenance.exceptions import LandingRefusedError
 from harness.features.maintenance.service.changed_steps import newest_version
+from harness.features.maintenance.service.live_trial import read_live_trial
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -169,13 +172,13 @@ class MaintenanceSteps:
 
         Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
         matches that version, or whose record declines it, is dropped and named. The consumers past the cap are named
-        once each for the next run.
+        once each for a later run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
 
         Returns:
-            The pairs, by step name and then by consumer name, the consumers left for the next run and those dropped.
+            The pairs, by step name and then by consumer name, the consumers left for a later run and those dropped.
 
         Raises:
             LibraryError: A step id names no saved reusable step version, or a library read fails.
@@ -265,22 +268,30 @@ class MaintenanceSteps:
         """Land the drafted plan as the planner decided it: save each adoption on live trial, decline each kept copy and flag each flagged pair.
 
         Each decision is merged into the drafted change with the same workflow id and step id, so the evidence stays as
-        `prepare_plan` copied it. A drafted change no decision names lands kept, with the reason "not decided". A
-        decision that names no drafted change is refused, and so is every decision of a drafted change decided twice.
+        `prepare_plan` copied it. A drafted change no decision names writes nothing and lands as not decided, so a later
+        run for its step offers it again. A decision that names no drafted change is refused, and so is every decision
+        of a drafted change decided twice.
 
-        An adoption copies the step from the library, applies the change's further edit operations, validates the
-        candidate and saves it as the consumer's next version, saved by step maintenance, with a live trial marker naming
-        the version it replaces. It then resolves the open consumer flag of that pair. A kept pair writes a decline into
-        the consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the
-        planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. Every
-        writable change lands before any refusal is raised.
+        Every adoption into one consumer lands as one version: the step of each is copied from the library, each
+        change's further edit operations are applied, the candidate is validated and saved as the consumer's next
+        version, numbered one above the highest saved version of its name so an archived version is never written over,
+        saved by step maintenance. Its lineage touches the nodes of every replaced step, and its live trial marker
+        covers each adopted step with the version it replaces as the baseline. A consumer whose newest version is still
+        on live trial is built on that version, and the new marker keeps its baseline and its steps beside the new ones.
+        Each adoption then resolves the open consumer flag of its pair. A kept pair writes a decline into the
+        consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the planner's
+        reason. Keeps land first, on the version the plan names, so an adoption into the same consumer inherits the
+        decline and a revert of it keeps the decline. The adoptions land next, and the flags last, on the version this
+        landing saved for their consumer when it saved one. Every writable change lands before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
+        `plan_rejected` flag of that step version or an earlier one, and a flag a person resolved is left alone.
 
         A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
         its name, when the consumer declines that version, or when someone saved a newer version of the consumer since
         the listing. An adoption is also refused when it carries an edit other than `rewire`, `add_parameter` or
-        `set_output`, when its edits do not apply, when the candidate does not validate, when its card's words name what
-        the workflow does not declare, when it names an agent this host cannot resolve, or when the library refuses the
-        save. A kept pair is refused when the library refuses its decline.
+        `set_output`. The adoptions into one consumer that pass those checks are refused together when their edits do
+        not apply, when the candidate does not validate, when its card's words name what the workflow does not declare,
+        when it names an agent this host cannot resolve, or when the library refuses the save. A kept pair is refused
+        when the library refuses its decline.
 
         Args:
             plan: The drafted plan, as `prepare_plan` answered it.
@@ -290,18 +301,37 @@ class MaintenanceSteps:
             What each change did, when nothing was refused.
 
         Raises:
-            LandingRefusedError: One or more changes were refused. Every other change landed, and the error's report
-                holds every outcome.
+            LandingRefusedError: One or more changes were refused. Every other change landed, the owner was sent one
+                notice saying every change with its reason, and the error's report holds every outcome.
         """
+        merged = merged_plan(plan, decisions)
+        outcomes: dict[int, LandedChange] = {index: change for index, change in enumerate(merged) if isinstance(change, LandedChange)}
+        adoptions: dict[str, list[tuple[int, PlannedChange]]] = {}
+        for index, change in enumerate(merged):
+            if isinstance(change, PlannedChange) and change.disposition == "adopt":
+                adoptions.setdefault(change.workflow_id, []).append((index, change))
+        for index, change in enumerate(merged):
+            if isinstance(change, PlannedChange) and change.disposition == "keep":
+                outcomes[index] = await self._land(change, change.workflow_id)
         saved: dict[str, str] = {}
-        changes = [change if isinstance(change, LandedChange) else await self._land(change, saved) for change in merged_plan(plan, decisions)]
+        for workflow_id, group in adoptions.items():
+            landed = await self._adopt_all(workflow_id, [planned for _, planned in group])
+            outcomes.update(zip((position for position, _ in group), landed, strict=True))
+            if saved_id := next((each.saved_id for each in landed if each.outcome == "adopted"), ""):
+                saved[workflow_id] = saved_id
+        for index, change in enumerate(merged):
+            if index not in outcomes and isinstance(change, PlannedChange):
+                outcomes[index] = await self._land(change, saved.get(change.workflow_id, change.workflow_id))
+        changes = await self._settle_rejected_plans([outcomes[index] for index in range(len(merged))])
         report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
-        if any(change.outcome == "refused" for change in changes):
-            raise LandingRefusedError(report)
+        refused = sum(change.outcome == "refused" for change in changes)
+        if refused:
+            _, told = await self._tell_owner(f"Step maintenance refused {refused} of {len(changes)} planned changes", report)
+            raise LandingRefusedError(report, told=told)
         return report
 
     async def report_changes(self, landed: LandingReport) -> str:
-        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for the next run.
+        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for a later run.
 
         A notice that fails is said in the answer and never fails the run. A landing that changed nothing tells nobody.
 
@@ -311,18 +341,26 @@ class MaintenanceSteps:
         Returns:
             The notice's text and whether it went out.
         """
+        if not landed.changes and not landed.left_for_next_run:
+            return "Step maintenance changed nothing, so nobody was told."
+        message, told = await self._tell_owner(f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}", landed)
+        return f"{message}\n{told}"
+
+    async def _tell_owner(self, title: str, landed: LandingReport) -> tuple[str, str]:
+        """Send the owner one notice saying every change of `landed` and the consumers past the cap, and answer it and whether it went out."""
         lines = [change_line(change) for change in landed.changes]
         if landed.left_for_next_run:
-            lines.append(f"Left for the next run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}.")
-        if not lines:
-            return "Step maintenance changed nothing, so nobody was told."
+            lines.append(
+                f"Left for a later run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}. Step maintenance "
+                f"takes them when it next runs for their steps, with a step's next version, or run step-maintenance by hand "
+                f"with the same step ids to take them now."
+            )
         message = "\n".join(lines)
-        title = f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}"
         try:
             delivered = await self._notifier.notify(title, message)
         except Exception as exc:  # noqa: BLE001 (a notice that fails is said in the answer, never raised into the run)
-            return f"{message}\nThe notice to the owner failed: {exc}"
-        return f"{message}\n{'The owner was told.' if delivered else 'The notice to the owner was not delivered.'}"
+            return message, f"The notice to the owner failed: {exc}"
+        return message, "The owner was told." if delivered else "The notice to the owner was not delivered."
 
     async def select_disagreements(self, landed: LandingReport, consumers: ConsumerList) -> list[RepositoryChange]:
         """One repository change to draft per changed step that some consumers adopted and others kept or flagged.
@@ -345,7 +383,7 @@ class MaintenanceSteps:
         for change in landed.changes:
             pair = pairs.get((change.workflow_id, change.step_id))
             outcome = change.outcome
-            if pair is None or outcome in ("refused", "undecided"):
+            if pair is None or outcome in ("refused", "not_decided"):
                 continue
             side = ConsumerSide(
                 workflow_id=change.workflow_id,
@@ -369,7 +407,7 @@ class MaintenanceSteps:
     async def plan_decisions(self, plan: MaintenancePlan) -> PlanDecisions:
         """No decision for any change of `plan`, the type the planner answers in.
 
-        No graph places this step. The landing keeps every drafted change of `plan` it is handed with these decisions.
+        No graph places this step. Handed these decisions, the landing writes nothing for any drafted change of `plan`.
 
         Args:
             plan: The drafted plan.
@@ -451,9 +489,10 @@ class MaintenanceSteps:
         Call it on every change you plan to adopt, with the further edit operations it needs, before you answer. The
         landing builds the same version and refuses it when the check fails, when the step version is not the newest of
         its name, when the consumer declines that version, when someone saved a newer version of the consumer, or when
-        an edit is anything but `rewire`, `add_parameter` or `set_output`. The answer says which. A repository change
-        you draft may hold any edit, such as a `replace_inline_step`, because the landing never lands a draft: read
-        only the contract check for it.
+        an edit is anything but `rewire`, `add_parameter` or `set_output`. The answer says which. Every adoption into one
+        consumer lands as one version, so adoptions that each pass here are refused together when that version does not
+        validate. A repository change you draft may hold any edit, such as a `replace_inline_step`, because the landing
+        never lands a draft: read only the contract check for it.
 
         Args:
             workflow_id: The consumer's workflow version id, `wf.<name>.v<version>`, as the pair names it.
@@ -562,7 +601,7 @@ class MaintenanceSteps:
         workflow = await self._library.fetch_workflow(workflow_id)
         step = await self._library.fetch_step(step_id)
         try:
-            candidate, _ = _adopted(workflow, step, extra_ops, evidence="")
+            candidate, _ = _adopted(workflow, ((step, extra_ops),), evidence="")
         except ValueError as exc:
             return ContractCheck(workflow_id=workflow_id, step_id=step_id, passed=False, issues=[str(exc)])
         report = validate(candidate, self._registered())
@@ -586,29 +625,43 @@ class MaintenanceSteps:
         calls: StandInCalls = []
         return await self._cases.perform(version.step, version.step_id, cases, calls)
 
-    async def _land(self, change: PlannedChange, saved: dict[str, str]) -> LandedChange:
-        """Land one change over the consumer version this landing last saved for it, or record why it was refused."""
-        base = saved.get(change.workflow_id, change.workflow_id)
+    async def _land(self, change: PlannedChange, base: str) -> LandedChange:
+        """Land one kept or flagged change on the consumer version `base`, or record why it was refused."""
         try:
             step = await self._library.fetch_step(change.step_id)
-            if change.disposition == "adopt":
-                refusal = await self._adoption_refusal(base, change.step_id, step, change.extra_ops)
-            else:
-                refusal = await self._stale_pair(base, change.step_id, step)
-            if refusal is not None:
+            if (refusal := await self._stale_pair(base, change.step_id, step)) is not None:
                 return _landed(change, "refused", refusal)
             workflow = await self._library.fetch_workflow(base)
-            if change.disposition == "adopt":
-                landed = await self._adopt(change, base, workflow, step)
-                if landed.outcome == "adopted":
-                    saved[change.workflow_id] = landed.saved_id
-                return landed
             if change.disposition == "keep":
                 await self._library.record_decline(base, step=step.name, step_hash=step_content_address(step), because="kept")
                 return _landed(change, "kept", change.reason)
             return await self._flag(change, base, workflow, step)
         except _REFUSALS as exc:
             return _landed(change, "refused", str(exc))
+
+    async def _adopt_all(self, base: str, changes: Sequence[PlannedChange]) -> list[LandedChange]:
+        """Land every adoption into the consumer version `base` as one version, each refused change with why, in their order."""
+        outcomes: dict[int, LandedChange] = {}
+        ready: list[tuple[int, PlannedChange, InlineStep]] = []
+        for index, change in enumerate(changes):
+            try:
+                step = await self._library.fetch_step(change.step_id)
+                refusal = await self._adoption_refusal(base, change.step_id, step, change.extra_ops)
+            except _REFUSALS as exc:
+                outcomes[index] = _landed(change, "refused", str(exc))
+                continue
+            if refusal is not None:
+                outcomes[index] = _landed(change, "refused", refusal)
+            else:
+                ready.append((index, change, step))
+        if ready:
+            adopted = [(change, step) for _, change, step in ready]
+            try:
+                landed = await self._adopt(base, adopted)
+            except _REFUSALS as exc:
+                landed = [_landed(change, "refused", _together(str(exc), change, adopted, base)) for change, _ in adopted]
+            outcomes.update(zip((index for index, _, _ in ready), landed, strict=True))
+        return [outcomes[index] for index in range(len(changes))]
 
     async def _stale_pair(self, base: str, step_id: str, step: InlineStep) -> str | None:
         """Why the pair is stale: the step version is not the newest of its name, the consumer declines it, or someone saved past the consumer."""
@@ -620,7 +673,10 @@ class MaintenanceSteps:
             return f"{base} declines {step_id}, so step maintenance leaves the pair alone until a newer version arrives"
         newest = await self._library.current(base)
         if newest != base:
-            return f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
+            return (
+                f"{newest} was saved after {base}, so this change no longer applies to the newest version. Step maintenance plans "
+                f"it again when it next runs for {step.name}, with its next version, or when you run step-maintenance with {step_id}"
+            )
         return None
 
     async def _adoption_refusal(self, base: str, step_id: str, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]]) -> str | None:
@@ -634,22 +690,32 @@ class MaintenanceSteps:
             )
         return None
 
-    async def _adopt(self, change: PlannedChange, base: str, workflow: Workflow, step: InlineStep) -> LandedChange:
-        """Save the consumer's next version with `step` on live trial, then resolve the pair's open consumer flag."""
+    async def _adopt(self, base: str, adopted: Sequence[tuple[PlannedChange, InlineStep]]) -> list[LandedChange]:
+        """Save the consumer's next version with every step of `adopted` on live trial, then resolve each pair's open consumer flag."""
+        workflow = await self._library.fetch_workflow(base)
         run = self._current_run()
         ran_in = f" in the run {run}" if run else ""
-        evidence = f"Step maintenance adopted {change.step_id} in {base}{ran_in}. {change.reason}"
-        child, lineage = _adopted(workflow, step, change.extra_ops, evidence=evidence)
+        if len(adopted) == 1:
+            ((change, _),) = adopted
+            evidence = f"Step maintenance adopted {change.step_id} in {base}{ran_in}. {change.reason}"
+        else:
+            reasons = " ".join(f"{change.step_id}: {change.reason}" for change, _ in adopted)
+            evidence = f"Step maintenance adopted {', '.join(change.step_id for change, _ in adopted)} in {base}{ran_in}. {reasons}"
+        child, lineage = _adopted(workflow, [(step, change.extra_ops) for change, step in adopted], evidence=evidence)
+        child = child.model_copy(update={"version": await next_version(workflow.name, above=workflow.version, versions=self._library)})
         registry = self._registered()
         verify_savable(child, registry)
         try:
             stamp = fingerprint(child, registry, environment=self._environment)
         except LookupError as exc:
-            return _landed(change, "refused", f"the next version of {base} names an agent this host cannot resolve: {exc}")
+            refusal = f"the next version of {base} names an agent this host cannot resolve: {exc}"
+            return [_landed(change, "refused", _together(refusal, change, adopted, base)) for change, _ in adopted]
         card = await self._library.fetch_card(base)
         if card is None:
             msg = f"{base} has no card to copy its title, summary and applicability from"
             raise LibraryError(msg)
+        steps = tuple(LiveTrialStep(step=step.name, step_hash=step_content_address(step)) for _, step in adopted)
+        earlier = await self._open_live_trial(base, workflow)
         saved_id = await self._library.put(
             child,
             title=card.title,
@@ -660,10 +726,55 @@ class MaintenanceSteps:
             lineage=lineage,
             presentation=card.presentation,
             intent=card.intent,
-            live_trial=LiveTrialMarker(previous=base, step=step.name, step_hash=step_content_address(step)),
+            live_trial=earlier.with_steps(steps) if earlier is not None else LiveTrialMarker(previous=base, steps=steps),
         )
-        notes = await self._resolve_consumer_flag(workflow.name, step.name, saved_id, change.step_id)
-        return _landed(change, "adopted", change.reason, saved_id=saved_id, notes=notes)
+        return [
+            _landed(change, "adopted", change.reason, saved_id=saved_id, notes=await self._resolve_consumer_flag(workflow.name, step.name, saved_id, change.step_id))
+            for change, step in adopted
+        ]
+
+    async def _open_live_trial(self, base: str, workflow: Workflow) -> LiveTrialMarker | None:
+        """The marker of the consumer version `base` while its live trial is still open, or None."""
+        marker = await self._library.fetch_live_trial(base)
+        if marker is None:
+            return None
+        runs = await read_live_trial(self._library, self._history, base, workflow, marker)
+        return None if runs.is_over() else marker
+
+    async def _settle_rejected_plans(self, changes: Sequence[LandedChange]) -> list[LandedChange]:
+        """Resolve the open `plan_rejected` flag of each step a change landed for, a failed resolution noted on its first landed change."""
+        notes: dict[str, str] = {}
+        for step_id in dict.fromkeys(change.step_id for change in changes if change.outcome in ("adopted", "kept", "flagged")):
+            if (note := await self._resolve_rejected_plan(step_id)) is not None:
+                notes[step_id] = note
+        settled: list[LandedChange] = []
+        for change in changes:
+            note = notes.pop(change.step_id, None) if change.outcome in ("adopted", "kept", "flagged") else None
+            settled.append(change if note is None else change.model_copy(update={"notes": [*change.notes, note]}))
+        return settled
+
+    async def _resolve_rejected_plan(self, step_id: str) -> str | None:
+        """Resolve as step maintenance the step's open `plan_rejected` flag about `step_id` or an earlier version, answering a note when that fails."""
+        try:
+            step = await self._library.fetch_step(step_id)
+        except LibraryError as exc:
+            return f"the open plan_rejected flag of {step_id} was not read: {exc}"
+        page = flag_id("plan_rejected", step.name)
+        try:
+            stored = await self._library.fetch_flag(page)
+            if stored is None or stored.status != "open":
+                return None
+            versions = {saved.step_id: saved.version for saved in await self._library.step_versions(step.name)}
+            flagged, landed = versions.get(stored.step_id), versions.get(step_id)
+            if flagged is None or landed is None or flagged > landed:
+                return None
+            run = self._current_run()
+            ran_in = f" in the run {run}" if run else ""
+            await self._library.resolve_flag(page, by=STEP_MAINTENANCE_AGENT, reason=f"Step maintenance landed a plan for {step_id}{ran_in}.")
+        except (LibraryError, ValueError) as exc:
+            _logger.warning("a plan for {step_id} landed, and the open flag {flag} was not resolved: {reason}", step_id=step_id, flag=page, reason=str(exc))
+            return f"the open flag {page} was not resolved: {exc}"
+        return None
 
     async def _resolve_consumer_flag(self, workflow_name: str, step_name: str, saved_id: str, step_id: str) -> list[str]:
         """Resolve the pair's open consumer flag as settled by the adoption, answering a note when that fails."""
@@ -741,11 +852,15 @@ class MaintenanceSteps:
         return [] if delivered else ["the notice to the owner was not delivered"]
 
 
-def _adopted(workflow: Workflow, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]], *, evidence: str) -> tuple[Workflow, Lineage]:
-    """The consumer's next version with its copy replaced by `step`, then `extra_ops` applied, refused as `AdaptationRefusedError`."""
-    replace: dict[str, JsonValue] = {"op": "replace_inline_step", "name": step.name, "with": step.model_dump(mode="json")}
+def _adopted(
+    workflow: Workflow, replacements: Sequence[tuple[InlineStep, Sequence[Mapping[str, JsonValue]]]], *, evidence: str
+) -> tuple[Workflow, Lineage]:
+    """The consumer's next version with each copy replaced by its step, each followed by its edits, refused as `AdaptationRefusedError`."""
+    ops: list[Mapping[str, JsonValue]] = []
+    for step, extra_ops in replacements:
+        ops.extend(({"op": "replace_inline_step", "name": step.name, "with": step.model_dump(mode="json")}, *extra_ops))
     try:
-        return adapt(workflow, ops=(replace, *extra_ops), evidence=evidence, predictions=(Prediction(claim="completes"),))
+        return adapt(workflow, ops=ops, evidence=evidence, predictions=(Prediction(claim="completes"),))
     except AdaptationRefusedError:
         raise
     except ValueError as exc:
@@ -787,6 +902,14 @@ def _landed(
         saved_id=saved_id,
         notes=list(notes),
     )
+
+
+def _together(refusal: str, change: PlannedChange, adopted: Sequence[tuple[PlannedChange, InlineStep]], base: str) -> str:
+    """Why one adoption was refused when it was refused with the others into the same consumer version."""
+    others = [other.step_id for other, _ in adopted if other is not change]
+    if not others:
+        return refusal
+    return f"{refusal}. It was adopted together with {', '.join(others)} into one next version of {base}, so none of them landed"
 
 
 def _check_text(check: ContractCheck) -> str:
