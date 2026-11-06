@@ -586,8 +586,8 @@ class MaintenanceSteps:
         if (held := _inline_addresses(child)) != expected:
             changed = sorted(name for name in expected.keys() | held.keys() if expected.get(name) != held.get(name))
             msg = (
-                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. "
-                f"An adoption changes only the step it adopts, and its edits may rewire nodes and add parameters"
+                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. An adoption "
+                f"changes only the step it adopts, and its further edits may only be rewire, add_parameter and set_output"
             )
             raise AdaptationRefusedError(msg)
         registry = self._registered()

@@ -24,6 +24,7 @@ class LandingRefusedError(RuntimeError):
             report: The landing's report, holding at least one refused change.
         """
         refused = sum(change.outcome == "refused" for change in report.changes)
+        rest = " and landed the rest" if refused < len(report.changes) else ""
         lines = "\n".join(change_line(change) for change in report.changes)
-        super().__init__(f"step maintenance refused {refused} of {len(report.changes)} planned changes and landed the rest:\n{lines}")
+        super().__init__(f"step maintenance refused {refused} of {len(report.changes)} planned changes{rest}:\n{lines}")
         self.report = report

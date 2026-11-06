@@ -467,6 +467,7 @@ async def test_land_changes_lands_every_other_adoption_then_fails_naming_the_con
         await world.steps.land_changes(plan)
 
     assert weekly_id in str(raised.value)
+    assert "and landed the rest" in str(raised.value)
     assert "wf.digest-sources.v2" in str(raised.value)
     assert "refused the page wf.weekly-digest.v2" in str(raised.value)
     assert await world.library.current(sources_id) == "wf.digest-sources.v2"
@@ -510,6 +511,7 @@ async def test_a_consumer_a_person_saved_past_since_the_listing_is_refused_and_t
     (refused,) = raised.value.report.changes
     assert refused.outcome == "refused"
     assert newer in refused.reason
+    assert "landed" not in str(raised.value)
     assert world.store.written(newer)["saved_by"] == "owner:cli"
 
 
@@ -720,6 +722,7 @@ async def test_an_adoption_whose_edits_change_another_inline_step_is_refused_and
     refused, landed = raised.value.report.changes
     assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
     assert "summarize" in refused.reason
+    assert "rewire, add_parameter and set_output" in refused.reason
     assert (landed.workflow_id, landed.outcome) == (weekly_id, "adopted")
     assert answer.startswith("passes")
 
