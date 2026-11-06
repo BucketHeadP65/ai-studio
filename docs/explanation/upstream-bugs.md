@@ -367,13 +367,14 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   never needs `default=` to dump one.
 - **Found:** the harness inspector's finding 5, confirmed 2026-11-04 by a review of its findings: a chat model's program
   called `json.dumps(..., default=str)` and was refused.
-- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says `json.dumps` takes no
-  `default=` and that a tool's return is already a JSON value. Nothing in the runtime.
-- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repro below (2026-11-05). pydantic/monty#1171,
-  which adds `default=` to `json.dumps` and `json.dump`, merged on 2026-10-29, after 1.4.0, and no release carries it yet.
-  The dialect's sentence stays until a release does.
-- **Issue:** pydantic/monty#739, filed by others, open. Nothing to file.
-- **Repro:** `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
+- **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) said `json.dumps` takes no
+  `default=` and that a tool's return is already a JSON value. Nothing in the runtime. The sentence went when pydantic-monty
+  1.5.0 landed.
+- **Upstream state:** fixed in pydantic-monty 1.5.0 (pydantic/monty#1171, which adds `default=` to `json.dumps` and
+  `json.dump`). The repro below returns `'{"a": 1}'` on 1.5.0, directly and through `CodeMode` (2026-11-06).
+- **Issue:** pydantic/monty#739, filed by others, still open, since it also asks for `Path.write_text(encoding=...)`.
+  Nothing to file.
+- **Repro:** on 1.4.0, `with pydantic_monty.Monty() as monty, monty.checkout() as session:` then
   `session.feed_run('import json\njson.dumps({"a": 1}, default=str)')` raises `MontyRuntimeError: TypeError:
   JSONEncoder.__init__() got an unexpected keyword argument 'default'`. The same call with `indent=1` in place of
   `default=str` returns `'{\n "a": 1\n}'`.
@@ -575,7 +576,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-20. Monty builds a generator expression as a list, so `next()` on one fails
 
-- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`).
+- **Library:** pydantic-monty 1.4.0 and 1.5.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`).
 - **Symptom:** `next(x for x in items if ...)` in a program fails with `TypeError: 'list' object is not an iterator`, and so
   does `next((x for x in items if ...), None)`. A model writes the CPython idiom for a first match and spends a retry on it.
   `sum`, `any` and the other functions that take an iterable work on a generator expression.
@@ -586,7 +587,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 - **What we did:** the sandbox dialect (`core/src/core/ai/sandbox.py`, `_DIALECT_PROGRAM`) says a generator expression is
   a list inside the sandbox, and to take its first match with `next(iter(...))` or a comprehension's `[0]`. Nothing in the
   runtime. The sentence and this entry go once a Monty release with generator expressions is installed.
-- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repro below (2026-11-05). Two open pull requests
+- **Upstream state:** present in pydantic-monty 1.5.0, reproduced with the repro below (2026-11-06). Two open pull requests
   add generators: pydantic/monty#784 ("implement generator expressions") and pydantic/monty#1020 ("Support Python
   generators and `yield from`").
 - **Issue:** pydantic/monty#364, filed by others, open. Nothing to file.
@@ -597,12 +598,13 @@ Entry shape: library and version, symptom, cause (file and function), how it was
 
 ## UB-21. Monty's type checker refuses `hasattr` and `getattr`, and its runtime cannot see a builtin's methods
 
-- **Library:** pydantic-monty 1.4.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`,
+- **Library:** pydantic-monty 1.4.0 and 1.5.0, the sandbox behind pydantic-ai-harness 0.66.0's `CodeMode` (`run_code`,
   `pydantic_ai_harness/code_mode/_toolset.py`, line 1214, where a session's first program is type-checked when the
   sandbox has functions).
-- **Symptom:** two halves. First, a turn's first program that names `hasattr`, `getattr`, `setattr`, `open`, `dir`, `vars`
+- **Symptom:** two halves. First, a turn's first program that names `hasattr`, `getattr`, `setattr`, `dir`, `vars`
   or `callable` is refused before it runs with ``Type error in code: error[unresolved-reference]: Name `hasattr` used when
-  not defined``. Second, a later program skips the type check, and there `hasattr([1], 'append')` is `False`, as is
+  not defined``. On 1.4.0 `open` was among them. From 1.5.0 it passes the type check (pydantic/monty#943) and fails when it
+  runs, with `PermissionError`. Second, a later program skips the type check, and there `hasattr([1], 'append')` is `False`, as is
   `hasattr` for a method of a `str` or a `dict`, `getattr([1], 'append')` raises `AttributeError: 'list' object has no
   attribute 'append'` while `[1].append(2)` works, and `dir`, `vars` and `callable` raise `NameError: Unknown function`.
   A model that checks for a method before it calls one decides the method is missing and writes around it. On an
@@ -620,7 +622,7 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   `callable`, `hasattr` or `getattr`, says what each program finds, and says to test a key with `in` and a value's kind
   with `type()` or `isinstance()`. `SandboxDiscipline` adds no way out to a refusal that names a Python builtin. Nothing in
   the runtime. That part of the sentence and this entry go once a Monty release type-checks and reads these builtins.
-- **Upstream state:** present in pydantic-monty 1.4.0, reproduced with the repros below (2026-11-05). pydantic/monty#1060
+- **Upstream state:** present in pydantic-monty 1.5.0, reproduced with the repros below (2026-11-06). pydantic/monty#1060
   lists `dir`, `vars` and `callable` among the missing builtins, and says a bound method of a builtin cannot be used as a
   value (`f = [1].append` raises `AttributeError`). pydantic/monty#721 reports the same misleading `hasattr` and
   `getattr` for the methods of a host dataclass. Both are open, no pull request fixes builtins, and neither names the
@@ -794,3 +796,8 @@ Entry shape: library and version, symptom, cause (file and function), how it was
   tool call id or a timestamp, so `message_key` keys it by its content. `json-repair` left
   the core, engram, studio and connectors locks, since only `Coder` and `RepairToolArguments` need it now, and the harness
   keeps it through the `coder` extra.
+- **Monty's `json.dumps` takes `default=`, and `open` passes the type check** (pydantic-monty 1.5.0). The sandbox dialect
+  said `json.dumps` takes no `default=`, which became false, so the sentence went (UB-13). Each conversation's first request
+  after the restart misses the prompt cache once, because the instructions' text changed. A turn's first program that
+  names `open` now fails when it runs, with `PermissionError`, instead of on the type checker's refusal. The dialect's
+  sentence about `open` stays true (UB-21).

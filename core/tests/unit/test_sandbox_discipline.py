@@ -106,14 +106,6 @@ def test_the_dialect_says_up_front_that_a_program_calls_only_the_sandboxs_functi
     assert "load_capability" in dialect
 
 
-def test_the_dialect_says_json_dumps_takes_no_default() -> None:
-    """Live, `json.dumps(value, default=str)` failed in the sandbox, whose `json` takes no `default=`."""
-    dialect = _dialect()
-
-    assert "`json.dumps` takes no `default=`" in dialect
-    assert "already a JSON value" in dialect
-
-
 async def test_the_type_checkers_refusal_of_the_same_name_gets_the_same_hint() -> None:
     """A fresh program is type-checked before it runs, and that voice refused `adapt_workflow` three times live with no hint."""
     raised = await _wrapped(RUN_CODE, _retry(_TYPE_CHECK_REFUSAL))
@@ -201,8 +193,7 @@ _CHAT_DIALECT = (
     "`results = await asyncio.gather(...)` at top level: the module is not preloaded, and a "
     "program that skips the import fails on NameError. The last expression is the program's "
     "result: end on the value, not on a bare function name. Build data as Python literals, and "
-    "never paste a page's prose or markdown into the program as code. `json.dumps` "
-    "takes no `default=`, and a tool's return is already a JSON value, so dump it as it is. A "
+    "never paste a page's prose or markdown into the program as code. A "
     "generator expression is a list inside the sandbox, so take its first match with `next(iter(...))` "
     "or a comprehension's `[0]`, never `next(<generator expression>)`. There "
     "is no file system (`open` on any path is refused). Do not use `dir`, `vars`, `callable`, `hasattr` "
