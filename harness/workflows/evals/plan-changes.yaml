@@ -59,6 +59,7 @@ cases:
           refused: null
       left_for_next_run: []
       left_to_repository: []
+      dropped: []
     consumers:
       pairs:
       - workflow_id: wf.meeting-actions.v1
@@ -222,6 +223,7 @@ cases:
           refused: null
       left_for_next_run: []
       left_to_repository: []
+      dropped: []
     consumers:
       pairs:
       - workflow_id: wf.board-actions.v1

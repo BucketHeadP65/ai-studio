@@ -62,6 +62,7 @@ from harness.features.maintenance.domain import (
     change_line,
     changed_ids,
     fenced,
+    ignored_line,
     merged_plan,
     one_line,
 )
@@ -266,7 +267,10 @@ class MaintenanceSteps:
                 )
             )
         return MaintenancePlan(
-            changes=changes, left_for_next_run=list(consumers.left_for_next_run), left_to_repository=list(consumers.left_to_repository)
+            changes=changes,
+            left_for_next_run=list(consumers.left_for_next_run),
+            left_to_repository=list(consumers.left_to_repository),
+            dropped=list(consumers.dropped),
         )
 
     async def land_changes(self, plan: MaintenancePlan, decisions: PlanDecisions) -> LandingReport:
@@ -274,8 +278,9 @@ class MaintenanceSteps:
 
         Each decision is merged into the drafted change with the same workflow id and step id, so the evidence stays as
         `prepare_plan` copied it. A drafted change no decision names writes nothing and lands as not decided, so a later
-        run for its step offers it again. A decision that names no drafted change is refused, and so is every decision
-        of a drafted change decided twice.
+        run for its step offers it again. A keep or a flag that names no drafted change, for a workflow the plan names in
+        `dropped`, `left_for_next_run` or `left_to_repository`, writes nothing and lands as ignored. Any other decision
+        that names no drafted change is refused, and so is every decision of a drafted change decided twice.
 
         Every adoption into one consumer lands as one version: the step of each is copied from the library, each
         change's further edit operations are applied, the candidate is validated and saved as the consumer's next
@@ -338,8 +343,9 @@ class MaintenanceSteps:
     async def report_changes(self, landed: LandingReport) -> str:
         """Tell the owner in one notice what changed in which workflow and why, and the consumers left for a later run or to the repository.
 
-        A notice that fails is said in the answer and never fails the run. A landing that changed nothing tells nobody,
-        and its answer still names what it left to the repository.
+        Every ignored decision is named in one line. A notice that fails is said in the answer and never fails the run. A
+        landing that changed nothing, ignored decisions aside, tells nobody, and its answer still names the decisions it
+        ignored and what it left to the repository.
 
         Args:
             landed: What the landing did.
@@ -347,15 +353,21 @@ class MaintenanceSteps:
         Returns:
             The notice's text and whether it went out.
         """
-        if not landed.changes and not landed.left_for_next_run:
-            nothing = "Step maintenance changed nothing, so nobody was told."
-            return f"{nothing}\n{_left_to_repository(landed.left_to_repository)}" if landed.left_to_repository else nothing
-        message, told = await self._tell_owner(f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}", landed)
+        decided = [change for change in landed.changes if change.outcome != "ignored"]
+        if not decided and not landed.left_for_next_run:
+            ignored = [change for change in landed.changes if change.outcome == "ignored"]
+            lines = ["Step maintenance changed nothing, so nobody was told."]
+            lines += [ignored_line(ignored)] if ignored else []
+            lines += [_left_to_repository(landed.left_to_repository)] if landed.left_to_repository else []
+            return "\n".join(lines)
+        message, told = await self._tell_owner(f"Step maintenance landed {', '.join(sorted({change.step_id for change in decided}))}", landed)
         return f"{message}\n{told}"
 
     async def _tell_owner(self, title: str, landed: LandingReport) -> tuple[str, str]:
         """Send the owner one notice saying every change of `landed` and the consumers past the cap or left to the repository, and answer it and whether it went out."""
-        lines = [change_line(change) for change in landed.changes]
+        lines = [change_line(change) for change in landed.changes if change.outcome != "ignored"]
+        if ignored := [change for change in landed.changes if change.outcome == "ignored"]:
+            lines.append(ignored_line(ignored))
         if landed.left_for_next_run:
             lines.append(
                 f"Left for a later run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}. Step maintenance "
@@ -392,7 +404,7 @@ class MaintenanceSteps:
         for change in landed.changes:
             pair = pairs.get((change.workflow_id, change.step_id))
             outcome = change.outcome
-            if pair is None or outcome in ("refused", "not_decided"):
+            if pair is None or outcome in ("refused", "not_decided", "ignored"):
                 continue
             side = ConsumerSide(
                 workflow_id=change.workflow_id,

@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import re
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from core.ai.workflows.contracts import TrustLevel, WorkflowIntent, WorkflowPresentation
 from core.markdown import code_block
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from harness.domain.contracts import CaseReport
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 MAINTENANCE_WORKFLOW = "step-maintenance"
 """The name of the workflow that checks a new reusable step version against each consumer."""
@@ -43,6 +46,9 @@ TrustName = Literal["unverified", "machine-confirmed", "approved"]
 """A trust level by name."""
 
 _PERCENT_BEFORE_PERCENT = re.compile(r"%(?=%)")
+
+_WORKFLOW_ID_PARTS = re.compile(r"^wf\.|\.v\d+$")
+"""The prefix and the version suffix of a workflow's library id, around its name."""
 
 
 class ConsumerPair(BaseModel):
@@ -150,6 +156,9 @@ class MaintenancePlan(BaseModel):
     """The consumer workflow ids past the pair cap, as `list_consumers` named them."""
     left_to_repository: list[str]
     """The consumer workflow ids of step maintenance itself, as `list_consumers` named them."""
+    dropped: list[str]
+    """The consumer workflow ids whose copy is current or whose record declines the changed version, as `list_consumers`
+    named them."""
 
 
 class PlanDecision(BaseModel):
@@ -191,9 +200,10 @@ class LandedChange(BaseModel):
     step_id: str
     """The changed step version's id."""
     disposition: Literal["adopt", "keep", "flag"]
-    outcome: Literal["adopted", "kept", "flagged", "refused", "not_decided"]
-    """`refused` when the library or the contract check refused the change, `not_decided` when no decision named it. Neither
-    writes anything."""
+    outcome: Literal["adopted", "kept", "flagged", "refused", "not_decided", "ignored"]
+    """`refused` when the library or the contract check refused the change, `not_decided` when no decision named it, and
+    `ignored` for a keep or a flag no drafted change names whose workflow the listing named in `dropped`,
+    `left_for_next_run` or `left_to_repository`. None of the three writes anything."""
     reason: str
     """The planner's reason, or for a refused change why it was refused."""
     saved_id: str
@@ -356,15 +366,16 @@ def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[Planned
     Each decision is matched to the drafted change with the same workflow id and step id, and its disposition, reason
     and further edits replace the drafted ones. The drafted evidence stays. A drafted change no decision names is
     not decided and writes nothing, so a later run for its step offers it again. A drafted change decided more than once lands none of
-    its decisions, and a decision that names no drafted change is refused.
+    its decisions. A decision that names no drafted change is refused, unless it keeps or flags a workflow the plan names, at
+    any version, in `dropped`, `left_for_next_run` or `left_to_repository`: that one is ignored and writes nothing.
 
     Args:
         plan: The drafted plan, as `prepare_plan` answered it.
         decisions: The planner's decisions.
 
     Returns:
-        A change to land, a change not decided or a refusal for each drafted change, in the drafted plan's order, then a
-        refusal for each decision that names no drafted change.
+        A change to land, a change not decided or a refusal for each drafted change, in the drafted plan's order, then an
+        ignored change or a refusal for each decision that names no drafted change.
     """
     by_pair: dict[tuple[str, str], list[PlanDecision]] = {}
     for decision in decisions.decisions:
@@ -379,15 +390,28 @@ def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[Planned
             merged.append(change.model_copy(update={"disposition": decision.disposition, "reason": decision.reason, "extra_ops": decision.extra_ops}))
         else:
             merged.append(_landed_as(change, "not_decided", OFFERED_AGAIN))
-    merged.extend(_refused(decision, "it names no drafted change, so nothing landed for it") for decided in by_pair.values() for decision in decided)
+    listed = {"dropped": plan.dropped, "left_for_next_run": plan.left_for_next_run, "left_to_repository": plan.left_to_repository}
+    names = {_workflow_name(workflow_id): list_name for list_name, workflow_ids in listed.items() for workflow_id in workflow_ids}
+    for decided in by_pair.values():
+        for decision in decided:
+            list_name = names.get(_workflow_name(decision.workflow_id))
+            if list_name is not None and decision.disposition != "adopt":
+                merged.append(_landed_as(decision, "ignored", f"its workflow is in {list_name}"))
+            else:
+                merged.append(_refused(decision, "it names no drafted change, so nothing landed for it"))
     return merged
+
+
+def _workflow_name(workflow_id: str) -> str:
+    """The workflow name a library id `wf.<name>.v<version>` names."""
+    return _WORKFLOW_ID_PARTS.sub("", workflow_id)
 
 
 def _refused(decision: PlanDecision, reason: str) -> LandedChange:
     return _landed_as(decision, "refused", reason)
 
 
-def _landed_as(change: PlanDecision | PlannedChange, outcome: Literal["refused", "not_decided"], reason: str) -> LandedChange:
+def _landed_as(change: PlanDecision | PlannedChange, outcome: Literal["refused", "not_decided", "ignored"], reason: str) -> LandedChange:
     return LandedChange(
         workflow_id=change.workflow_id,
         step_id=change.step_id,
@@ -425,5 +449,20 @@ def change_line(change: LandedChange) -> str:
                 f"{change.workflow_id} with {change.step_id} was {change.reason}: with the step's next version, or when you run "
                 f"step-maintenance with {change.step_id}."
             )
+        case "ignored":
+            said = f"{change.workflow_id} with {change.step_id} was ignored, because no drafted change names it and {change.reason}."
     notes = f" ({', '.join(change.notes)})" if change.notes else ""
     return f"{said}{notes}"
+
+
+def ignored_line(changes: Sequence[LandedChange]) -> str:
+    """The owner's one line naming every ignored decision, with what it decided and the list its workflow is in.
+
+    Args:
+        changes: The ignored changes, in the landing's order.
+
+    Returns:
+        The line.
+    """
+    named = ", ".join(f"{change.workflow_id} {change.disposition} on {change.step_id} ({change.reason})" for change in changes)
+    return f"Ignored, because no drafted change names them, so nothing was written: {named}."

@@ -940,7 +940,7 @@ async def test_repository_verdict_answers_an_undecided_verdict_for_the_step(tmp_
 async def test_plan_decisions_answers_no_decision_for_the_plan(tmp_path: Path) -> None:
     world = World(tmp_path)
 
-    decisions = await world.steps.plan_decisions(MaintenancePlan(changes=[], left_for_next_run=[], left_to_repository=[]))
+    decisions = await world.steps.plan_decisions(MaintenancePlan(changes=[], left_for_next_run=[], left_to_repository=[], dropped=[]))
 
     assert decisions == PlanDecisions(decisions=[])
 
@@ -995,6 +995,123 @@ async def test_a_decision_naming_no_drafted_change_is_refused_and_every_drafted_
     assert (refused.workflow_id, refused.step_id, refused.disposition, refused.outcome) == ("wf.daily-digest.v1", V4, "adopt", "refused")
     assert "no drafted change" in refused.reason
     assert "wf.daily-digest.v1" in str(raised.value)
+
+
+async def _listed_world(tmp_path: Path) -> tuple[World, MaintenancePlan, str, str]:
+    """A world whose drafted plan keeps `digest-sources` and drops `current-digest`, with one consumer past the cap and one left to the repository."""
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    current_id = await world.save(consumer("current-digest", DIGEST[4]))
+    plan = await world.plan(V4, {sources_id: ("keep", "Its own tone.")})
+    plan = plan.model_copy(update={"left_for_next_run": ["wf.digest-21.v1"], "left_to_repository": ["wf.step-maintenance.v2"]})
+    return world, plan, sources_id, current_id
+
+
+async def test_a_keep_or_a_flag_for_a_listed_consumer_no_drafted_change_names_is_ignored_and_writes_nothing(tmp_path: Path) -> None:
+    world, plan, sources_id, current_id = await _listed_world(tmp_path / "listed")
+    baseline, baseline_plan, _, _ = await _listed_world(tmp_path / "baseline")
+    assert plan.dropped == [current_id], "list_consumers dropped the current consumer and the drafted plan carries it"
+    listed = [
+        PlanDecision(workflow_id=current_id, step_id=V4, disposition="keep", reason="It already holds the new version."),
+        PlanDecision(workflow_id="wf.step-maintenance.v2", step_id=V4, disposition="flag", reason="Only the owner can say."),
+        PlanDecision(workflow_id="wf.digest-21.v1", step_id=V4, disposition="keep", reason="Its own layout."),
+    ]
+
+    landed = await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, *listed]))
+    await baseline.steps.land_changes(baseline_plan, _decided(baseline_plan))
+
+    kept, *ignored = landed.changes
+    assert (kept.workflow_id, kept.outcome) == (sources_id, "kept")
+    assert [(change.workflow_id, change.disposition, change.outcome, change.reason) for change in ignored] == [
+        (current_id, "keep", "ignored", "its workflow is in dropped"),
+        ("wf.step-maintenance.v2", "flag", "ignored", "its workflow is in left_to_repository"),
+        ("wf.digest-21.v1", "keep", "ignored", "its workflow is in left_for_next_run"),
+    ]
+    assert world.store.pages == baseline.store.pages, "the ignored decisions wrote nothing beyond what the drafted change wrote"
+
+
+async def test_a_listed_consumer_is_found_at_any_version_of_its_name(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    plan = (await world.plan(V4, {sources_id: ("keep", "Its own tone.")})).model_copy(update={"dropped": ["wf.daily-digest.v1"]})
+    later = PlanDecision(workflow_id="wf.daily-digest.v2", step_id=V4, disposition="keep", reason="Its own tone too.")
+
+    landed = await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, later]))
+
+    assert [(change.workflow_id, change.outcome) for change in landed.changes] == [(sources_id, "kept"), ("wf.daily-digest.v2", "ignored")]
+
+
+async def test_an_adopt_for_a_listed_consumer_no_drafted_change_names_is_still_refused(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    plan = (await world.plan(V4, {sources_id: ("keep", "Its own tone.")})).model_copy(update={"left_to_repository": ["wf.step-maintenance.v2"]})
+    adopt = PlanDecision(workflow_id="wf.step-maintenance.v2", step_id=V4, disposition="adopt", reason="It fits.")
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, adopt]))
+
+    assert [(change.workflow_id, change.outcome) for change in raised.value.report.changes] == [(sources_id, "kept"), ("wf.step-maintenance.v2", "refused")]
+
+
+async def test_a_keep_for_a_consumer_no_list_accounts_for_is_still_refused(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("keep", "Its own tone.")})
+    invented = PlanDecision(workflow_id="wf.daily-digest.v1", step_id=V4, disposition="keep", reason="Its own tone too.")
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, invented]))
+
+    assert raised.value.report.changes[-1].outcome == "refused"
+
+
+async def test_the_owner_reads_every_ignored_decision_in_one_line(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    kept = _landed("wf.weekly-digest.v1", "kept", "the weekly digest keeps its own tone.")
+    ignored = [
+        LandedChange(
+            workflow_id="wf.current-digest.v1", step_id=V4, disposition="keep", outcome="ignored", reason="its workflow is in dropped", saved_id="", notes=[]
+        ),
+        LandedChange(
+            workflow_id="wf.step-maintenance.v2",
+            step_id=V4,
+            disposition="flag",
+            outcome="ignored",
+            reason="its workflow is in left_to_repository",
+            saved_id="",
+            notes=[],
+        ),
+    ]
+
+    told = await world.steps.report_changes(LandingReport(changes=[kept, *ignored], left_for_next_run=[], left_to_repository=[]))
+
+    ((title, message),) = world.notifier.sent
+    line = (
+        f"Ignored, because no drafted change names them, so nothing was written: wf.current-digest.v1 keep on {V4} (its workflow "
+        f"is in dropped), wf.step-maintenance.v2 flag on {V4} (its workflow is in left_to_repository)."
+    )
+    assert message.splitlines() == [f"wf.weekly-digest.v1 keeps its copy instead of {V4}. The weekly digest keeps its own tone.", line]
+    assert title == f"Step maintenance landed {V4}"
+    assert line in told
+
+
+async def test_a_landing_that_only_ignored_decisions_tells_nobody_and_names_them_in_its_answer(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    ignored = LandedChange(
+        workflow_id="wf.step-maintenance.v2", step_id=V4, disposition="keep", outcome="ignored", reason="its workflow is in left_to_repository", saved_id="", notes=[]
+    )
+
+    told = await world.steps.report_changes(LandingReport(changes=[ignored], left_for_next_run=[], left_to_repository=["wf.step-maintenance.v2"]))
+
+    assert world.notifier.sent == []
+    assert told.splitlines()[:2] == [
+        "Step maintenance changed nothing, so nobody was told.",
+        f"Ignored, because no drafted change names them, so nothing was written: wf.step-maintenance.v2 keep on {V4} (its workflow is in left_to_repository).",
+    ]
 
 
 async def test_a_drafted_change_decided_twice_lands_neither_decision_and_the_others_land(tmp_path: Path) -> None:

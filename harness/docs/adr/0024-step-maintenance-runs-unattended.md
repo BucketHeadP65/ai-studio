@@ -26,7 +26,9 @@ reusable steps, so a new version of one would have been adopted into `step-maint
 the steps that judge its own plans. `list_consumers` never pairs a consumer named `step-maintenance` and names it as left
 to the repository, which the run's report says, apart from the consumers it dropped as current or declined. The plan
 judge (`judge_plan` v2) treats a decision about it as stale, as it treats one about a dropped consumer, never as cannot
-judge. Its own steps reach it through the repository and `harness import`, as before, so a new version of one of them
+judge. A keep or a flag for a consumer the listing named in `dropped`, `left_for_next_run` or `left_to_repository` but
+did not draft is ignored at landing and writes nothing, so such a decision never fails the run. An adopt for one is still
+refused. Its own steps reach it through the repository and `harness import`, as before, so a new version of one of them
 fires a run that pairs nothing.
 
 ## Context
