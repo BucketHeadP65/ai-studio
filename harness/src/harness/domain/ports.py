@@ -88,6 +88,11 @@ SHELL_TOOL = "run_command"
 
 A declared step is granted it by name, exactly like a read. There is no dedicated write verb."""
 
+CHECK_CHANGE_TOOL = "check_change"
+"""Step maintenance's tool that applies one planned adoption to a consumer and runs its contract check, saving nothing.
+
+A declared step is granted it by name, like a read."""
+
 SANDBOX = "run_code"
 """`CodeMode`'s tool, the one whose return the model reads.
 
@@ -146,7 +151,7 @@ CASE_RUN_TOOLS: Mapping[str, CaseRunTreatment] = MappingProxyType(
     {
         **dict.fromkeys(sorted(JUDGE_TOOLS), "read"),
         "check_note": "read",
-        "check_change": "read",
+        CHECK_CHANGE_TOOL: "read",
         "write_note": "checked_write",
         "request_source": "recorded_write",
         "decide_page": "recorded_write",

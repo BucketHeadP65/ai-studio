@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from harness.domain.arguments import AdmissionRefused, KnowledgeBaseNames, admitted_arguments, presentation_of, selected_knowledge_bases
-from harness.domain.case_reports import CaseReport, CaseResult
+from harness.domain.case_reports import CaseReport, CaseResult, cases_address
 from harness.domain.events import (
     Booted,
     ConversationForgotten,
@@ -46,6 +46,7 @@ from harness.domain.page_context import PageContext, compose_prompt, strip_page_
 from harness.domain.ports import (
     BRIEFING_ONLY_BUDGET,
     CASE_RUN_TOOLS,
+    CHECK_CHANGE_TOOL,
     DEFINED_STEP_BUDGET,
     JUDGE_TOOLS,
     NOT_FOR_STEPS,
@@ -77,6 +78,7 @@ from harness.domain.session_types import DEFAULT_SESSION_TYPE, UNKNOWN_SESSION, 
 __all__ = [
     "BRIEFING_ONLY_BUDGET",
     "CASE_RUN_TOOLS",
+    "CHECK_CHANGE_TOOL",
     "DEFAULT_GATE_MODE",
     "DEFAULT_SESSION_TYPE",
     "DEFINED_STEP_BUDGET",
@@ -137,6 +139,7 @@ __all__ = [
     "WorkflowPresentationPatch",
     "admitted_arguments",
     "card_readiness",
+    "cases_address",
     "compose_prompt",
     "decode",
     "effective_presentation",

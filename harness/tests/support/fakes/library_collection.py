@@ -66,7 +66,7 @@ class FakeCollection:
     `pages` holds each page by id: the `COLUMNS` keys, `superseded`, the remaining `frontmatter`, the body of each
     section by its slug under `sections`, and the `applicability`. With `prune` on, the ingest drops `None` and empty
     containers at every depth before it stores, as engram's ingest does. The ingest refuses a page whose type is in
-    `refused_types`. `payloads` keeps every payload the ingest was handed, `events` every event handed with one,
+    `refused_types` or whose id is in `refused_ids`. `payloads` keeps every payload the ingest was handed, `events` every event handed with one,
     beside the id of the page it came with, and `sent` every statement read, in order. A statement the fake does not
     answer fails the test.
     """
@@ -75,6 +75,7 @@ class FakeCollection:
         self.collection = collection
         self.prune = prune
         self.refused_types: frozenset[str] = frozenset()
+        self.refused_ids: frozenset[str] = frozenset()
         self.pages: dict[str, dict[str, Any]] = {}
         self.payloads: list[Mapping[str, Any]] = []
         self.events: list[tuple[str, Event]] = []
@@ -86,6 +87,9 @@ class FakeCollection:
         authored = dict(payload["frontmatter"])
         if authored["type"] in self.refused_types:
             msg = f"refused a {authored['type']} page"
+            raise RuntimeError(msg)
+        if authored["id"] in self.refused_ids:
+            msg = f"refused the page {authored['id']}"
             raise RuntimeError(msg)
         self.payloads.append(payload)
         self.events.extend((str(authored["id"]), event) for event in events)

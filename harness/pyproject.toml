@@ -199,6 +199,11 @@ preview = false
 # runtime. BLE001: the same boundary as service.py — a failed chat run is attested and relayed as
 # a ModelRetry the model must explain, never a raw exception that kills the turn.
 "src/harness/features/running/tools.py" = ["TC001", "TC002", "BLE001"]
+# TC001/TC002: the step maintenance steps are registered on the registry of steps, which reads their annotations with
+# `get_type_hints`, and `check_change` is mounted through `FunctionToolset.add_function`, the same runtime-resolution
+# boundary as running/tools.py above. The step models and `JsonValue` must exist at runtime, not only under
+# `TYPE_CHECKING`.
+"src/harness/features/maintenance/service/steps.py" = ["TC001", "TC002"]
 # TC001: the workflow process's `schedule_workflow_tool`/`update_schedule_tool` closures are
 # registered via `FunctionToolset.add_function`, the same runtime-resolution boundary as
 # running/tools.py above -- `GateMode` must exist at runtime for their `gate_mode` parameter, not

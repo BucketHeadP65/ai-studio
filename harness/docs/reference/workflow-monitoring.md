@@ -1396,6 +1396,34 @@ tick while the schedule's previous fire is still live stamps `last_outcome: "mis
 is never queued. `POST .../run-now` shares this same firing path, so a fire an owner clicks and one the ticker takes
 leave identical session state and tick-log entries behind them.
 
+## The step maintenance steps
+
+The `step-maintenance` workflow is built on registered steps the maintenance slice holds (`MaintenanceSteps`). Both
+compositions register them on the registry of steps, the session's own and the one `harness import` and
+`harness evals run` validate against, and every candidate they check is validated against that same registry. Each step
+hands the next a pydantic model, so a workflow file wires a briefing to a registered step by naming the step that
+produces the model: a briefing answers `{like: prepare_plan}`, a drafter answers
+`{like: select_disagreements, element: true}`, and a judge answers `{like: repository_verdict}`.
+
+| Step | What it does |
+|---|---|
+| `list_consumers(changed_step_ids)` | For each changed step, taken at its newest saved version whichever version the id names, every consumer whose copy is behind it or diverged: the step's unified diff from the copy, the nodes that run it, the consumer's presentation, intent and trust (current and total). A copy at that version, and a consumer whose record declines it, is dropped and counted. At most twenty pairs, by step name and consumer name, and the consumers past the cap are named once each for the next run. |
+| `check_contracts(consumers)` | Each pair's contract check: the consumer adapted with its copy replaced by the changed version, then validated. A failing check is a result. |
+| `run_step_cases(changed_step_ids)` | The case report of each changed version and of each older version a behind consumer holds. A case file that cannot run gives a failed report whose `refused` says why, and the other steps still run. Each step's cases run through a stand-in registry built for that step, over a stand-in list of its own, and reports are kept under the state home in `step-case-reports/`. A registry that cannot perform a step fails the run. |
+| `prepare_plan(consumers, checks, cases)` | One planned change per pair, `keep` and `not yet decided`, carrying its check and case reports, the type the planner answers in. |
+| `land_changes(plan)` | An adoption copies the step from the library by its id, applies the change's further edit operations, validates the candidate and saves the consumer's next version saved by `agent:step-maintenance`, with a `live_trial` marker naming the version it replaces, a lineage whose `touched` names the nodes that run the step, the prediction `completes` and evidence naming the run. It then resolves the pair's open `consumer_flag` page. A kept pair declines the step version in the consumer's record. A flagged pair writes `mf.consumer.<workflow name>.<step>` with the contract check and the planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. The landing trusts only the ids, the disposition, the reason and the edit operations, and refuses a change whose step version is not the newest of its name, whose consumer declines it, or whose consumer someone saved past since the listing. An adoption's further edits may only be `rewire`, `add_parameter` and `set_output`, so a gate, a charge, a node or an inline step a model wrote never lands in a consumer, and an adoption whose edits do not apply is refused too. Every writable change lands, then `LandingRefusedError` says every change in one line each (the new version on live trial, the step, the reason and any note), its report holding every outcome. |
+| `report_changes(landed)` | One notice to the owner naming each changed workflow and why, and the consumers left for the next run. A failed notice is said in the answer. |
+| `select_disagreements(landed, consumers)` | One `RepositoryChange` per changed step some consumers adopted and others kept or flagged, each side's evidence filled and the drafted fields empty. |
+| `repository_verdict(step)` | An undecided verdict. No graph places it: it carries the type a repository judge answers in. |
+| `hand_over_repository_changes(report, disagreements, drafts, verdicts)` | Writes each draft its judge kept as `mf.change.<step>`, the drafted step files and file edits in its Proposed change section, drops the rest with their reasons (a draft no verdict came for, and a step no draft came for), and tells the owner once when it wrote a page. It carries `report_changes`'s answer, so the graph ends here with no dead end and the run's answer holds the whole report. A failed flag write or notice is said in the answer. |
+
+`check_change(workflow_id, step_id, extra_ops)` is a tool a briefing is granted by name. It builds the version the
+landing would build, runs its contract check and says whether the landing would adopt it, naming the landing's
+refusal when it would not, saving nothing. It still checks any edit a drafted repository change holds, such as a
+`replace_inline_step`, since the landing never lands a draft. A stand-in registry grants it too. Text a model
+wrote reaches a flag page inside a fenced block with each `%%` written `% %`, so a heading or a `%%` in a reason or a
+drafted file never cuts the page.
+
 ## What hears a run's ending
 
 Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells
@@ -1411,9 +1439,10 @@ four parts in turn, and a part that fails is logged while the next is still told
    `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
    and the owner is told. A version that is no longer the newest live one of its name, because a person saved a newer
    one, is never reverted.
-3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per id in
-   `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
-   `max_attempts`, which is how a run ends with nothing landed.
+3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per step
+   named in `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
+   `max_attempts`, which is how a run ends with nothing landed. The flag is about the newest saved version of the step,
+   the version the run planned, whichever version the id names.
 4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
    starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
    status is failed tells the owner too, as a live trial reads a failed run. A run started by hand tells nobody.

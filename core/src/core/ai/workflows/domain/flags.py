@@ -15,6 +15,7 @@ from markdown_it import MarkdownIt
 from pydantic import AwareDatetime, BaseModel, ConfigDict, field_validator
 
 from core.ai.workflows.domain.fingerprint import canonical_step_yaml
+from core.markdown import code_block
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -45,8 +46,6 @@ AUTOMATIC_RESOLVERS = frozenset({"library", STEP_MAINTENANCE_AGENT})
 """Who resolves a flag on their own when its condition clears: a save, and a step maintenance run.
 
 Their resolution is no decision, so the next flag for the same step version opens the page again."""
-
-_BACKTICK_RUN = re.compile(r"`+")
 
 _SECTION_BREAKS = frozenset({"h2", "h3"})
 """The headings a flag page splits its sections at."""
@@ -200,8 +199,6 @@ def diverged_copy_flag(
     )
     split = _PERCENT_BEFORE_PERCENT.sub("% ", diff)
     note = "" if split == diff else " The diff writes each double percent sign as % %, because the flag's page drops the text between two of them."
-    diff = split
-    fence = "`" * max([3, *(len(run) + 1 for run in _BACKTICK_RUN.findall(diff))])
     return MaintenanceFlag(
         kind="diverged_copy",
         step=entry.step,
@@ -215,7 +212,7 @@ def diverged_copy_flag(
         ),
         evidence=(
             f"{workflow_id} holds a copy of the reusable step {entry.step} that matches no saved version. It diverged from "
-            f"{version.step_id}, {basis}.{note}\n\n{fence}diff\n{diff}\n{fence}"
+            f"{version.step_id}, {basis}.{note}\n\n{code_block(split, info='diff')}"
         ),
         raised_by="library",
         raised_at=raised_at,

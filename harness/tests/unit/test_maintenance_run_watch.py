@@ -53,7 +53,9 @@ def _maintenance(name: str = MAINTENANCE_WORKFLOW) -> Workflow:
     )
 
 
-def _ended(workflow: Workflow, *, outcome: str = "failed", rejected: Mapping[str, int] | None = None) -> RunEvidence:
+def _ended(
+    workflow: Workflow, *, outcome: str = "failed", rejected: Mapping[str, int] | None = None, changed: str = "st.a.v2,st.b.v5"
+) -> RunEvidence:
     return RunEvidence.model_validate({
         "workflow_id": f"wf.{workflow.name}.v{workflow.version}",
         "spec_hash": spec_identity(workflow),
@@ -63,7 +65,7 @@ def _ended(workflow: Workflow, *, outcome: str = "failed", rejected: Mapping[str
         "gates_auto": (),
         "gates_orchestrated": (),
         "gates_rejected": dict(rejected if rejected is not None else {PLAN_GATE: 3}),
-        "params": {"changed_step_ids": "st.a.v2,st.b.v5"},
+        "params": {"changed_step_ids": changed},
         "runner": "app:schedule:7",
         "at": T0,
     })
@@ -129,3 +131,18 @@ async def test_a_changed_step_the_library_cannot_read_leaves_the_other_flags_wri
 
     assert await library.fetch_flag("mf.rejected.gone") is None
     assert await library.fetch_flag("mf.rejected.b") is not None
+
+
+async def test_a_rejected_plan_is_flagged_under_the_newest_saved_version_of_each_named_step() -> None:
+    workflow = _maintenance()
+    _, library, watch = await _world(workflow)
+    newer = Briefing(name="a", instructions="Summarise the whole source in one short paragraph that names its author.", inputs={"text": TEXT}, output=TEXT)
+    await library.put_step(newer, version=3, title="Step", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+
+    await watch.run_ended(_ended(workflow))
+
+    flag = await library.fetch_flag("mf.rejected.a")
+    assert flag is not None
+    assert (flag.step_id, flag.step_hash) == ("st.a.v3", step_content_address(newer))
+    flags = await library.flags(kind="plan_rejected")
+    assert sorted(card.id for card in flags) == ["mf.rejected.a", "mf.rejected.b"]

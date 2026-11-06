@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
+from typing import TYPE_CHECKING
+
 from pydantic import BaseModel, ConfigDict
+from pydantic_core import to_jsonable_python
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pydantic import JsonValue
 
 
 class CaseResult(BaseModel):
@@ -29,8 +40,8 @@ class CaseReport(BaseModel):
     """A step version's case report: every case's result, or why no case ran.
 
     `step_hash` and `cases_hash` are the content addresses of the step and of its dataset, which together name the
-    report. A report whose `blocked_by` names a tool, or whose `no_cases` is true, ran nothing. A report holding an
-    errored case is never kept, so the cases run again next time.
+    report. A report whose `blocked_by` names a tool, whose `no_cases` is true, or whose `refused` says why, ran nothing.
+    A report holding an errored case, or a refused one, is never kept, so the cases run again next time.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -52,3 +63,21 @@ class CaseReport(BaseModel):
     step's type, because neither runs its cases on its own."""
     stand_in_calls: int
     """How many write calls the stand-ins answered while the cases ran."""
+    refused: str | None
+    """Why the step's case file cannot run, such as two cases sharing a name, which fails the step's report. `None` when
+    the case file could run."""
+
+
+def cases_address(cases: Mapping[str, JsonValue] | None) -> str:
+    """The content address of a step's dataset: the SHA-256 of its canonical JSON, keys sorted, with no spaces.
+
+    The same cases written two ways share one address.
+
+    Args:
+        cases: The step's dataset in `pydantic_evals` form, or `None` when it has none.
+
+    Returns:
+        The address, as hex.
+    """
+    canonical = json.dumps(to_jsonable_python(dict(cases)) if cases is not None else None, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

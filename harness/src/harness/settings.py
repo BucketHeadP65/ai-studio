@@ -307,6 +307,11 @@ class StateSettings(BaseModel):
         return self.home / "evidence.jsonl"
 
     @property
+    def step_case_reports(self) -> Path:
+        """Where each reusable step version's case report is kept, one file per step and cases content address."""
+        return self.home / "step-case-reports"
+
+    @property
     def activation_log(self) -> Path:
         """The append-only record of every custom-item activation act."""
         return self.home / "activations.jsonl"
