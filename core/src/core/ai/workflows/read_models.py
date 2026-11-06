@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from datetime import datetime
 
+    from core.ai.workflows.domain.flags import MaintenanceFlag
     from core.ai.workflows.domain.intent import WorkflowIntent
     from core.ai.workflows.domain.presentation import WorkflowPresentation
 
@@ -77,3 +78,27 @@ class FlagCard(BaseModel):
     """When the flag was raised, written in JSON as ISO 8601 with its offset."""
     evidence: str
     proposed_change: str
+
+    @classmethod
+    def from_flag(cls, flag_id: str, flag: MaintenanceFlag) -> FlagCard:
+        """The card of the flag a page holds under `flag_id`.
+
+        Args:
+            flag_id: The flag's page id.
+            flag: The flag the page holds.
+
+        Returns:
+            The card.
+        """
+        return cls(
+            id=flag_id,
+            kind=flag.kind,
+            status=flag.status,
+            step=flag.step,
+            workflow=flag.workflow,
+            title=flag.title,
+            summary=flag.summary,
+            raised_at=flag.raised_at,
+            evidence=flag.evidence,
+            proposed_change=flag.proposed_change,
+        )
