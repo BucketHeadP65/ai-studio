@@ -182,7 +182,7 @@ when there were refusals.
 **The landing accepts only the edits the step exists to make.** When a model's answer edits something durable (a
 workflow, a page, a config), the landing admits an allow-list of edit kinds and refuses every other one, naming it.
 An open edit vocabulary lets a model write instructions another agent will follow, or remove a person's review, through
-a door meant for wiring. Hand the model a checking tool that answers what the landing would refuse, so it learns the
+an edit meant for wiring. Hand the model a checking tool that answers what the landing would refuse, so it learns the
 limit before it answers.
 
 **Name what a step could not read.** A step that reads a set of sources lists each source it could not read, with the

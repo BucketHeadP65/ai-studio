@@ -318,7 +318,7 @@ TD-46 onward came from the close of the code standard refactor on
   name the ids.
 - **Why it is debt:** the schedule exists so no step version waits on a person, and one provider refusal undoes that.
 - **Cost while it stands:** the first live fire (2026-11-06, run `20261106T075142585876-9a873496`) failed when Azure's
-  content filter refused the plan judge's thinking-only reply as self harm at medium severity, on an empty plan. A run by
+  content filter refused the plan judge's thinking-only reply as self harm, on an empty plan. A run by
   hand with the same ids completed (`20261106T075434434115-fd12b74a`).
 - **Paying it off:** put the fired ids back on the schedule when a fire ends failed for a cause outside the steps (the run's
   failure is a model or connection error), once per id set, or have the failed-fire notice name the ids and the run to
