@@ -17,12 +17,20 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Literal
+from uuid import UUID
 
 from core.ai.workflows.contracts import LibraryError, unsatisfied_parameters, validate
 from core.observability import get_logger
 from pydantic import ValidationError
 
-from harness.domain.contracts import AdmissionRefused, SessionRenamed, admitted_arguments, presentation_of, selected_knowledge_bases
+from harness.domain.contracts import (
+    AdmissionRefused,
+    FailedFireSteps,
+    SessionRenamed,
+    admitted_arguments,
+    presentation_of,
+    selected_knowledge_bases,
+)
 from harness.features.running import contracts as running
 from harness.features.scheduling.domain import (
     CHANGED_PAGES_PARAMETER,
@@ -52,7 +60,6 @@ from harness.features.scheduling.exceptions import (
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from uuid import UUID
 
     from core.ai.workflows.contracts import RunEvidence, StepRegistry, Workflow, WorkflowArguments, WorkflowLibrary
     from core.cqrs.contracts import TopicSink
@@ -338,6 +345,24 @@ def _clears_pending_step_ids(held: Schedule, cadence: Cadence | None) -> bool:
     return cadence != stored
 
 
+def _fired_by(runner: str) -> UUID | None:
+    """The schedule a run's runner names, or `None` for a run no schedule fired."""
+    if not runner.startswith(running.SCHEDULE_RUNNER_PREFIX):
+        return None
+    try:
+        return UUID(runner.removeprefix(running.SCHEDULE_RUNNER_PREFIX))
+    except ValueError:
+        return None
+
+
+def _fired_steps(evidence: RunEvidence) -> tuple[str, ...]:
+    """The changed steps a run was given in `changed_step_ids`, each once, in the order the fire passed them."""
+    value = evidence.params.get(CHANGED_STEPS_PARAMETER)
+    if not isinstance(value, str):
+        return ()
+    return tuple(dict.fromkeys(step_id for step_id in value.split(",") if step_id))
+
+
 async def _selected_by(library: WorkflowLibrary, schedule: Schedule) -> frozenset[str]:
     """The knowledge bases a schedule's arguments select, read off the card of the version it fires."""
     workflow_id = await current_version(library, schedule.workflow_id)
@@ -484,6 +509,38 @@ class Scheduler:
         if armed.schedule_ids:
             self._topics.publish("schedules")
         return armed.schedule_ids
+
+    async def put_back_steps(self, evidence: RunEvidence) -> FailedFireSteps | None:
+        """Put the changed steps of a failed on-step-change fire back on its schedule when the run stopped with a provider error.
+
+        The steps go back among the schedule's changed steps, beside any that arrived during the run, and the schedule
+        fires again after its quiet period, counted from the run's end. A step is put back on one schedule once, so the
+        fire that took it again and failed again leaves it to a run by hand. A run that failed for any other reason, or a
+        paused schedule, puts nothing back.
+
+        Args:
+            evidence: What the failed run's ending recorded.
+
+        Returns:
+            Which steps were put back and which need a run by hand, or `None` when the run was not fired by an
+            on-step-change schedule or passed it no changed steps, such as a run started by hand.
+        """
+        schedule_id = _fired_by(evidence.runner)
+        schedule = None if schedule_id is None else await self._schedules.get(schedule_id)
+        cadence = None if schedule is None else _cadence_or_none(schedule.cadence)
+        fired = _fired_steps(evidence)
+        if schedule is None or not isinstance(cadence, OnStepChangeCadence) or not fired:
+            return None
+        if evidence.outcome != "failed" or not evidence.provider_error:
+            return FailedFireSteps(put_back=(), by_hand=fired, why="other_failure")
+        at = evidence.at + timedelta(seconds=cadence.quiet_seconds)
+        put_back = await self._schedules.put_back_steps(schedule.id, step_ids=fired, at=at)
+        if put_back is None:
+            return FailedFireSteps(put_back=(), by_hand=fired, why="schedule_paused")
+        if put_back:
+            self._topics.publish("schedules")
+        by_hand = tuple(step_id for step_id in fired if step_id not in put_back)
+        return FailedFireSteps(put_back=put_back, by_hand=by_hand, why="put_back_once" if by_hand else None)
 
     async def schedules(self) -> list[Schedule]:
         """Every schedule.

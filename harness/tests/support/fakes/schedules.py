@@ -29,6 +29,8 @@ class FakeSchedules:
     """Every event id `arm_with_pages` recorded, standing in for `coordination.event_deliveries` under the on-index subscriber."""
     received_steps: set[UUID] = field(default_factory=set)
     """Every event id `arm_with_steps` recorded, standing in for `coordination.event_deliveries` under the on-step-change subscriber."""
+    put_back: set[tuple[UUID, str]] = field(default_factory=set)
+    """Every schedule and step id `put_back_steps` put back, standing in for `coordination.event_deliveries` under the put-back subscriber."""
     index_after_due: tuple[UUID, datetime, tuple[str, ...]] | None = None
     """An index the next `due` lands once it has read the due rows, the way one arrives while a fire is held: the schedule it
     arms, the fire it gives and its changed pages. Cleared once landed."""
@@ -173,3 +175,14 @@ class FakeSchedules:
             self.rows[schedule_id] = row.model_copy(update={"next_run_at": at, "pending_step_ids": pending})
             armed.append(schedule_id)
         return Armed(schedule_ids=tuple(armed))
+
+    async def put_back_steps(self, schedule_id: UUID, *, step_ids: Sequence[str], at: datetime) -> tuple[str, ...] | None:
+        row = self.rows.get(schedule_id)
+        if row is None or not row.enabled:
+            return None
+        first = tuple(step_id for step_id in dict.fromkeys(step_ids) if (schedule_id, step_id) not in self.put_back)
+        if first:
+            self.put_back.update((schedule_id, step_id) for step_id in first)
+            pending = tuple(sorted({*row.pending_step_ids, *first}))
+            self.rows[schedule_id] = row.model_copy(update={"next_run_at": at, "pending_step_ids": pending})
+        return first

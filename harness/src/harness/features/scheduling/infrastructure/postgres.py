@@ -8,11 +8,19 @@ from __future__ import annotations
 import json
 
 from typing import TYPE_CHECKING
+from uuid import uuid5
 
 from core.db import open_asyncpg_pool
 
 from harness.adapters.contracts import store_writer_pool_terms
-from harness.features.scheduling.domain import ON_INDEX_SUBSCRIBER, ON_REFRESH_SUBSCRIBER, ON_STEP_CHANGE_SUBSCRIBER, Armed, Schedule
+from harness.features.scheduling.domain import (
+    ON_INDEX_SUBSCRIBER,
+    ON_REFRESH_SUBSCRIBER,
+    ON_STEP_CHANGE_SUBSCRIBER,
+    PUT_BACK_SUBSCRIBER,
+    Armed,
+    Schedule,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -349,6 +357,30 @@ class PostgresSchedules:
             Whether the event was a repeat, and which schedules it armed.
         """
         return await self._arm_collecting(fires, event_id=event_id, subscriber=ON_STEP_CHANGE_SUBSCRIBER, statement=_ARM_WITH_STEPS, ids=step_ids)
+
+    async def put_back_steps(self, schedule_id: UUID, *, step_ids: Sequence[str], at: datetime) -> tuple[str, ...] | None:
+        """Lock the enabled row, record each step under the put-back subscriber, then move the fire and add the ids recorded first, in one transaction.
+
+        Args:
+            schedule_id: The schedule the failed fire was fired by.
+            step_ids: The changed steps that fire passed on.
+            at: The next fire the row gets when a step is put back.
+
+        Returns:
+            The step ids put back, in the order given, or `None` when no enabled row has that id.
+        """
+        async with self._pool.acquire() as connection, connection.transaction():
+            locked = await connection.fetchval("SELECT id FROM public.schedules WHERE id = $1 AND enabled FOR UPDATE", schedule_id)
+            if locked is None:
+                return None
+            first = [
+                step_id
+                for step_id in dict.fromkeys(step_ids)
+                if await connection.fetchval(_RECORD_EVENT, uuid5(schedule_id, step_id), PUT_BACK_SUBSCRIBER) is not None
+            ]
+            if first:
+                await connection.fetchval(_ARM_WITH_STEPS, schedule_id, at, first)
+        return tuple(first)
 
     async def _arm_collecting(
         self, fires: Mapping[UUID, datetime], *, event_id: UUID, subscriber: str, statement: str, ids: Sequence[str]

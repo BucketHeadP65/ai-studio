@@ -138,6 +138,10 @@ class _Store:
         del fires, event_id, step_ids
         return Armed()
 
+    async def put_back_steps(self, schedule_id: UUID, *, step_ids: Sequence[str], at: datetime) -> tuple[str, ...] | None:
+        del schedule_id, step_ids, at
+        return None
+
 
 @pytest.fixture
 def clock() -> _Clock:

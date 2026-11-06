@@ -1,7 +1,7 @@
 ---
 title: Judge a maintenance plan
 summary: Reviews each of the planner's decisions against its consumer's goal and the evidence the registered steps made, and answers approve, reject with a pass or fail line per decision, or cannot judge.
-version: 1
+version: 2
 step:
   name: judge_plan
   instructions: |-
@@ -19,10 +19,11 @@ step:
 
     Because the evidence was read after the plan was made, a pair can move in between: someone saved a newer version
     of the consumer or of the step, or the consumer took the new version itself or declined it. A decision is stale only
-    when no pair matches it and its workflow name is in `dropped` or `left_for_next_run` at any version, or `consumers`
-    holds a pair for its workflow name at a newer workflow or step version than the decision names. The landing refuses
-    a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An adopt on a stale
-    pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change with no decision
+    when no pair matches it and its workflow name is in `dropped`, `left_for_next_run` or `left_to_repository` at any
+    version, or `consumers` holds a pair for its workflow name at a newer workflow or step version than the decision
+    names. `left_to_repository` names step maintenance's own workflow, which takes no change from a plan. The landing
+    refuses a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An adopt on
+    a stale pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change with no decision
     writes nothing and a later run for its step offers it again, and a pair saved after the plan was drafted waits for
     such a run.
 
@@ -39,8 +40,8 @@ step:
 
     Answer approve when every decision passes. No decisions are approved when `consumers` holds no pairs, because
     there is nothing to land. Answer reject only when a decision fails on the evidence. Answer cannot_judge when a
-    decision names a workflow that no pair, no `dropped` entry and no `left_for_next_run` entry accounts for, so the
-    evidence never held it, or when the evidence arrived cut off or unreadable, and say which.
+    decision names a workflow that no pair and no entry of `dropped`, `left_for_next_run` or `left_to_repository`
+    accounts for, so the evidence never held it, or when the evidence arrived cut off or unreadable, and say which.
 
     Your feedback is read by the planner on its next attempt. Write one line per decision, in its order:
     `<workflow_id> <step_id>: pass`, `<workflow_id> <step_id>: pass, stale,` followed by what moved, or

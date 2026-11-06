@@ -52,7 +52,10 @@ that passes the step once.
 
 D5. **A launched fire passes the changed steps to `changed_step_ids`.** The ids are sorted and comma separated. The
 fire's stamp removes exactly the ids it passed, so a step a later event added while the fire ran waits for the next
-fire, and the schedule keeps the fire that event gave it. A held or refused fire keeps every id. Saving or updating an
+fire, and the schedule keeps the fire that event gave it. A held or refused fire keeps every id. A launched fire whose
+run stops with a provider error puts the ids it passed back on the schedule once per step, beside any that arrived
+during the run, and the schedule fires again after its quiet period (the amendment of 2026-11-06 in harness
+[ADR 0024](../../harness/docs/adr/0024-step-maintenance-runs-unattended.md)). Saving or updating an
 on-step-change schedule is refused when its workflow declares no `changed_step_ids` parameter, and a fire whose newest
 workflow version declares none is stamped refused and rests.
 

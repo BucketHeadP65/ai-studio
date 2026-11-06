@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -22,12 +23,15 @@ from harness.features.authoring.internal_contracts import Chat
 from harness.features.authoring.service import ChatService
 from harness.features.maintenance.contracts import FailedFireNotice, LiveTrialWatch, MaintenanceRunWatch
 from harness.features.running.contracts import SCHEDULE_RUNNER_PREFIX, RunEndObserver, RunEndObservers
-from harness.features.scheduling.contracts import RunEndArming
+from harness.features.scheduling.contracts import RunEndArming, Scheduler
+from harness.features.scheduling.domain import Schedule
 from harness.main import CONTROLLERS
 from harness.settings import HarnessSettings
 from tests.support.container import IO_LEAVES, answering_from_memory, rooted_at
+from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.fakes.owner_notifier import FakeOwnerNotifier
 from tests.support.fakes.pools import FakePool, FakeRecordDatabase, FakeRecordPool, FakeSessionsDatabase
+from tests.support.fakes.schedules import FakeSchedules
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -288,6 +292,38 @@ class TestTheRunEndObserver:
             )
 
         assert [title for title, _ in notifier.sent] == ["A scheduled run failed"]
+        await container.close()
+
+    async def test_the_notice_puts_the_changed_steps_of_a_fire_stopped_by_a_provider_error_back_through_the_scheduler(self, tmp_path: Path) -> None:
+        container = create_container(rooted_at(HarnessSettings(), tmp_path))
+        notifier = FakeOwnerNotifier()
+        schedules = FakeSchedules()
+        waiting = Schedule(workflow_id="wf.step-maintenance.v1", cadence="on step change quiet 10m")
+        await schedules.insert(waiting)
+        ended_at = datetime(2026, 11, 6, 7, 52, tzinfo=UTC)
+        scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+        with container.override({**dict(IO_LEAVES), Notifier: notifier, Scheduler: scheduler}):
+            observer = await container.get(RunEndObserver)
+            await observer.run_ended(
+                RunEvidence(
+                    workflow_id="wf.step-maintenance.v1",
+                    spec_hash="abc",
+                    outcome="failed",
+                    result=Outcome(status="unknown", summary="The primary work never took an input."),
+                    gates_auto=(),
+                    gates_orchestrated=(),
+                    provider_error=True,
+                    params={"changed_step_ids": "st.a.v2"},
+                    runner=f"{SCHEDULE_RUNNER_PREFIX}{waiting.id}",
+                    at=ended_at,
+                )
+            )
+
+        stored = await schedules.get(waiting.id)
+        assert stored is not None
+        assert (stored.pending_step_ids, stored.next_run_at) == (("st.a.v2",), ended_at + timedelta(minutes=10))
+        ((_, message),) = notifier.sent
+        assert "st.a.v2 went back on the schedule" in message
         await container.close()
 
 

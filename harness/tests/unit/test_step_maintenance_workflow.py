@@ -175,7 +175,7 @@ async def test_the_workflow_file_loads_and_validates_against_the_app_s_registry(
 def test_the_workflow_takes_the_changed_step_ids_and_answers_with_the_hand_over_after_the_landing_its_judge_gates() -> None:
     spec = _spec()
 
-    assert (spec.name, spec.version) == (MAINTENANCE_WORKFLOW, 1)
+    assert (spec.name, spec.version) == (MAINTENANCE_WORKFLOW, 2)
     assert spec.parameters == {
         CHANGED_STEPS: ParameterSpec(
             description=spec.parameters[CHANGED_STEPS].description, json_schema={"type": "string", "minLength": 1}, required=True
@@ -559,6 +559,25 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     assert unnamed == ["approve"], "a pair no decision names, such as a consumer saved after the plan, is never a reason to reject"
 
 
+def _left_to_repository(inputs: Mapping[str, object]) -> bool:
+    """Whether a decision names a workflow the evidence left to the repository."""
+    left = set(ConsumerList.model_validate(inputs["consumers"]).left_to_repository)
+    return any(decision.workflow_id in left for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions)
+
+
+def test_the_plan_judge_passes_a_decision_about_a_workflow_left_to_the_repository_as_stale() -> None:
+    document = _documents()["judge_plan"]
+    front = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8").split("---", 2)[1])
+    left = [_outcome(case.expected_output) for case in _dataset("judge_plan").cases if _left_to_repository(case.inputs)]
+
+    assert left == ["approve"], "a decision about step maintenance itself is stale, never a rejection or a cannot judge"
+    assert _step("judge_plan").instructions.count("`dropped`, `left_for_next_run` or `left_to_repository`") == 2, (
+        "the stale rule and the cannot judge rule both count the workflows left to the repository"
+    )
+    assert document.version == 2
+    assert "st.judge_plan.v2" in front["uses"]
+
+
 def test_the_repository_judge_s_cases_keep_one_draft_and_drop_another() -> None:
     dataset = _dataset("judge_repository_change")
     decisions = [
@@ -700,7 +719,7 @@ async def test_a_run_with_no_consumer_behind_is_approved_and_lands_writes_and_te
     )
 
     assert scripted.models.performed == ["plan_changes", PLAN_GATE], "approved on the first attempt, and no repository change to draft"
-    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=[current])
+    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=[current], left_to_repository=[])
     assert isinstance(handed, HandOver)
     assert handed.report == "Step maintenance changed nothing, so nobody was told."
     assert (handed.flags, handed.dropped, handed.problems) == ([], [], [])
