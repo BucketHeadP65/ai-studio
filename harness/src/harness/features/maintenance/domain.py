@@ -28,6 +28,10 @@ CHANGED_STEPS = "changed_step_ids"
 PAIR_CAP = 20
 """The most consumer pairs one step maintenance run takes. The rest wait for the next run."""
 
+ADOPTION_EDITS = frozenset({"rewire", "add_parameter", "set_output"})
+"""The edit operations an adoption may carry beside its replaced step. Every other one is refused at landing, so a gate,
+a charge or a node a model wrote never lands in a consumer."""
+
 NOT_YET_DECIDED = "not yet decided"
 """The reason `prepare_plan` gives every planned change, until the planner writes its own."""
 

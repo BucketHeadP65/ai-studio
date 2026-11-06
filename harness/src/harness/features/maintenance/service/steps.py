@@ -40,6 +40,7 @@ from pydantic import JsonValue
 
 from harness.domain.contracts import CaseReport, cases_address
 from harness.features.maintenance.domain import (
+    ADOPTION_EDITS,
     NOT_YET_DECIDED,
     PAIR_CAP,
     ConsumerList,
@@ -263,9 +264,16 @@ class MaintenanceSteps:
         candidate and saves it as the consumer's next version, saved by step maintenance, with a live trial marker naming
         the version it replaces. It then resolves the open consumer flag of that pair. A kept pair writes a decline into
         the consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the
-        planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. A change
-        to a consumer someone saved past since the listing is refused. Every writable change lands before any refusal is
-        raised.
+        planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. Every
+        writable change lands before any refusal is raised.
+
+        A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
+        its name, when the consumer declines that version, or when someone saved a newer version of the consumer since
+        the listing. An adoption is also refused when it carries an edit other than `rewire`, `add_parameter` or
+        `set_output`, when its edits change an inline step other than the adopted one or do not apply, when the
+        candidate does not validate, when its card's words name what the workflow does not declare, when it names an
+        agent this host cannot resolve, or when the library refuses the save. A kept pair is refused when the library
+        refuses its decline.
 
         Args:
             plan: The plan the judge approved.
@@ -412,34 +420,47 @@ class MaintenanceSteps:
         return HandOver(report=report, flags=flags, dropped=dropped, problems=problems)
 
     async def check_change(self, workflow_id: str, step_id: str, extra_ops: tuple[dict[str, JsonValue], ...] = ()) -> str:
-        """Build the consumer version an adoption would save and run its contract check on it, saving nothing.
+        """Build the consumer version an adoption would save, run its contract check, and say whether the landing would adopt it.
 
         Call it on every change you plan to adopt, with the further edit operations it needs, before you answer. The
-        landing builds the same version and refuses one whose check fails.
+        landing builds the same version and refuses it when the check fails, when the step version is not the newest of
+        its name, when the consumer declines that version, when someone saved a newer version of the consumer, when an
+        edit is anything but `rewire`, `add_parameter` or `set_output`, and when the edits change any inline step other
+        than the adopted one. The answer says which. A repository change you draft may hold any edit, such as a
+        `replace_inline_step`, because the landing never lands a draft: read only the contract check for it.
 
         Args:
             workflow_id: The consumer's workflow version id, `wf.<name>.v<version>`, as the pair names it.
             step_id: The changed step version's id, `st.<name>.v<version>`, as the pair names it.
             extra_ops: Edit operations applied after the copy is replaced by the step, in the form an adaptation takes,
-                such as `{"op": "rewire", "id": "<node>", "input": "<input>", "to": {"node": "<other node>"}}` or
-                `{"op": "add_parameter", "name": "<name>", "with": {"description": "...", "json_schema": {...}}}`.
-                Leave it empty for a plain adoption.
+                such as `{"op": "rewire", "id": "<node>", "input": "<input>", "to": {"node": "<other node>"}}`,
+                `{"op": "add_parameter", "name": "<name>", "with": {"description": "...", "json_schema": {...}}}` or
+                `{"op": "set_output", "to": {"node": "<node>"}}`. Leave it empty for a plain adoption.
 
         Returns:
-            `passes` and what was checked, or `fails` and each validation issue, or why nothing could be checked.
+            `passes` and that the landing would adopt it, `passes the contract check` and why the landing refuses it as
+            an adoption, `fails` and each validation issue, or why nothing could be checked.
         """
         try:
+            step = await self._library.fetch_step(step_id)
+            refusal = await self._adoption_refusal(workflow_id, step_id, step, extra_ops)
             check = await self._check(workflow_id, step_id, extra_ops)
         except LibraryError as exc:
             return f"cannot check: {exc}. Use the workflow id and the step id the pair names."
         edits = f" and {len(extra_ops)} further edit operations" if extra_ops else ""
+        if check.passed and refusal is None:
+            return f"passes: {workflow_id} validates with {step_id} in place of its copy{edits}. The landing would adopt it."
         if check.passed:
-            return f"passes: {workflow_id} validates with {step_id} in place of its copy{edits}."
+            return (
+                f"passes the contract check: {workflow_id} validates with {step_id} in place of its copy{edits}. "
+                f"The landing refuses it as an adoption: {refusal}."
+            )
         issues = "\n".join(check.issues)
-        return (
+        failed = (
             f"fails: {workflow_id} does not validate with {step_id} in place of its copy{edits}:\n{issues}\n"
             f"Add edit operations that fix each issue and check again, or plan keep or flag for this consumer."
         )
+        return failed if refusal is None else f"{failed}\nThe landing refuses it as an adoption too: {refusal}."
 
     def _registered(self) -> StepRegistry:
         if self._registry is None:
@@ -544,7 +565,12 @@ class MaintenanceSteps:
         base = saved.get(change.workflow_id, change.workflow_id)
         try:
             step = await self._library.fetch_step(change.step_id)
-            await self._refuse_a_stale_pair(change, base, step)
+            if change.disposition == "adopt":
+                refusal = await self._adoption_refusal(base, change.step_id, step, change.extra_ops)
+            else:
+                refusal = await self._stale_pair(base, change.step_id, step)
+            if refusal is not None:
+                return _landed(change, "refused", refusal)
             workflow = await self._library.fetch_workflow(base)
             if change.disposition == "adopt":
                 landed = await self._adopt(change, base, workflow, step)
@@ -558,20 +584,41 @@ class MaintenanceSteps:
         except _REFUSALS as exc:
             return _landed(change, "refused", str(exc))
 
-    async def _refuse_a_stale_pair(self, change: PlannedChange, base: str, step: InlineStep) -> None:
-        """Refuse a change whose step version is not the newest of its name, which the consumer declines, or whose consumer someone saved past."""
+    async def _stale_pair(self, base: str, step_id: str, step: InlineStep) -> str | None:
+        """Why the pair is stale: the step version is not the newest of its name, the consumer declines it, or someone saved past the consumer."""
         newest_step = max(await self._library.step_versions(step.name), key=lambda saved: saved.version)
-        if newest_step.step_id != change.step_id:
-            msg = f"{change.step_id} is not the newest version of {step.name}, {newest_step.step_id} is. The next run plans {newest_step.step_id}"
-            raise LibraryError(msg)
+        if newest_step.step_id != step_id:
+            return f"{step_id} is not the newest version of {step.name}, {newest_step.step_id} is. The next run plans {newest_step.step_id}"
         address = step_content_address(step)
         if any(entry.step == step.name and entry.declined == address for entry in await self._library.fetch_consumer_record(base)):
-            msg = f"{base} declines {change.step_id}, so step maintenance leaves the pair alone until a newer version arrives"
-            raise LibraryError(msg)
+            return f"{base} declines {step_id}, so step maintenance leaves the pair alone until a newer version arrives"
         newest = await self._library.current(base)
         if newest != base:
-            msg = f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
-            raise LibraryError(msg)
+            return f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
+        return None
+
+    async def _adoption_refusal(self, base: str, step_id: str, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]]) -> str | None:
+        """Why the landing refuses this adoption before validating it, or None: a stale pair, an edit it may not carry, or another step changed."""
+        if (stale := await self._stale_pair(base, step_id, step)) is not None:
+            return stale
+        if refused := [str(op.get("op")) for op in extra_ops if op.get("op") not in ADOPTION_EDITS]:
+            return (
+                f"an adoption may carry only the edits rewire, add_parameter and set_output, and this one carries "
+                f"{', '.join(refused)}. Plan keep or flag for this consumer, or adopt it without those edits"
+            )
+        workflow = await self._library.fetch_workflow(base)
+        try:
+            child, _ = _adopted(workflow, step, extra_ops, evidence="")
+        except AdaptationRefusedError:
+            return None
+        expected = {**_inline_addresses(workflow), step.name: step_content_address(step)}
+        if (held := _inline_addresses(child)) != expected:
+            changed = sorted(name for name in expected.keys() | held.keys() if expected.get(name) != held.get(name))
+            return (
+                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. An adoption "
+                f"changes only the step it adopts, and its further edits may only be rewire, add_parameter and set_output"
+            )
+        return None
 
     async def _adopt(self, change: PlannedChange, base: str, workflow: Workflow, step: InlineStep) -> LandedChange:
         """Save the consumer's next version with `step` on live trial, then resolve the pair's open consumer flag."""
@@ -579,14 +626,6 @@ class MaintenanceSteps:
         ran_in = f" in the run {run}" if run else ""
         evidence = f"Step maintenance adopted {change.step_id} in {base}{ran_in}. {change.reason}"
         child, lineage = _adopted(workflow, step, change.extra_ops, evidence=evidence)
-        expected = {**_inline_addresses(workflow), step.name: step_content_address(step)}
-        if (held := _inline_addresses(child)) != expected:
-            changed = sorted(name for name in expected.keys() | held.keys() if expected.get(name) != held.get(name))
-            msg = (
-                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. An adoption "
-                f"changes only the step it adopts, and its further edits may only be rewire, add_parameter and set_output"
-            )
-            raise AdaptationRefusedError(msg)
         registry = self._registered()
         verify_savable(child, registry)
         try:

@@ -707,7 +707,7 @@ async def test_a_planned_change_to_a_consumer_that_declines_the_step_version_is_
     assert (landed.workflow_id, landed.outcome) == (weekly_id, "adopted")
 
 
-async def test_an_adoption_whose_edits_change_another_inline_step_is_refused_and_check_change_still_answers_it(tmp_path: Path) -> None:
+async def test_an_adoption_whose_edits_change_another_inline_step_is_refused_and_check_change_says_so_and_still_checks_it(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
@@ -721,10 +721,12 @@ async def test_an_adoption_whose_edits_change_another_inline_step_is_refused_and
 
     refused, landed = raised.value.report.changes
     assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
-    assert "summarize" in refused.reason
+    assert "replace_inline_step" in refused.reason
     assert "rewire, add_parameter and set_output" in refused.reason
     assert (landed.workflow_id, landed.outcome) == (weekly_id, "adopted")
-    assert answer.startswith("passes")
+    assert answer.startswith("passes the contract check")
+    assert "The landing refuses it as an adoption" in answer
+    assert "replace_inline_step" in answer
 
 
 async def test_list_consumers_takes_the_newest_saved_version_of_a_named_step(tmp_path: Path) -> None:
@@ -811,3 +813,76 @@ async def test_step_case_runs_build_no_stand_in_registry_for_a_step_without_case
 
 def test_one_line_keeps_a_model_written_name_on_one_line_without_backticks_and_with_each_double_percent_split() -> None:
     assert one_line("steps/`digest`.md\n  and 100%% %%sure") == "steps/digest.md and 100% % % %sure"
+
+
+REFUSED_EDITS: tuple[dict[str, JsonValue], ...] = (
+    {"op": "add_node", "node": {"kind": "run", "id": "extra", "work": "digest", "inputs": {"text": {"parameter": "text"}}}},
+    {"op": "replace_node", "id": "digest", "with": {"kind": "run", "id": "digest", "work": "digest", "inputs": {"text": {"parameter": "text"}}}},
+    {"op": "remove_node", "id": "digest"},
+    {"op": "set_description", "to": "Digest one source, as an orchestrator gate charge would say."},
+    {"op": "add_inline_step", "with": SUMMARIZE[1].model_dump(mode="json")},
+    {"op": "remove_inline_step", "name": "digest"},
+    {"op": "replace_inline_step", "name": "digest", "with": DIGEST[3].model_dump(mode="json")},
+)
+
+
+@pytest.mark.parametrize("edit", REFUSED_EDITS, ids=[str(edit["op"]) for edit in REFUSED_EDITS])
+async def test_an_adoption_carrying_an_edit_other_than_rewire_add_parameter_or_set_output_is_refused_and_check_change_says_so(
+    tmp_path: Path, edit: dict[str, JsonValue]
+) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too.")})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await world.steps.land_changes(_tampered(plan, 0, extra_ops=(edit,)))
+    answer = await world.steps.check_change(sources_id, V4, extra_ops=(edit,))
+
+    refused, landed = raised.value.report.changes
+    assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
+    assert str(edit["op"]) in refused.reason
+    assert "rewire, add_parameter and set_output" in refused.reason
+    assert (landed.workflow_id, landed.outcome) == (weekly_id, "adopted")
+    assert "The landing refuses it as an adoption" in answer
+    assert str(edit["op"]) in answer
+    assert await world.library.current(sources_id) == sources_id
+
+
+async def test_an_adoption_that_rewires_a_node_to_a_parameter_it_adds_lands_and_check_change_says_it_would(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    wiring: tuple[dict[str, JsonValue], ...] = (
+        {"op": "add_parameter", "name": "source", "with": {"description": "the whole source", "json_schema": {"type": "string"}}},
+        {"op": "rewire", "id": "digest", "input": "text", "to": {"parameter": "source"}},
+    )
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits once it reads the whole source.")})
+
+    answer = await world.steps.check_change(sources_id, V4, extra_ops=wiring)
+    landed = await world.steps.land_changes(_tampered(plan, 0, extra_ops=wiring))
+
+    assert answer.startswith("passes")
+    assert "The landing would adopt it." in answer
+    ((change),) = landed.changes
+    assert (change.outcome, change.saved_id) == ("adopted", "wf.digest-sources.v2")
+    child = await world.library.fetch_workflow("wf.digest-sources.v2")
+    assert "source" in child.parameters
+    (node,) = child.nodes
+    assert isinstance(node, RunNode)
+    assert node.inputs["text"] == FromParameter(parameter="source")
+
+
+async def test_check_change_says_the_landing_refuses_an_older_step_version_and_a_declined_one(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    await world.library.record_decline(weekly_id, step="digest", step_hash=HASH4, because="reverted")
+
+    older = await world.steps.check_change(sources_id, "st.digest.v3")
+    declined = await world.steps.check_change(weekly_id, V4)
+
+    assert "The landing refuses it as an adoption: st.digest.v3 is not the newest version of digest" in older
+    assert f"The landing refuses it as an adoption: {weekly_id} declines {V4}" in declined
