@@ -773,10 +773,10 @@ async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_
 
     assert [(change.workflow_id, change.outcome, change.reason) for change in landed.changes] == [
         (sources_id, "adopted", "It fits."),
-        (weekly_id, "undecided", "not decided, offered again on the next run"),
+        (weekly_id, "not_decided", "not decided, offered again on the next run"),
     ]
     (record,) = await world.library.fetch_consumer_record(weekly_id)
-    assert (record.declined, record.declined_because) == (None, None), "an undecided pair writes no decline"
+    assert (record.declined, record.declined_because) == (None, None), "a pair not decided writes no decline"
     assert [pair.workflow_id for pair in (await world.steps.list_consumers(V4)).pairs] == [weekly_id]
     assert f"{weekly_id} with {V4} was not decided, offered again on the next run." in await world.steps.report_changes(landed)
 

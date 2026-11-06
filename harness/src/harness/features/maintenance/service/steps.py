@@ -376,7 +376,7 @@ class MaintenanceSteps:
         for change in landed.changes:
             pair = pairs.get((change.workflow_id, change.step_id))
             outcome = change.outcome
-            if pair is None or outcome in ("refused", "undecided"):
+            if pair is None or outcome in ("refused", "not_decided"):
                 continue
             side = ConsumerSide(
                 workflow_id=change.workflow_id,
