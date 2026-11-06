@@ -49,6 +49,7 @@ from harness.features.maintenance.contracts import (
     LandedChange,
     LandingRefusedError,
     LandingReport,
+    LiveTrialWatch,
     MaintenancePlan,
     MaintenanceSteps,
     PlanDecision,
@@ -59,9 +60,12 @@ from harness.features.maintenance.contracts import (
     one_line,
 )
 from harness.features.maintenance.wiring import StepCaseRuns
+from harness.session import SessionPool
 from tests.support.fakes.case_runner import FakeCaseRunner
 from tests.support.fakes.library_collection import FakeCollection
 from tests.support.fakes.owner_notifier import FakeOwnerNotifier
+from tests.support.fakes.sessions import APool
+from tests.support.runtime import a_runtime
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -621,6 +625,47 @@ async def test_a_kept_copy_landed_beside_an_adoption_into_the_same_consumer_stay
     assert await world.library.revert("wf.digest-sources.v2") == sources_id
     restored = {entry.step: entry for entry in await world.library.fetch_consumer_record(sources_id)}
     assert (restored["digest"].declined, restored["digest"].declined_because) == (HASH4, "kept"), "the decline survives the revert"
+
+
+async def test_a_revert_of_an_adoption_stacked_beside_a_keep_restores_the_baseline_declining_the_kept_step_and_the_reverted_one(
+    tmp_path: Path,
+) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    await world.save_steps(5)
+    on_trial = "wf.digest-sources.v2"
+    changed = f"st.digest.v5,{SUMMARIZE2}"
+    consumers = await world.steps.list_consumers(changed)
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(changed))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=on_trial, step_id="st.digest.v5", disposition="adopt", reason="It dates each claim too."),
+            PlanDecision(workflow_id=on_trial, step_id=SUMMARIZE2, disposition="keep", reason="The weekly note keeps three sentences."),
+        ]
+    )
+    landed = await world.steps.land_changes(draft, decisions)
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        ("st.digest.v5", "adopted", "wf.digest-sources.v3"),
+        (SUMMARIZE2, "kept", ""),
+    ]
+    stacked = await world.library.fetch_workflow("wf.digest-sources.v3")
+    watch = LiveTrialWatch(APool(SessionPool(a_runtime(library=world.library))), world.log, world.notifier)
+    failed = _ran(stacked, "wf.digest-sources.v3", at=T0).model_copy(
+        update={"outcome": "failed", "result": Outcome(status="failed", summary="digest wrote nothing"), "produced": {}}
+    )
+    await world.log.append(failed)
+
+    await watch.run_ended(failed)
+
+    assert await world.library.current("wf.digest-sources.v3") == sources_id
+    restored = {entry.step: (entry.declined, entry.declined_because) for entry in await world.library.fetch_consumer_record(sources_id)}
+    assert restored == {
+        "digest": (step_content_address(DIGEST[5]), "reverted"),
+        "summarize": (SUMMARIZE2_HASH, "kept"),
+    }
 
 
 async def test_two_adoptions_into_one_consumer_whose_save_the_library_refuses_are_refused_together_each_naming_the_other(tmp_path: Path) -> None:

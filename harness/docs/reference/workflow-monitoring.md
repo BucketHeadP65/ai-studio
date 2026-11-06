@@ -1476,8 +1476,9 @@ four parts in turn, and a part that fails is logged while the next is still told
    anywhere but at a node running an adopted step among them. A completed run whose checked status is failed is ranked
    against the baseline like any completed run, failed ranking lowest, and ignored when the baseline is empty. Once three runs counted (the marker's `runs`)
    the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
-   the version the marker names as `previous` is live again (a version between them stays superseded), its consumer
-   record declines every step version on the marker as reverted, the flag of each diverged copy it still holds is
+   the version the marker names as `previous` is live again (a version between them stays superseded), it keeps each
+   decline the retired versions recorded for a step off the marker, so a keep survives the revert, its consumer record
+   declines every step version on the marker as reverted, the flag of each diverged copy it still holds is
    raised again, one `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` per step on the marker carries the
    run's end time, the verdict's reason and every step the live trial covered, and the owner is told once. A version
    that is no longer the newest live one of its name, because a person saved a newer one, is never reverted.

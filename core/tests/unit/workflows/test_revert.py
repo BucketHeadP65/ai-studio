@@ -406,3 +406,33 @@ async def test_an_equal_re_save_of_a_version_on_live_trial_with_a_marker_writes_
 
     assert await library.fetch_live_trial("wf.digest-sources.v2") == longer
 
+async def test_a_revert_carries_onto_the_restored_version_the_declines_of_the_versions_it_retires_for_steps_off_the_marker() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version in (1, 2):
+        await library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    first = CONSUMER.model_copy(
+        update={
+            "inline": (DIGEST[1], SUMMARIZE[1]),
+            "nodes": (*CONSUMER.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(first, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    between, lineage = adapt(first, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    await library.put(
+        between, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+    kept = step_content_address(SUMMARIZE[2])
+    await library.record_decline("wf.digest-sources.v2", step="summarize", step_hash=kept, because="kept")
+    await library.record_decline("wf.digest-sources.v2", step="digest", step_hash="a-later-digest", because="kept")
+    newest, lineage = adapt(between, ops=[{"op": "set_description", "to": "Digest one source, then summarize it."}])
+    await library.put(
+        newest, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+
+    assert await library.revert("wf.digest-sources.v3") == "wf.digest-sources.v1"
+
+    restored = {entry.step: (entry.declined, entry.declined_because) for entry in await library.fetch_consumer_record("wf.digest-sources.v1")}
+    assert restored == {"summarize": (kept, "kept"), "digest": (None, None)}, "a keep survives the revert, a step on the marker is not carried"

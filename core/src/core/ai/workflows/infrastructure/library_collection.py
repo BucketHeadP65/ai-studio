@@ -358,6 +358,20 @@ def _flag_of(page: Mapping[str, Any]) -> MaintenanceFlag:
         raise LibraryError(msg) from exc
 
 
+def _with_declines(long_tail: Mapping[str, Any], carried: Mapping[str, ConsumerEntry], *, workflow_id: str) -> dict[str, Any]:
+    """`long_tail` with each carried decline written onto its record's entry of the same step."""
+    record = _consumer_entries(long_tail.get("reusable_steps"), workflow_id=workflow_id)
+    declined = tuple(
+        entry.model_copy(update={"declined": carry.declined, "declined_because": carry.declined_because})
+        if (carry := carried.get(entry.step)) is not None
+        else entry
+        for entry in record
+    )
+    if declined == record:
+        return dict(long_tail)
+    return {**long_tail, "reusable_steps": [entry.model_dump(mode="json") for entry in declined]}
+
+
 def _holds(stored: Mapping[str, JsonValue], workflow: Workflow) -> bool:
     """Whether the frontmatter `stored` holds `workflow` by content address. A stored workflow that does not read holds nothing."""
     try:
@@ -1097,8 +1111,10 @@ class LibraryCollection:
 
         The previous version is written first, every other key it holds kept, so a failed archive leaves both versions
         live with this one still the newest, and the revert can be asked again. A version between the two stays
-        superseded. Archiving resolves the open `diverged_copy` flags this version raised, and then the previous version
-        raises again, as `put` does, the flag of each diverged copy its record holds, warning with
+        superseded. The previous version takes, in that same write, the newest decline the versions the revert retires
+        record (read along their lineages from this version back) for each step off the marker, so a revert undoes the
+        adoptions and keeps the keeps. Archiving resolves the open `diverged_copy` flags this version
+        raised, and then the previous version raises again, as `put` does, the flag of each diverged copy its record holds, warning with
         `FlagWriteIncompleteWarning` when a flag is not written, the revert standing. Nothing is written when the call is
         refused.
 
@@ -1112,8 +1128,9 @@ class LibraryCollection:
         Raises:
             LibraryError: If `workflow_id` is not a workflow version id or not the newest live version of its name, it
                 carries no live trial marker or one that does not parse, the marker names no lower version of the same
-                name, that version is not there, holds no workflow or is archived, or the ingest refuses a write. A
-                refused archive says the previous version is live again and to revert again.
+                name, that version is not there, holds no workflow or is archived, a consumer record it reads does not
+                parse, or the ingest refuses a write. A refused archive says the previous version is live again and to
+                revert again.
         """
         match = _VERSIONED_ID.match(workflow_id)
         if match is None:
@@ -1156,8 +1173,9 @@ class LibraryCollection:
                 f"Nothing was written."
             )
             raise LibraryError(msg)
+        carried = await self._retired_declines(workflow_id, name, above=int(previous["version"]), marker=marker)
         try:
-            await self._rewrite(page, long_tail)
+            await self._rewrite(page, _with_declines(long_tail, carried, workflow_id=previous_id))
         except Exception as exc:
             msg = f"the collection refused to make {previous_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
             raise LibraryError(msg) from exc
@@ -1171,6 +1189,23 @@ class LibraryCollection:
             raise LibraryError(msg) from exc
         await self._raise_diverged_flags_again(previous_id, long_tail)
         return previous_id
+
+    async def _retired_declines(self, workflow_id: str, name: str, *, above: int, marker: LiveTrialMarker) -> dict[str, ConsumerEntry]:
+        """The newest decline of each step off the marker on the versions a revert retires, read along their lineages back to `above`."""
+        on_marker = {each.step for each in marker.steps}
+        carried: dict[str, ConsumerEntry] = {}
+        version_id: str | None = workflow_id
+        seen: set[str] = set()
+        while version_id is not None and version_id not in seen:
+            seen.add(version_id)
+            for entry in _consumer_entries((await self._frontmatter(version_id)).get("reusable_steps"), workflow_id=version_id):
+                if entry.declined is not None and entry.step not in on_marker:
+                    carried.setdefault(entry.step, entry)
+            lineage = await self.fetch_lineage(version_id)
+            if lineage is None or lineage.parent_name != name or lineage.parent_version <= above:
+                break
+            version_id = page_id(name, lineage.parent_version)
+        return carried
 
     async def _raise_diverged_flags_again(self, workflow_id: str, long_tail: Mapping[str, Any]) -> None:
         """Settle the diverged copy flags of a version a revert made live again, from its stored workflow and record."""

@@ -58,8 +58,9 @@ run is read once by `live_trial_verdict`, from what the run and its grades recor
 - counted otherwise. Three counted runs close the live trial and nothing is written.
 
 The first failed or worse run reverts the version while it is still the newest live one: it is archived, the version
-the marker names as previous is live again with its own trust record, that version's record declines every step version
-on the marker as reverted, its diverged copy flags are raised again, one `live_trial_reverted` flag per step is raised,
+the marker names as previous is live again with its own trust record and every decline the retired versions recorded
+for other steps (a revert undoes the adoptions, not the keeps), that version's record declines every step version on
+the marker as reverted, its diverged copy flags are raised again, one `live_trial_reverted` flag per step is raised,
 and the owner is told. An adoption into a version still on live trial builds on it, keeps its baseline and carries its
 steps into the new marker, and its run count starts again. A version a person saved past is never reverted.
 
