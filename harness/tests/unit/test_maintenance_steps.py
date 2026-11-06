@@ -596,6 +596,33 @@ async def test_a_flag_drafted_before_an_adoption_into_the_same_consumer_lands_on
     assert flag.workflow == "wf.digest-sources.v2", "the flag names the consumer's newest version, the one the adoption saved"
 
 
+async def test_a_kept_copy_landed_beside_an_adoption_into_the_same_consumer_stays_declined_after_the_adoption_is_reverted(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    consumers = await world.steps.list_consumers(f"{V4},{SUMMARIZE2}")
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(f"{V4},{SUMMARIZE2}"))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=sources_id, step_id=V4, disposition="keep", reason="The digest keeps its own tone."),
+            PlanDecision(workflow_id=sources_id, step_id=SUMMARIZE2, disposition="adopt", reason="It names every claim."),
+        ]
+    )
+
+    landed = await world.steps.land_changes(draft, decisions)
+
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        (V4, "kept", ""),
+        (SUMMARIZE2, "adopted", "wf.digest-sources.v2"),
+    ]
+    adopted = {entry.step: entry for entry in await world.library.fetch_consumer_record("wf.digest-sources.v2")}
+    assert (adopted["digest"].declined, adopted["digest"].declined_because) == (HASH4, "kept"), "the adopted version inherits the decline"
+    assert await world.library.revert("wf.digest-sources.v2") == sources_id
+    restored = {entry.step: entry for entry in await world.library.fetch_consumer_record(sources_id)}
+    assert (restored["digest"].declined, restored["digest"].declined_because) == (HASH4, "kept"), "the decline survives the revert"
+
+
 async def test_two_adoptions_into_one_consumer_whose_save_the_library_refuses_are_refused_together_each_naming_the_other(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)

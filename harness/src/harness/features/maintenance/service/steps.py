@@ -280,8 +280,9 @@ class MaintenanceSteps:
         on live trial is built on that version, and the new marker keeps its baseline and its steps beside the new ones.
         Each adoption then resolves the open consumer flag of its pair. A kept pair writes a decline into the
         consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the planner's
-        reason. The adoptions land first, so a keep or a flag lands on the version this landing saved for its consumer
-        when it saved one. Every writable change lands before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
+        reason. Keeps land first, on the version the plan names, so an adoption into the same consumer inherits the
+        decline and a revert of it keeps the decline. The adoptions land next, and the flags last, on the version this
+        landing saved for their consumer when it saved one. Every writable change lands before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
         `plan_rejected` flag of that step version or an earlier one, and a flag a person resolved is left alone.
 
         A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
@@ -309,6 +310,9 @@ class MaintenanceSteps:
         for index, change in enumerate(merged):
             if isinstance(change, PlannedChange) and change.disposition == "adopt":
                 adoptions.setdefault(change.workflow_id, []).append((index, change))
+        for index, change in enumerate(merged):
+            if isinstance(change, PlannedChange) and change.disposition == "keep":
+                outcomes[index] = await self._land(change, change.workflow_id)
         saved: dict[str, str] = {}
         for workflow_id, group in adoptions.items():
             landed = await self._adopt_all(workflow_id, [planned for _, planned in group])
