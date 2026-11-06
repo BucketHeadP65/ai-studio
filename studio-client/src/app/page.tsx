@@ -46,6 +46,8 @@ const SECONDARY_ACTION =
 
 // What the live pool says, or that it said nothing at all. A read that failed knows neither how
 // many runs are in flight nor how many wait on a person, and saying either would be a claim.
+// `waiting` counts the runs at a gate and the open maintenance flags, the flags only when their
+// read answered.
 function summarize(waiting: number, running: number, paused: number, unread: boolean): string {
   if (unread) return "Could not read what is running.";
   const clauses: string[] = [];
@@ -152,7 +154,9 @@ export default function HomePage(): ReactElement {
   const saved: LibraryEntry[] = libraryQuery.data ?? [];
   const recent: RunEnvelope[] = recentQuery.data ?? [];
   const flagsError = flagsQuery.isError ? studioErrorMessage(flagsQuery.error) : null;
-  const flags: MaintenanceFlag[] = flagsQuery.data ?? [];
+  // A failed refetch keeps the last answer's flags in the cache. Neither the list nor the count
+  // shows them, since the alert already says the flags could not be read.
+  const flags: MaintenanceFlag[] = flagsError === null ? (flagsQuery.data ?? []) : [];
 
   // Ticking only while something is actually in flight: an ended run's duration stopped changing
   // when it ended.
@@ -255,7 +259,12 @@ export default function HomePage(): ReactElement {
           {/* The one live region on this screen, and polite: the counts settle as runs start and
               end, and nothing else here interrupts a reader to say so. */}
           <p aria-live="polite" className="text-caption text-label-3">
-            {summarize(waiting.length, running.length, paused.length, runsQuery.isError)}
+            {summarize(
+              waiting.length + flags.length,
+              running.length,
+              paused.length,
+              runsQuery.isError,
+            )}
           </p>
         </div>
       </div>
@@ -358,7 +367,7 @@ export default function HomePage(): ReactElement {
           flags.length === 0 ? (
             <EmptyState
               title="No decision is waiting."
-              hint="When a run reaches a gate it stops here until you answer it."
+              hint="When a run reaches a gate or step maintenance needs your decision, it waits here."
               className="rounded-lg border border-line border-dashed"
             />
           ) : null}

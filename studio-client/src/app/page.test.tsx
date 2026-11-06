@@ -384,7 +384,9 @@ describe("Home says what an empty shelf is for", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("No decision is waiting.")).toBeInTheDocument();
     expect(
-      screen.getByText("When a run reaches a gate it stops here until you answer it."),
+      screen.getByText(
+        "When a run reaches a gate or step maintenance needs your decision, it waits here.",
+      ),
     ).toBeInTheDocument();
     expect(screen.getByText("No results yet.")).toBeInTheDocument();
     expect(screen.getByText("A run that ends lands here with what it produced.")).toBeInTheDocument();
@@ -671,7 +673,7 @@ describe("Home lists the open maintenance flags under Needs your decision", () =
 
     const decisions = sectionOf(container, "home-decisions");
     expect(await within(decisions).findByText(flag.summary)).toBeInTheDocument();
-    expect(await screen.findByText("Nothing is running right now.")).toBeInTheDocument();
+    expect(await screen.findByText("1 waiting on you.")).toBeInTheDocument();
     expect(within(decisions).queryByText("No decision is waiting.")).not.toBeInTheDocument();
   });
 
@@ -685,6 +687,63 @@ describe("Home lists the open maintenance flags under Needs your decision", () =
     );
     expect(await within(decisions).findByText("Last week's sweep")).toBeInTheDocument();
     expect(within(decisions).getAllByRole("alert")).toHaveLength(1);
+    // The alert says the flags went unread, so the count claims only the runs.
+    expect(screen.getByText("1 waiting on you.")).toBeInTheDocument();
+  });
+
+  it("counts the open flags with the runs waiting on you", async () => {
+    mountApi({
+      runs: [waitingRun("Last week's sweep"), runViewFixture({ session_id: "s-live", state: "running" })],
+      flags: [
+        maintenanceFlag(),
+        maintenanceFlag({ id: "mf.change.compose", kind: "repository_change", workflow: "" }),
+      ],
+    });
+    render(<HomePage />);
+
+    expect(await screen.findByText("3 waiting on you, 1 running.")).toBeInTheDocument();
+  });
+
+  it("counts an open flag when no run waits", async () => {
+    mountApi({ flags: [maintenanceFlag()] });
+    render(<HomePage />);
+
+    expect(await screen.findByText("1 waiting on you.")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing is running right now.")).not.toBeInTheDocument();
+  });
+
+  it("counts only the runs once a flags read fails, even after an earlier read listed a flag", async () => {
+    const flag = maintenanceFlag();
+    mountApi({ runs: [waitingRun("Last week's sweep")] });
+    let reads = 0;
+    server.use(
+      http.get(`${BASE}/api/library/flags`, () => {
+        reads += 1;
+        return reads === 1
+          ? HttpResponse.json({ flags: [flag] })
+          : HttpResponse.json({ ok: false, message: "The library did not answer." }, { status: 503 });
+      }),
+      http.post(`${BASE}/api/library/flags/:flagId/resolve`, () =>
+        HttpResponse.json({ ok: true, flag: { ...flag, status: "resolved" } }),
+      ),
+    );
+    const { container } = render(<HomePage />);
+
+    expect(await screen.findByText("2 waiting on you.")).toBeInTheDocument();
+    const decisions = sectionOf(container, "home-decisions");
+    const card = cardHolding(await within(decisions).findByText(flag.summary));
+    await userEvent.click(within(card).getByRole("button", { name: "Resolve" }));
+    const dialog = await screen.findByRole("dialog", { name: "Resolve this flag" });
+    await userEvent.type(within(dialog).getByLabelText("Your name"), "Alex");
+    await userEvent.type(within(dialog).getByLabelText("Why"), "The sweep keeps its own wording.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Resolve" }));
+
+    // The second read failed while the first one's flag is still in the cache: it is not counted.
+    expect(await within(decisions).findByRole("alert")).toHaveTextContent(
+      "Could not read the flags waiting on you. The library did not answer.",
+    );
+    expect(screen.getByText("1 waiting on you.")).toBeInTheDocument();
+    expect(within(decisions).queryByText(flag.summary)).not.toBeInTheDocument();
   });
 
   it("never reads a failed flags read as nothing waiting", async () => {

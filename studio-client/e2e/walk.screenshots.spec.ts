@@ -4,7 +4,12 @@ import type { z } from "zod";
 
 import type { KnowledgeBaseDetailSchema, KnowledgeBaseListResultSchema } from "@/api/types";
 import type { RunListSchema, SessionListSchema } from "@/api/sessions-types";
-import type { LibraryEntrySchema, RunEnvelopeSchema } from "@/api/studio-types";
+import type {
+  LibraryEntrySchema,
+  MaintenanceFlagSchema,
+  RunEnvelopeSchema,
+} from "@/api/studio-types";
+import { maintenanceFlag } from "@/test-support/factories/flags";
 
 import { singleVersionTrust } from "./trust";
 
@@ -191,6 +196,31 @@ const ARTIFACTS: Record<string, unknown[]> = {
     },
   ],
 };
+
+// Two open maintenance flags for Home: a diverged copy in one workflow, and a change to a step's
+// own files with a proposed change.
+const FLAGS: Wire<typeof MaintenanceFlagSchema>[] = [
+  maintenanceFlag({
+    id: "mf.diverged.lit-check.rank_risks",
+    step: "rank_risks",
+    workflow: "wf.lit-check.v5",
+    title: "Diverged copy of rank_risks in lit-check",
+    summary:
+      "Decide whether the copy of rank_risks in wf.lit-check.v5 stays as it is, or takes rank_risks v4.",
+    evidence:
+      "wf.lit-check.v5 holds a copy of rank_risks that differs from st.rank_risks.v4.\n\n```diff\n-Rank the three largest risks.\n+Rank every risk, largest first.\n```",
+  }),
+  maintenanceFlag({
+    id: "mf.change.find_prior_art",
+    kind: "repository_change",
+    step: "find_prior_art",
+    workflow: "",
+    title: "Repository change to find_prior_art",
+    summary: "Decide whether find_prior_art gains a limit parameter its consumers set.",
+    evidence: "Two consumers adopted find_prior_art v3 and one kept v2 for its shorter answers.",
+    proposed_change: "steps/find_prior_art/step.md: add a limit parameter, default 10.",
+  }),
+];
 
 const LIBRARY: Wire<typeof LibraryEntrySchema>[] = [
   {
@@ -452,6 +482,7 @@ async function mockApi(page: Page) {
     json(route, { rows: [], skipped: [], outcomes_by_page_type: {} }),
   );
   await page.route("**/api/library", (route) => json(route, LIBRARY));
+  await page.route("**/api/library/flags**", (route) => json(route, { flags: FLAGS }));
   await page.route("**/api/steps", (route) => json(route, STEPS));
   await page.route("**/api/conversation", (route) => json(route, CONVERSATION));
   await page.route("**/api/sessions**", (route) => json(route, { sessions: SESSIONS }));
@@ -524,6 +555,16 @@ for (const theme of ["paper", "graphite"] as const) {
       await page.waitForLoadState("networkidle");
       await page.screenshot({ path: `test-results/walk/${name}-${theme}.png`, fullPage: true });
     }
+
+    // Home's first open flag with its evidence unfolded, then the modal that resolves it.
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    const flag = page.locator("li", { hasText: FLAGS[0].summary });
+    await flag.getByRole("button", { name: "Evidence" }).click();
+    await page.screenshot({ path: `test-results/walk/home-flag-evidence-${theme}.png`, fullPage: true });
+    await flag.getByRole("button", { name: "Resolve" }).click();
+    await expect(page.getByRole("dialog", { name: "Resolve this flag" })).toBeVisible();
+    await page.screenshot({ path: `test-results/walk/home-flag-resolve-${theme}.png`, fullPage: true });
 
     // The graph lives inside a knowledge base's own page now: capture its tab too,
     // after the canvas has real nodes rather than the loading text.
