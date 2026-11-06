@@ -11,12 +11,21 @@ step:
     real runs try it.
 
     `decisions` holds the planner's decisions, each naming its pair by `workflow_id` and `step_id`. The evidence comes
-    from the steps that made it, not from the planner: `consumers` holds each pair's step diff, the consumer's
-    presentation and intent, the nodes that run the step and its trust, `checks` each pair's contract check with no
-    edits, and `cases` the case reports of each new version and of each version a consumer holds. Match each decision
-    to its pair and its check by `workflow_id` and `step_id`, and judge it by this evidence.
+    from the steps that made it, run again once the planner answered, not from the planner: `consumers` holds each
+    pair's step diff, the consumer's presentation and intent, the nodes that run the step and its trust, `checks` each
+    pair's contract check with no edits, and `cases` the case reports of each new version and of each version a
+    consumer holds. Match each decision to the pair and the check with its `workflow_id` and `step_id`, and judge it by
+    this evidence.
 
-    Mark each decision pass or fail:
+    Because the evidence was read after the plan was made, a pair can move in between: someone saved a newer version
+    of the consumer or of the step, or the consumer took the new version itself. A decision is stale when no pair
+    matches it but `consumers` holds a pair for the same workflow name at another workflow or step version, or holds no
+    pair for that workflow name while `dropped` is above 0 (a consumer that took the version or declined it). The
+    landing refuses a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An
+    adopt on a stale pair fails: say to keep it. A pair at a newer version of a workflow the decisions already name
+    was made after the plan and waits for the next run, so it is no pair left out.
+
+    Mark each other decision pass or fail:
     - An adopt fails when the diff takes away something the consumer's presentation or intent says it needs, when its
       check failed and the decision carries no edits, when its edits are anything but rewire, add_parameter or set_output
       or leave an issue of the check unanswered, when a case of the new version failed that the held version passed,
@@ -27,13 +36,15 @@ step:
     - Any decision fails when its reason is empty, says "not decided", or contradicts the evidence.
 
     Answer approve when every decision passes. No decisions are approved when `consumers` holds no pairs, because
-    there is nothing to land. Answer reject when any decision fails, or when no decision names a pair `consumers`
-    holds. Answer cannot_judge when a decision names a consumer or a step version that no pair and no check covers, or
-    when the evidence arrived empty or cut off while there are decisions, and say which.
+    there is nothing to land. Answer reject when any decision fails, or when no decision names the workflow of a pair
+    `consumers` holds. Answer cannot_judge when a decision names a workflow that no pair, no `left_for_next_run` entry
+    and nothing dropped accounts for, so the evidence never held it, or when the evidence arrived cut off or
+    unreadable, and say which.
 
     Your feedback is read by the planner on its next attempt. Write one line per decision, in its order:
-    `<workflow_id> <step_id>: pass`, or `<workflow_id> <step_id>: fail,` followed by what is wrong and what to do. Add
-    a line for anything wrong with the decisions as a whole, such as a pair no decision names.
+    `<workflow_id> <step_id>: pass`, `<workflow_id> <step_id>: pass, stale,` followed by what moved, or
+    `<workflow_id> <step_id>: fail,` followed by what is wrong and what to do. Add a line for anything wrong with the
+    decisions as a whole, such as a pair no decision names.
 
     `search` and `fetch` read the knowledge bases a consumer works in, for a reason in the plan that cites one. You
     write nothing and change no workflow. Your only answer is the outcome and the feedback.

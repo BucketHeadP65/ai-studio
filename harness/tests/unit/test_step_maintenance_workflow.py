@@ -511,6 +511,17 @@ async def test_every_case_file_reads_back_from_the_library_as_it_was_written() -
         assert await library.fetch_step_cases(step_page_id(name, document.version)) == cases, name
 
 
+def _moved(inputs: Mapping[str, object]) -> bool:
+    """Whether a decision names a pair the evidence holds only at another version of the same workflow."""
+    held = ConsumerList.model_validate(inputs["consumers"]).pairs
+    pairs = {(pair.workflow_id, pair.step_id) for pair in held}
+    names = {pair.workflow for pair in held}
+    return any(
+        (decision.workflow_id, decision.step_id) not in pairs and re.sub(r"^wf\.|\.v\d+$", "", decision.workflow_id) in names
+        for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions
+    )
+
+
 def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check_and_cannot_judge() -> None:
     dataset = _dataset("judge_plan")
     expected = [_outcome(case.expected_output) for case in dataset.cases]
@@ -524,6 +535,8 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     assert [(ConsumerList.model_validate(case.inputs["consumers"]).pairs, _outcome(case.expected_output)) for case in empty] == [([], "approve")], (
         "no decisions are approved when no consumer needs a change, or every new step would end in rejections"
     )
+    moved = [_outcome(case.expected_output) for case in dataset.cases if _moved(case.inputs)]
+    assert moved == ["approve"], "a pair that moved between the plan and the evidence is passed as stale, never a rejection"
 
 
 def test_the_repository_judge_s_cases_keep_one_draft_and_drop_another() -> None:
@@ -654,3 +667,23 @@ async def test_one_run_adopts_one_consumer_on_live_trial_and_keeps_the_other_onc
     assert flag is not None
     assert "`unowned` parameter" in flag.proposed_change
     assert len(world.notifier.sent) == 2, "one notice for the landing and one for the repository change"
+
+
+async def test_a_run_with_no_consumer_behind_is_approved_and_lands_writes_and_tells_nothing(sandbox: AsyncMonty) -> None:
+    world = MaintenanceWorld()
+    current = await world.fill_current()
+    pages = dict(world.store.pages)
+    scripted = Scripted(models=ScriptedMaintenanceModels(verdicts=[{"outcome": "approve", "feedback": "no consumer needs a change"}]))
+
+    handed = await run_workflow(
+        _spec(), await _world_registry(world, sandbox), params={CHANGED_STEPS: CHANGED}, approval=NobodyDecides(), executor=scripted
+    )
+
+    assert scripted.models.performed == ["plan_changes", PLAN_GATE], "approved on the first attempt, and no repository change to draft"
+    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=1)
+    assert isinstance(handed, HandOver)
+    assert handed.report == "Step maintenance changed nothing, so nobody was told."
+    assert (handed.flags, handed.dropped, handed.problems) == ([], [], [])
+    assert world.store.pages == pages, "nothing landed and no flag page was written"
+    assert await world.library.current(current) == current
+    assert world.notifier.sent == []

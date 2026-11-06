@@ -165,6 +165,17 @@ class MaintenanceWorld:
         await self._put_step(2)
         return meeting, standup
 
+    async def fill_current(self) -> str:
+        """Save `extract_actions` v1 and v2, then the consumer `meeting-actions` already holding v2.
+
+        Returns:
+            The consumer's id.
+        """
+        await self._put_step(1)
+        await self._put_step(2)
+        current = _consumer("meeting-actions").model_copy(update={"inline": (EXTRACT[2],)})
+        return await self._put(current)
+
     async def _put_step(self, version: int) -> None:
         await self.library.put_step(
             EXTRACT[version],

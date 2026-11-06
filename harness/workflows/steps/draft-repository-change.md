@@ -39,7 +39,9 @@ step:
     new step's mapping>}` for a split, `{"op": "replace_node", "id": "<node>", "with": <the whole node as it should
     read>}` for a node that runs another step or takes another input, and `add_parameter` for a parameter the consumer
     adds. Read only the contract check in its answer: a draft is never adopted, so its refusal as an adoption does not
-    apply. Fix each issue the check names and check again, and answer only a draft whose every check passes.
+    apply. Fix each issue the check names and check again, and answer only a draft whose every check passes. Where it
+    says `cannot check`, the consumer or the step version could not be read: check that you passed the ids as `change`
+    names them, and if you did, say in the proposal which consumer could not be checked.
   inputs:
     change: {like: select_disagreements, element: true}
   output: {like: select_disagreements, element: true}

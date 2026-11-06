@@ -263,8 +263,8 @@ TD-46 onward came from the close of the code standard refactor on
 - **Why it is debt:** the evidence is computed twice per attempt for no reason but the rewind rule, and the graph carries
   four nodes, one of them a program, that exist only to satisfy it.
 - **Cost while it stands:** one extra pass of library and evidence log reads per judge attempt, three at most, and no
-  model call, since a kept case report is not run again. A person saving a consumer between the two passes makes the
-  judge see a pair the plan lacks, so it rejects, and the landing would have refused that pair anyway.
+  model call, since a kept case report is not run again. A person saving a consumer or the step between the two passes moves a
+  pair: the judge passes a keep or a flag on it as stale and fails an adopt, and the landing refuses the stale pair.
 - **Paying it off:** let a rewind reuse the kept outputs of the producers outside the rewound region when it re-enters a
   wait, then wire the judge straight from the three evidence nodes and delete the second pass.
 - **Found:** 2026-11-06, writing the `step-maintenance` workflow, whose plan judge the validator refused.
