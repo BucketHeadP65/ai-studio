@@ -112,8 +112,19 @@ _TOO_MANY_REQUESTS = 429
 _SERVER_ERROR = 500
 
 
-def _is_provider_error(exc: BaseException) -> bool:
-    """Whether `exc` stopped the run at its model provider: a refusal, a lost connection, a 5xx or 429, or a reply with no output."""
+def is_provider_error(exc: BaseException) -> bool:
+    """Whether `exc` stopped a run at its model provider: a refusal, a lost connection, a 5xx or 429, or a reply with no output.
+
+    A reply with no output is the error pydantic-ai raises once the output retries ran out after a reply with no output,
+    never the same error after a real answer failed validation.
+
+    Args:
+        exc: The error the run stopped with.
+
+    Returns:
+        True for a content filter, a lost connection or timeout, a server error, an unavailable model or a rate limit
+        (HTTP 5xx or 429), or a reply with no output. False for every other error.
+    """
     if isinstance(exc, _PROVIDER_ERRORS):
         return True
     if isinstance(exc, ModelHTTPError):
@@ -338,7 +349,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
                 session.active.result = f"The run stopped with an error: {failure}"
             except Exception as exc:  # a failed run is news, not a silent stop
                 failure = f"{type(exc).__name__}: {exc}"
-                provider_error = _is_provider_error(exc)
+                provider_error = is_provider_error(exc)
                 _logger.exception("run of {workflow} failed", workflow=workflow_id)
                 session.active.result = f"The run stopped with an error: {failure}"
             finally:

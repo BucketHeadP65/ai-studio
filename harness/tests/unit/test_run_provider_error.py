@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from typing import TYPE_CHECKING
 
 import pytest
@@ -20,9 +22,15 @@ from pydantic_ai.exceptions import (
     UnexpectedModelBehavior,
 )
 from pydantic_ai.messages import RetryFeedbackCause, RetryFeedbackPart, RetryInfo
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.tools import RunContext
+from pydantic_ai.usage import RunUsage
 
 from harness.features.maintenance.contracts import LandingRefusedError, LandingReport
 from harness.features.running import service
+from harness.features.running.records import RunCollaborators
+from harness.features.running.tools import run_workflow
+from harness.settings import RunSettings
 from tests.support.fakes.broadcaster import FakeBroadcaster
 from tests.support.runtime import a_runtime
 from tests.support.state import a_state, records_under
@@ -121,3 +129,34 @@ async def test_a_completed_run_is_no_provider_error(tmp_path: Path) -> None:
 
     assert evidence.outcome == "completed"
     assert evidence.provider_error is False
+
+
+async def _chat_evidence_of(tmp_path: Path, raised: Callable[[], BaseException]) -> RunEvidence:
+    """The evidence of one run started from chat whose only step raises what `raised` makes."""
+
+    async def plan(topic: str) -> str:
+        del topic
+        raise raised()
+
+    registry = StepRegistry()
+    registry.register(plan)
+    session = a_runtime(registry=registry, state=a_state(tmp_path))
+    session.conversation.last_workflow = _spec()
+    records = records_under(tmp_path)
+    run = RunCollaborators(records=records, topics=FakeBroadcaster(), run_settings=RunSettings())
+    await run_workflow(RunContext(deps=session, model=TestModel(), usage=RunUsage()), "draft", {"topic": "steps"}, run=run)
+    settlement = session.active.settlement
+    assert settlement is not None
+    await settlement
+    if leftover := asyncio.all_tasks() - {asyncio.current_task()}:
+        await asyncio.wait(leftover, timeout=5)
+    (evidence,) = [event for event in await records.evidence.events_for("draft") if isinstance(event, RunEvidence)]
+    return evidence
+
+
+async def test_a_run_started_from_chat_records_a_provider_error_as_the_button_does(tmp_path: Path) -> None:
+    stopped = await _chat_evidence_of(tmp_path / "filtered", lambda: ContentFilterError("Content filter triggered."))
+    failed = await _chat_evidence_of(tmp_path / "refused", lambda: ValueError("the change does not validate"))
+
+    assert (stopped.runner, stopped.outcome, stopped.provider_error) == ("app:chat", "failed", True)
+    assert (failed.outcome, failed.provider_error) == ("failed", False)
