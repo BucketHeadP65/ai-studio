@@ -1,19 +1,23 @@
-"""The browsing use cases: archive a workflow, restore it, and rewrite its card. None of them changes the workflow a run executes."""
+"""The browsing use cases: archive a workflow, restore it, rewrite its card, and resolve a maintenance flag.
+
+None of them changes the workflow a run executes.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import LibraryError, SavedWorkflow, prepare
+from core.ai.workflows.contracts import FlagUnknownError, LibraryError, SavedWorkflow, prepare
 from core.observability import get_logger
 from pydantic import ValidationError
 
 from harness.domain.contracts import card_readiness, effective_presentation, refusal_text
 from harness.features.browsing.exceptions import CardRefusedError
+from harness.features.browsing.flags import flag_card
 
 if TYPE_CHECKING:
-    from core.ai.workflows.contracts import Workflow
+    from core.ai.workflows.contracts import FlagCard, MaintenanceFlags, Workflow
 
     from harness.domain.contracts import DraftReadiness, ReadinessField
     from harness.features.browsing.api_models import WorkflowCardPatch
@@ -132,6 +136,35 @@ async def redescribe_workflow(session: Runtime, workflow_id: str, body: Workflow
         presentation=words if patch is not None and patch.changes_anything() else None,
     )
     return RedescribedCard(card=await saved_card(session, workflow_id, workflow), readiness=readiness)
+
+
+async def resolve_flag(flags: MaintenanceFlags, flag_id: str, *, by: str, reason: str) -> FlagCard:
+    """Resolve one maintenance flag with who resolved it and why, and answer its card as the library now holds it.
+
+    `by` is written as given. A name outside the automatic resolvers holds as a decision, so the same flag raised again
+    for the same step version leaves the page resolved.
+
+    Args:
+        flags: The library's maintenance flags.
+        flag_id: The flag's page id.
+        by: Who resolves it. Must not be blank.
+        reason: Why. Must not be blank.
+
+    Returns:
+        The flag's card, resolved.
+
+    Raises:
+        ValueError: If `by` or `reason` is blank. Nothing is written.
+        FlagUnknownError: If no maintenance flag has that id. Nothing is written.
+        LibraryError: If the flag page does not parse, or the library refuses the write.
+    """
+    await flags.resolve_flag(flag_id, by=by, reason=reason)
+    resolved = await flags.fetch_flag(flag_id)
+    if resolved is None:
+        msg = f"no maintenance flag {flag_id!r} after resolving it. List the flags to find its id."
+        raise FlagUnknownError(msg)
+    _logger.info("maintenance flag {flag_id} resolved by {by}", flag_id=flag_id, by=by)
+    return flag_card(flag_id, resolved)
 
 
 def _supplied(body: WorkflowCardPatch) -> frozenset[ReadinessField]:

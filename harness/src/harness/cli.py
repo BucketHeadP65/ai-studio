@@ -3,7 +3,8 @@
 The review verbs (`list`, `activate`, `disable`, `delete`, `plugins`, `profile`, `promote`, `demote`)
 live in `harness.features.selfauthoring.routes_cli`. This module is the entry point that owns the
 wiring and adds `serve`, `import` (load a folder of workflow and step files into the library),
-the `steps` group (`lock`, which records a folder's step files in its step lock file),
+the `steps` group (`lock`, which records a folder's step files in its step lock file), the `flags` group
+(`list`, `show` and `resolve`, over the library's maintenance flags),
 `inspect` (issue `InspectRun` by hand, for one run or for every run that ended in a window), the
 `evals` group, and the `sessions` group (`list`, `rebuild`, `import`, `tail`, `search`, `friction`)
 over the session log.
@@ -13,15 +14,19 @@ A verb must import its heavy dependencies inside its body, so every verb keeps a
 from __future__ import annotations
 
 import asyncio
+import json
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import typer
+
+from core.ai.workflows.contracts import FlagKind, MaintenanceFlags
 
 from harness.features.selfauthoring.contracts import fail, harness_app
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from contextlib import AsyncExitStack
     from pathlib import Path
 
@@ -51,6 +56,16 @@ app.add_typer(sessions_app)
 
 steps_app = typer.Typer(name="steps", help="The reusable step files of a workflows folder.", no_args_is_help=True)
 app.add_typer(steps_app)
+
+flags_app = typer.Typer(
+    name="flags",
+    help=(
+        "The library's maintenance flags: what a save or step maintenance asks the owner to decide, such as a workflow "
+        "whose copy of a reusable step matches no saved version. List them, read one, and resolve one with a reason."
+    ),
+    no_args_is_help=True,
+)
+app.add_typer(flags_app)
 
 evals_app = typer.Typer(
     name="evals", help="A step's own dataset, performed through the same executor a workflow run uses.", no_args_is_help=True
@@ -351,6 +366,131 @@ def lock_steps(folder: str = typer.Argument(..., help="A workflows folder holdin
         fail(str(error))
     for name, entry in lock.steps.items():
         typer.echo(f"{name} v{entry.version} {entry.step_hash}")
+
+
+_NO_SUCH_FLAG = "No maintenance flag {flag_id}. Find its id with `harness flags list`, or `harness flags list --status resolved` for a resolved one."
+
+
+def _given_flags(ctx: typer.Context) -> MaintenanceFlags | None:
+    """The maintenance flags the command's context object holds, or None when it holds none."""
+    held = ctx.obj
+    return held if isinstance(held, MaintenanceFlags) else None
+
+
+async def _over_flags[T](given: MaintenanceFlags | None, use: Callable[[MaintenanceFlags], Awaitable[T]]) -> T:
+    """What `use` answers over `given`, or else over the library this deployment runs on, opened for this one call."""
+    from contextlib import AsyncExitStack  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
+
+    from harness.settings import HarnessSettings  # noqa: PLC0415 (same)
+
+    if given is not None:
+        return await use(given)
+    async with AsyncExitStack() as stack:
+        library, _ = await _library_session(stack, HarnessSettings())
+        return await use(library)
+
+
+def _one_line(refusal: Exception) -> str:
+    """A refusal's text on one line, whitespace runs collapsed."""
+    return " ".join(str(refusal).split())
+
+
+@flags_app.command(name="list")
+def list_flags(
+    ctx: typer.Context,
+    status: Annotated[Literal["open", "resolved"], typer.Option("--status", help="List the open flags, or the resolved ones.")] = "open",
+    kind: Annotated[
+        FlagKind | None,
+        typer.Option("--kind", help="Only flags of this kind. `diverged_copy` lists every workflow whose copy of a reusable step matches no saved version."),
+    ] = None,
+    *,
+    as_json: Annotated[bool, typer.Option("--json", help="Print a JSON array of the flags, each whole, its evidence and proposed change included.")] = False,
+) -> None:
+    """List the library's maintenance flags, newest first, one line each: id, kind, workflow, step and summary.
+
+    A flag about a step prints `-` for its workflow. Read one flag whole, its evidence included, with
+    `harness flags show <id>`. A flag that cannot be read prints one line and exits 1.
+    """
+    from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
+
+    from harness.features.browsing.contracts import flag_line  # noqa: PLC0415 (same)
+
+    try:
+        cards = asyncio.run(_over_flags(_given_flags(ctx), lambda flags: flags.flags(status=status, kind=kind)))
+    except LibraryError as refusal:
+        fail(_one_line(refusal))
+    if as_json:
+        typer.echo(json.dumps([card.model_dump(mode="json") for card in cards], indent=2))
+        return
+    if not cards:
+        typer.echo(f"No {status} maintenance flags{f' of kind {kind}' if kind else ''}.")
+    for card in cards:
+        typer.echo(flag_line(card))
+
+
+@flags_app.command(name="show")
+def show_flag(
+    ctx: typer.Context,
+    flag_id: Annotated[str, typer.Argument(help="The flag's id, as `harness flags list` prints it, such as mf.diverged.<workflow>.<step>.")],
+    *,
+    as_json: Annotated[bool, typer.Option("--json", help="Print the flag as JSON: its id, and the flag with every field.")] = False,
+) -> None:
+    """Print one maintenance flag whole: what it is about, who raised it, its Evidence and its Proposed change.
+
+    A diverged copy's Evidence names the version the copy diverged from and holds the unified diff from that version
+    to the copy. An unknown id prints one line and exits 1.
+    """
+    from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
+
+    from harness.features.browsing.contracts import render_flag  # noqa: PLC0415 (same)
+
+    try:
+        flag = asyncio.run(_over_flags(_given_flags(ctx), lambda flags: flags.fetch_flag(flag_id)))
+    except LibraryError as refusal:
+        fail(_one_line(refusal))
+    if flag is None:
+        fail(_NO_SUCH_FLAG.format(flag_id=flag_id))
+    if as_json:
+        typer.echo(json.dumps({"id": flag_id, "flag": flag.model_dump(mode="json")}, indent=2))
+        return
+    typer.echo(render_flag(flag_id, flag), nl=False)
+
+
+@flags_app.command(name="resolve")
+def resolve_flag(
+    ctx: typer.Context,
+    flag_id: Annotated[str, typer.Argument(help="The flag's id, as `harness flags list` prints it.")],
+    *,
+    by: Annotated[
+        str,
+        typer.Option(
+            "--by",
+            help=(
+                "Who resolves the flag, written to it as `resolved_by`. Any name but `library` and `agent:step-maintenance` "
+                "holds as a decision: the same flag raised again for the same step version stays resolved. A flag those two "
+                "resolved opens again when it is raised again."
+            ),
+        ),
+    ],
+    reason: Annotated[str, typer.Option("--reason", help="Why, written to the flag as `decision_reason`.")],
+) -> None:
+    """Resolve one maintenance flag with who resolved it and why. Every other field of the flag is kept.
+
+    An unknown id, or an empty `--by` or `--reason`, prints one line, writes nothing and exits 1.
+    """
+    from core.ai.workflows.contracts import FlagUnknownError, LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
+
+    from harness.features.browsing.contracts import resolve_flag as resolve  # noqa: PLC0415 (same)
+
+    try:
+        asyncio.run(_over_flags(_given_flags(ctx), lambda flags: resolve(flags, flag_id, by=by, reason=reason)))
+    except FlagUnknownError:
+        fail(_NO_SUCH_FLAG.format(flag_id=flag_id))
+    except ValueError:
+        fail(f"{flag_id} was not resolved: --by and --reason must not be empty. Say who resolves it and why, then run it again.")
+    except LibraryError as refusal:
+        fail(_one_line(refusal))
+    typer.echo(f"Resolved {flag_id} by {by}.")
 
 
 def _dataset_path(step_name: str, *, artifacts: str) -> Path:

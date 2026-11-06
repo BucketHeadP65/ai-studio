@@ -1,7 +1,8 @@
-"""The browsing routes: the registered steps, the library listing, one workflow's page, card edits, archive and restore.
+"""The browsing routes: the registered steps, the library listing, one workflow's page, card edits, archive and restore, and maintenance flags.
 
-The three write routes change only the card a person reads about a version that already exists,
-and whether that version is archived. They never change the workflow a run executes.
+The three workflow write routes change only the card a person reads about a version that already exists,
+and whether that version is archived. They never change the workflow a run executes. The flag routes list the
+library's maintenance flags and resolve one.
 """
 
 from __future__ import annotations
@@ -9,13 +10,17 @@ from __future__ import annotations
 import asyncio
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
 from core.ai.workflows.contracts import (
     EvidenceLog,
+    FlagKind,
+    FlagUnknownError,
     LibraryError,
     Lineage,
+    MaintenanceFlags,
     PredictionOutcome,
     PresentationRefusedError,
     RunEvidence,
@@ -45,7 +50,7 @@ from wireup.integration.fastapi import WireupRoute
 from harness.adapters.contracts import environment_stamps
 from harness.domain.contracts import DraftReadiness, card_readiness
 from harness.features.browsing import service
-from harness.features.browsing.api_models import WorkflowCardPatch
+from harness.features.browsing.api_models import FlagResolveIn, WorkflowCardPatch
 from harness.features.browsing.exceptions import CardRefusedError
 from harness.features.browsing.service import saved_card
 from harness.features.running.contracts import RunArchiveQueries, SpendLogQueries, workflow_spend
@@ -56,6 +61,8 @@ from harness.settings import SelfAuthoringSettings, custom_root
 
 type _JsonObject = dict[str, JsonValue]
 type _Trust = dict[str, JsonValue]
+
+_NO_FLAGS = "this app's workflow library keeps no maintenance flags."
 
 
 def _shape_counts(nodes: list[_JsonObject]) -> dict[str, int]:
@@ -296,6 +303,36 @@ class BrowsingController:
         """Put one archived workflow back in the library, where search and the listing see it again."""
         return await restore_workflow(self._sessions.default, workflow_id)
 
+    @router.get("/library/flags")
+    async def library_flags(self, status: Literal["open", "resolved"] | None = None, kind: FlagKind | None = None) -> JSONResponse:
+        """The library's maintenance flags with that status and kind, newest raised first. Without either, every flag is listed.
+
+        A flag that cannot be read answers 503 with a message, never an empty list.
+        """
+        flags = _maintenance_flags(self._sessions.default)
+        if flags is None:
+            return JSONResponse({"ok": False, "message": _NO_FLAGS}, status_code=503)
+        try:
+            cards = await flags.flags(status=status, kind=kind)
+        except LibraryError as exc:
+            return _flag_refusal(exc)
+        return JSONResponse({"flags": [card.model_dump(mode="json") for card in cards]})
+
+    @router.post("/library/flags/{flag_id}/resolve")
+    async def resolve_library_flag(self, flag_id: str, body: FlagResolveIn) -> JSONResponse:
+        """Resolve one maintenance flag with who resolved it and why, and answer the flag. Every other field of the flag is kept.
+
+        An unknown id answers 404, and a blank name or reason answers 400 and writes nothing.
+        """
+        flags = _maintenance_flags(self._sessions.default)
+        if flags is None:
+            return JSONResponse({"ok": False, "message": _NO_FLAGS}, status_code=503)
+        try:
+            card = await service.resolve_flag(flags, flag_id, by=body.by, reason=body.reason)
+        except (ValueError, LibraryError) as exc:
+            return _flag_refusal(exc)
+        return JSONResponse({"ok": True, "flag": card.model_dump(mode="json")})
+
 
 async def redescribe_workflow(session: Runtime, workflow_id: str, body: WorkflowCardPatch) -> JSONResponse:
     """Rewrite one workflow's card: its title, summary, applicability and the author's own words.
@@ -361,6 +398,24 @@ async def restore_workflow(session: Runtime, workflow_id: str) -> JSONResponse:
     except LibraryError as exc:
         return JSONResponse({"ok": False, "message": str(exc)}, status_code=404)
     return JSONResponse(_card_payload(workflow_id, card))
+
+
+def _maintenance_flags(session: Runtime) -> MaintenanceFlags | None:
+    """The session's library as its maintenance flags, or None when that library keeps none."""
+    library = session.library
+    return library if isinstance(library, MaintenanceFlags) else None
+
+
+def _flag_refusal(exc: ValueError | LibraryError) -> JSONResponse:
+    """The JSON refusal a flag error answers with: 404 for an unknown id, 503 for a failed read or write, 400 for a blank field."""
+    match exc:
+        case FlagUnknownError():
+            status = 404
+        case LibraryError():
+            status = 503
+        case _:
+            status = 400
+    return JSONResponse({"ok": False, "message": str(exc)}, status_code=status)
 
 
 def _card_payload(workflow_id: str, card: SavedWorkflow, readiness: DraftReadiness | None = None) -> _JsonObject:
