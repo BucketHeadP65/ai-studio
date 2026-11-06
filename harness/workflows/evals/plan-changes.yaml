@@ -58,6 +58,8 @@ cases:
           stand_in_calls: 0
           refused: null
       left_for_next_run: []
+      left_to_repository: []
+      dropped: []
     consumers:
       pairs:
       - workflow_id: wf.meeting-actions.v1
@@ -176,6 +178,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
   evaluators:
   - LLMJudge:
@@ -219,6 +222,8 @@ cases:
           stand_in_calls: 0
           refused: null
       left_for_next_run: []
+      left_to_repository: []
+      dropped: []
     consumers:
       pairs:
       - workflow_id: wf.board-actions.v1
@@ -283,6 +288,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
   evaluators:
   - LLMJudge:

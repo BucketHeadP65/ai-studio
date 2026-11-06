@@ -86,6 +86,11 @@ class RunEvidence(BaseModel):
     Every rejection the run's gate decisions recorded counts once, whoever gave it: a judge, a person, an orchestrator
     or a timeout. A judge's refusal under gate mode `auto` counts once, the same as its plain rejection. Empty means no
     gate was rejected."""
+    provider_error: bool = False
+    """Whether the run stopped with a provider error: its model provider refused the reply or could not answer.
+
+    False for a run that did not fail, for one that failed for any other reason, and for one whose engine does not
+    say what stopped it."""
     params: WorkflowArguments = Field(default_factory=dict)
     """What this run was given, as the JSON each parameter declares. A replay runs on these
     inputs."""

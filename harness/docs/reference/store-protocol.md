@@ -116,7 +116,8 @@ Trust is a fold over an append-only event log, not a field.
 
 - `RunEvidence`, one run's structural outcome: `outcome` (`completed` / `failed`),
  `gates_approved`, `params`, `produced` (node id to the *shape* of the value, never the
- value), `runner`, `spec_hash`, `workflow_id`, `workflow_version`, `at`.
+ value), `runner`, `spec_hash`, `workflow_id`, `workflow_version`, `at`, and `provider_error`, true
+ when the run stopped because its model provider refused the reply or could not answer.
 - `Approval`, a deliberate human act, recorded with its author, the `spec_hash` and the
  version approved.
 

@@ -41,6 +41,7 @@ from harness.domain.events import (
     session_spans,
 )
 from harness.domain.exceptions import CardUnreadableError
+from harness.domain.failed_fires import FailedFireSteps, NotPutBack
 from harness.domain.gates import DEFAULT_GATE_MODE, GATE_MODES, GateMode
 from harness.domain.page_context import PageContext, compose_prompt, strip_page_context
 from harness.domain.ports import (
@@ -106,12 +107,14 @@ __all__ = [
     "ExternalAgentFinished",
     "ExternalAgentStarted",
     "ExternalAgentUpdated",
+    "FailedFireSteps",
     "FlagSource",
     "FrictionFlagged",
     "FrictionTargetType",
     "GateMode",
     "KnowledgeBaseNames",
     "KnowledgeBaseSurface",
+    "NotPutBack",
     "PageContext",
     "PluginSet",
     "ProfileSelected",

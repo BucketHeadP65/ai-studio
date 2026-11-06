@@ -4,7 +4,7 @@ description: >-
   Checks a new reusable step version against every workflow holding a copy of the step, adopts it on live trial where
   a judge approves the plan, declines or flags the rest, tells the owner, and drafts a repository change for a step its
   consumers split over.
-uses: [st.plan_changes.v1, st.judge_plan.v1, st.draft_repository_change.v1, st.judge_repository_change.v1]
+uses: [st.plan_changes.v1, st.judge_plan.v2, st.draft_repository_change.v1, st.judge_repository_change.v1]
 presentation:
   purpose: >-
     Keep every workflow built on a reusable step current when the step gets a new version, without a person
@@ -26,7 +26,7 @@ presentation:
     - {label: Repository changes handed over, path: values.hand_over_repository_changes}
 workflow:
   name: step-maintenance
-  version: 1
+  version: 2
   description: >-
     List each changed step's behind or diverged consumers, check their contracts and run the step's cases, plan
     adopt, keep or flag per consumer under a judge, land the plan, report it, and draft and judge a repository change
@@ -149,7 +149,8 @@ Use on the `on step change` schedule, which fires it with the reusable step vers
 by hand with `changed_step_ids` naming the versions to check. Each named step is taken at its newest saved version.
 
 The stages: `list_consumers` takes at most twenty consumer pairs per run and names the rest, which a later run for
-their step takes: the step's next version, or a run by hand with its id.
+their step takes: the step's next version, or a run by hand with its id. It never pairs this workflow itself, whose own
+steps reach it through the repository and `harness import`, and names it as left to the repository, which the report says.
 `check_contracts` and `run_step_cases` gather the evidence side by side, and `prepare_plan` copies it into one undecided
 change per pair. The planner, `plan_changes`, decides adopt, keep or flag per pair on the orchestrator tier, checking
 every adoption with `check_change`, and answers only its decisions, so it never retypes the evidence. Once the plan exists, `pass_changed_ids` hands the run's own `changed_step_ids` to
@@ -160,7 +161,8 @@ plan is judged on evidence made after it. The third rejection ends the run with 
 maintenance flag per changed step. The second pass reads the library and the evidence log again, and runs again the
 cases of a step version whose first case report held an errored case, since such a report is not kept, one model call
 per case. `land_changes` merges the approved decisions into the plan `prepare_plan` drafted, a change no decision
-names writing nothing so a later run for its step offers it again. It declines each kept copy, saves every adoption
+names writing nothing so a later run for its step offers it again. A keep or a flag for a consumer the listing dropped,
+left for a later run or left to the repository, which no drafted change names, is ignored and writes nothing. It declines each kept copy, saves every adoption
 into one consumer as that consumer's one next version on a live trial covering each adopted step, and flags each
 flagged pair. It lands every writable change, and when it refused any it tells the owner in one notice what landed,
 was kept, flagged and refused before it fails naming each refusal. Only then do `report_changes` and the repository

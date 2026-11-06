@@ -14,6 +14,7 @@ from harness.features.maintenance.service.failed_fires import FailedFireNotice
 from harness.features.maintenance.service.live_trial import LiveTrialWatch
 from harness.features.maintenance.service.run_watch import MaintenanceRunWatch
 from harness.features.running.contracts import SCHEDULE_RUNNER_PREFIX
+from harness.features.scheduling.contracts import Scheduler
 from harness.session import PooledSessions
 from harness.settings import StateSettings
 
@@ -57,16 +58,17 @@ def maintenance_run_watch(sessions: PooledSessions) -> MaintenanceRunWatch:
 
 
 @injectable
-def failed_fire_notice(notifier: Notifier) -> FailedFireNotice:
-    """The failed-fire notice, over the runner prefix of every run a schedule fires.
+def failed_fire_notice(notifier: Notifier, scheduler: Scheduler) -> FailedFireNotice:
+    """The failed-fire notice, over the runner prefix of every run a schedule fires, putting changed steps back through the scheduler.
 
     Args:
         notifier: How the owner is told.
+        scheduler: The scheduler, which puts the changed steps of a failed on-step-change fire back on its schedule.
 
     Returns:
         The failed-fire notice.
     """
-    return FailedFireNotice(SCHEDULE_RUNNER_PREFIX, notifier)
+    return FailedFireNotice(SCHEDULE_RUNNER_PREFIX, notifier, scheduler)
 
 
 REGISTRATIONS: list[object] = [live_trial_watch, maintenance_run_watch, failed_fire_notice]

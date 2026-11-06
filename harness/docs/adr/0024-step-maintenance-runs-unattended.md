@@ -10,6 +10,27 @@ app: harness
 created: '2026-11-06'
 ---
 
+**Amended (2026-11-06), a fire stopped by a provider error fires again once.** The first live fire failed when Azure's
+content filter refused the plan judge's reply, and nothing planned its step versions again, because the fire had cleared
+them. Now a run's evidence says whether it stopped with a provider error (`RunEvidence.provider_error`: a content filter,
+a lost connection or timeout, a server error, an unavailable model, a rate limit, or a reply with no output after every
+output retry). When an on-step-change fire ends failed with one, the failed-fire notice has the scheduler put the step
+ids it was fired with back on the schedule, beside any that arrived during the run, and the schedule fires again after
+its quiet period. Each step id goes back on one schedule once, so the fire that took it again and failed again leaves it
+to a run by hand. The notice names the ids put back and those that need a run by hand, with the run to start. A failure
+inside the run, such as a refused landing or the judge's third rejection, puts nothing back, and neither does a run
+started by hand.
+
+**Amended (2026-11-06), step maintenance never adopts into itself.** Its planner, its judges and its drafter are
+reusable steps, so a new version of one would have been adopted into `step-maintenance` on live trial, a model choosing
+the steps that judge its own plans. `list_consumers` never pairs a consumer named `step-maintenance` and names it as left
+to the repository, which the run's report says, apart from the consumers it dropped as current or declined. The plan
+judge (`judge_plan` v2) treats a decision about it as stale, as it treats one about a dropped consumer, never as cannot
+judge. A keep or a flag for a consumer the listing named in `dropped`, `left_for_next_run` or `left_to_repository` but
+did not draft is ignored at landing and writes nothing, so such a decision never fails the run. An adopt for one is still
+refused. Its own steps reach it through the repository and `harness import`, as before, so a new version of one of them
+fires a run that pairs nothing.
+
 ## Context
 
 A workflow keeps the copy of each reusable step it was saved with. A new version of a step reaches a consumer only as

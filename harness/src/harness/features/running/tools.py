@@ -56,7 +56,7 @@ from harness.features.running.feedback import settled_turn
 from harness.features.running.infrastructure import run_events
 from harness.features.running.infrastructure.run_log import RunLog, load_waiting
 from harness.features.running.records import RunCollaborators, RunRecords
-from harness.features.running.service import archive_run, index_held_writes, run_phase
+from harness.features.running.service import archive_run, index_held_writes, is_provider_error, run_phase
 from harness.features.running.service import stop as stop_active_run
 from harness.features.running.spend import RunSpendHeader
 from harness.features.running.spend_report import DEFAULT_SINCE_HOURS, SpendLine, SpendReporter, SpendUnavailable, parse_scope
@@ -275,6 +275,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
     )
     outcome: Literal["completed", "failed", "stopped"] = "completed"
     failure: str | None = None
+    provider_error = False
     cancelled = False
     produced: object = None
     exhausted: RetryFeedback | None = None
@@ -313,7 +314,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
 
     async def settle() -> str:
         """Await the run in its own task, record and archive it unless it was cancelled, and return the outcome sentence."""
-        nonlocal outcome, failure, cancelled, exhausted
+        nonlocal outcome, failure, provider_error, cancelled, exhausted
         try:
             await task
         except asyncio.CancelledError:
@@ -336,6 +337,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
             _logger.info("run_workflow of {workflow} ended holding a refusal it had no reach left to repair", workflow=requested.source)
         except Exception as exc:  # a failed run is news the model relays, never a dead turn
             outcome, failure = "failed", f"{type(exc).__name__}: {exc}"
+            provider_error = is_provider_error(exc)
             _logger.exception("run_workflow of {workflow} failed", workflow=requested.source)
         finally:
             # The chat entry records exactly as the button does (`service.run`), differing only in
@@ -374,6 +376,7 @@ async def _execute(  # noqa: PLR0915 (one reset line per session field the run p
                         gates_auto=auto,
                         gates_orchestrated=orchestrated,
                         gates_rejected=gates_rejected,
+                        provider_error=provider_error,
                         params=dict(requested.arguments),
                         produced=shapes_of(run_log.state.values),
                         runner="app:chat",
