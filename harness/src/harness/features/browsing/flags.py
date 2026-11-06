@@ -1,37 +1,11 @@
-"""Maintenance flags as the `harness flags` verbs print them, and a flag's card as the list and the routes answer it."""
+"""Maintenance flags as the `harness flags` verbs print them: one line per flag in a list, and one whole flag."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import FlagCard
-
 if TYPE_CHECKING:
-    from core.ai.workflows.contracts import MaintenanceFlag
-
-
-def flag_card(flag_id: str, flag: MaintenanceFlag) -> FlagCard:
-    """The card of one flag, the shape the list of flags answers.
-
-    Args:
-        flag_id: The flag's page id.
-        flag: The flag the page holds.
-
-    Returns:
-        The card.
-    """
-    return FlagCard(
-        id=flag_id,
-        kind=flag.kind,
-        status=flag.status,
-        step=flag.step,
-        workflow=flag.workflow,
-        title=flag.title,
-        summary=flag.summary,
-        raised_at=flag.raised_at,
-        evidence=flag.evidence,
-        proposed_change=flag.proposed_change,
-    )
+    from core.ai.workflows.contracts import FlagCard, MaintenanceFlag
 
 
 def flag_line(card: FlagCard) -> str:

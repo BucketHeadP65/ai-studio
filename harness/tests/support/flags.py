@@ -1,12 +1,23 @@
-"""A library holding three maintenance flags: a diverged copy and a repository change open, and a diverged copy a person resolved."""
+"""A library holding three maintenance flags: a diverged copy and a repository change open, and a diverged copy a person resolved.
+
+Also an opener that fails as opening the library does when the studio does not answer.
+"""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from core.ai.workflows.contracts import LibraryCollection, MaintenanceFlag
 
 from tests.support.fakes.library_collection import FakeCollection
+
+if TYPE_CHECKING:
+    from contextlib import AsyncExitStack
+
+    from core.ai.workflows.contracts import StepRegistry
+
+    from harness.settings import HarnessSettings
 
 T0 = datetime(2026, 11, 5, 9, 0, tzinfo=UTC)
 
@@ -77,3 +88,20 @@ async def a_flag_library() -> tuple[FakeCollection, LibraryCollection]:
         await library.put_flag(flag)
     await library.resolve_flag(SETTLED_ID, by="owner", reason=SETTLED_REASON)
     return store, library
+
+
+UNREADABLE_MOVE = "Fix or delete that flag page in the library's database (engram_workflows, collection workflows), then try again."
+"""The next move the verbs and the routes give after a flag page that does not parse."""
+
+STUDIO_DOWN = (
+    "the registry of knowledge bases lives in the studio, and the studio knowledge base API at http://127.0.0.1:8100 did not "
+    "answer GET /api/knowledge-bases: All connection attempts failed. Start it (scripts/stack/stack.sh restart studio-api), "
+    "then open this app again."
+)
+"""What opening the library raises when the studio does not answer."""
+
+
+async def studio_down(stack: AsyncExitStack, settings: HarnessSettings) -> tuple[LibraryCollection, StepRegistry]:
+    """Fail as opening the library does when the studio does not answer."""
+    del stack, settings
+    raise RuntimeError(STUDIO_DOWN)

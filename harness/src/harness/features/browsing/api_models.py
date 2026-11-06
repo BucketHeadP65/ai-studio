@@ -34,7 +34,7 @@ class FlagResolveIn(BaseModel):
     model_config = ConfigDict(extra="forbid", use_attribute_docstrings=True)
 
     by: str
-    """Who resolves the flag, written as `resolved_by`. Must not be blank. Any name but `library` and
-    `agent:step-maintenance` holds as a decision, so the same flag raised again for the same step version stays resolved."""
+    """Who resolves the flag, written as `resolved_by`. Must not be blank. A name in `AUTOMATIC_RESOLVERS` resolves it as a
+    save or a run does, so the next writer opens it again. Any other name holds as a decision for that step version."""
     reason: str
     """Why the flag is resolved, written as `decision_reason`. Must not be blank."""

@@ -1,6 +1,7 @@
 """`harness flags`: list, show and resolve the library's maintenance flags from the shell.
 
-Each verb reads the flags the command's context object holds, so a test hands it a library through `obj`.
+Each verb opens the library through the `LibraryAccess` the command's context object holds, so a test hands it an
+opener through `obj`.
 """
 
 from __future__ import annotations
@@ -12,16 +13,32 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.ai.workflows.contracts import FlagCard, MaintenanceFlag
+from core.ai.workflows.contracts import FlagCard, MaintenanceFlag, StepRegistry
 from typer.testing import CliRunner
 
-from harness.cli import app
-from tests.support.flags import CHANGE, CHANGE_ID, DIFF, DIVERGED, DIVERGED_ID, SETTLED, SETTLED_ID, SETTLED_REASON, a_flag_library
+from harness.cli import LibraryAccess, app
+from tests.support.flags import (
+    CHANGE,
+    CHANGE_ID,
+    DIFF,
+    DIVERGED,
+    DIVERGED_ID,
+    SETTLED,
+    SETTLED_ID,
+    SETTLED_REASON,
+    STUDIO_DOWN,
+    UNREADABLE_MOVE,
+    a_flag_library,
+    studio_down,
+)
 
 if TYPE_CHECKING:
+    from contextlib import AsyncExitStack
+
     from core.ai.workflows.contracts import LibraryCollection
     from typer.testing import Result
 
+    from harness.settings import HarnessSettings
     from tests.support.fakes.library_collection import FakeCollection
 
 runner = CliRunner()
@@ -32,8 +49,16 @@ def flagged() -> tuple[FakeCollection, LibraryCollection]:
     return asyncio.run(a_flag_library())
 
 
+def _opening(library: LibraryCollection) -> LibraryAccess:
+    async def open_library(stack: AsyncExitStack, settings: HarnessSettings) -> tuple[LibraryCollection, StepRegistry]:
+        del stack, settings
+        return library, StepRegistry()
+
+    return LibraryAccess(open_library=open_library)
+
+
 def _flags(library: LibraryCollection, *arguments: str) -> Result:
-    return runner.invoke(app, ["flags", *arguments], obj=library)
+    return runner.invoke(app, ["flags", *arguments], obj=_opening(library))
 
 
 def _refused(result: Result) -> str:
@@ -92,7 +117,34 @@ def test_list_refuses_a_flag_page_that_does_not_parse_in_one_line(flagged: tuple
 
     line = _refused(_flags(library, "list"))
 
-    assert CHANGE_ID in line
+    assert line.startswith(f"the maintenance flag {CHANGE_ID!r} does not parse")
+    assert line.endswith(f". {UNREADABLE_MOVE}")
+
+
+@pytest.mark.parametrize("verb", [("show",), ("resolve", "--by", "owner", "--reason", "Applied.")], ids=["show", "resolve"])
+def test_show_and_resolve_refuse_a_flag_page_that_does_not_parse_with_the_next_move(
+    flagged: tuple[FakeCollection, LibraryCollection], verb: tuple[str, ...]
+) -> None:
+    store, library = flagged
+    del store.pages[CHANGE_ID]["frontmatter"]["step_hash"]
+    written = len(store.payloads)
+
+    line = _refused(_flags(library, verb[0], CHANGE_ID, *verb[1:]))
+
+    assert line.startswith(f"the maintenance flag {CHANGE_ID!r} does not parse")
+    assert line.endswith(f". {UNREADABLE_MOVE}")
+    assert len(store.payloads) == written
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [["flags", "list"], ["flags", "show", DIVERGED_ID], ["flags", "resolve", DIVERGED_ID, "--by", "owner", "--reason", "Kept."]],
+    ids=["list", "show", "resolve"],
+)
+def test_a_library_that_does_not_open_prints_what_did_not_answer_in_one_line(arguments: list[str]) -> None:
+    result = runner.invoke(app, arguments, obj=LibraryAccess(open_library=studio_down))
+
+    assert _refused(result) == f"The workflow library did not open: {STUDIO_DOWN}"
 
 
 def test_show_prints_the_whole_flag_with_its_evidence_and_diff(flagged: tuple[FakeCollection, LibraryCollection]) -> None:

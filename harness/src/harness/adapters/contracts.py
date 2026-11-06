@@ -56,6 +56,7 @@ from harness.adapters.stand_ins import StandInCall, StandInCalls, stand_in_calle
 from harness.adapters.steps import notify_owner_step
 from harness.adapters.store import (
     RECORD_NAMESPACE,
+    STORE_DB,
     DatabaseBinding,
     LibraryOutbox,
     RecordDatabase,
@@ -81,6 +82,7 @@ __all__ = [
     "GROUNDING_TOOLS",
     "LOCAL_HOSTS",
     "RECORD_NAMESPACE",
+    "STORE_DB",
     "TIER_ROLES",
     "WEB_SEARCH_TOOL",
     "AgentUpdate",

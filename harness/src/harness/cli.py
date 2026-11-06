@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Annotated, Literal
 
 import typer
 
-from core.ai.workflows.contracts import FlagKind, MaintenanceFlags
+from core.ai.workflows.contracts import AUTOMATIC_RESOLVERS, FlagKind
 
 from harness.features.selfauthoring.contracts import fail, harness_app
 
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from core.ai.evaluation.contracts import EvaluationLimits, StateRootIdentity
-    from core.ai.workflows.contracts import LibraryCollection, StepRegistry
+    from core.ai.workflows.contracts import LibraryCollection, MaintenanceFlags, StepRegistry
     from pydantic_evals.reporting import EvaluationReport
     from wireup import AsyncContainer
 
@@ -99,6 +99,62 @@ async def _library_session(stack: AsyncExitStack, settings: HarnessSettings) -> 
     tiers = await container.get(ModelTiers)
     binding = await container.get(DatabaseBinding)
     return await stack.enter_async_context(library_composition(settings, records, tiers, binding))
+
+
+type LibraryOpener = Callable[[AsyncExitStack, HarnessSettings], Awaitable[tuple[LibraryCollection, StepRegistry]]]
+"""Opens the library and the registry for one console verb, closed with the stack it is handed."""
+
+
+@dataclass(frozen=True)
+class LibraryAccess:
+    """How the `import` and `flags` verbs open the library.
+
+    They read one from the command's context object, and open this deployment's own library when it holds none.
+    """
+
+    open_library: LibraryOpener = _library_session
+    """Opens the library and the registry. It raises `RuntimeError` when a service the library reads at start does not answer."""
+
+
+class LibraryUnreachableError(Exception):
+    """The library a console verb needs did not open, because a service it reads at start did not answer.
+
+    The message names what did not answer and how to start it.
+    """
+
+    def __init__(self, refusal: RuntimeError) -> None:
+        """Name what did not answer, on one line.
+
+        Args:
+            refusal: What opening the library raised.
+        """
+        super().__init__(f"The workflow library did not open: {one_line(refusal)}")
+
+
+async def _opened(stack: AsyncExitStack, settings: HarnessSettings, open_library: LibraryOpener) -> tuple[LibraryCollection, StepRegistry]:
+    """The library and the registry `open_library` opens, its `RuntimeError` raised as `LibraryUnreachableError`."""
+    try:
+        return await open_library(stack, settings)
+    except RuntimeError as refusal:
+        raise LibraryUnreachableError(refusal) from refusal
+
+
+def _access(ctx: typer.Context) -> LibraryAccess:
+    """The `LibraryAccess` the command's context object holds, or this deployment's own."""
+    held = ctx.obj
+    return held if isinstance(held, LibraryAccess) else LibraryAccess()
+
+
+def one_line(refusal: BaseException) -> str:
+    """A refusal's text and its notes on one line, every run of whitespace written as one space.
+
+    Args:
+        refusal: The error a console verb refuses with.
+
+    Returns:
+        The line, without a line break.
+    """
+    return " ".join(" ".join([str(refusal), *getattr(refusal, "__notes__", [])]).split())
 
 
 async def provision_record(container: AsyncContainer) -> None:
@@ -254,7 +310,7 @@ def search_sessions(term: str, limit: int = typer.Option(20, "--limit", help="St
         typer.echo(f"no matches for {term!r}.")
 
 
-async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
+async def import_path_in_session(path: Path, *, by: str, open_library: LibraryOpener = _library_session) -> FolderImport:
     """Open the library and the registry once and import the folder at `path` into the library.
 
     Each workflow is stamped with this host's environment and the registry it was checked against.
@@ -265,12 +321,14 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
     Args:
         path: A folder holding `steps/` and `workflows/` files.
         by: Who the import is recorded as, such as `owner:cli`.
+        open_library: Opens the library and the registry, this deployment's own by default.
 
     Returns:
         The ids the library holds from the folder, the reusable steps first and then the workflows, and the workflow
         files it skipped.
 
     Raises:
+        LibraryUnreachableError: The library did not open, because a service it reads at start did not answer.
         SaveRefusedError: A workflow would not run on this registry.
         PresentationRefusedError: A workflow's `presentation` names an input or an artifact the
             workflow does not declare.
@@ -298,7 +356,7 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
 
     settings = HarnessSettings()
     async with AsyncExitStack() as stack:
-        library, registry = await _library_session(stack, settings)
+        library, registry = await _opened(stack, settings, open_library)
         custom = custom_root(settings.self_authoring)
         return await import_path(
             path,
@@ -312,13 +370,13 @@ async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
 
 
 @app.command(name="import")
-def import_files(path: str = typer.Argument(..., help="A directory holding steps/ and workflows/ files.")) -> None:
+def import_files(ctx: typer.Context, path: str = typer.Argument(..., help="A directory holding steps/ and workflows/ files.")) -> None:
     """Import a folder of workflow and step files into the library, steps first, then the workflows that use them.
 
     It prints each id the library holds from the folder, then each workflow file it skipped: one whose version the library
     archived, and one whose workflow step maintenance saved a newer version of, with the library's version to bring the
     file up to.
-    A refusal prints as one line and exits 1.
+    A refusal, and a library that does not open, print as one line and exit 1.
     """
     import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
@@ -327,9 +385,9 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
     from core.ai.workflows.contracts import DocumentError, LibraryError, PresentationRefusedError, SaveRefusedError  # noqa: PLC0415 (same)
 
     try:
-        imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
-    except (LibraryError, SaveRefusedError, PresentationRefusedError, DocumentError) as refusal:
-        fail(" ".join(" ".join([str(refusal), *getattr(refusal, "__notes__", [])]).split()))
+        imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli", open_library=_access(ctx).open_library))
+    except (LibraryError, SaveRefusedError, PresentationRefusedError, DocumentError, LibraryUnreachableError) as refusal:
+        fail(one_line(refusal))
     for written in imported.written:
         typer.echo(written)
     for skipped in imported.skipped:
@@ -371,28 +429,24 @@ def lock_steps(folder: str = typer.Argument(..., help="A workflows folder holdin
 _NO_SUCH_FLAG = "No maintenance flag {flag_id}. Find its id with `harness flags list`, or `harness flags list --status resolved` for a resolved one."
 
 
-def _given_flags(ctx: typer.Context) -> MaintenanceFlags | None:
-    """The maintenance flags the command's context object holds, or None when it holds none."""
-    held = ctx.obj
-    return held if isinstance(held, MaintenanceFlags) else None
+_BY_HELP = (
+    "Who resolves the flag, written to it as `resolved_by`. Any name but "
+    + " and ".join(f"`{name}`" for name in sorted(AUTOMATIC_RESOLVERS))
+    + " holds as a decision: the same flag raised again for the same step version stays resolved. A flag those resolved "
+    "opens again when it is raised again."
+)
+"""The `--by` help, naming the automatic resolvers as the library holds them."""
 
 
-async def _over_flags[T](given: MaintenanceFlags | None, use: Callable[[MaintenanceFlags], Awaitable[T]]) -> T:
-    """What `use` answers over `given`, or else over the library this deployment runs on, opened for this one call."""
+async def _over_flags[T](access: LibraryAccess, use: Callable[[MaintenanceFlags], Awaitable[T]]) -> T:
+    """What `use` answers over the library `access` opens for this one call."""
     from contextlib import AsyncExitStack  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
     from harness.settings import HarnessSettings  # noqa: PLC0415 (same)
 
-    if given is not None:
-        return await use(given)
     async with AsyncExitStack() as stack:
-        library, _ = await _library_session(stack, HarnessSettings())
+        library, _ = await _opened(stack, HarnessSettings(), access.open_library)
         return await use(library)
-
-
-def _one_line(refusal: Exception) -> str:
-    """A refusal's text on one line, whitespace runs collapsed."""
-    return " ".join(str(refusal).split())
 
 
 @flags_app.command(name="list")
@@ -409,16 +463,18 @@ def list_flags(
     """List the library's maintenance flags, newest first, one line each: id, kind, workflow, step and summary.
 
     A flag about a step prints `-` for its workflow. Read one flag whole, its evidence included, with
-    `harness flags show <id>`. A flag that cannot be read prints one line and exits 1.
+    `harness flags show <id>`. A flag page that cannot be read, or a library that does not open, prints one line and
+    exits 1.
     """
     from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
 
     from harness.features.browsing.contracts import flag_line  # noqa: PLC0415 (same)
+    from harness.features.browsing.contracts import list_flags as listed  # noqa: PLC0415 (same)
 
     try:
-        cards = asyncio.run(_over_flags(_given_flags(ctx), lambda flags: flags.flags(status=status, kind=kind)))
-    except LibraryError as refusal:
-        fail(_one_line(refusal))
+        cards = asyncio.run(_over_flags(_access(ctx), lambda flags: listed(flags, status=status, kind=kind)))
+    except (LibraryError, LibraryUnreachableError) as refusal:
+        fail(one_line(refusal))
     if as_json:
         typer.echo(json.dumps([card.model_dump(mode="json") for card in cards], indent=2))
         return
@@ -438,16 +494,17 @@ def show_flag(
     """Print one maintenance flag whole: what it is about, who raised it, its Evidence and its Proposed change.
 
     A diverged copy's Evidence names the version the copy diverged from and holds the unified diff from that version
-    to the copy. An unknown id prints one line and exits 1.
+    to the copy. An unknown id, a flag page that cannot be read, or a library that does not open prints one line and
+    exits 1.
     """
     from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
 
-    from harness.features.browsing.contracts import render_flag  # noqa: PLC0415 (same)
+    from harness.features.browsing.contracts import read_flag, render_flag  # noqa: PLC0415 (same)
 
     try:
-        flag = asyncio.run(_over_flags(_given_flags(ctx), lambda flags: flags.fetch_flag(flag_id)))
-    except LibraryError as refusal:
-        fail(_one_line(refusal))
+        flag = asyncio.run(_over_flags(_access(ctx), lambda flags: read_flag(flags, flag_id)))
+    except (LibraryError, LibraryUnreachableError) as refusal:
+        fail(one_line(refusal))
     if flag is None:
         fail(_NO_SUCH_FLAG.format(flag_id=flag_id))
     if as_json:
@@ -461,35 +518,26 @@ def resolve_flag(
     ctx: typer.Context,
     flag_id: Annotated[str, typer.Argument(help="The flag's id, as `harness flags list` prints it.")],
     *,
-    by: Annotated[
-        str,
-        typer.Option(
-            "--by",
-            help=(
-                "Who resolves the flag, written to it as `resolved_by`. Any name but `library` and `agent:step-maintenance` "
-                "holds as a decision: the same flag raised again for the same step version stays resolved. A flag those two "
-                "resolved opens again when it is raised again."
-            ),
-        ),
-    ],
+    by: Annotated[str, typer.Option("--by", help=_BY_HELP)],
     reason: Annotated[str, typer.Option("--reason", help="Why, written to the flag as `decision_reason`.")],
 ) -> None:
     """Resolve one maintenance flag with who resolved it and why. Every other field of the flag is kept.
 
-    An unknown id, or an empty `--by` or `--reason`, prints one line, writes nothing and exits 1.
+    An unknown id, an empty `--by` or `--reason`, a flag page that cannot be read, or a library that does not open
+    prints one line, writes nothing and exits 1.
     """
     from core.ai.workflows.contracts import FlagUnknownError, LibraryError  # noqa: PLC0415 (what this verb needs loads only when it runs)
 
     from harness.features.browsing.contracts import resolve_flag as resolve  # noqa: PLC0415 (same)
 
     try:
-        asyncio.run(_over_flags(_given_flags(ctx), lambda flags: resolve(flags, flag_id, by=by, reason=reason)))
+        asyncio.run(_over_flags(_access(ctx), lambda flags: resolve(flags, flag_id, by=by, reason=reason)))
     except FlagUnknownError:
         fail(_NO_SUCH_FLAG.format(flag_id=flag_id))
     except ValueError:
         fail(f"{flag_id} was not resolved: --by and --reason must not be empty. Say who resolves it and why, then run it again.")
-    except LibraryError as refusal:
-        fail(_one_line(refusal))
+    except (LibraryError, LibraryUnreachableError) as refusal:
+        fail(one_line(refusal))
     typer.echo(f"Resolved {flag_id} by {by}.")
 
 

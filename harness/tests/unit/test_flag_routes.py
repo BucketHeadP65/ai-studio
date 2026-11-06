@@ -14,7 +14,7 @@ from harness.session import NoSessionLog, Runtime
 from harness.settings import SelfAuthoringSettings
 from tests.support.controllers import a_client_of
 from tests.support.fakes.sessions import FakeSessionPool
-from tests.support.flags import CHANGE_ID, DIVERGED, DIVERGED_ID, SETTLED_ID, a_flag_library
+from tests.support.flags import CHANGE_ID, DIVERGED, DIVERGED_ID, SETTLED_ID, UNREADABLE_MOVE, a_flag_library
 from tests.support.runtime import EmptyLibrary, a_silent_agent
 from tests.support.state import a_state, records_under
 
@@ -154,7 +154,22 @@ async def test_a_flag_page_that_does_not_parse_is_a_failed_read_never_an_empty_l
 
     assert response.status_code == 503
     assert response.json()["ok"] is False
-    assert CHANGE_ID in response.json()["message"]
+    assert response.json()["message"].startswith(f"the maintenance flag {CHANGE_ID!r} does not parse")
+    assert response.json()["message"].endswith(f". {UNREADABLE_MOVE}")
+
+
+async def test_resolving_a_flag_page_that_does_not_parse_answers_503_with_the_next_move_and_writes_nothing(
+    flagged: tuple[httpx.AsyncClient, FakeCollection, LibraryCollection],
+) -> None:
+    client, store, _ = flagged
+    del store.pages[CHANGE_ID]["frontmatter"]["step_hash"]
+    written = len(store.payloads)
+
+    response = await client.post(f"/api/library/flags/{CHANGE_ID}/resolve", json={"by": "owner", "reason": "Applied."})
+
+    assert response.status_code == 503
+    assert response.json()["message"].endswith(f". {UNREADABLE_MOVE}")
+    assert len(store.payloads) == written
 
 
 async def test_a_library_that_keeps_no_flags_says_so_on_both_routes(tmp_path: Path) -> None:

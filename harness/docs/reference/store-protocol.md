@@ -533,11 +533,15 @@ A person and a coding agent read and resolve flags through the harness, over the
 
 | Surface | Does |
 |---|---|
-| `GET /api/library/flags?status=&kind=` | answers `{"flags": [...]}`, each a `FlagCard` as JSON (`id`, `kind`, `status`, `step`, `workflow`, `title`, `summary`, `raised_at`, `evidence`, `proposed_change`), newest raised first. `status` and `kind` are optional, and without them every flag is listed. `raised_at` is ISO 8601 with its offset, such as `2026-11-05T09:00:00Z`. A flag that does not parse answers 503 with a message, never an empty list |
-| `POST /api/library/flags/{flag_id}/resolve` | takes `{"by": str, "reason": str}` and answers `{"ok": true, "flag": <FlagCard as JSON>}`. An unknown id answers 404, a blank `by` or `reason` answers 400 and writes nothing, and a failed write answers 503, each as `{"ok": false, "message": str}` |
+| `GET /api/library/flags?status=&kind=` | answers `{"flags": [...]}`, each a `FlagCard` as JSON (`id`, `kind`, `status`, `step`, `workflow`, `title`, `summary`, `raised_at`, `evidence`, `proposed_change`), newest raised first. `status` and `kind` are optional, and without them every flag is listed. `raised_at` is ISO 8601 with its offset, such as `2026-11-05T09:00:00Z`. A flag page that does not parse answers 503 with a message naming the page and saying to fix or delete it in the library's database, never an empty list |
+| `POST /api/library/flags/{flag_id}/resolve` | takes `{"by": str, "reason": str}` and answers `{"ok": true, "flag": <FlagCard as JSON>}`. An unknown id answers 404, a blank `by` or `reason` answers 400, a flag page that does not parse answers 503 with the same message as the list, and a failed write answers 503, each as `{"ok": false, "message": str}`. The first three write nothing |
 | `harness flags list [--status open\|resolved] [--kind <kind>] [--json]` | prints one line per flag, its id, kind, workflow (`-` for a flag about a step), step and summary, the open flags unless `--status resolved`. `--json` prints the route's array of cards. `harness flags list --kind diverged_copy` lists the diverged copies |
 | `harness flags show <id> [--json]` | prints one flag whole: its fields, its Evidence (for a diverged copy, the version it diverged from and the diff) and its Proposed change. `--json` prints `{"id": str, "flag": <MaintenanceFlag as JSON>}` |
 | `harness flags resolve <id> --by <name> --reason <text>` | resolves one flag. An unknown id or a blank `--by` or `--reason` prints one line, writes nothing and exits 1 |
+
+Every refusal of the three verbs prints one line and exits 1: a flag page that does not parse prints the routes' 503
+message, and a library that does not open (the studio knowledge base API did not answer) prints `The workflow library
+did not open:` and what did not answer. `harness import` refuses a library that does not open the same way.
 
 Both write `by` as given. A name in `AUTOMATIC_RESOLVERS` resolves the flag as a save or a run does, so the next writer
 opens it again. Any other name holds as a decision for that step version. A library that keeps no maintenance flags

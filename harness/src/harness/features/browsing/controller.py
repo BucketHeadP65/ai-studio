@@ -307,13 +307,13 @@ class BrowsingController:
     async def library_flags(self, status: Literal["open", "resolved"] | None = None, kind: FlagKind | None = None) -> JSONResponse:
         """The library's maintenance flags with that status and kind, newest raised first. Without either, every flag is listed.
 
-        A flag that cannot be read answers 503 with a message, never an empty list.
+        A flag page that cannot be read answers 503 with a message naming it and what to do about it, never an empty list.
         """
         flags = _maintenance_flags(self._sessions.default)
         if flags is None:
             return JSONResponse({"ok": False, "message": _NO_FLAGS}, status_code=503)
         try:
-            cards = await flags.flags(status=status, kind=kind)
+            cards = await service.list_flags(flags, status=status, kind=kind)
         except LibraryError as exc:
             return _flag_refusal(exc)
         return JSONResponse({"flags": [card.model_dump(mode="json") for card in cards]})
@@ -322,7 +322,8 @@ class BrowsingController:
     async def resolve_library_flag(self, flag_id: str, body: FlagResolveIn) -> JSONResponse:
         """Resolve one maintenance flag with who resolved it and why, and answer the flag. Every other field of the flag is kept.
 
-        An unknown id answers 404, and a blank name or reason answers 400 and writes nothing.
+        An unknown id answers 404, a blank name or reason answers 400, and a flag page that cannot be read answers 503.
+        None of them writes anything.
         """
         flags = _maintenance_flags(self._sessions.default)
         if flags is None:

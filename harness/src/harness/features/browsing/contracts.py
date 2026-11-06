@@ -15,7 +15,7 @@ from harness.features.browsing.exceptions import (
 )
 from harness.features.browsing.flags import flag_line, render_flag
 from harness.features.browsing.importing import CaseCheck, FolderImport, SkippedWorkflowFile, SkipReason, import_path
-from harness.features.browsing.service import archive_workflow, redescribe_workflow, resolve_flag, restore_workflow
+from harness.features.browsing.service import archive_workflow, list_flags, read_flag, redescribe_workflow, resolve_flag, restore_workflow
 from harness.features.browsing.step_locks import StepLock, StepLockEntry, locked_steps, read_lock, write_lock
 
 __all__ = [
@@ -37,7 +37,9 @@ __all__ = [
     "archive_workflow",
     "flag_line",
     "import_path",
+    "list_flags",
     "locked_steps",
+    "read_flag",
     "read_lock",
     "redescribe_workflow",
     "render_flag",
