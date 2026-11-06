@@ -574,6 +574,28 @@ async def test_two_changed_steps_adopted_in_one_consumer_land_as_one_version_on_
     assert f"wf.digest-sources.v2 adopts {SUMMARIZE2} on live trial in place of {sources_id}." in told
 
 
+async def test_a_flag_drafted_before_an_adoption_into_the_same_consumer_lands_on_the_version_the_adoption_saved(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    consumers = await world.steps.list_consumers(f"{V4},{SUMMARIZE2}")
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(f"{V4},{SUMMARIZE2}"))
+    decisions = PlanDecisions(
+        decisions=[
+            PlanDecision(workflow_id=sources_id, step_id=V4, disposition="flag", reason="Only the owner can say."),
+            PlanDecision(workflow_id=sources_id, step_id=SUMMARIZE2, disposition="adopt", reason="It names every claim."),
+        ]
+    )
+
+    landed = await world.steps.land_changes(draft, decisions)
+
+    assert [(change.step_id, change.outcome) for change in landed.changes] == [(V4, "flagged"), (SUMMARIZE2, "adopted")]
+    flag = await world.library.fetch_flag("mf.consumer.digest-sources.digest")
+    assert flag is not None
+    assert flag.workflow == "wf.digest-sources.v2", "the flag names the consumer's newest version, the one the adoption saved"
+
+
 async def test_two_adoptions_into_one_consumer_whose_save_the_library_refuses_are_refused_together_each_naming_the_other(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)

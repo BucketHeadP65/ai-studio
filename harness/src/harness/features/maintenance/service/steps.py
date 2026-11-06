@@ -279,8 +279,8 @@ class MaintenanceSteps:
         on live trial is built on that version, and the new marker keeps its baseline and its steps beside the new ones.
         Each adoption then resolves the open consumer flag of its pair. A kept pair writes a decline into the
         consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the planner's
-        reason, both on the version this landing saved for the consumer when it saved one. Every writable change lands
-        before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
+        reason. The adoptions land first, so a keep or a flag lands on the version this landing saved for its consumer
+        when it saved one. Every writable change lands before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
         `plan_rejected` flag of that step version or an earlier one, and a flag a person resolved is left alone.
 
         A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
@@ -309,16 +309,13 @@ class MaintenanceSteps:
             if isinstance(change, PlannedChange) and change.disposition == "adopt":
                 adoptions.setdefault(change.workflow_id, []).append((index, change))
         saved: dict[str, str] = {}
+        for workflow_id, group in adoptions.items():
+            landed = await self._adopt_all(workflow_id, [planned for _, planned in group])
+            outcomes.update(zip((position for position, _ in group), landed, strict=True))
+            if saved_id := next((each.saved_id for each in landed if each.outcome == "adopted"), ""):
+                saved[workflow_id] = saved_id
         for index, change in enumerate(merged):
-            if index in outcomes or isinstance(change, LandedChange):
-                continue
-            if change.disposition == "adopt":
-                group = adoptions[change.workflow_id]
-                landed = await self._adopt_all(change.workflow_id, [planned for _, planned in group])
-                outcomes.update(zip((position for position, _ in group), landed, strict=True))
-                if saved_id := next((each.saved_id for each in landed if each.outcome == "adopted"), ""):
-                    saved[change.workflow_id] = saved_id
-            else:
+            if index not in outcomes and isinstance(change, PlannedChange):
                 outcomes[index] = await self._land(change, saved.get(change.workflow_id, change.workflow_id))
         changes = await self._settle_rejected_plans([outcomes[index] for index in range(len(merged))])
         report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
