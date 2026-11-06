@@ -158,7 +158,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         raise ModelRetry(str(exc)) from exc
     fires = preview_fires(parse_cadence(cadence), since=now)
     if not fires:
-        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run, a workflow run or an index arms it, never by the clock."
+        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run, a workflow run, an index or a new reusable step version arms it, never by the clock."
     when = ", ".join(moment.isoformat() for moment in fires)
     return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. Next three fires. {when}."
 

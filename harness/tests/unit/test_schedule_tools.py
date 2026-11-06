@@ -28,7 +28,7 @@ from harness.features.scheduling.contracts import (
     schedules,
     update_schedule,
 )
-from harness.features.scheduling.domain import UNKNOWN_SCHEDULE
+from harness.features.scheduling.domain import CHANGED_STEPS_PARAMETER, UNKNOWN_SCHEDULE
 from harness.session import NoSessionLog, Runtime, SessionPool
 from harness.settings import RunSettings
 from tests.support.fakes.broadcaster import FakeBroadcaster
@@ -36,7 +36,16 @@ from tests.support.fakes.schedules import FakeSchedules
 from tests.support.fakes.sessions import APool
 from tests.support.runtime import a_runtime
 from tests.support.state import a_throwaway_state, records_under
-from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _sales_taking_pages, _schedule, _typed_registry, _typed_spec
+from tests.unit.test_schedule_ticker import (
+    FakeWorkflowStore,
+    _one_node_spec,
+    _requiring_registry,
+    _requiring_spec,
+    _sales_taking_pages,
+    _schedule,
+    _typed_registry,
+    _typed_spec,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -345,4 +354,14 @@ async def test_schedule_workflow_says_an_on_index_schedule_rests_until_an_index_
         run_engine="in_process",
     )
 
-    assert report.endswith("It rests until a refresh run, a workflow run or an index arms it, never by the clock.")
+    assert report.endswith("It rests until a refresh run, a workflow run, an index or a new reusable step version arms it, never by the clock.")
+
+
+async def test_schedule_workflow_says_an_on_step_change_schedule_rests_until_a_new_step_version_arms_it() -> None:
+    session = _world(FakeWorkflowStore(specs={"wf-collects": _requiring_spec(CHANGED_STEPS_PARAMETER)}), registry=_requiring_registry(CHANGED_STEPS_PARAMETER, [])).default
+
+    report = await schedule_workflow(
+        Scheduler(FakeSchedules(), FakeSchedules(), FakeBroadcaster()), _ctx(session), "wf-collects", "on step change quiet 10m", run_engine="in_process"
+    )
+
+    assert report.endswith("It rests until a refresh run, a workflow run, an index or a new reusable step version arms it, never by the clock.")
