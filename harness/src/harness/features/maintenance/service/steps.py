@@ -279,7 +279,8 @@ class MaintenanceSteps:
         Each adoption then resolves the open consumer flag of its pair. A kept pair writes a decline into the
         consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the planner's
         reason, both on the version this landing saved for the consumer when it saved one. Every writable change lands
-        before any refusal is raised.
+        before any refusal is raised. Each step a change was adopted, kept or flagged for resolves the open
+        `plan_rejected` flag of that step version or an earlier one, and a flag a person resolved is left alone.
 
         A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
         its name, when the consumer declines that version, or when someone saved a newer version of the consumer since
@@ -318,7 +319,7 @@ class MaintenanceSteps:
                     saved[change.workflow_id] = saved_id
             else:
                 outcomes[index] = await self._land(change, saved.get(change.workflow_id, change.workflow_id))
-        changes = [outcomes[index] for index in range(len(merged))]
+        changes = await self._settle_rejected_plans([outcomes[index] for index in range(len(merged))])
         report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
         refused = sum(change.outcome == "refused" for change in changes)
         if refused:
@@ -728,6 +729,41 @@ class MaintenanceSteps:
             return None
         runs = await read_live_trial(self._library, self._history, base, workflow, marker)
         return None if runs.is_over() else marker
+
+    async def _settle_rejected_plans(self, changes: Sequence[LandedChange]) -> list[LandedChange]:
+        """Resolve the open `plan_rejected` flag of each step a change landed for, a failed resolution noted on its first landed change."""
+        notes: dict[str, str] = {}
+        for step_id in dict.fromkeys(change.step_id for change in changes if change.outcome in ("adopted", "kept", "flagged")):
+            if (note := await self._resolve_rejected_plan(step_id)) is not None:
+                notes[step_id] = note
+        settled: list[LandedChange] = []
+        for change in changes:
+            note = notes.pop(change.step_id, None) if change.outcome in ("adopted", "kept", "flagged") else None
+            settled.append(change if note is None else change.model_copy(update={"notes": [*change.notes, note]}))
+        return settled
+
+    async def _resolve_rejected_plan(self, step_id: str) -> str | None:
+        """Resolve as step maintenance the step's open `plan_rejected` flag about `step_id` or an earlier version, answering a note when that fails."""
+        try:
+            step = await self._library.fetch_step(step_id)
+        except LibraryError as exc:
+            return f"the open plan_rejected flag of {step_id} was not read: {exc}"
+        page = flag_id("plan_rejected", step.name)
+        try:
+            stored = await self._library.fetch_flag(page)
+            if stored is None or stored.status != "open":
+                return None
+            versions = {saved.step_id: saved.version for saved in await self._library.step_versions(step.name)}
+            flagged, landed = versions.get(stored.step_id), versions.get(step_id)
+            if flagged is None or landed is None or flagged > landed:
+                return None
+            run = self._current_run()
+            ran_in = f" in the run {run}" if run else ""
+            await self._library.resolve_flag(page, by=STEP_MAINTENANCE_AGENT, reason=f"Step maintenance landed a plan for {step_id}{ran_in}.")
+        except (LibraryError, ValueError) as exc:
+            _logger.warning("a plan for {step_id} landed, and the open flag {flag} was not resolved: {reason}", step_id=step_id, flag=page, reason=str(exc))
+            return f"the open flag {page} was not resolved: {exc}"
+        return None
 
     async def _next_version(self, name: str) -> int:
         """One above the highest saved version of the workflow `name`, archived and superseded ones included."""

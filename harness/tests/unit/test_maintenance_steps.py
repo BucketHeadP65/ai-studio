@@ -1132,3 +1132,60 @@ async def test_a_landing_without_refusals_leaves_the_one_notice_to_report_change
     await world.steps.report_changes(landed)
     assert len(world.notifier.sent) == 1
 
+def _rejected_plan(step_id: str, *, raised_at: datetime = T0 - timedelta(days=1)) -> MaintenanceFlag:
+    return MaintenanceFlag(
+        kind="plan_rejected",
+        step="digest",
+        step_id=step_id,
+        step_hash=step_content_address(DIGEST[int(step_id.rsplit(".v", 1)[1])]),
+        title="Plan for digest rejected",
+        summary="Decide how the step reaches the workflows that hold digest.",
+        evidence="The judge rejected the plan three times.",
+        raised_by=STEP_MAINTENANCE_AGENT,
+        raised_at=raised_at,
+    )
+
+
+@pytest.mark.parametrize("disposition", ["adopt", "keep", "flag"])
+async def test_a_landing_for_a_step_resolves_the_open_plan_rejected_flag_of_an_earlier_version(tmp_path: Path, disposition: str) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan("st.digest.v3"))
+
+    await _land(world, await world.plan(V4, {sources_id: (disposition, "Decided.")}))
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert (flag.status, flag.resolved_by) == ("resolved", STEP_MAINTENANCE_AGENT)
+    assert V4 in flag.decision_reason
+
+
+async def test_a_landing_leaves_a_plan_rejected_flag_a_person_resolved_as_they_left_it(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan(V4))
+    await world.library.resolve_flag("mf.rejected.digest", by="owner", reason="I will handle digest by hand.")
+
+    await _land(world, await world.plan(V4, {sources_id: ("keep", "Decided.")}))
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert (flag.status, flag.resolved_by, flag.decision_reason) == ("resolved", "owner", "I will handle digest by hand.")
+
+
+async def test_a_landing_whose_every_change_was_refused_leaves_the_plan_rejected_flag_open(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    await world.library.put_flag(_rejected_plan("st.digest.v3"))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError):
+        await _land(world, plan)
+
+    flag = await world.library.fetch_flag("mf.rejected.digest")
+    assert flag is not None
+    assert flag.status == "open"
