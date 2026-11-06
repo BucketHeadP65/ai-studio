@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 class FailedFireNotice:
     """Tells the owner once about each run a schedule fired that ended failed, by its outcome or its checked status.
 
-    A completed run whose checked status is failed tells the owner too, the way a live trial reads a failed run. A run
-    whose runner does not start with the schedule runner prefix, such as a run started by hand, tells nobody.
+    A completed run whose checked status is failed tells the owner too. A run whose runner does not start with the
+    schedule runner prefix, such as a run started by hand, tells nobody.
     """
 
     def __init__(self, schedule_runner_prefix: str, notifier: Notifier) -> None:

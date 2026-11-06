@@ -1465,8 +1465,9 @@ four parts in turn, and a part that fails is logged while the next is still told
 1. **The arming** (`RunEndArming`, scheduling slice) arms every `after <workflow name>` schedule the run satisfies.
 2. **The live trial watch** (`LiveTrialWatch`, maintenance slice) reads a run of a consumer version on live trial, one
    that carries a `live_trial` marker, by core's `live_trial_verdict` against the previous version's newest three
-   completed runs from the evidence log. Ignored runs change nothing, a run that failed anywhere but at a node running
-   the adopted step among them, and once three runs counted (the marker's `runs`)
+   completed runs from the evidence log. Ignored runs change nothing, a run that failed in execution anywhere but at a
+   node running the adopted step among them. A completed run whose checked status is failed is ranked against the
+   baseline like any completed run, failed ranking lowest. Once three runs counted (the marker's `runs`)
    the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
    the previous version is live again, its consumer record declines the step version as reverted, a
    `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` carries the run's end time and the verdict's reason,
@@ -1478,7 +1479,7 @@ four parts in turn, and a part that fails is logged while the next is still told
    the version the run planned, whichever version the id names.
 4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
    starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
-   status is failed tells the owner too, as a live trial reads a failed run. A run started by hand tells nobody.
+   status is failed tells the owner too. A run started by hand tells nobody.
 
 ## What this station does not do (v1)
 

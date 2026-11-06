@@ -1,9 +1,9 @@
 """The live trial: the next real runs of a consumer version step maintenance adopted, each read once when it ends.
 
-A run is ignored when it says nothing about the adopted step, which a run that failed anywhere but at the step never
-does, failed when the step did not produce while everything it reads did, and worse when it did less well than the
-version the adoption replaced. Any other run counts. The rule reads
-only what the run and its grades recorded, and asks no model.
+A run is ignored when it says nothing about the adopted step, which a run that failed in execution anywhere but at the
+step never does, failed when it failed in execution and the step did not produce while everything it reads did, and
+worse when it did less well than the version the adoption replaced, a completed run whose checked status is failed
+ranking lowest. Any other run counts. The rule reads only what the run and its grades recorded, and asks no model.
 """
 
 from __future__ import annotations
@@ -71,11 +71,12 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
 ) -> LiveTrialVerdict:
     """Read one ended run of a version on live trial as ignored, failed, worse or counting.
 
-    A run a person stopped is ignored. A run whose outcome or checked status is failed is failed when a touched node
-    did not produce and every node it wires from did. Any other failed run is ignored, baseline or not: a node a touched
-    node wires from produced nothing, or every touched node produced and the run failed elsewhere. Against a baseline a
-    run that did not fail is worse when its checked status ranks below every one of the baseline's, when a gate both
-    versions hold was rejected more times than in any baseline run, or when one of its structural grades is more than
+    A run a person stopped is ignored. A run whose outcome is failed, one that failed in execution, is failed when a
+    touched node did not produce and every node it wires from did. Any other such run is ignored, baseline or not: a
+    node a touched node wires from produced nothing, or every touched node produced and the run failed elsewhere. A
+    completed run is read against the baseline whatever its checked status, a failed one ranking lowest. Against a
+    baseline it is worse when its checked status ranks below every one of the baseline's, when a gate both versions
+    hold was rejected more times than in any baseline run, or when one of its structural grades is more than
     `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible.
     Any other run counts.
 
@@ -93,7 +94,7 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
     """
     if run.outcome == "stopped":
         return LiveTrialVerdict(kind="ignored", reason="A person stopped the run, so it says nothing about the step.")
-    if run.outcome == "failed" or run.result.status == "failed":
+    if run.outcome == "failed":
         return _failed_at_a_touched_node(workflow, touched, run)
     if not baseline:
         return LiveTrialVerdict(

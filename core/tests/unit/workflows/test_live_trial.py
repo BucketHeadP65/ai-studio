@@ -130,10 +130,24 @@ def test_a_touched_node_wired_only_from_parameters_that_did_not_produce_is_faile
     assert verdict.kind == "failed"
 
 
-def test_a_completed_run_whose_checked_status_is_failed_where_the_touched_node_did_not_produce_is_failed() -> None:
-    verdict = _verdict(_run(status="failed", produced={"fetch": "str"}), baseline=_baseline("succeeded"))
+@pytest.mark.parametrize("produced", [{"fetch": "str"}, EVERY_NODE], ids=["the touched node silent", "every node produced"])
+def test_a_completed_run_whose_checked_status_is_failed_ranks_below_a_baseline_that_did_not_fail_and_is_worse(produced: Mapping[str, str]) -> None:
+    verdict = _verdict(_run(status="failed", produced=produced), baseline=_baseline("succeeded", "partial", "unknown"))
 
-    assert verdict.kind == "failed"
+    assert verdict.kind == "worse"
+    assert "failed" in verdict.reason
+
+
+def test_a_completed_run_whose_checked_status_is_failed_counts_against_a_baseline_that_failed_too() -> None:
+    verdict = _verdict(_run(status="failed"), baseline=_baseline("failed", "failed"))
+
+    assert verdict.kind == "counts"
+
+
+def test_a_completed_run_whose_checked_status_is_failed_counts_without_a_baseline() -> None:
+    verdict = _verdict(_run(status="failed", produced={"fetch": "str"}))
+
+    assert verdict.kind == "counts"
 
 
 def test_a_completed_partial_run_against_three_succeeded_runs_is_worse() -> None:
@@ -155,12 +169,6 @@ def test_a_run_that_failed_outside_the_touched_nodes_is_ignored(baseline: tuple[
 
     assert verdict.kind == "ignored"
     assert "outside" in verdict.reason
-
-
-def test_a_completed_run_whose_checked_status_is_failed_while_every_touched_node_produced_is_ignored() -> None:
-    verdict = _verdict(_run(status="failed"), baseline=_baseline("succeeded", "succeeded", "succeeded"))
-
-    assert verdict.kind == "ignored"
 
 
 def test_a_gate_rejected_more_times_than_in_any_baseline_run_is_worse_a_judges_rejections_included() -> None:
