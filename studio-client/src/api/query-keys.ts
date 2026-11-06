@@ -37,6 +37,14 @@ export const runKeys = {
     ["run", "artifact", runId, artifactId, digest] as const,
 };
 
+// The library's maintenance flags, on a root of their own. Nothing publishes a flags topic, so this
+// key refetches when it is invalidated, as resolving a flag does, and on the client's one minute
+// refetch interval, never on a run's frames.
+export const flagKeys = {
+  /** The open maintenance flags, GET /api/library/flags?status=open. */
+  open: ["maintenance-flags", "open"] as const,
+};
+
 // What this deployment answers about itself rather than about one run. Nothing publishes a
 // "studio" topic, so these keys refetch on their own invalidation alone, which is what a fact that
 // only changes when the deployment is recomposed needs.

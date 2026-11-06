@@ -88,6 +88,7 @@ async function mockApi(page: Page) {
     json(route, { rows: [], skipped: [], outcomes_by_page_type: {} }),
   );
   await page.route("**/api/library", (route) => json(route, []));
+  await page.route("**/api/library/flags**", (route) => json(route, { flags: [] }));
   await page.route("**/api/steps", (route) => json(route, []));
   await page.route("**/api/conversation", (route) =>
     json(route, { turns: [], session_id: "s-1" }),

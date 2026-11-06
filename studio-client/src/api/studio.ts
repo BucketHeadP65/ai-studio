@@ -15,6 +15,9 @@ import {
   ConversationStartedSchema,
   type Decided,
   DecidedSchema,
+  FlagResolvedSchema,
+  type MaintenanceFlag,
+  MaintenanceFlagListSchema,
   type Step,
   StepSchema,
   type LibraryEntry,
@@ -270,6 +273,23 @@ export const studioApi = {
       method: "POST",
       body: JSON.stringify({ by, note }),
     }),
+
+  // The library's open maintenance flags, newest raised first. A flag page the library cannot read
+  // is a refusal naming it, never a shorter list.
+  flags: (): Promise<MaintenanceFlag[]> =>
+    request<z.infer<typeof MaintenanceFlagListSchema>>(
+      "/api/library/flags?status=open",
+      MaintenanceFlagListSchema,
+    ).then((result) => result.flags),
+
+  // Resolves one maintenance flag with who resolved it and why, both required, and answers the
+  // flag resolved. The name is recorded as given, so a person types their own.
+  resolveFlag: (flagId: string, by: string, reason: string): Promise<MaintenanceFlag> =>
+    request<z.infer<typeof FlagResolvedSchema>>(
+      `/api/library/flags/${encodeURIComponent(flagId)}/resolve`,
+      FlagResolvedSchema,
+      { method: "POST", body: JSON.stringify({ by, reason }) },
+    ).then((result) => result.flag),
 
   // Archives a saved artifact: it leaves the library and search, its runs and versions stay.
   // Answers with the refreshed card.

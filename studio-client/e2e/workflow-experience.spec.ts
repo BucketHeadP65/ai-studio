@@ -238,7 +238,7 @@ function session(id: string, title: string) {
 
 // One router for every request the walk can make, so nothing can reach a real backend: an
 // unrecognized path answers with an empty object and is recorded, and the bounded-reads test
-// asserts that Home asked for nothing outside its three reads.
+// asserts that Home asked for nothing outside its four reads.
 async function mockApi(page: Page, journey: Journey): Promise<void> {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -269,6 +269,7 @@ async function mockApi(page: Page, journey: Journey): Promise<void> {
     }
     if (path === "/api/runs/recent") return json({ runs: journey.recent });
     if (path === "/api/library") return json(LIBRARY);
+    if (path === "/api/library/flags") return json({ flags: [] });
     if (path === "/api/master") return json({ session_id: "m-1" });
     if (path === "/api/spend") {
       return json({
@@ -629,7 +630,7 @@ for (const size of [
 test.describe("what Home asks for", () => {
   test.use({ viewport: DESKTOP });
 
-  test("reads the live pool, the saved workflows, and a bounded page of results", async ({
+  test("reads the live pool, the saved workflows, a bounded page of results, and the open flags", async ({
     page,
   }) => {
     const journey = freshJourney();
@@ -640,12 +641,13 @@ test.describe("what Home asks for", () => {
     await expect(page.getByRole("button", { name: "Set up Weekly sweep" })).toBeVisible();
     await expect(page.getByText("No results yet.")).toBeVisible();
     await expect.poll(() => journey.asked.filter((asked) => asked.startsWith("GET /api/")).length)
-      .toBeGreaterThanOrEqual(3);
+      .toBeGreaterThanOrEqual(4);
 
     const reads = journey.asked.filter((asked) => asked.startsWith("GET /api/"));
     expect(reads).toContain("GET /api/runs");
     expect(reads).toContain("GET /api/library");
     expect(reads).toContain("GET /api/runs/recent?limit=6");
+    expect(reads).toContain("GET /api/library/flags?status=open");
 
     // No per-card graph read, and no unbounded archive read.
     expect(reads.filter((asked) => asked.startsWith("GET /api/workflow/"))).toEqual([]);

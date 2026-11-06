@@ -190,6 +190,44 @@ export const ApprovedSchema = z.object({
 });
 export type Approved = z.infer<typeof ApprovedSchema>;
 
+// -- maintenance flags --------------------------------------------------------------
+
+// What a maintenance flag asks the owner about: a diverged copy a save recorded, a consumer step
+// maintenance flagged, a live trial that reverted, a plan its judge rejected three times, or a
+// change to a reusable step's files.
+export const FlagKindSchema = z.enum([
+  "diverged_copy",
+  "consumer_flag",
+  "live_trial_reverted",
+  "plan_rejected",
+  "repository_change",
+]);
+export type FlagKind = z.infer<typeof FlagKindSchema>;
+
+// One maintenance flag as GET /api/library/flags lists it and the resolve route answers it. Every
+// field is always present. `workflow` is "" for a flag about a step rather than one workflow's
+// copy of it, and `proposed_change` is "" when there is none.
+export const MaintenanceFlagSchema = z.object({
+  id: z.string(),
+  kind: FlagKindSchema,
+  status: z.enum(["open", "resolved"]),
+  step: z.string(),
+  workflow: z.string(),
+  title: z.string(),
+  // One line saying what to decide.
+  summary: z.string(),
+  raised_at: z.string().datetime({ offset: true }),
+  // Markdown, a fenced diff for a diverged copy.
+  evidence: z.string(),
+  proposed_change: z.string(),
+});
+export type MaintenanceFlag = z.infer<typeof MaintenanceFlagSchema>;
+
+export const MaintenanceFlagListSchema = z.object({ flags: z.array(MaintenanceFlagSchema) });
+
+// The resolve route's answer: the flag as it now stands, resolved.
+export const FlagResolvedSchema = z.object({ ok: z.literal(true), flag: MaintenanceFlagSchema });
+
 // -- one saved workflow ----------------------------------------------------------
 
 export const LineageSchema = z.object({
