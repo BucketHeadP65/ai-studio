@@ -162,6 +162,12 @@ sends every item back for one weak one, and when its last round still finds a we
 Let the judge mark each item, keep what passes and drop what fails with its reason. Use a redo round only when an item
 cannot be dropped.
 
+**A judge rejects a decision, never what the worker could not see.** When the judge reads evidence gathered after the
+worker decided, the world may have moved in between: an item vanished, a newer one appeared. A decision about an item
+that moved passes as stale, and the landing refuses it on its own. An item the worker never saw is left for the next
+pass. Rejecting for either sends the worker back with nothing it can fix, every round fails the same way, and every
+sound decision in the batch is lost.
+
 **The model cites, code copies.** When an answer must carry text that already exists (a quoted finding, a clause, a
 section kept as it was), the model names it by its handle (an id, an anchor) and a program copies the words from the
 source after checking the handle exists. The model never retypes it. Retyped text drifts, a handle the source does
@@ -172,6 +178,12 @@ on the first: land every writable item, then fail the run naming each refusal. N
 refused at landing shows up again on the next pass's pending list. A step that raises leaves no answer on the run's
 record, so the landing step returns everything it did, refusals included, and a small check after it fails the run
 when there were refusals.
+
+**The landing accepts only the edits the step exists to make.** When a model's answer edits something durable (a
+workflow, a page, a config), the landing admits an allow-list of edit kinds and refuses every other one, naming it.
+An open edit vocabulary lets a model write instructions another agent will follow, or remove a person's review, through
+a door meant for wiring. Hand the model a checking tool that answers what the landing would refuse, so it learns the
+limit before it answers.
 
 **Name what a step could not read.** A step that reads a set of sources lists each source it could not read, with the
 reason, apart from the sources it read and found nothing in. A source that failed to load and is counted as saying
@@ -221,6 +233,8 @@ turn. Then check it against the spend rows after the first real run.
 - [ ] Does the essential write land before any optional branch starts, and never wait on one?
 - [ ] Does each judge review one concern, so a rejection reruns only that concern's work?
 - [ ] Does a judge over a list of independent items keep what passes and drop what fails, rather than lose them all?
+- [ ] Does a judge reject only a decision wrong on the evidence, never an item that moved or the worker never saw?
+- [ ] Does a landing that applies a model's edits admit only the edit kinds the step exists to make?
 - [ ] Does each failed part show its reason on the run's record and screen, not only a count?
 - [ ] Does a step that reads sources list each one it could not read, apart from the ones that said nothing?
 - [ ] Is text that must be reproduced copied by a program from its source, the model naming it only by its handle?
