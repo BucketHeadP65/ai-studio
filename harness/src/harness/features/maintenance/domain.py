@@ -32,8 +32,8 @@ ADOPTION_EDITS = frozenset({"rewire", "add_parameter", "set_output"})
 """The edit operations an adoption may carry beside its replaced step. Every other one is refused at landing, so a gate,
 a charge or a node a model wrote never lands in a consumer."""
 
-NOT_YET_DECIDED = "not yet decided"
-"""The reason `prepare_plan` gives every planned change, until the planner writes its own."""
+NOT_DECIDED = "not decided"
+"""The reason `prepare_plan` gives every planned change, and the one a drafted change keeps when no decision names it."""
 
 TrustName = Literal["unverified", "machine-confirmed", "approved"]
 """A trust level by name."""
@@ -109,7 +109,7 @@ class PlannedChange(BaseModel):
     """What one step maintenance run does with one consumer pair: adopt the changed version, keep the copy, or flag it.
 
     The workflow and the step are named by id, and the landing copies the step from the library, so a planner never
-    writes a step. `check` and `cases` are the evidence `prepare_plan` copied for the pair. Answer them as they were given.
+    writes a step. `check` and `cases` are the evidence `prepare_plan` copied for the pair.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -139,6 +139,35 @@ class MaintenancePlan(BaseModel):
     changes: list[PlannedChange]
     left_for_next_run: list[str]
     """The consumer workflow ids past the pair cap, as `list_consumers` named them."""
+
+
+class PlanDecision(BaseModel):
+    """What the planner decided for one drafted change: adopt, keep or flag, why, and the further edits an adoption needs.
+
+    The change is named by its consumer's workflow id and its step id, as the drafted plan names them.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    workflow_id: str
+    """The consumer's workflow version id, as the drafted change names it."""
+    step_id: str
+    """The changed step version's id, as the drafted change names it."""
+    disposition: Literal["adopt", "keep", "flag"]
+    """`adopt` saves the consumer's next version with the changed step, `keep` declines it, `flag` asks the owner."""
+    reason: str
+    """Why, in one or two sentences the owner reads."""
+    extra_ops: tuple[dict[str, JsonValue], ...] = ()
+    """Edit operations applied after the step is replaced, such as a `rewire` or an `add_parameter`, for an adoption the
+    contract check fails without."""
+
+
+class PlanDecisions(BaseModel):
+    """The planner's decisions for the changes of one drafted maintenance plan, one per change it decided."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    decisions: list[PlanDecision]
 
 
 class LandedChange(BaseModel):
@@ -189,14 +218,14 @@ class ConsumerSide(BaseModel):
 
 
 class DraftedFile(BaseModel):
-    """One file of a repository change, as its whole new text."""
+    """One file of a repository change: a step file whole, or the lines that change in a consumer's workflow file."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: str
-    """The file's path from the repository root."""
+    """The file's path, `steps/<step file>` or `workflows/<workflow file>`, in the folder that holds the step."""
     text: str
-    """The file's whole new text."""
+    """A step file's whole new text, or the lines of a workflow file as they should read."""
 
 
 class RepositoryChange(BaseModel):
@@ -213,6 +242,8 @@ class RepositoryChange(BaseModel):
     """The reusable step's name."""
     step_id: str
     """The changed step version's id."""
+    step_yaml: str
+    """The changed step version, whole, as its canonical YAML: the step a drafted change starts from."""
     adopted: list[ConsumerSide]
     """The consumers that adopted the changed version."""
     kept: list[ConsumerSide]
@@ -220,9 +251,9 @@ class RepositoryChange(BaseModel):
     proposal: str = ""
     """What the drafted change does and why every consumer's goal holds under it."""
     step_files: tuple[DraftedFile, ...] = ()
-    """The new or changed step files."""
+    """The new or changed step files, each whole."""
     file_edits: tuple[DraftedFile, ...] = ()
-    """The changed workflow files of the consumers the repository holds."""
+    """The lines that change in each workflow file of the consumers the repository holds."""
 
 
 class RepositoryVerdict(BaseModel):
@@ -303,6 +334,51 @@ def one_line(text: str) -> str:
         The line.
     """
     return _PERCENT_BEFORE_PERCENT.sub("% ", " ".join(text.replace("`", "").split()))
+
+
+def merged_plan(plan: MaintenancePlan, decisions: PlanDecisions) -> list[PlannedChange | LandedChange]:
+    """The drafted plan with the planner's decisions merged in, each decision that cannot be merged refused in place.
+
+    Each decision is matched to the drafted change with the same workflow id and step id, and its disposition, reason
+    and further edits replace the drafted ones. The drafted evidence stays. A drafted change no decision names stays
+    kept, not decided. A drafted change decided more than once lands none of its decisions, and a decision that names
+    no drafted change is refused.
+
+    Args:
+        plan: The drafted plan, as `prepare_plan` answered it.
+        decisions: The planner's decisions.
+
+    Returns:
+        A change to land or a refusal for each drafted change, in the drafted plan's order, then a refusal for each
+        decision that names no drafted change.
+    """
+    by_pair: dict[tuple[str, str], list[PlanDecision]] = {}
+    for decision in decisions.decisions:
+        by_pair.setdefault((decision.workflow_id, decision.step_id), []).append(decision)
+    merged: list[PlannedChange | LandedChange] = []
+    for change in plan.changes:
+        decided = by_pair.pop((change.workflow_id, change.step_id), [])
+        if len(decided) > 1:
+            merged.append(_refused(decided[0], f"the planner decided it {len(decided)} times, so none of its decisions landed"))
+        elif decided:
+            (decision,) = decided
+            merged.append(change.model_copy(update={"disposition": decision.disposition, "reason": decision.reason, "extra_ops": decision.extra_ops}))
+        else:
+            merged.append(change.model_copy(update={"disposition": "keep", "reason": NOT_DECIDED, "extra_ops": ()}))
+    merged.extend(_refused(decision, "it names no drafted change, so nothing landed for it") for decided in by_pair.values() for decision in decided)
+    return merged
+
+
+def _refused(decision: PlanDecision, reason: str) -> LandedChange:
+    return LandedChange(
+        workflow_id=decision.workflow_id,
+        step_id=decision.step_id,
+        disposition=decision.disposition,
+        outcome="refused",
+        reason=reason,
+        saved_id="",
+        notes=[],
+    )
 
 
 def change_line(change: LandedChange) -> str:

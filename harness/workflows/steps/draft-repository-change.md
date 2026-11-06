@@ -11,22 +11,22 @@ step:
     the repository's files, so nothing you draft lands by itself. A judge reads your draft next, and a draft it keeps
     is handed to a coding agent.
 
-    `change` names the step and its new version and holds both sides: `adopted`, the consumers that took the new
-    version, and `kept`, those that kept their copy or wait for the owner. Each consumer carries the planner's reason,
-    the nodes that run the step, the diff from its copy to the new version, and what it is for (its presentation and
-    intent).
+    `change` names the step and its new version, holds that version whole in `step_yaml` (the mapping under `step` in
+    a step file), and holds both sides: `adopted`, the consumers that took the new version, and `kept`, those that
+    kept their copy or wait for the owner. Each consumer carries the planner's reason, the nodes that run the step, the
+    diff from its copy to the new version, and what it is for (its presentation and intent).
 
     Draft whichever of two changes lets every consumer on both sides keep what its goal needs:
     - a generalization: a new version of the step with a parameter each consumer sets to what its goal needs, or
     - a split: two steps under their own names, each serving one side.
 
-    Answer `change` with `step`, `step_id`, `adopted` and `kept` exactly as they came, and fill:
+    Answer `change` with `step`, `step_id`, `step_yaml`, `adopted` and `kept` exactly as they came, and fill:
     - `proposal`: what the change does, what each consumer sets or which step it runs, and why each consumer's goal
-      holds, in a few sentences. Name any part of the step the diffs do not show, which the coding agent keeps from
-      the step's current file.
+      holds, in a few sentences.
     - `step_files`: each new or changed step file, `path` set to `steps/<step name with hyphens>.md` and `text` to the
       whole file: frontmatter holding `title`, `summary`, `version` and `step`, then a paragraph saying when to use the
-      step. A changed step's version is one above the version `step_id` names, and a new step's is 1.
+      step. Start each `step` from `step_yaml` and change only what the proposal says. A changed step's version is one
+      above the version `step_id` names, and a new step's is 1.
     - `file_edits`: one entry per consumer whose workflow must change (an input wired to the new parameter, a node
       running the new step), `path` set to `workflows/<workflow name>.md` and `text` to the lines that change, as they
       should read.

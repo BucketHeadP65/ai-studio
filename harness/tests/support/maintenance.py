@@ -50,6 +50,7 @@ MAINTENANCE_STEPS = (
     "land_changes",
     "report_changes",
     "select_disagreements",
+    "plan_decisions",
     "repository_verdict",
     "hand_over_repository_changes",
 )
@@ -184,7 +185,7 @@ class MaintenanceWorld:
 class ScriptedMaintenanceModels:
     """The planner, the plan judge, the drafter and the repository judge of step maintenance, answered by step name.
 
-    The planner adopts both consumers first, and keeps the standup copy once a repair is owed. The plan judge answers
+    The planner decides to adopt both consumers first, and to keep the standup copy once a repair is owed. The plan judge answers
     `verdicts` in order. The drafter fills a proposal, and the repository judge keeps every draft. `performed` keeps each
     model step answered in order, `repairs` each planner call's owed repairs as (gate, attempt, feedback), and `judged`
     the inputs each plan judge call was handed.
@@ -223,15 +224,16 @@ class ScriptedMaintenanceModels:
                 self.repairs.append([(feedback.gate_id, feedback.attempt, feedback.feedback) for feedback in owed])
                 draft = inputs["draft"]
                 assert isinstance(draft, MaintenancePlan)
-                changes = [
-                    change.model_copy(
-                        update={"disposition": "keep", "reason": "The standup list keeps every item, owned or not."}
+                decisions = [
+                    {"workflow_id": change.workflow_id, "step_id": change.step_id}
+                    | (
+                        {"disposition": "keep", "reason": "The standup list keeps every item, owned or not."}
                         if owed and change.workflow_id.startswith("wf.standup-actions")
                         else {"disposition": "adopt", "reason": "The new version names who owns each item, which the list is for."}
                     )
                     for change in draft.changes
                 ]
-                return draft.model_copy(update={"changes": changes}).model_dump(mode="json")
+                return {"decisions": decisions}
             case "judge_plan":
                 self.judged.append(inputs)
                 return self.verdicts.pop(0)

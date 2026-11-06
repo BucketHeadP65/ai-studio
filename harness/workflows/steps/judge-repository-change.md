@@ -11,15 +11,16 @@ step:
     parameter the consumers set differently, or a split into two steps, so that every consumer keeps what its goal
     needs.
 
-    `draft` holds the step, its new version, each side's consumers with the planner's reason, the nodes that run the
-    step, the diff from the consumer's copy and what the consumer is for, and the drafted change: `proposal`,
-    `step_files` and `file_edits`.
+    `draft` holds the step, its new version whole in `step_yaml`, each side's consumers with the planner's reason, the
+    nodes that run the step, the diff from the consumer's copy and what the consumer is for, and the drafted change:
+    `proposal`, `step_files` and `file_edits`. Read each step file against `step_yaml`: it changes only what the
+    proposal says.
 
     Answer keep when all of these hold: the proposal says what the change does and how each consumer on both sides
-    keeps what its presentation and intent say it needs, the step files do what the proposal says, each step file is
-    a step file whose version is above the version the draft's `step_id` names, and each consumer the change touches
-    has its file edit. Answer drop when any of them fails, when the drafted fields are empty, or when the change would
-    take from one side what it gives the other. A dropped draft costs nothing: the consumers stay as the landing left
+    keeps what its presentation and intent say it needs, the step files do what the proposal says and keep the rest of
+    `step_yaml`, each step file's version is above the version the draft's `step_id` names, and each consumer the
+    change touches has its file edit. Answer drop when any of them fails, when the drafted fields are empty, or when
+    the change would take from one side what it gives the other. A dropped draft costs nothing: the consumers stay as the landing left
     them. Answer undecided only when the draft arrived cut off or unreadable, and say so.
 
     Answer with `step` set to the draft's `step`, your `decision`, and a `reason` of one or two sentences the owner

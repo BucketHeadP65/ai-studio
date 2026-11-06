@@ -6,7 +6,7 @@ cases:
       - workflow_id: wf.meeting-actions.v1
         step_id: st.extract_actions.v3
         disposition: keep
-        reason: not yet decided
+        reason: not decided
         extra_ops: []
         check:
           workflow_id: wf.meeting-actions.v1
@@ -33,7 +33,7 @@ cases:
       - workflow_id: wf.standup-actions.v1
         step_id: st.extract_actions.v3
         disposition: keep
-        reason: not yet decided
+        reason: not decided
         extra_ops: []
         check:
           workflow_id: wf.standup-actions.v1
@@ -179,11 +179,11 @@ cases:
       dropped: 0
   evaluators:
   - LLMJudge:
-      rubric: The plan holds two changes, in the draft's order. wf.standup-actions.v1 is keep or flag, never adopt, and its
-        reason says the new version leaves out items nobody owns, which the standup list must keep. wf.meeting-actions.v1
-        is adopt, with a reason naming the owners the team message needs, or flag with a reason saying check_change could
-        not check it. No reason says "not yet decided". workflow_id, step_id, check, cases and left_for_next_run are exactly
-        as in the draft, and no change carries extra_ops.
+      rubric: The answer holds two decisions, in the draft's order, each naming its change by the draft's workflow_id and
+        step_id. wf.standup-actions.v1 is keep or flag, never adopt, and its reason says the new version leaves out items
+        nobody owns, which the standup list must keep. wf.meeting-actions.v1 is adopt, with a reason naming the owners the
+        team message needs, or flag with a reason quoting check_change's cannot check answer. No reason is empty or says "not
+        decided", and no decision carries extra_ops.
       model: gateway/openai:gpt-5.4
       include_input: true
 - name: the new version needs an input the consumer's node does not have
@@ -193,7 +193,7 @@ cases:
       - workflow_id: wf.board-actions.v1
         step_id: st.extract_actions.v3
         disposition: keep
-        reason: not yet decided
+        reason: not decided
         extra_ops: []
         check:
           workflow_id: wf.board-actions.v1
@@ -286,9 +286,9 @@ cases:
       dropped: 0
   evaluators:
   - LLMJudge:
-      rubric: The plan holds one change, for wf.board-actions.v1, and it is flag or keep, never adopt, because the new version
-        needs an attendees input the consumer's node does not take, and an adoption may only rewire an input the node already
-        has, add a parameter or set the output. Its reason says what the owner has to decide or what the consumer keeps. workflow_id,
-        step_id, check, cases and left_for_next_run are exactly as in the draft.
+      rubric: The answer holds one decision, naming wf.board-actions.v1 and the draft's step_id, and it is flag or keep, never
+        adopt, because the new version needs an attendees input the consumer's node does not take, and an adoption may only
+        rewire an input the node already has, add a parameter or set the output. Its reason says what the owner has to decide
+        or what the consumer keeps.
       model: gateway/openai:gpt-5.4
       include_input: true

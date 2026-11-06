@@ -40,7 +40,7 @@ workflow:
     - name: pass_changed_ids
       source: changed_step_ids
       inputs:
-        plan: {like: prepare_plan}
+        decisions: {like: plan_decisions}
         changed_step_ids: {json_schema: {type: string, minLength: 1}}
       output: {json_schema: {type: string}}
   result:
@@ -78,7 +78,7 @@ workflow:
       id: pass_changed_ids
       work: pass_changed_ids
       inputs:
-        plan: {node: plan_changes}
+        decisions: {node: plan_changes}
         changed_step_ids: {parameter: changed_step_ids}
     - kind: run
       id: relist_consumers
@@ -106,7 +106,9 @@ workflow:
     - kind: run
       id: land_changes
       work: land_changes
-      inputs: {plan: {node: judge_plan}}
+      inputs:
+        plan: {node: prepare_plan}
+        decisions: {node: judge_plan}
     - kind: run
       id: report_changes
       work: report_changes
@@ -148,15 +150,16 @@ by hand with `changed_step_ids` naming the versions to check. Each named step is
 The stages: `list_consumers` takes at most twenty consumer pairs per run and names the rest for the next run.
 `check_contracts` and `run_step_cases` gather the evidence side by side, and `prepare_plan` copies it into one undecided
 change per pair. The planner, `plan_changes`, decides adopt, keep or flag per pair on the orchestrator tier, checking
-every adoption with `check_change`. Once the plan exists, `pass_changed_ids` hands the run's own `changed_step_ids` to
+every adoption with `check_change`, and answers only its decisions, so it never retypes the evidence. Once the plan exists, `pass_changed_ids` hands the run's own `changed_step_ids` to
 `relist_consumers`, `recheck_contracts` and `rerun_step_cases`, the same registered steps run again, and `judge_plan`
-reviews the plan against what they answer, never against the planner's copy of it, marking each change pass or fail.
+reviews the decisions against what they answer, marking each one pass or fail.
 A rejection sends the plan back to the planner with that feedback and re-runs everything after the planner, so each
 plan is judged on evidence made after it. The third rejection ends the run with nothing landed, which raises a
 maintenance flag per changed step. The second pass reads the library and the evidence log again and calls no model,
-and a step version's kept case report is not run again. `land_changes`
-saves each adoption as the consumer's next version on live trial, declines each kept copy and flags each flagged pair,
-landing every writable change before it fails naming each refusal. Only then do `report_changes` and the repository
+and a step version's kept case report is not run again. `land_changes` merges the approved decisions into the plan
+`prepare_plan` drafted, a change no decision names staying kept as not decided, then saves each adoption as the
+consumer's next version on live trial, declines each kept copy and flags each flagged pair, landing every writable
+change before it fails naming each refusal. Only then do `report_changes` and the repository
 branch start: one drafter per step whose consumers split, one judge per draft, and the hand-over, which writes each
 kept draft as a maintenance flag for a coding agent and answers for the run.
 

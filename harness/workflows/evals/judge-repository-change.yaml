@@ -4,6 +4,16 @@ cases:
     draft:
       step: extract_actions
       step_id: st.extract_actions.v3
+      step_yaml: |
+        inputs:
+          transcript:
+            json_schema:
+              type: string
+        instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+        name: extract_actions
+        output:
+          json_schema:
+            type: string
       adopted:
       - workflow_id: wf.meeting-actions.v1
         outcome: adopted
@@ -130,6 +140,16 @@ cases:
     draft:
       step: extract_actions
       step_id: st.extract_actions.v3
+      step_yaml: |
+        inputs:
+          transcript:
+            json_schema:
+              type: string
+        instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+        name: extract_actions
+        output:
+          json_schema:
+            type: string
       adopted:
       - workflow_id: wf.meeting-actions.v1
         outcome: adopted
@@ -255,6 +275,16 @@ cases:
     draft:
       step: extract_actions
       step_id: st.extract_actions.v3
+      step_yaml: |
+        inputs:
+          transcript:
+            json_schema:
+              type: string
+        instructions: Read the meeting transcript and list every action item agreed, one line each, naming who owns it and when it is due. Leave out an item nobody owns.
+        name: extract_actions
+        output:
+          json_schema:
+            type: string
       adopted:
       - workflow_id: wf.meeting-actions.v1
         outcome: adopted

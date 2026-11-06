@@ -53,6 +53,7 @@ from harness.features.maintenance.contracts import (
     HandOver,
     LandingReport,
     MaintenancePlan,
+    PlanDecisions,
     RepositoryChange,
     RepositoryVerdict,
 )
@@ -213,7 +214,7 @@ def test_the_plan_judge_reads_the_evidence_from_the_registered_steps_run_again_a
         ("run_step_cases", {"changed_step_ids": FromNode(node="pass_changed_ids")}),
     ]
     passed = _node(spec, "pass_changed_ids")
-    assert passed.inputs == {"plan": FromNode(node="plan_changes"), "changed_step_ids": FromParameter(parameter=CHANGED_STEPS)}, (
+    assert passed.inputs == {"decisions": FromNode(node="plan_changes"), "changed_step_ids": FromParameter(parameter=CHANGED_STEPS)}, (
         "the run's own parameter, so a plan that leaves a step out cannot hide its consumers from the judge"
     )
     for evidence in judge.inputs.values():
@@ -221,7 +222,7 @@ def test_the_plan_judge_reads_the_evidence_from_the_registered_steps_run_again_a
         assert "plan_changes" in upstream[evidence.node], evidence.node
     step = _step("judge_plan")
     assert step.inputs == {
-        "plan": SameAs(like="prepare_plan"),
+        "decisions": SameAs(like="plan_decisions"),
         "consumers": SameAs(like="list_consumers"),
         "checks": SameAs(like="check_contracts"),
         "cases": SameAs(like="run_step_cases"),
@@ -230,7 +231,9 @@ def test_the_plan_judge_reads_the_evidence_from_the_registered_steps_run_again_a
     properties = step.output.json_schema["properties"]
     assert set(properties) == {"outcome", "feedback"}
     assert tuple(properties["outcome"]["enum"]) == VERDICTS
-    assert _node(spec, "land_changes").inputs == {"plan": FromNode(node=PLAN_GATE)}, "nothing lands unless the judge approved it"
+    assert _node(spec, "land_changes").inputs == {"plan": FromNode(node="prepare_plan"), "decisions": FromNode(node=PLAN_GATE)}, (
+        "the landing merges the decisions the judge approved into the plan code drafted"
+    )
 
 
 def test_the_planner_drafts_from_prepare_plan_on_the_orchestrator_tier_and_its_brief_ends_on_check_change() -> None:
@@ -249,7 +252,7 @@ def test_the_planner_drafts_from_prepare_plan_on_the_orchestrator_tier_and_its_b
     )
     step = _step("plan_changes")
     assert step.inputs == {"draft": SameAs(like="prepare_plan"), "consumers": SameAs(like="list_consumers")}
-    assert (step.output, step.tier) == (SameAs(like="prepare_plan"), "orchestrator")
+    assert (step.output, step.tier) == (SameAs(like="plan_decisions"), "orchestrator"), "the planner answers its decisions and never the evidence"
     assert CHECK_CHANGE_TOOL in step.tools
     assert step.budget is not None
     assert step.budget.tool_calls is not None
@@ -381,7 +384,7 @@ def _own_words() -> frozenset[str]:
             for value in schema:
                 collect(value)
 
-    for model in (Workflow, ConsumerList, ContractCheck, MaintenancePlan, LandingReport, RepositoryChange, RepositoryVerdict, HandOver):
+    for model in (Workflow, ConsumerList, ContractCheck, MaintenancePlan, PlanDecisions, LandingReport, RepositoryChange, RepositoryVerdict, HandOver):
         collect(model.model_json_schema())
     return frozenset(words)
 
@@ -517,9 +520,9 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     assert expected.count("reject") >= 2
     assert expected.count("cannot_judge") >= 1
     assert any(isinstance(evaluator, OutcomeMatches) for evaluator in dataset.evaluators)
-    empty = [case for case in dataset.cases if not MaintenancePlan.model_validate(case.inputs["plan"]).changes]
+    empty = [case for case in dataset.cases if not PlanDecisions.model_validate(case.inputs["decisions"]).decisions]
     assert [(ConsumerList.model_validate(case.inputs["consumers"]).pairs, _outcome(case.expected_output)) for case in empty] == [([], "approve")], (
-        "a plan with nothing to land is approved when no consumer needs a change, or every new step would end in rejections"
+        "no decisions are approved when no consumer needs a change, or every new step would end in rejections"
     )
 
 
@@ -607,7 +610,7 @@ async def test_the_second_pass_reads_the_run_s_own_changed_steps_whatever_the_pl
 
     assert problems == ()
     assert passing is not None
-    assert await passing.function(plan=MaintenancePlan(changes=[], left_for_next_run=[]), changed_step_ids="st.a.v2, st.b.v3") == "st.a.v2, st.b.v3"
+    assert await passing.function(decisions=PlanDecisions(decisions=[]), changed_step_ids="st.a.v2, st.b.v3") == "st.a.v2, st.b.v3"
 
 
 async def test_one_run_adopts_one_consumer_on_live_trial_and_keeps_the_other_once_the_judge_approves_the_second_plan(sandbox: AsyncMonty) -> None:

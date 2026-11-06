@@ -1,64 +1,17 @@
 cases:
 - name: one consumer adopts and the other keeps the copy its goal needs
   inputs:
-    plan:
-      changes:
+    decisions:
+      decisions:
       - workflow_id: wf.meeting-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
-        extra_ops: []
-        check:
-          workflow_id: wf.meeting-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
       - workflow_id: wf.standup-actions.v1
         step_id: st.extract_actions.v3
         disposition: keep
         reason: The new version leaves out items nobody owns, and the standup list must keep every item raised until the weekly
           review gives it an owner.
-        extra_ops: []
-        check:
-          workflow_id: wf.standup-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-      left_for_next_run: []
     consumers:
       pairs:
       - workflow_id: wf.meeting-actions.v1
@@ -208,63 +161,16 @@ cases:
     outcome: approve
 - name: an adoption that takes away what the consumer is for
   inputs:
-    plan:
-      changes:
+    decisions:
+      decisions:
       - workflow_id: wf.meeting-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
-        extra_ops: []
-        check:
-          workflow_id: wf.meeting-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
       - workflow_id: wf.standup-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: The new version names owners and due dates, which makes the standup list clearer.
-        extra_ops: []
-        check:
-          workflow_id: wf.standup-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-      left_for_next_run: []
     consumers:
       pairs:
       - workflow_id: wf.meeting-actions.v1
@@ -414,37 +320,12 @@ cases:
     outcome: reject
 - name: an adoption whose contract check fails and carries no edits
   inputs:
-    plan:
-      changes:
+    decisions:
+      decisions:
       - workflow_id: wf.board-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: Naming owners from the attendee list makes the follow-ups more accurate.
-        extra_ops: []
-        check:
-          workflow_id: wf.board-actions.v1
-          step_id: st.extract_actions.v3
-          passed: false
-          issues:
-          - '[input_mismatch] extract: work ''extract_actions'' requires unwired inputs: attendees'
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: a7928a87f71cb79e18449ea5477216d8120d4811a5b84e90936bd15b13c24ee5
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-      left_for_next_run: []
     consumers:
       pairs:
       - workflow_id: wf.board-actions.v1
@@ -535,93 +416,23 @@ cases:
       refused: null
   expected_output:
     outcome: reject
-- name: a change for a consumer no evidence covers
+- name: a decision for a consumer no evidence covers
   inputs:
-    plan:
-      changes:
+    decisions:
+      decisions:
       - workflow_id: wf.meeting-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: The new version names who owns each item, which is what the team message is for, and its contract check passes.
-        extra_ops: []
-        check:
-          workflow_id: wf.meeting-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
       - workflow_id: wf.standup-actions.v1
         step_id: st.extract_actions.v3
         disposition: keep
         reason: The new version leaves out items nobody owns, and the standup list must keep every item raised until the weekly
           review gives it an owner.
-        extra_ops: []
-        check:
-          workflow_id: wf.standup-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
       - workflow_id: wf.retro-actions.v1
         step_id: st.extract_actions.v3
         disposition: adopt
         reason: The retro list wants owners too.
-        extra_ops: []
-        check:
-          workflow_id: wf.meeting-actions.v1
-          step_id: st.extract_actions.v3
-          passed: true
-          issues: []
-        cases:
-        - step_id: st.extract_actions.v3
-          step_hash: 2d7c5b25c199afa45465156b2ae6fe8fdb03e1aeae623660fb11ad9feedd7d39
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-        - step_id: st.extract_actions.v2
-          step_hash: 5ea5a8d4ecc486e326e8a9ef92e84b9c06fe8e267b6c4704b5f60a4ded31ac8d
-          cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
-          results: []
-          blocked_by: null
-          no_cases: true
-          stand_in_calls: 0
-          refused: null
-      left_for_next_run: []
     consumers:
       pairs:
       - workflow_id: wf.meeting-actions.v1
@@ -769,11 +580,10 @@ cases:
       refused: null
   expected_output:
     outcome: cannot_judge
-- name: no consumer is behind, so the plan is empty
+- name: no consumer is behind, so there are no decisions
   inputs:
-    plan:
-      changes: []
-      left_for_next_run: []
+    decisions:
+      decisions: []
     consumers:
       pairs: []
       left_for_next_run: []
