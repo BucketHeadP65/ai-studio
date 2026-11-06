@@ -1,10 +1,12 @@
-"""The errors the browsing slice raises when a card cannot be rewritten, a step lock file cannot be written, or an import refuses a workflow file."""
+"""The errors the browsing slice raises when a card cannot be rewritten, a step lock file cannot be written, an import refuses a workflow file, or a maintenance flag page cannot be read."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from core.ai.workflows.contracts import LibraryError
+
+from harness.adapters.contracts import STORE_DB
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -28,6 +30,22 @@ class CardRefusedError(Exception):
         """
         super().__init__(message)
         self.readiness = readiness
+
+
+class FlagUnreadableError(LibraryError):
+    """A maintenance flag page in the library does not parse, so no flag was read or written.
+
+    The message is the library's, which names the page, followed by what to do about the page.
+    """
+
+    def __init__(self, refusal: LibraryError) -> None:
+        """Keep the library's refusal on one line and add what to do about the page.
+
+        Args:
+            refusal: What the library raised reading the page.
+        """
+        read = " ".join(str(refusal).split()).rstrip(".")
+        super().__init__(f"{read}. Fix or delete that flag page in the library's database ({STORE_DB}, collection workflows), then try again.")
 
 
 class StepLockRefusedError(Exception):

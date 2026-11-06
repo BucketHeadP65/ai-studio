@@ -1,4 +1,4 @@
-"""The request body the browsing routes read."""
+"""The request bodies the browsing routes read."""
 
 from __future__ import annotations
 
@@ -26,3 +26,15 @@ class WorkflowCardPatch(BaseModel):
     """When this workflow applies, in the author's words."""
     presentation: WorkflowPresentationPatch | None = None
     """The author's own words to replace. A supplied sentence the readiness check refuses stops the write."""
+
+
+class FlagResolveIn(BaseModel):
+    """What resolving a maintenance flag writes: who resolved it and why. Every other field of the flag is kept."""
+
+    model_config = ConfigDict(extra="forbid", use_attribute_docstrings=True)
+
+    by: str
+    """Who resolves the flag, written as `resolved_by`. Must not be blank. A name in `AUTOMATIC_RESOLVERS` resolves it as a
+    save or a run does, so the next writer opens it again. Any other name holds as a decision for that step version."""
+    reason: str
+    """Why the flag is resolved, written as `decision_reason`. Must not be blank."""

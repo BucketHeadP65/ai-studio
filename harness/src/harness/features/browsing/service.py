@@ -1,19 +1,24 @@
-"""The browsing use cases: archive a workflow, restore it, and rewrite its card. None of them changes the workflow a run executes."""
+"""The browsing use cases: archive a workflow, restore it, rewrite its card, and list, read and resolve maintenance flags.
+
+None of them changes the workflow a run executes.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from core.ai.workflows.contracts import LibraryError, SavedWorkflow, prepare
+from core.ai.workflows.contracts import FlagCard, FlagUnknownError, LibraryError, SavedWorkflow, prepare
 from core.observability import get_logger
 from pydantic import ValidationError
 
 from harness.domain.contracts import card_readiness, effective_presentation, refusal_text
-from harness.features.browsing.exceptions import CardRefusedError
+from harness.features.browsing.exceptions import CardRefusedError, FlagUnreadableError
 
 if TYPE_CHECKING:
-    from core.ai.workflows.contracts import Workflow
+    from typing import Literal
+
+    from core.ai.workflows.contracts import FlagKind, MaintenanceFlag, MaintenanceFlags, Workflow
 
     from harness.domain.contracts import DraftReadiness, ReadinessField
     from harness.features.browsing.api_models import WorkflowCardPatch
@@ -132,6 +137,78 @@ async def redescribe_workflow(session: Runtime, workflow_id: str, body: Workflow
         presentation=words if patch is not None and patch.changes_anything() else None,
     )
     return RedescribedCard(card=await saved_card(session, workflow_id, workflow), readiness=readiness)
+
+
+async def list_flags(
+    flags: MaintenanceFlags, *, status: Literal["open", "resolved"] | None = None, kind: FlagKind | None = None
+) -> tuple[FlagCard, ...]:
+    """The maintenance flags with that status and kind, newest raised first.
+
+    Args:
+        flags: The library's maintenance flags.
+        status: Only flags with this status. None lists both.
+        kind: Only flags of this kind. None lists every kind.
+
+    Returns:
+        The cards, newest raised first.
+
+    Raises:
+        FlagUnreadableError: If a flag page does not parse. Its message names the page and what to do about it.
+    """
+    try:
+        return await flags.flags(status=status, kind=kind)
+    except LibraryError as refusal:
+        raise FlagUnreadableError(refusal) from refusal
+
+
+async def read_flag(flags: MaintenanceFlags, flag_id: str) -> MaintenanceFlag | None:
+    """The maintenance flag one page holds.
+
+    Args:
+        flags: The library's maintenance flags.
+        flag_id: The flag's page id.
+
+    Returns:
+        The flag, or None when no maintenance flag has that id.
+
+    Raises:
+        FlagUnreadableError: If the flag page does not parse. Its message names the page and what to do about it.
+    """
+    try:
+        return await flags.fetch_flag(flag_id)
+    except LibraryError as refusal:
+        raise FlagUnreadableError(refusal) from refusal
+
+
+async def resolve_flag(flags: MaintenanceFlags, flag_id: str, *, by: str, reason: str) -> FlagCard:
+    """Resolve one maintenance flag with who resolved it and why, and answer its card as the library now holds it.
+
+    `by` is written as given. A name in `AUTOMATIC_RESOLVERS` resolves the flag as a save or a run does, so the next
+    writer opens it again. Any other name holds as a decision for that step version.
+
+    Args:
+        flags: The library's maintenance flags.
+        flag_id: The flag's page id.
+        by: Who resolves it. Must not be blank.
+        reason: Why. Must not be blank.
+
+    Returns:
+        The flag's card, resolved.
+
+    Raises:
+        FlagUnreadableError: If the flag page does not parse. Nothing is written.
+        ValueError: If `by` or `reason` is blank. Nothing is written.
+        FlagUnknownError: If no maintenance flag has that id. Nothing is written.
+        LibraryError: If the library refuses the write.
+    """
+    await read_flag(flags, flag_id)
+    await flags.resolve_flag(flag_id, by=by, reason=reason)
+    resolved = await read_flag(flags, flag_id)
+    if resolved is None:
+        msg = f"no maintenance flag {flag_id!r} after resolving it. List the flags to find its id."
+        raise FlagUnknownError(msg)
+    _logger.info("maintenance flag {flag_id} resolved by {by}", flag_id=flag_id, by=by)
+    return FlagCard.from_flag(flag_id, resolved)
 
 
 def _supplied(body: WorkflowCardPatch) -> frozenset[ReadinessField]:

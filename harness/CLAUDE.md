@@ -125,6 +125,9 @@ uv run harness evals inspection --repetitions 2          # compare inspector evi
 uv run uvicorn harness.main:create_app --factory --port 8770   # the same app, uvicorn spelled out
 uv run harness import ../templates/research/workflows   # load a folder of workflow and step files into the library
 uv run harness steps lock ../templates/research/workflows   # record the folder's step files in its steps.lock
+uv run harness flags list --kind diverged_copy          # the open maintenance flags, here every diverged copy of a reusable step
+uv run harness flags show <id>                          # one flag whole: its evidence (a diverged copy's diff) and proposed change
+uv run harness flags resolve <id> --by <name> --reason <text>   # resolve one flag, with who and why
 uv run python -m harness.acp                           # the agent served over ACP (Zed et al.)
 ```
 

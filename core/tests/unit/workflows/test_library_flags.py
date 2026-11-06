@@ -314,6 +314,36 @@ async def test_flags_sends_the_collection_status_and_kind_and_answers_cards_newe
     assert cards[0].model_dump(mode="json")["raised_at"] == "2026-11-05T09:00:00Z", "the card's time carries its offset"
 
 
+def test_a_flag_card_carries_the_flags_id_and_every_field_a_list_shows() -> None:
+    flag = _flag(status="resolved", resolved_by="owner", decision_reason="Kept.", proposed_change="Retype the output.")
+
+    card = FlagCard.from_flag("mf.consumer.digest-sources.digest", flag)
+
+    assert card == FlagCard(
+        id="mf.consumer.digest-sources.digest",
+        kind="consumer_flag",
+        status="resolved",
+        step="digest",
+        workflow="wf.digest-sources.v2",
+        title="Flagged consumer: digest in digest-sources",
+        summary="Decide whether digest-sources adopts st.digest.v3.",
+        raised_at=RAISED,
+        evidence="The contract check failed on the output type.",
+        proposed_change="Retype the output.",
+    )
+
+
+async def test_flags_lists_each_card_as_from_flag_maps_its_page() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest)
+    written = await library.put_flag(_flag(proposed_change="Retype the output."))
+    assert written is not None
+    stored = await library.fetch_flag(written)
+    assert stored is not None
+
+    assert await library.flags() == (FlagCard.from_flag(written, stored),)
+
+
 async def test_put_of_a_workflow_holding_a_diverged_copy_writes_its_flag_with_the_diff_in_evidence() -> None:
     store = FakeCollection(prune=True)
     library = await _library(store)

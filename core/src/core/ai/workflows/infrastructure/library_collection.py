@@ -1257,23 +1257,7 @@ class LibraryCollection:
         Raises:
             LibraryError: If a flag page does not parse.
         """
-        cards: list[FlagCard] = []
-        for listed_id, flag in await self._flag_rows(status=status, kind=kind):
-            cards.append(
-                FlagCard(
-                    id=listed_id,
-                    kind=flag.kind,
-                    status=flag.status,
-                    step=flag.step,
-                    workflow=flag.workflow,
-                    title=flag.title,
-                    summary=flag.summary,
-                    raised_at=flag.raised_at,
-                    evidence=flag.evidence,
-                    proposed_change=flag.proposed_change,
-                )
-            )
-        return tuple(cards)
+        return tuple(FlagCard.from_flag(listed_id, flag) for listed_id, flag in await self._flag_rows(status=status, kind=kind))
 
     async def _flag_rows(self, *, status: Literal["open", "resolved"] | None, kind: FlagKind | None) -> list[tuple[str, MaintenanceFlag]]:
         """Each flag `FLAGS_SQL` answers for that status and kind, with its id, newest raised first."""
