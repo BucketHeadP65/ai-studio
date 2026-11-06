@@ -23,6 +23,7 @@ from core.ai.workflows.contracts import (
     FromNode,
     FromParameter,
     JudgeGate,
+    LibraryCollection,
     LiveTrialMarker,
     MapNode,
     ParameterSpec,
@@ -57,6 +58,7 @@ from harness.features.maintenance.contracts import (
 )
 from harness.features.maintenance.domain import CHANGED_STEPS, MAINTENANCE_WORKFLOW, PLAN_GATE
 from harness.rendering import parallel_groups
+from tests.support.fakes.library_collection import FakeCollection
 from tests.support.grants import app_grants, app_reads
 from tests.support.maintenance import (
     CHANGED,
@@ -483,6 +485,27 @@ def _outcome(expected: object) -> str:
     outcome = expected.get("outcome")
     assert isinstance(outcome, str)
     return outcome
+
+
+async def test_every_case_file_reads_back_from_the_library_as_it_was_written() -> None:
+    """The library keeps a step's cases as JSON text, so the nulls and empty lists of a dumped input survive the save."""
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    documents = _documents()
+
+    for name in MODEL_STEPS:
+        document = documents[name]
+        cases = _cases(name)
+        await library.put_step(
+            document.step,
+            version=document.version,
+            title=document.title,
+            summary=document.summary,
+            applicability=document.applicability,
+            provenance={"saved_by": "owner:cli"},
+            cases=cases,
+        )
+        assert await library.fetch_step_cases(step_page_id(name, document.version)) == cases, name
 
 
 def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check_and_cannot_judge() -> None:
