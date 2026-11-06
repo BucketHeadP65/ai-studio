@@ -8,6 +8,10 @@
       "step_hash": "04c8e338a8f41c5dcffcc7693500eb469add2c6360f98429416245c0bca9061e",
       "version": 11
     },
+    "draft_repository_change": {
+      "step_hash": "11563cce33a57ffdc167fbf59b742f49ce1783dd5c63ec91ead2b144d5aa844d",
+      "version": 1
+    },
     "excise_source": {
       "step_hash": "628b0946e4aa706cecad30aecf7ed425c5730daffa1d6a0f89e17641281e4a9d",
       "version": 2
@@ -20,9 +24,21 @@
       "step_hash": "3e7c22c24c0127415002dc8a12057b796c442c066f183e23c897b800ccfae74d",
       "version": 2
     },
+    "judge_plan": {
+      "step_hash": "38da7344b01d63d6b053a55f9203682525689b2d37369bcd722f7449c96b7014",
+      "version": 1
+    },
+    "judge_repository_change": {
+      "step_hash": "8917095a6cd85cdcb1080a59d00f69eeee5f5032833a4190ed5ac363b6873f48",
+      "version": 1
+    },
     "link_entities": {
       "step_hash": "71d75bb40902a140896a09df7609d1ec664ca63689f2a0c670a94cfa269350ed",
       "version": 2
+    },
+    "plan_changes": {
+      "step_hash": "1ce751504205668da373be49dff75ec3a7923b0a8cac77cb97346a2101e5ffb6",
+      "version": 1
     },
     "relate_digest": {
       "step_hash": "02f9b8c088328b9d849d2286fd601d9e0c35aafb64f2381abd171ec78164c19d",

@@ -31,6 +31,7 @@ from core.ai.workflows.contracts import (
     WorkflowIntent,
     WorkflowPresentation,
     adapt,
+    canonical_step_yaml,
     spec_identity,
     step_content_address,
 )
@@ -47,6 +48,8 @@ from harness.features.maintenance.contracts import (
     LandingReport,
     MaintenancePlan,
     MaintenanceSteps,
+    PlanDecision,
+    PlanDecisions,
     PlannedChange,
     RepositoryChange,
     RepositoryVerdict,
@@ -214,6 +217,27 @@ def _landed(workflow_id: str, outcome: str, reason: str, *, saved_id: str = "", 
     })
 
 
+def _decided(plan: MaintenancePlan) -> PlanDecisions:
+    """What a planner would answer for `plan`: each change's disposition, reason and further edits, by its ids."""
+    return PlanDecisions(
+        decisions=[
+            PlanDecision(
+                workflow_id=change.workflow_id,
+                step_id=change.step_id,
+                disposition=change.disposition,
+                reason=change.reason,
+                extra_ops=change.extra_ops,
+            )
+            for change in plan.changes
+        ]
+    )
+
+
+async def _land(world: World, plan: MaintenancePlan) -> LandingReport:
+    """Land `plan` with the planner's decisions taken from its own changes, `plan` standing in for the drafted plan."""
+    return await world.steps.land_changes(plan, _decided(plan))
+
+
 async def test_list_consumers_answers_each_behind_pair_with_its_diff_goal_and_trust_and_drops_a_declined_one(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
@@ -224,6 +248,7 @@ async def test_list_consumers_answers_each_behind_pair_with_its_diff_goal_and_tr
     weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]), presentation=PRESENTATION, intent=INTENT)
     declined_id = await world.save(consumer("daily-digest", DIGEST[3]))
     await world.library.record_decline(declined_id, step="digest", step_hash=HASH4, because="kept")
+    current_id = await world.save(consumer("current-digest", DIGEST[4]))
     for hour in range(2):
         await world.log.append(_ran(first, "wf.digest-sources.v1", at=T0 + timedelta(hours=hour)))
     await world.log.append(_ran(second, sources_id, at=T0 + timedelta(hours=3)))
@@ -231,7 +256,7 @@ async def test_list_consumers_answers_each_behind_pair_with_its_diff_goal_and_tr
     listed = await world.steps.list_consumers(V4)
 
     assert [pair.workflow_id for pair in listed.pairs] == [sources_id, weekly_id]
-    assert (listed.dropped, listed.left_for_next_run) == (1, [])
+    assert (sorted(listed.dropped), listed.left_for_next_run) == (sorted([declined_id, current_id]), []), "each dropped pair is named"
     sources, weekly = listed.pairs
     for pair in listed.pairs:
         assert (pair.state, pair.step, pair.step_id, pair.step_hash, pair.held_step_id, pair.nodes) == (
@@ -363,8 +388,8 @@ async def test_prepare_plan_answers_one_undecided_keep_per_pair_carrying_its_che
     plan = await world.steps.prepare_plan(consumers, checks, cases)
 
     assert [(change.workflow_id, change.step_id, change.disposition, change.reason) for change in plan.changes] == [
-        (sources_id, V4, "keep", "not yet decided"),
-        (weekly_id, V4, "keep", "not yet decided"),
+        (sources_id, V4, "keep", "not decided"),
+        (weekly_id, V4, "keep", "not decided"),
     ]
     assert [change.check for change in plan.changes] == checks
     for change in plan.changes:
@@ -401,7 +426,7 @@ async def test_land_changes_adopts_on_live_trial_declines_a_kept_copy_flags_a_fl
         },
     )
 
-    landed = await world.steps.land_changes(plan)
+    landed = await _land(world, plan)
 
     outcomes = {change.workflow_id: (change.outcome, change.saved_id) for change in landed.changes}
     assert outcomes == {sources_id: ("adopted", "wf.digest-sources.v2"), weekly_id: ("kept", ""), daily_id: ("flagged", "")}
@@ -444,7 +469,7 @@ async def test_a_planner_s_reason_holding_headings_and_double_percent_signs_stil
     reason = "## Why\n\nThe daily tone matters.\nIt is plain\n---\n\nThe owner is 100%% sure of nothing yet, %% says the note."
     plan = await world.plan(V4, {daily_id: ("flag", reason)})
 
-    landed = await world.steps.land_changes(plan)
+    landed = await _land(world, plan)
 
     assert [change.outcome for change in landed.changes] == ["flagged"]
     flag = await world.library.fetch_flag("mf.consumer.daily-digest.digest")
@@ -464,7 +489,7 @@ async def test_land_changes_lands_every_other_adoption_then_fails_naming_the_con
     world.store.refused_ids = frozenset({"wf.weekly-digest.v2"})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(plan)
+        await _land(world, plan)
 
     assert weekly_id in str(raised.value)
     assert "and landed the rest" in str(raised.value)
@@ -487,7 +512,7 @@ async def test_a_planned_change_naming_no_step_in_the_library_is_refused_with_it
     plan = plan.model_copy(update={"changes": [unknown, plan.changes[1]]})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(plan)
+        await _land(world, plan)
 
     refused, landed = raised.value.report.changes
     assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
@@ -506,7 +531,7 @@ async def test_a_consumer_a_person_saved_past_since_the_listing_is_refused_and_t
     newer = await world.save(person, lineage=lineage)
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(plan)
+        await _land(world, plan)
 
     (refused,) = raised.value.report.changes
     assert refused.outcome == "refused"
@@ -522,7 +547,7 @@ async def test_two_changed_steps_adopted_in_one_consumer_land_one_after_the_othe
     sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
     plan = await world.plan(f"{V4},st.summarize.v2", {sources_id: ("adopt", "It fits.")})
 
-    landed = await world.steps.land_changes(plan)
+    landed = await _land(world, plan)
 
     assert [(change.step_id, change.saved_id) for change in landed.changes] == [(V4, "wf.digest-sources.v2"), ("st.summarize.v2", "wf.digest-sources.v3")]
     second = await world.library.fetch_live_trial("wf.digest-sources.v3")
@@ -591,6 +616,7 @@ async def test_select_disagreements_answers_a_step_one_consumer_adopted_and_anot
     nothing = await world.steps.select_disagreements(agreed, consumers)
 
     assert (change.step, change.step_id) == ("digest", V4)
+    assert change.step_yaml == canonical_step_yaml(DIGEST[4]), "the drafter starts from the changed version, whole"
     assert [(side.workflow_id, side.outcome, side.reason) for side in change.adopted] == [(sources_id, "adopted", "It fits.")]
     assert [(side.workflow_id, side.outcome, side.reason) for side in change.kept] == [(weekly_id, "kept", "The weekly digest keeps its own tone.")]
     assert all(side.diff and side.nodes == ["digest"] for side in (*change.adopted, *change.kept))
@@ -606,7 +632,9 @@ async def test_hand_over_keeps_a_draft_its_judge_kept_as_a_flag_page_drops_the_r
 
     def selected(step: str, step_id: str) -> RepositoryChange:
         side = ConsumerSide(workflow_id="wf.weekly-digest.v1", outcome="kept", reason="Its own tone.", nodes=["digest"], diff="", presentation=None, intent=None)
-        return RepositoryChange(step=step, step_id=step_id, adopted=[side.model_copy(update={"outcome": "adopted"})], kept=[side])
+        return RepositoryChange(
+            step=step, step_id=step_id, step_yaml=canonical_step_yaml(DIGEST[4]), adopted=[side.model_copy(update={"outcome": "adopted"})], kept=[side]
+        )
 
     step_file = DraftedFile(path="harness/workflows/steps/digest.md", text="---\ntitle: Digest\nversion: 5\n---\n\nQuote each claim, 100%% of them, %% always.")
     edit = DraftedFile(path="templates/research/workflows/workflows/weekly-digest.md", text="## Steps\n\nwith:\n  tone: weekly")
@@ -646,6 +674,82 @@ async def test_repository_verdict_answers_an_undecided_verdict_for_the_step(tmp_
     assert (verdict.step, verdict.decision) == ("digest", "undecided")
 
 
+async def test_plan_decisions_answers_no_decision_for_the_plan(tmp_path: Path) -> None:
+    world = World(tmp_path)
+
+    decisions = await world.steps.plan_decisions(MaintenancePlan(changes=[], left_for_next_run=[]))
+
+    assert decisions == PlanDecisions(decisions=[])
+
+
+async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_again_on_the_next_run(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    consumers = await world.steps.list_consumers(V4)
+    draft = await world.steps.prepare_plan(consumers, await world.steps.check_contracts(consumers), await world.steps.run_step_cases(V4))
+    decisions = PlanDecisions(decisions=[PlanDecision(workflow_id=sources_id, step_id=V4, disposition="adopt", reason="It fits.")])
+
+    landed = await world.steps.land_changes(draft, decisions)
+
+    assert [(change.workflow_id, change.outcome, change.reason) for change in landed.changes] == [
+        (sources_id, "adopted", "It fits."),
+        (weekly_id, "undecided", "not decided, offered again on the next run"),
+    ]
+    (record,) = await world.library.fetch_consumer_record(weekly_id)
+    assert (record.declined, record.declined_because) == (None, None), "an undecided pair writes no decline"
+    assert [pair.workflow_id for pair in (await world.steps.list_consumers(V4)).pairs] == [weekly_id]
+    assert f"{weekly_id} with {V4} was not decided, offered again on the next run." in await world.steps.report_changes(landed)
+
+
+async def test_the_owner_s_line_starts_the_reason_after_its_period_with_a_capital(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    kept = _landed("wf.weekly-digest.v1", "kept", "the weekly digest keeps its own tone.")
+    flagged = _landed("wf.daily-digest.v1", "flagged", "only the owner can say.")
+
+    told = await world.steps.report_changes(LandingReport(changes=[kept, flagged], left_for_next_run=[]))
+
+    assert f"wf.weekly-digest.v1 keeps its copy instead of {V4}. The weekly digest keeps its own tone." in told
+    assert f"wf.daily-digest.v1 waits for your decision on {V4}. Only the owner can say." in told
+
+
+async def test_a_decision_naming_no_drafted_change_is_refused_and_every_drafted_change_still_lands(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("keep", "Its own tone.")})
+    invented = PlanDecision(workflow_id="wf.daily-digest.v1", step_id=V4, disposition="adopt", reason="It fits as well.")
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, invented]))
+
+    adopted, kept, refused = raised.value.report.changes
+    assert [(adopted.workflow_id, adopted.outcome), (kept.workflow_id, kept.outcome)] == [(sources_id, "adopted"), (weekly_id, "kept")]
+    assert (refused.workflow_id, refused.step_id, refused.disposition, refused.outcome) == ("wf.daily-digest.v1", V4, "adopt", "refused")
+    assert "no drafted change" in refused.reason
+    assert "wf.daily-digest.v1" in str(raised.value)
+
+
+async def test_a_drafted_change_decided_twice_lands_neither_decision_and_the_others_land(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("keep", "Its own tone.")})
+    again = PlanDecision(workflow_id=sources_id, step_id=V4, disposition="keep", reason="On second thought it does not fit.")
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await world.steps.land_changes(plan, PlanDecisions(decisions=[*_decided(plan).decisions, again]))
+
+    refused, kept = raised.value.report.changes
+    assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
+    assert "decided it 2 times" in refused.reason
+    assert (kept.workflow_id, kept.outcome) == (weekly_id, "kept")
+    assert await world.library.current(sources_id) == sources_id, "neither of two decisions for one change lands"
+
+
 def _tampered(plan: MaintenancePlan, index: int, **update: object) -> MaintenancePlan:
     """`plan` with the change at `index` changed as a model might have changed it."""
     changes: list[PlannedChange] = list(plan.changes)
@@ -662,7 +766,7 @@ async def test_a_malformed_edit_operation_is_refused_with_its_reason_and_check_c
     plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too.")})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(_tampered(plan, 0, extra_ops=(malformed,)))
+        await _land(world, _tampered(plan, 0, extra_ops=(malformed,)))
     answer = await world.steps.check_change(sources_id, V4, extra_ops=(malformed,))
 
     refused, landed = raised.value.report.changes
@@ -681,7 +785,7 @@ async def test_a_planned_change_naming_a_step_version_older_than_the_newest_is_r
     plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too.")})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(_tampered(plan, 0, step_id="st.digest.v3"))
+        await _land(world, _tampered(plan, 0, step_id="st.digest.v3"))
 
     refused, landed = raised.value.report.changes
     assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
@@ -699,7 +803,7 @@ async def test_a_planned_change_to_a_consumer_that_declines_the_step_version_is_
     await world.library.record_decline(sources_id, step="digest", step_hash=HASH4, because="reverted")
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(plan)
+        await _land(world, plan)
 
     refused, landed = raised.value.report.changes
     assert (refused.workflow_id, refused.outcome) == (sources_id, "refused")
@@ -716,7 +820,7 @@ async def test_an_adoption_whose_edits_change_another_inline_step_is_refused_and
     plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too.")})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(_tampered(plan, 0, extra_ops=(rewrite,)))
+        await _land(world, _tampered(plan, 0, extra_ops=(rewrite,)))
     answer = await world.steps.check_change(sources_id, V4, extra_ops=(rewrite,))
 
     refused, landed = raised.value.report.changes
@@ -772,7 +876,7 @@ async def test_a_flag_a_person_already_resolved_for_the_step_version_is_left_alo
     await world.library.put_flag(decided)
     await world.library.resolve_flag("mf.consumer.daily-digest.digest", by="owner", reason="The daily digest keeps its copy.")
 
-    landed = await world.steps.land_changes(plan)
+    landed = await _land(world, plan)
 
     (flagged,) = landed.changes
     assert flagged.outcome == "flagged"
@@ -837,7 +941,7 @@ async def test_an_adoption_carrying_an_edit_other_than_rewire_add_parameter_or_s
     plan = await world.plan(V4, {sources_id: ("adopt", "It fits."), weekly_id: ("adopt", "It fits too.")})
 
     with pytest.raises(LandingRefusedError) as raised:
-        await world.steps.land_changes(_tampered(plan, 0, extra_ops=(edit,)))
+        await _land(world, _tampered(plan, 0, extra_ops=(edit,)))
     answer = await world.steps.check_change(sources_id, V4, extra_ops=(edit,))
 
     refused, landed = raised.value.report.changes
@@ -861,7 +965,7 @@ async def test_an_adoption_that_rewires_a_node_to_a_parameter_it_adds_lands_and_
     plan = await world.plan(V4, {sources_id: ("adopt", "It fits once it reads the whole source.")})
 
     answer = await world.steps.check_change(sources_id, V4, extra_ops=wiring)
-    landed = await world.steps.land_changes(_tampered(plan, 0, extra_ops=wiring))
+    landed = await _land(world, _tampered(plan, 0, extra_ops=wiring))
 
     assert answer.startswith("passes")
     assert "The landing would adopt it." in answer

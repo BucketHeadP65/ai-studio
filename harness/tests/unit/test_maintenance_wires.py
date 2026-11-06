@@ -1,8 +1,9 @@
 """The step maintenance steps' pydantic types wire into briefings and maps by `like`, so a workflow file can name them.
 
-A briefing that takes and answers `{like: prepare_plan}` feeds `land_changes`, a map whose briefing answers one element
-of `select_disagreements` feeds `hand_over_repository_changes`'s drafts, and a map whose briefing answers
-`{like: repository_verdict}` feeds its verdicts. `report_changes` feeds the hand-over too, which answers for the run, so
+A briefing that takes `{like: prepare_plan}` and answers `{like: plan_decisions}` feeds `land_changes` its decisions
+beside the drafted plan, a map whose briefing answers one element of `select_disagreements` feeds
+`hand_over_repository_changes`'s drafts, and a map whose briefing answers `{like: repository_verdict}`, reading every
+selected change beside its draft, feeds its verdicts. `report_changes` feeds the hand-over too, which answers for the run, so
 no node is a dead end. The registry holds the steps over a library that holds nothing.
 """
 
@@ -60,7 +61,7 @@ WORKFLOW = {
             "name": "plan_changes",
             "instructions": BRIEFING,
             "inputs": {"draft": {"like": "prepare_plan"}},
-            "output": {"like": "prepare_plan"},
+            "output": {"like": "plan_decisions"},
             "tools": [CHECK_CHANGE_TOOL],
         },
         {
@@ -73,7 +74,7 @@ WORKFLOW = {
         {
             "name": "judge_repository_change",
             "instructions": BRIEFING,
-            "inputs": {"draft": {"like": "select_disagreements", "element": True}},
+            "inputs": {"draft": {"like": "select_disagreements", "element": True}, "disagreements": {"like": "select_disagreements"}},
             "output": {"like": "repository_verdict"},
         },
     ],
@@ -88,7 +89,7 @@ WORKFLOW = {
             "inputs": {"consumers": {"node": "list_consumers"}, "checks": {"node": "check_contracts"}, "cases": {"node": "run_step_cases"}},
         },
         {"kind": "run", "id": "plan_changes", "work": "plan_changes", "inputs": {"draft": {"node": "prepare_plan"}}},
-        {"kind": "run", "id": "land_changes", "work": "land_changes", "inputs": {"plan": {"node": "plan_changes"}}},
+        {"kind": "run", "id": "land_changes", "work": "land_changes", "inputs": {"plan": {"node": "prepare_plan"}, "decisions": {"node": "plan_changes"}}},
         {"kind": "run", "id": "report_changes", "work": "report_changes", "inputs": {"landed": {"node": "land_changes"}}},
         {
             "kind": "run",
@@ -110,6 +111,7 @@ WORKFLOW = {
             "turns": ["judge_repository_change"],
             "over": {"node": "draft_repository_changes"},
             "each": "draft",
+            "inputs": {"disagreements": {"node": "select_disagreements"}},
             "on_error": "skip",
         },
         {

@@ -41,7 +41,7 @@ from pydantic import JsonValue
 from harness.domain.contracts import CaseReport, cases_address
 from harness.features.maintenance.domain import (
     ADOPTION_EDITS,
-    NOT_YET_DECIDED,
+    NOT_DECIDED,
     PAIR_CAP,
     ConsumerList,
     ConsumerPair,
@@ -52,12 +52,14 @@ from harness.features.maintenance.domain import (
     LandedChange,
     LandingReport,
     MaintenancePlan,
+    PlanDecisions,
     PlannedChange,
     RepositoryChange,
     RepositoryVerdict,
     change_line,
     changed_ids,
     fenced,
+    merged_plan,
     one_line,
 )
 from harness.features.maintenance.exceptions import LandingRefusedError
@@ -138,7 +140,8 @@ class MaintenanceSteps:
     def register(self, registry: StepRegistry) -> None:
         """Register every step on `registry`, and validate every candidate against it from then on.
 
-        `repository_verdict` is registered too, though no graph places it, so a briefing can answer in its type.
+        `plan_decisions` and `repository_verdict` are registered too, though no graph places them, so a briefing can
+        answer in their types.
 
         Args:
             registry: The registry a step maintenance run executes on.
@@ -154,7 +157,8 @@ class MaintenanceSteps:
             (self.prepare_plan, True),
             (self.land_changes, False),
             (self.report_changes, False),
-            (self.select_disagreements, True),
+            (self.select_disagreements, False),
+            (self.plan_decisions, True),
             (self.repository_verdict, True),
             (self.hand_over_repository_changes, False),
         ):
@@ -164,14 +168,14 @@ class MaintenanceSteps:
         """Every consumer whose copy of a changed step is behind it or diverged, at most twenty, with what the planner decides by.
 
         Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
-        matches that version, or whose record declines it, is dropped and counted. The consumers past the cap are named
+        matches that version, or whose record declines it, is dropped and named. The consumers past the cap are named
         once each for the next run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
 
         Returns:
-            The pairs, by step name and then by consumer name, the consumers left for the next run and the count dropped.
+            The pairs, by step name and then by consumer name, the consumers left for the next run and those dropped.
 
         Raises:
             LibraryError: A step id names no saved reusable step version, or a library read fails.
@@ -221,7 +225,7 @@ class MaintenanceSteps:
         return [await self._case_report(version) for version in versions.values()]
 
     async def prepare_plan(self, consumers: ConsumerList, checks: list[ContractCheck], cases: list[CaseReport]) -> MaintenancePlan:
-        """The plan the planner starts from: one change per pair, kept and not yet decided, its evidence copied in.
+        """The drafted plan: one change per pair, kept and not decided, its evidence copied in.
 
         Each change carries its pair's contract check and the case reports of the changed version and of the version a
         behind consumer holds, so the planner decides and never writes evidence.
@@ -250,15 +254,19 @@ class MaintenanceSteps:
                     workflow_id=pair.workflow_id,
                     step_id=pair.step_id,
                     disposition="keep",
-                    reason=NOT_YET_DECIDED,
+                    reason=NOT_DECIDED,
                     check=check,
                     cases=[report for report in cases if report.step_id in reported],
                 )
             )
         return MaintenancePlan(changes=changes, left_for_next_run=list(consumers.left_for_next_run))
 
-    async def land_changes(self, plan: MaintenancePlan) -> LandingReport:
-        """Land every planned change: save each adoption on live trial, decline each kept copy and flag each flagged pair.
+    async def land_changes(self, plan: MaintenancePlan, decisions: PlanDecisions) -> LandingReport:
+        """Land the drafted plan as the planner decided it: save each adoption on live trial, decline each kept copy and flag each flagged pair.
+
+        Each decision is merged into the drafted change with the same workflow id and step id, so the evidence stays as
+        `prepare_plan` copied it. A drafted change no decision names lands kept, with the reason "not decided". A
+        decision that names no drafted change is refused, and so is every decision of a drafted change decided twice.
 
         An adoption copies the step from the library, applies the change's further edit operations, validates the
         candidate and saves it as the consumer's next version, saved by step maintenance, with a live trial marker naming
@@ -275,7 +283,8 @@ class MaintenanceSteps:
         save. A kept pair is refused when the library refuses its decline.
 
         Args:
-            plan: The plan the judge approved.
+            plan: The drafted plan, as `prepare_plan` answered it.
+            decisions: The planner's decisions the judge approved.
 
         Returns:
             What each change did, when nothing was refused.
@@ -285,7 +294,7 @@ class MaintenanceSteps:
                 holds every outcome.
         """
         saved: dict[str, str] = {}
-        changes = [await self._land(change, saved) for change in plan.changes]
+        changes = [change if isinstance(change, LandedChange) else await self._land(change, saved) for change in merged_plan(plan, decisions)]
         report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
         if any(change.outcome == "refused" for change in changes):
             raise LandingRefusedError(report)
@@ -318,8 +327,8 @@ class MaintenanceSteps:
     async def select_disagreements(self, landed: LandingReport, consumers: ConsumerList) -> list[RepositoryChange]:
         """One repository change to draft per changed step that some consumers adopted and others kept or flagged.
 
-        Each side holds every consumer with its outcome, the planner's reason and what the consumer is for. The drafted
-        fields are empty.
+        Each carries the changed step version whole, as its canonical YAML read from the library. Each side holds every
+        consumer with its outcome, the planner's reason and what the consumer is for. The drafted fields are empty.
 
         Args:
             landed: What the landing did.
@@ -327,13 +336,16 @@ class MaintenanceSteps:
 
         Returns:
             The repository changes, empty when no step's consumers split.
+
+        Raises:
+            LibraryError: A changed step version cannot be read.
         """
         pairs = {(pair.workflow_id, pair.step_id): pair for pair in consumers.pairs}
         sides: dict[str, list[tuple[ConsumerPair, ConsumerSide]]] = {}
         for change in landed.changes:
             pair = pairs.get((change.workflow_id, change.step_id))
             outcome = change.outcome
-            if pair is None or outcome == "refused":
+            if pair is None or outcome in ("refused", "undecided"):
                 continue
             side = ConsumerSide(
                 workflow_id=change.workflow_id,
@@ -350,8 +362,23 @@ class MaintenanceSteps:
             adopted = [side for _, side in held if side.outcome == "adopted"]
             kept = [side for _, side in held if side.outcome != "adopted"]
             if adopted and kept:
-                selected.append(RepositoryChange(step=held[0][0].step, step_id=step_id, adopted=adopted, kept=kept))
+                step_yaml = canonical_step_yaml(await self._library.fetch_step(step_id))
+                selected.append(RepositoryChange(step=held[0][0].step, step_id=step_id, step_yaml=step_yaml, adopted=adopted, kept=kept))
         return selected
+
+    async def plan_decisions(self, plan: MaintenancePlan) -> PlanDecisions:
+        """No decision for any change of `plan`, the type the planner answers in.
+
+        No graph places this step. The landing keeps every drafted change of `plan` it is handed with these decisions.
+
+        Args:
+            plan: The drafted plan.
+
+        Returns:
+            No decisions.
+        """
+        del plan
+        return PlanDecisions(decisions=[])
 
     async def repository_verdict(self, step: str) -> RepositoryVerdict:
         """An undecided verdict on the drafted repository change for `step`, the type a repository judge answers in.
@@ -475,16 +502,16 @@ class MaintenanceSteps:
             taken[newest.name] = (newest, saved)
         return tuple(taken[name] for name in sorted(taken))
 
-    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], int]:
-        """The behind or diverged consumers within the cap, those past it, and how many current or declined ones were dropped."""
+    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], list[str]]:
+        """The behind or diverged consumers within the cap, those past it, and the ids of the current or declined ones, each once."""
         candidates: list[_Candidate] = []
-        dropped = 0
+        dropped: dict[str, None] = {}
         for version, saved in changed:
             by_version = {each.version: each for each in saved}
             for card in await self._library.consumers_of(version.name):
                 entry = card.entry
                 if entry.declined == version.step_hash or (entry.version is not None and entry.version >= version.version):
-                    dropped += 1
+                    dropped[card.workflow_id] = None
                     continue
                 held_version = entry.version if entry.version is not None else entry.diverged_from
                 held = by_version.get(held_version) if held_version is not None else None
@@ -493,7 +520,7 @@ class MaintenanceSteps:
                     raise LibraryError(msg)
                 candidates.append(_Candidate(version=version, card=card, held=held))
         candidates.sort(key=lambda candidate: (candidate.version.name, candidate.card.name, candidate.card.version))
-        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], dropped
+        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], list(dropped)
 
     async def _pair(self, candidate: _Candidate) -> ConsumerPair:
         """The pair one candidate makes, with its diff, its nodes, its card's words and its trust."""

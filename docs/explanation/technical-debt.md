@@ -249,3 +249,48 @@ TD-46 onward came from the close of the code standard refactor on
 - **Paying it off:** strip comments only outside fenced blocks and inline code, from the markdown-it tokens the parser already
   builds, and keep the trailing whitespace strip apart from it.
 - **Found:** 2026-11-05, in the review of the change that writes maintenance flags into the library.
+
+## TD-83. The plan judge's evidence is read a second time after the planner
+
+- **Where:** `harness/workflows/workflows/step-maintenance.md` (`pass_changed_ids`, `relist_consumers`,
+  `recheck_contracts`, `rerun_step_cases`) and the validator's rule in `core/src/core/ai/workflows/domain/validator.py`
+  (`_check_rewinds_into_joins`).
+- **What is wrong:** a gate's rejection re-runs `rejected_to` and everything after it, and the validator refuses a node
+  behind the gate that waits on a producer the rewind would not re-run, because that wait would never be met again. The
+  plan judge must send its rejection to the planner, so it cannot read the evidence from `list_consumers`,
+  `check_contracts` and `run_step_cases`, which come before the planner. The workflow runs those three steps a second time
+  after the planner, from the run's own `changed_step_ids`, and the judge reads that second pass.
+- **Why it is debt:** the evidence is read once before the planner and once more after each plan, up to four times a
+  run, for no reason but the rewind rule, and the graph carries four nodes, one of them a program, that exist only to
+  satisfy it.
+- **Cost while it stands:** each judge attempt, three at most, reads the library and the evidence log again. A step
+  version whose first case report held an errored case has no kept report, so each attempt runs its cases again, one
+  model call per case. A rejection therefore costs the planner's new turn, that pass and the judge's new review. A person saving a consumer or the step between the two passes moves a
+  pair: the judge passes a keep or a flag on it as stale and fails an adopt, and the landing refuses the stale pair.
+- **Paying it off:** let a rewind reuse the kept outputs of the producers outside the rewound region when it re-enters a
+  wait, then wire the judge straight from the three evidence nodes and delete the second pass.
+- **Found:** 2026-11-06, writing the `step-maintenance` workflow, whose plan judge the validator refused.
+
+## TD-84. A program that holds no tool never finishes on the durable engine
+
+- **Where:** `core/src/core/ai/workflows/authoring.py` builds an inline program `replay_safe=not task.tools`,
+  `core/src/core/ai/workflows/infrastructure/temporal.py` (`ActivityExecutor.perform`) awaits a replay-safe step in
+  workflow code, and `harness/src/harness/adapters/environment.py` (`code_runner`) runs programs in the Monty sandbox, which
+  hands each one to a thread.
+- **What is wrong:** under `run_engine: temporal` a program that holds no tool runs in workflow code, and the sandbox's
+  hand-off to its thread calls `call_soon_threadsafe`, which Temporal's deterministic event loop refuses with
+  `NotImplementedError`. The error never reaches the run: the workflow task completes with nothing scheduled, and the run
+  waits forever with no failure recorded. The same program holding a tool runs as an activity and finishes.
+- **Why it is debt:** replay safety is asserted for pure computation, but the code runner that performs it cannot run in
+  workflow code, so all twelve shipped workflows that run such a program hang on the durable engine: `step-maintenance`,
+  `source-remove`, `research-digest`, `research-compound`, `research-decision-brief`, `research-stance-refresh`,
+  `docs-notes-to-analysis`, `docs-promote-initiative`, `benchmark-digest`, `news-digest`, `news-link` and `news-relate`.
+  The programs are their own inline ones and the reusable `finish`, `report`, `removal_report`, `count_digests`,
+  `fold_report` and `render_decision_brief`.
+- **Cost while it stands:** the durable engine cannot run those workflows. `in_process` is the default engine, so no live
+  run hangs today. `harness/tests/integration/test_step_maintenance_durable.py` is held as a strict expected failure on its
+  timeout.
+- **Paying it off:** build a program replay-safe only when the registry's code runner can run in workflow code, or schedule
+  every program as an activity, then drop the expected failure. A one-program workflow reproduces it in seconds on the
+  Temporal test server.
+- **Found:** 2026-11-06, running `step-maintenance` end to end on the Temporal test server.
