@@ -23,8 +23,8 @@ step:
     holds a pair for its workflow name at a newer workflow or step version than the decision names. The landing refuses
     a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An adopt on a stale
     pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change with no decision
-    writes nothing and is offered again on the next run, and a pair saved after the plan was drafted waits for the next
-    run.
+    writes nothing and a later run for its step offers it again, and a pair saved after the plan was drafted waits for
+    such a run.
 
     Mark each other decision pass or fail:
     - An adopt fails when the diff takes away something the consumer's presentation or intent says it needs, when its

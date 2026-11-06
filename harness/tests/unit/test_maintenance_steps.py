@@ -541,6 +541,7 @@ async def test_a_consumer_a_person_saved_past_since_the_listing_is_refused_and_t
     (refused,) = raised.value.report.changes
     assert refused.outcome == "refused"
     assert newer in refused.reason
+    assert f"run step-maintenance with {V4}" in refused.reason
     assert "landed" not in str(raised.value)
     assert world.store.written(newer)["saved_by"] == "owner:cli"
 
@@ -666,6 +667,7 @@ async def test_report_changes_tells_the_owner_once_what_changed_in_which_workflo
     assert "digest" in title
     for said in ("wf.digest-sources.v2", "It fits and quotes every claim.", "wf.weekly-digest.v1", "keeps its own tone", "wf.daily-digest.v1"):
         assert said in message
+    assert "run step-maintenance by hand with the same step ids" in message, "the owner reads how to take the consumers past the cap now"
     assert message in answer
 
 
@@ -760,7 +762,7 @@ async def test_plan_decisions_answers_no_decision_for_the_plan(tmp_path: Path) -
     assert decisions == PlanDecisions(decisions=[])
 
 
-async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_again_on_the_next_run(tmp_path: Path) -> None:
+async def test_a_drafted_change_no_decision_names_writes_nothing_and_the_owner_reads_when_it_is_offered_again(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
@@ -773,12 +775,14 @@ async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_
 
     assert [(change.workflow_id, change.outcome, change.reason) for change in landed.changes] == [
         (sources_id, "adopted", "It fits."),
-        (weekly_id, "not_decided", "not decided, offered again on the next run"),
+        (weekly_id, "not_decided", "not decided, so nothing was written, and step maintenance offers it again when it next runs for its step"),
     ]
     (record,) = await world.library.fetch_consumer_record(weekly_id)
     assert (record.declined, record.declined_because) == (None, None), "a pair not decided writes no decline"
     assert [pair.workflow_id for pair in (await world.steps.list_consumers(V4)).pairs] == [weekly_id]
-    assert f"{weekly_id} with {V4} was not decided, offered again on the next run." in await world.steps.report_changes(landed)
+    told = await world.steps.report_changes(landed)
+    assert f"{weekly_id} with {V4} was not decided, so nothing was written" in told
+    assert f"with the step's next version, or when you run step-maintenance with {V4}." in told
 
 
 async def test_the_owner_s_line_starts_the_reason_after_its_period_with_a_capital(tmp_path: Path) -> None:

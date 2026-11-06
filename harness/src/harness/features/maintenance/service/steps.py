@@ -171,13 +171,13 @@ class MaintenanceSteps:
 
         Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
         matches that version, or whose record declines it, is dropped and named. The consumers past the cap are named
-        once each for the next run.
+        once each for a later run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
 
         Returns:
-            The pairs, by step name and then by consumer name, the consumers left for the next run and those dropped.
+            The pairs, by step name and then by consumer name, the consumers left for a later run and those dropped.
 
         Raises:
             LibraryError: A step id names no saved reusable step version, or a library read fails.
@@ -329,7 +329,7 @@ class MaintenanceSteps:
         return report
 
     async def report_changes(self, landed: LandingReport) -> str:
-        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for the next run.
+        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for a later run.
 
         A notice that fails is said in the answer and never fails the run. A landing that changed nothing tells nobody.
 
@@ -348,7 +348,11 @@ class MaintenanceSteps:
         """Send the owner one notice saying every change of `landed` and the consumers past the cap, and answer it and whether it went out."""
         lines = [change_line(change) for change in landed.changes]
         if landed.left_for_next_run:
-            lines.append(f"Left for the next run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}.")
+            lines.append(
+                f"Left for a later run, past the cap of {PAIR_CAP} pairs: {', '.join(landed.left_for_next_run)}. Step maintenance "
+                f"takes them when it next runs for their steps, with a step's next version, or run step-maintenance by hand "
+                f"with the same step ids to take them now."
+            )
         message = "\n".join(lines)
         try:
             delivered = await self._notifier.notify(title, message)
@@ -666,7 +670,10 @@ class MaintenanceSteps:
             return f"{base} declines {step_id}, so step maintenance leaves the pair alone until a newer version arrives"
         newest = await self._library.current(base)
         if newest != base:
-            return f"{newest} was saved after {base}, so this change no longer applies to the newest version. The next run plans it again"
+            return (
+                f"{newest} was saved after {base}, so this change no longer applies to the newest version. Step maintenance plans "
+                f"it again when it next runs for {step.name}, with its next version, or when you run step-maintenance with {step_id}"
+            )
         return None
 
     async def _adoption_refusal(self, base: str, step_id: str, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]]) -> str | None:

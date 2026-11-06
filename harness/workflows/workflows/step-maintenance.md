@@ -148,7 +148,8 @@ workflow:
 Use on the `on step change` schedule, which fires it with the reusable step versions saved during the quiet period, or
 by hand with `changed_step_ids` naming the versions to check. Each named step is taken at its newest saved version.
 
-The stages: `list_consumers` takes at most twenty consumer pairs per run and names the rest for the next run.
+The stages: `list_consumers` takes at most twenty consumer pairs per run and names the rest, which a later run for
+their step takes: the step's next version, or a run by hand with its id.
 `check_contracts` and `run_step_cases` gather the evidence side by side, and `prepare_plan` copies it into one undecided
 change per pair. The planner, `plan_changes`, decides adopt, keep or flag per pair on the orchestrator tier, checking
 every adoption with `check_change`, and answers only its decisions, so it never retypes the evidence. Once the plan exists, `pass_changed_ids` hands the run's own `changed_step_ids` to
@@ -159,7 +160,7 @@ plan is judged on evidence made after it. The third rejection ends the run with 
 maintenance flag per changed step. The second pass reads the library and the evidence log again, and runs again the
 cases of a step version whose first case report held an errored case, since such a report is not kept, one model call
 per case. `land_changes` merges the approved decisions into the plan
-`prepare_plan` drafted, a change no decision names writing nothing so the next run offers it again, then saves each adoption as the
+`prepare_plan` drafted, a change no decision names writing nothing so a later run for its step offers it again, then saves each adoption as the
 consumer's next version on live trial, declines each kept copy and flags each flagged pair, landing every writable
 change before it fails naming each refusal. Only then do `report_changes` and the repository
 branch start: one drafter per step whose consumers split, one judge per draft, and the hand-over, which writes each
