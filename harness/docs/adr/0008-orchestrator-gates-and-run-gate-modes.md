@@ -14,6 +14,13 @@ title: "0008 — Orchestrator gates: a machine decider the artifact can name, an
 feedback-routing machinery this decision reuses rather than duplicates, and [0006](0006-schedules-and-the-ticker.md),
 whose schedule row gains this decision's third gate mode alongside its own `gate_policy`.
 
+**Amended (2026-11-05), a judge still sends work back under `auto`.** A judge gate reaches the approval hook only when
+its judge could not decide. Under `auto` that hook used to pass it with nobody deciding, which would land work no one
+judged. Now `automode_refusal` (`core.ai.workflows.automode`) answers it, on both engines, with a rejection credited to
+the judge that carries the judge's note (or `JUDGE_NOTE_FALLBACK` when the note is blank) back to `rejected_to` and spends
+one of the gate's attempts. `auto` still passes a person's gate with nobody asked. The step maintenance schedule runs
+under `auto` and relies on this, with its judge as the only gate (see [0024](0024-step-maintenance-runs-unattended.md)).
+
 ## Context
 
 A run that must go unattended today has exactly one way to skip a human gate: automode, `auto_approve_gates`, which
@@ -50,7 +57,8 @@ are never shown two different versions of one object.
 
 **Three run gate modes, with the legacy switch folded into the middle of them.** `GateMode = Literal["wait",
 "orchestrate", "auto"]` (`harness/src/harness/domain/gates.py`) is what a run's own gates decide under: `"wait"` parks
-a human gate for a person (unchanged), `"auto"` passes every gate with nobody asked (automode, unchanged), and
+a human gate for a person (unchanged), `"auto"` passes every person's gate with nobody asked (automode, unchanged)
+and turns a judge's cannot-judge answer into a rejection (amended above), and
 `"orchestrate"` hands a human gate to this run's own orchestrator instead of parking it. `resolve_gate_mode(gate_mode,
 *, auto_approve_gates)` is the one function every wire boundary calls: `auto_approve_gates=True` has only ever meant
 `"auto"`, so it still does when `gate_mode` is left at its default, and the one shape refused in words is the two
