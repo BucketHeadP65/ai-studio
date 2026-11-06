@@ -69,9 +69,9 @@ needs a decision waits as a flag under Home's "Needs your decision" and in `harn
 
 A revert declines every step version on the marker for that consumer, so a good step version adopted together with a
 bad one is declined until a newer version of it arrives. A completed run whose own check failed for a reason outside
-the adopted steps can revert a good adoption, because a checked failure ranks against the baseline. Judge rejections
-are counted from each run's gate decisions only since this change, so a baseline run from before it can carry too few
-rejections and make an honest live trial run read as worse.
+the adopted steps can revert a good adoption, because a checked failure ranks against the baseline. A run's gate
+rejections are counted from its recorded gate decisions, a judge's included, only since 2026-11-05, so a baseline run
+from before then can carry too few rejections and make an honest live trial run read as worse.
 
 Each run spends a planner turn and a judge turn even when no consumer needs a change, because the engine has no way to
 skip a node or answer a gate without its model. The workflow runs on the in-process engine, because on the durable
