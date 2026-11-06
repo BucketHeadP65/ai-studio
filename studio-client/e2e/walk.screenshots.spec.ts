@@ -9,8 +9,8 @@ import type {
   MaintenanceFlagSchema,
   RunEnvelopeSchema,
 } from "@/api/studio-types";
-import { maintenanceFlag } from "@/test-support/factories/flags";
 
+import { maintenanceFlag } from "./flags";
 import { singleVersionTrust } from "./trust";
 
 // Every mock below is annotated with the INPUT type of the schema the app parses it with, so a

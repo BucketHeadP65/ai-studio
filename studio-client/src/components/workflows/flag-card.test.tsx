@@ -81,6 +81,16 @@ describe("FlagCard reads one maintenance flag", () => {
     expect(screen.getByText("Add a length parameter to compose.")).toBeInTheDocument();
   });
 
+  it("reads its evidence and proposed change before the act that resolves it", () => {
+    render(inList(maintenanceFlag({ proposed_change: "Add a length parameter to compose." })));
+
+    const evidence = screen.getByRole("button", { name: "Evidence" });
+    const proposed = screen.getByRole("button", { name: "Proposed change" });
+    const resolve = screen.getByRole("button", { name: "Resolve" });
+    expect(evidence.compareDocumentPosition(proposed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(proposed.compareDocumentPosition(resolve) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("offers no proposed change when it has none", () => {
     render(inList(maintenanceFlag({ proposed_change: "" })));
 
@@ -127,7 +137,7 @@ describe("FlagCard resolves a flag with a name and a reason", () => {
     expect(within(dialog).getByRole("button", { name: "Resolve" })).toBeDisabled();
   });
 
-  it("posts the reason with the name typed, then closes and says the flag resolved", async () => {
+  it("posts the trimmed name and reason, then calls back once and closes the modal", async () => {
     const flag = maintenanceFlag();
     const posted: { flagId: string; body: unknown }[] = [];
     server.use(

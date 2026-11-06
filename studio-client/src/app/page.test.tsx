@@ -236,6 +236,21 @@ function waitingRun(runTitle: string): RunView {
   });
 }
 
+// Every string under `root` that the screen wrote itself: each aria-label, and the text of each
+// leaf that is not set in mono and is not one of the backend's own words in `supplied`.
+function writtenStrings(root: Element, supplied: Set<string>): Set<string> {
+  const strings = new Set<string>();
+  for (const node of root.querySelectorAll("*")) {
+    const label = node.getAttribute("aria-label");
+    if (label) strings.add(label);
+    if (node.classList.contains("font-mono")) continue;
+    if (node.children.length > 0 || !node.textContent) continue;
+    if (supplied.has(node.textContent.trim())) continue;
+    strings.add(node.textContent);
+  }
+  return strings;
+}
+
 // The list item holding the text, narrowed rather than cast.
 function cardHolding(text: HTMLElement): HTMLElement {
   const card = text.closest("li");
@@ -382,10 +397,10 @@ describe("Home says what an empty shelf is for", () => {
     expect(
       screen.getByText("Set up a saved workflow above and it shows here while it works."),
     ).toBeInTheDocument();
-    expect(screen.getByText("No decision is waiting.")).toBeInTheDocument();
+    expect(await screen.findByText("No decision is waiting.")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "When a run reaches a gate or step maintenance needs your decision, it waits here.",
+        "A run at a gate, or a step maintenance flag that needs your decision, waits here.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("No results yet.")).toBeInTheDocument();
@@ -433,16 +448,19 @@ describe("Home says what an empty shelf is for", () => {
       "two sections, one thin",
       flag.summary,
     ]);
-    const strings = new Set<string>();
-    for (const node of container.querySelectorAll("*")) {
-      const label = node.getAttribute("aria-label");
-      if (label) strings.add(label);
-      if (node.classList.contains("font-mono")) continue;
-      if (node.children.length > 0 || !node.textContent) continue;
-      if (supplied.has(node.textContent.trim())) continue;
-      strings.add(node.textContent);
+    for (const text of writtenStrings(container, supplied)) {
+      expect(text).toMatch(PLAIN_PUNCTUATION);
+      expect(text).not.toMatch(BORROWED_VOCABULARY);
     }
-    for (const text of strings) {
+
+    // The modal renders outside the page's own tree, so its words are read from the dialog.
+    const card = cardHolding(screen.getByText(flag.summary));
+    await userEvent.click(within(card).getByRole("button", { name: "Resolve" }));
+    const dialog = await screen.findByRole("dialog", { name: "Resolve this flag" });
+    const modal = writtenStrings(dialog, supplied);
+    expect(modal).toContain("Resolve this flag");
+    expect(modal).toContain("Your name");
+    for (const text of modal) {
       expect(text).toMatch(PLAIN_PUNCTUATION);
       expect(text).not.toMatch(BORROWED_VOCABULARY);
     }
@@ -475,8 +493,9 @@ describe("Home never reads an unread pool as an empty one", () => {
     const { container } = render(<HomePage />);
 
     expect(await screen.findByText("Nothing is running right now.")).toBeInTheDocument();
-    expect(within(sectionOf(container, "home-decisions")).getByText("No decision is waiting."))
-      .toBeInTheDocument();
+    expect(
+      await within(sectionOf(container, "home-decisions")).findByText("No decision is waiting."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
@@ -691,6 +710,78 @@ describe("Home lists the open maintenance flags under Needs your decision", () =
     expect(screen.getByText("1 waiting on you.")).toBeInTheDocument();
   });
 
+  it("claims no waiting count while the flags read is on its way", async () => {
+    const flag = maintenanceFlag();
+    mountApi({ runs: [waitingRun("Last week's sweep")] });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/api/library/flags`, async () => {
+        await held;
+        return HttpResponse.json({ flags: [flag] });
+      }),
+    );
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    expect(await within(decisions).findByText("Last week's sweep")).toBeInTheDocument();
+    expect(screen.getByText("Checking what is waiting on you.")).toBeInTheDocument();
+    expect(screen.queryByText("1 waiting on you.")).not.toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("2 waiting on you.")).toBeInTheDocument();
+    expect(within(decisions).getByText(flag.summary)).toBeInTheDocument();
+  });
+
+  it("writes no empty copy while the flags read is on its way", async () => {
+    mountApi({ runs: [runViewFixture({ session_id: "s-live", run_title: "This week's sweep" })] });
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/api/library/flags`, async () => {
+        await held;
+        return HttpResponse.json({ flags: [] });
+      }),
+    );
+    const { container } = render(<HomePage />);
+
+    const decisions = sectionOf(container, "home-decisions");
+    expect(await screen.findByText("This week's sweep")).toBeInTheDocument();
+    expect(screen.getByText("1 running.")).toBeInTheDocument();
+    expect(within(decisions).queryByText("No decision is waiting.")).not.toBeInTheDocument();
+
+    release();
+    expect(await within(decisions).findByText("No decision is waiting.")).toBeInTheDocument();
+    expect(screen.getByText("1 running.")).toBeInTheDocument();
+  });
+
+  it("writes no empty copy while the live pool read is on its way", async () => {
+    mountApi({});
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    server.use(
+      http.get(`${BASE}/api/runs`, async () => {
+        await held;
+        return HttpResponse.json({ runs: [] });
+      }),
+    );
+    const { container } = render(<HomePage />);
+
+    // The header counts the flags once their read answered, here with none and no run read yet.
+    expect(await screen.findByText("Nothing is running right now.")).toBeInTheDocument();
+    const decisions = sectionOf(container, "home-decisions");
+    expect(within(decisions).queryByText("No decision is waiting.")).not.toBeInTheDocument();
+
+    release();
+    expect(await within(decisions).findByText("No decision is waiting.")).toBeInTheDocument();
+  });
+
   it("counts the open flags with the runs waiting on you", async () => {
     mountApi({
       runs: [waitingRun("Last week's sweep"), runViewFixture({ session_id: "s-live", state: "running" })],
@@ -790,6 +881,6 @@ describe("Home lists the open maintenance flags under Needs your decision", () =
     );
     expect(posted).toEqual([{ by: "Alex", reason: "The sweep keeps its own wording." }]);
     expect(reads).toBe(2);
-    expect(within(decisions).getByText("No decision is waiting.")).toBeInTheDocument();
+    expect(await within(decisions).findByText("No decision is waiting.")).toBeInTheDocument();
   });
 });

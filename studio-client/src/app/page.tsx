@@ -46,15 +46,22 @@ const SECONDARY_ACTION =
 
 // What the live pool says, or that it said nothing at all. A read that failed knows neither how
 // many runs are in flight nor how many wait on a person, and saying either would be a claim.
-// `waiting` counts the runs at a gate and the open maintenance flags, the flags only when their
-// read answered.
-function summarize(waiting: number, running: number, paused: number, unread: boolean): string {
+// `waiting` counts the runs at a gate and the open maintenance flags. It is null while the flags
+// read is on its way, so the line claims no waiting count before it knows one. A failed flags read
+// counts the runs alone, since its own alert says the flags went unread.
+function summarize(
+  waiting: number | null,
+  running: number,
+  paused: number,
+  unread: boolean,
+): string {
   if (unread) return "Could not read what is running.";
   const clauses: string[] = [];
-  if (waiting > 0) clauses.push(`${waiting} waiting on you`);
+  if (waiting !== null && waiting > 0) clauses.push(`${waiting} waiting on you`);
   if (running > 0) clauses.push(`${running} running`);
   if (paused > 0) clauses.push(`${paused} paused`);
-  return clauses.length === 0 ? "Nothing is running right now." : `${clauses.join(", ")}.`;
+  if (clauses.length > 0) return `${clauses.join(", ")}.`;
+  return waiting === null ? "Checking what is waiting on you." : "Nothing is running right now.";
 }
 
 function Alert({ children }: { children: ReactNode }): ReactElement {
@@ -260,7 +267,7 @@ export default function HomePage(): ReactElement {
               end, and nothing else here interrupts a reader to say so. */}
           <p aria-live="polite" className="text-caption text-label-3">
             {summarize(
-              waiting.length + flags.length,
+              flagsQuery.isPending ? null : waiting.length + flags.length,
               running.length,
               paused.length,
               runsQuery.isError,
@@ -337,7 +344,8 @@ export default function HomePage(): ReactElement {
         </Section>
 
         {/* The runs waiting at a gate, then the open maintenance flags. Each read that failed says
-            so on its own, and the empty copy shows only once both answered with nothing. */}
+            so on its own. The empty copy shows only once both reads have answered and neither
+            holds anything, never while one is on its way or after one failed. */}
         <Section id="home-decisions" title="Needs your decision">
           {liveError !== null ? (
             <Alert>Could not read what is waiting on you. {liveError}</Alert>
@@ -361,13 +369,13 @@ export default function HomePage(): ReactElement {
               ))}
             </ul>
           ) : null}
-          {liveError === null &&
-          flagsError === null &&
+          {runsQuery.isSuccess &&
+          flagsQuery.isSuccess &&
           decisionCards.length === 0 &&
           flags.length === 0 ? (
             <EmptyState
               title="No decision is waiting."
-              hint="When a run reaches a gate or step maintenance needs your decision, it waits here."
+              hint="A run at a gate, or a step maintenance flag that needs your decision, waits here."
               className="rounded-lg border border-line border-dashed"
             />
           ) : null}

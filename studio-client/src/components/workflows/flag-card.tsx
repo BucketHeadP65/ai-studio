@@ -13,9 +13,10 @@ import { Input } from "@/shared/ui/input";
 import { Modal, ModalDescription, ModalTitle } from "@/shared/ui/modal";
 import { Textarea } from "@/shared/ui/textarea";
 
-// One maintenance flag in a list: what it asks the owner to decide, the step it is about and the
-// workflow holding that step's copy, the evidence and any proposed change folded away until asked
-// for, and the one act on it, resolving it with a reason.
+// One maintenance flag in a list, in the order a decision is made: what it asks the owner to
+// decide, the step it is about and the workflow holding that step's copy, the evidence and any
+// proposed change folded away until asked for, and last the one act on it, resolving it with a
+// reason.
 //
 // Whoever resolves types their own name, as approving a workflow does. This deployment has no
 // accounts and no logins, so the name is text, recorded as given and never filled in on anybody's
@@ -179,16 +180,16 @@ export function FlagCard({ flag, onResolved }: FlagCardProps): ReactElement {
         <p className="text-body text-label-1">{flag.summary}</p>
       </div>
 
+      <Fold label="Evidence" text={flag.evidence} />
+      {flag.proposed_change !== "" ? (
+        <Fold label="Proposed change" text={flag.proposed_change} />
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2 border-ground border-t px-4 py-2 sm:justify-end">
         <Button onClick={() => setResolving(true)} className="h-8 px-4 text-caption">
           Resolve
         </Button>
       </div>
-
-      <Fold label="Evidence" text={flag.evidence} />
-      {flag.proposed_change !== "" ? (
-        <Fold label="Proposed change" text={flag.proposed_change} />
-      ) : null}
 
       {resolving ? (
         <ResolveDialog
