@@ -21,7 +21,9 @@ class ScheduleIn(BaseModel):
     arguments: WorkflowArguments = Field(default_factory=dict)
     """One JSON value per declared parameter, admitted against that parameter's own schema before
     the row is written. Text under a parameter that cannot hold it is read as JSON once, so a
-    client with nothing but strings still writes a schedule that fires."""
+    client with nothing but strings still writes a schedule that fires. An `on index` cadence fills
+    `changed_page_ids` and an `on step change` cadence fills `changed_step_ids` at every fire, so that
+    parameter may be left out even when the workflow requires it."""
     cadence: str
     """`every <N><s, m, h, or d>`, a 5 field cron expression, `on refresh`, `after <workflow name>`, `on index <knowledge base>` or
     `on step change`, the last two with an optional `quiet <N><s, m, or h>` of at most 24 hours."""

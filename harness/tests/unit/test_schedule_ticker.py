@@ -22,7 +22,7 @@ from harness.features.running import service as running_service
 from harness.features.running.contracts import schedule_runner
 from harness.features.running.records import RunCollaborators
 from harness.features.scheduling.domain import CHANGED_PAGES_PARAMETER, CHANGED_STEPS_PARAMETER, Schedule, ScheduleUpdate
-from harness.features.scheduling.exceptions import ScheduleSettingInvalidError
+from harness.features.scheduling.exceptions import ScheduleSettingInvalidError, WorkflowParametersMissingError
 from harness.features.scheduling.service import CAUGHT_UP_OUTCOME, ENGINE_UNREACHABLE_OUTCOME, MISSED_OUTCOME, Scheduler
 from harness.session import NoSessionLog, Runtime, SessionPool
 from harness.settings import RunSettings
@@ -1193,3 +1193,232 @@ async def test_a_change_that_still_waits_on_step_changes_keeps_the_pending_steps
     after = await schedules.get(schedule.id)
     assert after is not None
     assert after.pending_step_ids == ("st.a.v1",)
+
+
+# --- a parameter the fire supplies ----------------------------------------------------------------
+
+_COLLECTING = [
+    pytest.param("on step change quiet 10m", CHANGED_STEPS_PARAMETER, id="on step change"),
+    pytest.param("on index notes", CHANGED_PAGES_PARAMETER, id="on index"),
+]
+"""Each cadence that collects ids, with the parameter its fire passes them to."""
+
+
+def _requiring_spec(parameter: str, *, name: str = "wf-collects", quarter: bool = False) -> Workflow:
+    """A workflow that requires `parameter` as text of at least one character, as step maintenance requires its steps, and `quarter` when asked."""
+    work = "read_steps" if parameter == CHANGED_STEPS_PARAMETER else "read_pages"
+    parameters = {parameter: ParameterSpec(description="the collected ids", json_schema={"type": "string", "minLength": 1})}
+    if quarter:
+        parameters["quarter"] = ParameterSpec(description="fiscal quarter", json_schema={"type": "string"})
+    return Workflow(
+        name=name,
+        version=1,
+        description="read the ids a fire collected",
+        parameters=parameters,
+        nodes=(RunNode(id="read", work=work, inputs={parameter: FromParameter(parameter=parameter)}),),
+        output=FromNode(node="read"),
+    )
+
+
+def _requiring_registry(parameter: str, seen: list[str]) -> StepRegistry:
+    """The registry whose one step reads `parameter` and records what a fire handed it."""
+    return _steps_registry(seen) if parameter == CHANGED_STEPS_PARAMETER else _pages_registry(seen)
+
+
+def _pending(parameter: str, ids: tuple[str, ...]) -> dict[str, object]:
+    """The schedule field that holds the ids collected for `parameter`."""
+    return {"pending_step_ids": ids} if parameter == CHANGED_STEPS_PARAMETER else {"pending_page_ids": ids}
+
+
+async def _create(scheduler: Scheduler, store: FakeWorkflowStore, registry: StepRegistry, *, arguments: dict[str, Any], cadence: str) -> Schedule:
+    """Create a schedule of `wf-collects` with every other setting at its default."""
+    return await scheduler.create_schedule(
+        store,
+        registry,
+        workflow_id="wf-collects",
+        arguments=arguments,
+        cadence=cadence,
+        gate_policy="wait",
+        gate_mode="auto",
+        capacity_key=None,
+        capacity_limit=None,
+        blackout=None,
+        catch_up=False,
+        names=None,
+        now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+        run_engine="in_process",
+    )
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_cadence_that_collects_a_required_parameter_saves_the_schedule_without_it(cadence: str, parameter: str) -> None:
+    schedules = FakeSchedules()
+    scheduler = Scheduler(schedules, schedules, FakeBroadcaster())
+
+    saved = await _create(
+        scheduler, FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)}), _requiring_registry(parameter, []), arguments={}, cadence=cadence
+    )
+
+    assert parameter not in saved.arguments, "the fire supplies it"
+    assert [row.id for row in await schedules.list_all()] == [saved.id]
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_cadence_that_collects_a_parameter_still_demands_every_other_required_one(cadence: str, parameter: str) -> None:
+    schedules = FakeSchedules()
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter, quarter=True)})
+
+    with pytest.raises(WorkflowParametersMissingError) as refusal:
+        await _create(Scheduler(schedules, schedules, FakeBroadcaster()), store, _requiring_registry(parameter, []), arguments={}, cadence=cadence)
+
+    assert refusal.value.missing == ("quarter",)
+    assert await schedules.list_all() == []
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_clock_cadence_demands_the_parameter_an_event_cadence_would_collect(cadence: str, parameter: str) -> None:
+    del cadence
+    schedules = FakeSchedules()
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)})
+
+    with pytest.raises(WorkflowParametersMissingError) as refusal:
+        await _create(Scheduler(schedules, schedules, FakeBroadcaster()), store, _requiring_registry(parameter, []), arguments={}, cadence="every 30m")
+
+    assert refusal.value.missing == (parameter,)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [ScheduleUpdate(arguments={"quarter": "Q2"}), ScheduleUpdate(workflow_id="wf-collects-2")],
+    ids=["its arguments", "its workflow"],
+)
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_patch_of_a_collecting_schedule_does_not_demand_the_parameter_its_fire_supplies(
+    cadence: str, parameter: str, changes: ScheduleUpdate
+) -> None:
+    store = FakeWorkflowStore(
+        specs={
+            "wf-collects": _requiring_spec(parameter, quarter=True),
+            "wf-collects-2": _requiring_spec(parameter, name="wf-collects-2", quarter=True),
+        }
+    )
+    schedules = FakeSchedules()
+    held = _schedule(workflow_id="wf-collects", arguments={"quarter": "Q1"}, cadence=cadence, next_run_at=None)
+    await schedules.insert(held)
+
+    saved = await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        store, _requiring_registry(parameter, []), held.id, changes, names=None, run_engine="in_process"
+    )
+
+    assert parameter not in saved.arguments
+    assert (saved.workflow_id, saved.arguments["quarter"]) == (changes.workflow_id or "wf-collects", "Q2" if changes.arguments else "Q1")
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_patch_to_a_collecting_cadence_with_new_arguments_does_not_demand_the_parameter(cadence: str, parameter: str) -> None:
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter, quarter=True)})
+    schedules = FakeSchedules()
+    held = _schedule(workflow_id="wf-collects", arguments={"quarter": "Q1", parameter: "a.one"})
+    await schedules.insert(held)
+
+    saved = await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+        store, _requiring_registry(parameter, []), held.id, ScheduleUpdate(cadence=cadence, arguments={"quarter": "Q2"}), names=None, run_engine="in_process"
+    )
+
+    assert (saved.cadence, saved.arguments) == (cadence, {"quarter": "Q2"})
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_patch_from_a_collecting_cadence_to_the_clock_demands_the_parameter(cadence: str, parameter: str) -> None:
+    """The clock collects nothing, so a schedule that leaves the parameter to its fire must now name it."""
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)})
+    schedules = FakeSchedules()
+    held = _schedule(workflow_id="wf-collects", arguments={}, cadence=cadence, next_run_at=None)
+    await schedules.insert(held)
+
+    with pytest.raises(WorkflowParametersMissingError) as refusal:
+        await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+            store, _requiring_registry(parameter, []), held.id, ScheduleUpdate(cadence="every 30m"), names=None, run_engine="in_process"
+        )
+
+    assert refusal.value.missing == (parameter,)
+    kept = await schedules.get(held.id)
+    assert kept is not None
+    assert kept.cadence == cadence
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_patch_of_a_collecting_schedule_still_demands_every_other_required_parameter(cadence: str, parameter: str) -> None:
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter, quarter=True)})
+    schedules = FakeSchedules()
+    held = _schedule(workflow_id="wf-collects", arguments={"quarter": "Q1"}, cadence=cadence, next_run_at=None)
+    await schedules.insert(held)
+
+    with pytest.raises(WorkflowParametersMissingError) as refusal:
+        await Scheduler(schedules, schedules, FakeBroadcaster()).update_schedule(
+            store, _requiring_registry(parameter, []), held.id, ScheduleUpdate(arguments={}), names=None, run_engine="in_process"
+        )
+
+    assert refusal.value.missing == ("quarter",)
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_fire_fills_a_required_collected_parameter_the_schedule_does_not_hold(cadence: str, parameter: str, tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)})
+    pool = SessionPool(_runtime(_requiring_registry(parameter, seen), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-collects", arguments={}, cadence=cadence, **_pending(parameter, ("b.two", "a.one")))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.last_outcome == "launched"
+    session = await pool.get(after.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["a.one,b.two"]
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_fire_replaces_a_stored_value_of_the_collected_parameter(cadence: str, parameter: str, tmp_path: Path) -> None:
+    seen: list[str] = []
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)})
+    pool = SessionPool(_runtime(_requiring_registry(parameter, seen), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-collects", arguments={parameter: "stored.old"}, cadence=cadence, **_pending(parameter, ("new.one",)))
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    await Scheduler(schedules, schedules, FakeBroadcaster()).tick(pool, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    session = await pool.get(after.session_id)
+    assert session.active.task is not None
+    await session.active.task
+    assert seen == ["new.one"], "the collected ids win over the stored value"
+
+
+@pytest.mark.parametrize(("cadence", "parameter"), _COLLECTING)
+async def test_a_fire_that_collected_nothing_is_refused_by_a_workflow_that_requires_some(cadence: str, parameter: str, tmp_path: Path) -> None:
+    """Run now with nothing collected passes empty text, which a parameter of at least one character refuses."""
+    store = FakeWorkflowStore(specs={"wf-collects": _requiring_spec(parameter)})
+    pool = SessionPool(_runtime(_requiring_registry(parameter, []), store))
+    schedules = FakeSchedules()
+    schedule = _schedule(workflow_id="wf-collects", arguments={}, cadence=cadence, next_run_at=None)
+    await schedules.insert(schedule)
+    run = RunCollaborators(records=records_under(tmp_path), topics=FakeBroadcaster(), run_settings=RunSettings())
+
+    outcome = await Scheduler(schedules, schedules, FakeBroadcaster()).run_now(pool, schedule.id, run=run, now=datetime(2026, 8, 24, 12, 0, tzinfo=UTC))
+
+    assert outcome.startswith("refused: ")
+    assert parameter in outcome
+    after = await schedules.get(schedule.id)
+    assert after is not None
+    assert after.next_run_at is None, "the schedule rests"
+    session = await pool.get(after.session_id)
+    assert session.active.task is None, "nothing was launched"

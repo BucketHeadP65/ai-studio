@@ -1372,7 +1372,11 @@ removes exactly the ids it passed. A page an index adds while the fire runs stay
 the fire that index gave it. A fire that launches nothing, such as a held one, keeps every id. A fire whose newest
 workflow version declares no `changed_page_ids` stamps `refused: <workflow id> declares no changed_page_ids` and
 rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-index schedule over a workflow
-that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow. A
+that declares no `changed_page_ids`, checked on create and on any patch that changes the cadence or the workflow.
+Because every fire fills `changed_page_ids`, the schedule's arguments need not hold it even when the workflow requires
+it, and a value they hold is replaced by the collected ids at every fire. Every other required parameter is still
+demanded. A patch that moves the schedule to a cadence that does not fill `changed_page_ids` answers 400
+`fill in: changed_page_ids` when the workflow requires it and the arguments hold none. A
 patch that gives the schedule another cadence clears its `pending_page_ids`, so no page collected under the old one
 rides a later fire. A patch to another `on index` cadence over the same knowledge base keeps them, so a change of the
 quiet period alone loses no page. `POST /api/schedules/{id}/run-now` on an on-index schedule that has collected nothing passes an
@@ -1390,7 +1394,13 @@ later. A fire that launches passes the collected ids, sorted and comma-separated
 `changed_step_ids` and removes exactly the ids it passed, as the on-index cadence does with its pages. A fire whose
 newest workflow version declares no `changed_step_ids` stamps `refused: <workflow id> declares no changed_step_ids` and
 rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-step-change schedule over a workflow
-that declares no `changed_step_ids`. A patch that gives the schedule another cadence clears its `pending_step_ids`,
+that declares no `changed_step_ids`. The arguments need not hold `changed_step_ids` even when the workflow requires it,
+as `step-maintenance` does, and a value they hold is replaced at every fire, as with `changed_page_ids` above. Every
+other required parameter is still demanded, and a patch that moves the schedule to a cadence that does not fill
+`changed_step_ids` answers 400 `fill in: changed_step_ids` when the workflow requires it and the arguments hold none.
+`POST /api/schedules/{id}/run-now` on an on-step-change schedule that has collected nothing passes an empty
+`changed_step_ids`, which `step-maintenance` refuses because it requires at least one character, so the fire stamps
+`refused: changed_step_ids $: ...` and rests. A patch that gives the schedule another cadence clears its `pending_step_ids`,
 and a patch to another quiet period keeps them. Migration 0074 adds the column.
 
 **Gate policy** is `"wait"` (default: a gated fire waits for a person indefinitely) or `"fail_after:<seconds>"`, how

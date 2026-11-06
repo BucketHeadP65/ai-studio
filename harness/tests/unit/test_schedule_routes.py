@@ -23,6 +23,7 @@ from pydantic_ai.models.test import TestModel
 from harness.features.running.records import RunCollaborators
 from harness.features.running.spend import RunSpend, SpendTotals, rows_for
 from harness.features.scheduling.controller import SchedulingController
+from harness.features.scheduling.domain import CHANGED_STEPS_PARAMETER
 from harness.features.scheduling.service import Scheduler
 from harness.session import NoSessionLog, Runtime, SessionPool
 from harness.settings import RunSettings
@@ -33,7 +34,16 @@ from tests.support.fakes.sessions import APool
 from tests.support.fakes.spend import FakeSpendLog
 from tests.support.state import a_state, records_under
 from tests.unit.test_run_spend import _response
-from tests.unit.test_schedule_ticker import FakeWorkflowStore, _one_node_spec, _sales_taking_pages, _schedule, _typed_registry, _typed_spec
+from tests.unit.test_schedule_ticker import (
+    FakeWorkflowStore,
+    _one_node_spec,
+    _requiring_registry,
+    _requiring_spec,
+    _sales_taking_pages,
+    _schedule,
+    _typed_registry,
+    _typed_spec,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -594,6 +604,20 @@ async def test_pointing_an_on_index_schedule_at_a_workflow_without_changed_page_
     kept = await schedules.get(held.id)
     assert kept is not None
     assert kept.workflow_id == "wf-pages"
+
+
+async def test_create_takes_an_on_step_change_schedule_without_the_steps_its_fire_collects(tmp_path: Path) -> None:
+    """The workflow requires `changed_step_ids`, and the fire fills it from the steps the schedule collects."""
+    store = FakeWorkflowStore(specs={"wf.step-maintenance.v1": _requiring_spec(CHANGED_STEPS_PARAMETER, name="step-maintenance")})
+    schedules = FakeSchedules()
+    async with _studio(store, schedules, tmp_path, registry=_requiring_registry(CHANGED_STEPS_PARAMETER, [])) as (client, _):
+        created = await client.post(
+            "/api/schedules", json={"workflow_id": "wf.step-maintenance.v1", "cadence": "on step change quiet 10m", "gate_mode": "auto"}
+        )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["schedule"]["arguments"] == {}
+    assert len(await schedules.list_all()) == 1
 
 
 async def test_preview_of_an_event_cadence_lists_no_fires(tmp_path: Path) -> None:
