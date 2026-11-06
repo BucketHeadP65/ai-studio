@@ -1,10 +1,12 @@
 version: 2
+# A limit of 0 turns version-update pull requests off, because packages are upgraded locally in one pass.
+# Security updates ignore this limit and still open pull requests.
 updates:
   - package-ecosystem: "uv"
     directory: "/core"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       core-dependencies:
         patterns:
@@ -13,7 +15,7 @@ updates:
     directory: "/engram"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       engram-dependencies:
         patterns:
@@ -22,7 +24,7 @@ updates:
     directory: "/studio"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       studio-dependencies:
         patterns:
@@ -31,7 +33,7 @@ updates:
     directory: "/harness"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       harness-dependencies:
         patterns:
@@ -40,7 +42,7 @@ updates:
     directory: "/connectors"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       connectors-dependencies:
         patterns:
@@ -49,7 +51,7 @@ updates:
     directory: "/studio-client"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       studio-client-dependencies:
         patterns:
@@ -58,7 +60,7 @@ updates:
     directory: "/engram/docker/postgres"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       postgres-image:
         patterns:
@@ -70,7 +72,7 @@ updates:
     directory: "/engram"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       engram-compose:
         patterns:
@@ -82,7 +84,7 @@ updates:
     directory: "/harness"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     groups:
       harness-compose:
         patterns:
