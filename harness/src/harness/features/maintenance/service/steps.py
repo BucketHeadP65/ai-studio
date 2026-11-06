@@ -487,9 +487,10 @@ class MaintenanceSteps:
         Call it on every change you plan to adopt, with the further edit operations it needs, before you answer. The
         landing builds the same version and refuses it when the check fails, when the step version is not the newest of
         its name, when the consumer declines that version, when someone saved a newer version of the consumer, or when
-        an edit is anything but `rewire`, `add_parameter` or `set_output`. The answer says which. A repository change
-        you draft may hold any edit, such as a `replace_inline_step`, because the landing never lands a draft: read
-        only the contract check for it.
+        an edit is anything but `rewire`, `add_parameter` or `set_output`. The answer says which. Every adoption into one
+        consumer lands as one version, so adoptions that each pass here are refused together when that version does not
+        validate. A repository change you draft may hold any edit, such as a `replace_inline_step`, because the landing
+        never lands a draft: read only the contract check for it.
 
         Args:
             workflow_id: The consumer's workflow version id, `wf.<name>.v<version>`, as the pair names it.

@@ -132,7 +132,7 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
         return _failed_at_a_touched_node(workflow, touched, run)
     if not baseline:
         return LiveTrialVerdict(
-            kind="counts", reason="The run did not fail at the adopted step, and the previous version has no completed run to compare it with."
+            kind="counts", reason="The run did not fail in execution, and the previous version has no completed run to compare it with."
         )
     return (
         _ranked_below(run, baseline)
