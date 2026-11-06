@@ -270,10 +270,9 @@ class MaintenanceSteps:
         A change is refused when its step or its consumer cannot be read, when its step version is not the newest of
         its name, when the consumer declines that version, or when someone saved a newer version of the consumer since
         the listing. An adoption is also refused when it carries an edit other than `rewire`, `add_parameter` or
-        `set_output`, when its edits change an inline step other than the adopted one or do not apply, when the
-        candidate does not validate, when its card's words name what the workflow does not declare, when it names an
-        agent this host cannot resolve, or when the library refuses the save. A kept pair is refused when the library
-        refuses its decline.
+        `set_output`, when its edits do not apply, when the candidate does not validate, when its card's words name what
+        the workflow does not declare, when it names an agent this host cannot resolve, or when the library refuses the
+        save. A kept pair is refused when the library refuses its decline.
 
         Args:
             plan: The plan the judge approved.
@@ -424,10 +423,10 @@ class MaintenanceSteps:
 
         Call it on every change you plan to adopt, with the further edit operations it needs, before you answer. The
         landing builds the same version and refuses it when the check fails, when the step version is not the newest of
-        its name, when the consumer declines that version, when someone saved a newer version of the consumer, when an
-        edit is anything but `rewire`, `add_parameter` or `set_output`, and when the edits change any inline step other
-        than the adopted one. The answer says which. A repository change you draft may hold any edit, such as a
-        `replace_inline_step`, because the landing never lands a draft: read only the contract check for it.
+        its name, when the consumer declines that version, when someone saved a newer version of the consumer, or when
+        an edit is anything but `rewire`, `add_parameter` or `set_output`. The answer says which. A repository change
+        you draft may hold any edit, such as a `replace_inline_step`, because the landing never lands a draft: read
+        only the contract check for it.
 
         Args:
             workflow_id: The consumer's workflow version id, `wf.<name>.v<version>`, as the pair names it.
@@ -598,25 +597,13 @@ class MaintenanceSteps:
         return None
 
     async def _adoption_refusal(self, base: str, step_id: str, step: InlineStep, extra_ops: Sequence[Mapping[str, JsonValue]]) -> str | None:
-        """Why the landing refuses this adoption before validating it, or None: a stale pair, an edit it may not carry, or another step changed."""
+        """Why the landing refuses this adoption before building it, or None: a stale pair, or an edit it may not carry."""
         if (stale := await self._stale_pair(base, step_id, step)) is not None:
             return stale
         if refused := [str(op.get("op")) for op in extra_ops if op.get("op") not in ADOPTION_EDITS]:
             return (
                 f"an adoption may carry only the edits rewire, add_parameter and set_output, and this one carries "
                 f"{', '.join(refused)}. Plan keep or flag for this consumer, or adopt it without those edits"
-            )
-        workflow = await self._library.fetch_workflow(base)
-        try:
-            child, _ = _adopted(workflow, step, extra_ops, evidence="")
-        except AdaptationRefusedError:
-            return None
-        expected = {**_inline_addresses(workflow), step.name: step_content_address(step)}
-        if (held := _inline_addresses(child)) != expected:
-            changed = sorted(name for name in expected.keys() | held.keys() if expected.get(name) != held.get(name))
-            return (
-                f"the further edit operations change inline steps other than {step.name}: {', '.join(changed)}. An adoption "
-                f"changes only the step it adopts, and its further edits may only be rewire, add_parameter and set_output"
             )
         return None
 
@@ -737,11 +724,6 @@ def _adopted(workflow: Workflow, step: InlineStep, extra_ops: Sequence[Mapping[s
     except ValueError as exc:
         msg = f"an edit operation does not apply: {exc}"
         raise AdaptationRefusedError(msg) from exc
-
-
-def _inline_addresses(workflow: Workflow) -> dict[str, str]:
-    """Each inline step's content address, by step name."""
-    return {inline.name: step_content_address(inline) for inline in workflow.inline}
 
 
 def _nodes_running(workflow: Workflow, name: str) -> list[str]:
