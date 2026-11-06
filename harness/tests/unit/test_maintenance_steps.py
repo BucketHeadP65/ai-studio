@@ -1147,6 +1147,30 @@ async def test_a_refused_landing_tells_the_owner_once_what_landed_and_what_was_r
     assert "The owner was told." in str(raised.value)
 
 
+@pytest.mark.parametrize(
+    ("failure", "delivers", "said"),
+    [(ConnectionError("the notification centre is not running"), True, "The notice to the owner failed: the notification centre is not running"),
+     (None, False, "The notice to the owner was not delivered.")],
+    ids=["it raises", "it is not delivered"],
+)
+async def test_a_refused_landing_whose_notice_does_not_reach_the_owner_still_fails_and_says_so(
+    tmp_path: Path, failure: Exception | None, delivers: bool, said: str
+) -> None:
+    world = World(tmp_path)
+    world.notifier.failure = failure
+    world.notifier.delivers = delivers
+    await world.save_steps(3, 4)
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
+    plan = await world.plan(V4, {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    assert len(world.notifier.sent) == 1
+    assert str(raised.value).endswith(said)
+
+
 async def test_a_landing_without_refusals_leaves_the_one_notice_to_report_changes(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
