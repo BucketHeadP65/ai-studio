@@ -34,6 +34,8 @@ from core.ai.workflows.contracts import (
     canonical_step_yaml,
     spec_identity,
     step_content_address,
+    trust_across_versions,
+    version_hashes,
 )
 
 from harness.domain.contracts import CaseReport, CaseResult, cases_address
@@ -990,3 +992,32 @@ async def test_check_change_says_the_landing_refuses_an_older_step_version_and_a
 
     assert "The landing refuses it as an adoption: st.digest.v3 is not the newest version of digest" in older
     assert f"The landing refuses it as an adoption: {weekly_id} declines {V4}" in declined
+
+
+async def test_an_adoption_after_a_revert_is_numbered_above_the_archived_version_which_keeps_its_marker_and_its_runs(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    sources = consumer("digest-sources", DIGEST[3])
+    sources_id = await world.save(sources)
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    live_trial_id = "wf.digest-sources.v2"
+    live_trial = await world.library.fetch_workflow(live_trial_id)
+    marker = await world.library.fetch_live_trial(live_trial_id)
+    await world.log.append(_ran(sources, sources_id, at=T0 - timedelta(days=1)))
+    await world.log.append(_ran(live_trial, live_trial_id, at=T0))
+    assert await world.library.revert(live_trial_id) == sources_id
+    await world.save_steps(5)
+
+    landed = await _land(world, await world.plan("st.digest.v5", {sources_id: ("adopt", "It dates each claim too.")}))
+
+    (change,) = landed.changes
+    assert (change.outcome, change.saved_id) == ("adopted", "wf.digest-sources.v3")
+    assert "archived_at" in world.store.pages[live_trial_id]["frontmatter"]
+    assert await world.library.fetch_workflow(live_trial_id) == live_trial
+    assert await world.library.fetch_live_trial(live_trial_id) == marker
+    newest = await world.library.fetch_workflow("wf.digest-sources.v3")
+    assert newest.inline == (DIGEST[5],)
+    hashes = await version_hashes(newest, versions=world.library, fetch_workflow=world.library.fetch_workflow)
+    trust = trust_across_versions(await world.log.history_for_any(spec_hashes=hashes.keys()), hashes, spec_identity(newest))
+    assert trust.total.runs_with_evidence == 2, "the run of the archived version and the run of the version it replaced both count"
+    assert dict(trust.versions).keys() == {1, 2, 3}

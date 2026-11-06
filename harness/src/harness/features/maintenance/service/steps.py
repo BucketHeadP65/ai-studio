@@ -269,8 +269,9 @@ class MaintenanceSteps:
         decision that names no drafted change is refused, and so is every decision of a drafted change decided twice.
 
         An adoption copies the step from the library, applies the change's further edit operations, validates the
-        candidate and saves it as the consumer's next version, saved by step maintenance, with a live trial marker naming
-        the version it replaces. It then resolves the open consumer flag of that pair. A kept pair writes a decline into
+        candidate and saves it as the consumer's next version, numbered one above the highest saved version of its name
+        so an archived version is never written over, saved by step maintenance, with a live trial marker naming the
+        version it replaces. It then resolves the open consumer flag of that pair. A kept pair writes a decline into
         the consumer's record, and a flagged pair writes a `consumer_flag` page with the contract check and the
         planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. Every
         writable change lands before any refusal is raised.
@@ -640,6 +641,7 @@ class MaintenanceSteps:
         ran_in = f" in the run {run}" if run else ""
         evidence = f"Step maintenance adopted {change.step_id} in {base}{ran_in}. {change.reason}"
         child, lineage = _adopted(workflow, step, change.extra_ops, evidence=evidence)
+        child = child.model_copy(update={"version": await self._next_version(workflow.name)})
         registry = self._registered()
         verify_savable(child, registry)
         try:
@@ -664,6 +666,10 @@ class MaintenanceSteps:
         )
         notes = await self._resolve_consumer_flag(workflow.name, step.name, saved_id, change.step_id)
         return _landed(change, "adopted", change.reason, saved_id=saved_id, notes=notes)
+
+    async def _next_version(self, name: str) -> int:
+        """One above the highest saved version of the workflow `name`, archived and superseded ones included."""
+        return max(version for version, _ in await self._library.versions(name)) + 1
 
     async def _resolve_consumer_flag(self, workflow_name: str, step_name: str, saved_id: str, step_id: str) -> list[str]:
         """Resolve the pair's open consumer flag as settled by the adoption, answering a note when that fails."""

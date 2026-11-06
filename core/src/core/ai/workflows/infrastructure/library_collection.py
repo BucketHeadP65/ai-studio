@@ -250,10 +250,11 @@ _FLAG_FIELDS = ("step", "step_id", "step_hash", "workflow", "raised_by", "raised
 """The flag fields a flag page keeps in its frontmatter under their own names. Its kind is kept as `flag_kind`."""
 
 
-SUPERSEDED_SQL = "select c.superseded from api.cards c where c.id = $1"
-"""Whether page `$1` already points at a successor.
+RETIRED_SQL = "select c.superseded, c.frontmatter ? 'archived_at' as archived from api.cards c where c.id = $1"
+"""Whether page `$1` already points at a successor, and whether it is archived.
 
-`api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good."""
+`api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good. An
+upsert of an archived page would write another workflow over the one its runs ran."""
 
 SAVED_BY_SQL = """
 select c.frontmatter ->> 'saved_by' as saved_by
@@ -675,7 +676,7 @@ class LibraryCollection:
             WorkflowUnknownError: If no workflow page has that id. Nothing is written.
             LibraryError: If the version is superseded, or the ingest refuses the write. Nothing is written in each case.
         """
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        superseded = await self._rows.fetch(RETIRED_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
             msg = f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link, so it is not restamped."
             raise LibraryError(msg)
@@ -893,21 +894,29 @@ class LibraryCollection:
             The page id the workflow lives under.
 
         Raises:
-            LibraryError: If this exact version already exists and is superseded, the prior consumer record
-                does not parse, or the ingest refuses the page. The current version of anything still saves again
-                freely.
+            LibraryError: If this exact version already exists and is superseded or archived, the prior consumer record
+                does not parse, or the ingest refuses the page. The refusal of an archived version names the next free
+                version number. The current version of anything still saves again freely.
             PresentationRefusedError: If the presentation names an input or an artifact the
                 workflow does not declare. Nothing is read or written in that case.
         """
         if presentation is not None:
             verify_presentation(workflow, presentation)
         workflow_id = page_id(workflow.name, workflow.version)
-        existing = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        existing = await self._rows.fetch(RETIRED_SQL, workflow_id)
         if existing and bool(existing[0].get("superseded")):
             msg = (
                 f"{workflow_id!r} is already superseded by a later version. Saving it again would offer the stale "
                 f"version beside the current one and erase the supersession link. Fetch the newest version of "
                 f"{workflow.name!r} and adapt that instead."
+            )
+            raise LibraryError(msg)
+        if existing and bool(existing[0].get("archived")):
+            free = max(version for version, _ in await self.versions(workflow.name)) + 1
+            msg = (
+                f"{workflow_id!r} is archived, and saving it again would write over the archived version, the workflow its "
+                f"runs ran. A new version number is needed: save it as version {free}, one above the highest saved version of "
+                f"{workflow.name!r}."
             )
             raise LibraryError(msg)
         record, versions = await self._consumer_record(workflow, workflow_id, lineage)
@@ -1172,7 +1181,7 @@ class LibraryCollection:
             LibraryError: If no page has that id, it is superseded, its record holds no copy of `step`, or the ingest
                 refuses the write. Nothing is written in each case.
         """
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        superseded = await self._rows.fetch(RETIRED_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
             msg = (
                 f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link. "
@@ -1484,7 +1493,7 @@ class LibraryCollection:
         held = long_tail.get("cases")
         if (held == _cases_text(cases)) if cases else (held is None):
             return
-        superseded = await self._rows.fetch(SUPERSEDED_SQL, step_id)
+        superseded = await self._rows.fetch(RETIRED_SQL, step_id)
         if superseded and bool(superseded[0].get("superseded")):
             return
         long_tail.pop("cases", None)

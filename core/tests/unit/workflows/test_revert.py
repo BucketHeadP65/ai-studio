@@ -202,3 +202,21 @@ def test_the_collection_answers_the_live_trial_port_and_the_folder_library_does_
     assert isinstance(collection, LiveTrialLibrary)
     assert isinstance(collection, WorkflowLibrary)
     assert not isinstance(FolderLibrary(tmp_path), LiveTrialLibrary)
+
+
+async def test_a_save_over_an_archived_version_is_refused_naming_the_next_free_version_and_writes_nothing() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    await library.revert("wf.digest-sources.v2")
+    archived_before = dict(store.pages["wf.digest-sources.v2"]["frontmatter"])
+    written = len(store.payloads)
+    again, lineage = adapt(CONSUMER, ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
+
+    with pytest.raises(LibraryError, match=r"wf\.digest-sources\.v2") as refused:
+        await library.put(again, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"}, lineage=lineage)
+
+    assert "archived" in str(refused.value)
+    assert "version 3" in str(refused.value), "the refusal names the next free version number"
+    assert len(store.payloads) == written
+    assert store.pages["wf.digest-sources.v2"]["frontmatter"] == archived_before, "the archived version keeps its spec, lineage, marker and archived_at"
+    assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v1"
