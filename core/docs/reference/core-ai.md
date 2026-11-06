@@ -138,7 +138,9 @@ succeeded or a gate spent its last reach. Everything else is `unknown`: an incom
 contradictory facts, a run that did not complete, and a workflow that declared no result. `unknown` is
 never rewritten into a verdict afterwards.
 
-`RunEvidence.result` carries the `Outcome` beside the execution's own `outcome`. `trust_level` folds
+`RunEvidence.result` carries the `Outcome` beside the execution's own `outcome`, and `RunEvidence.provider_error`
+says whether the run stopped because its model provider refused the reply or could not answer, as the runner that
+saw the error read it (false when its engine does not say). `trust_level` folds
 a completed run into `runs_with_evidence` only when its result is `succeeded` or `noop`. Every other
 completed run counts in `unconfirmed_runs`, and a workflow that declares no result can never be more
 than `unverified`. `last_evidence_at` is the time of the most recent run that confirmed, so it is the
