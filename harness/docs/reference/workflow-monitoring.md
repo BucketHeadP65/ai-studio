@@ -1453,6 +1453,9 @@ registered step's type (`like`), which that runner refuses, and a step maintenan
 cases. The planner's cases call `check_change`, which reads the library the case run reads, so its consumers must be
 there.
 
+The workflow runs on the in-process engine. On the durable engine it never finishes, because its program holds no tool
+(technical debt TD-84).
+
 ## What hears a run's ending
 
 Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells

@@ -268,3 +268,26 @@ TD-46 onward came from the close of the code standard refactor on
 - **Paying it off:** let a rewind reuse the kept outputs of the producers outside the rewound region when it re-enters a
   wait, then wire the judge straight from the three evidence nodes and delete the second pass.
 - **Found:** 2026-11-06, writing the `step-maintenance` workflow, whose plan judge the validator refused.
+
+## TD-84. A program that holds no tool never finishes on the durable engine
+
+- **Where:** `core/src/core/ai/workflows/authoring.py` builds an inline program `replay_safe=not task.tools`,
+  `core/src/core/ai/workflows/infrastructure/temporal.py` (`ActivityExecutor.perform`) awaits a replay-safe step in
+  workflow code, and `harness/src/harness/adapters/environment.py` (`code_runner`) runs programs in the Monty sandbox, which
+  hands each one to a thread.
+- **What is wrong:** under `run_engine: temporal` a program that holds no tool runs in workflow code, and the sandbox's
+  hand-off to its thread calls `call_soon_threadsafe`, which Temporal's deterministic event loop refuses with
+  `NotImplementedError`. The error never reaches the run: the workflow task completes with nothing scheduled, and the run
+  waits forever with no failure recorded. The same program holding a tool runs as an activity and finishes.
+- **Why it is debt:** replay safety is asserted for pure computation, but the code runner that performs it cannot run in
+  workflow code, so every shipped workflow holding such a program hangs on the durable engine: `step-maintenance`,
+  `source-remove`, `research-compound`, `research-stance-refresh`, `news-digest`, `news-link` and `news-relate`, and any
+  workflow copying the reusable programs `finish`, `removal_report`, `count_digests`, `fold_report`,
+  `render_decision_brief` or `report_digests`.
+- **Cost while it stands:** the durable engine cannot run those workflows. `in_process` is the default engine, so no live
+  run hangs today. `harness/tests/integration/test_step_maintenance_durable.py` is held as a strict expected failure on its
+  timeout.
+- **Paying it off:** build a program replay-safe only when the registry's code runner can run in workflow code, or schedule
+  every program as an activity, then drop the expected failure. A one-program workflow reproduces it in seconds on the
+  Temporal test server.
+- **Found:** 2026-11-06, running `step-maintenance` end to end on the Temporal test server.
