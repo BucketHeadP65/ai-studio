@@ -294,3 +294,16 @@ TD-46 onward came from the close of the code standard refactor on
   every program as an activity, then drop the expected failure. A one-program workflow reproduces it in seconds on the
   Temporal test server.
 - **Found:** 2026-11-06, running `step-maintenance` end to end on the Temporal test server.
+
+## TD-85. A harness full test run prints logging errors at interpreter exit
+
+- **Where:** the harness test suite as one process (`uv run pytest` in `harness/`, unit and integration together), and
+  logfire's `exit_open_spans`, which ends every span still open when the interpreter exits.
+- **What is wrong:** spans some tests leave open are ended at exit after the span processor has shut down and pytest has
+  closed the output stream. The processor's "Processor is already shutdown, ignoring call" warning then fails to write, and
+  each failure prints a `--- Logging error ---` traceback. Every test passes. Either tier run alone prints none.
+- **Why it is debt:** test output should be clean, and noise at exit hides a real error printed there.
+- **Cost while it stands:** 4 such tracebacks at `adbeb5d0`, 24 at `ac65b09c`, after the last line of the pytest summary.
+- **Paying it off:** find the tests that leave spans open (bisect by running the unit tier with one integration module at
+  a time) and end their spans, or shut logfire down in a session-scoped fixture before pytest closes its streams.
+- **Found:** 2026-11-06, the full suites at the close of the reusable step maintenance initiative.
