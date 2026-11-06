@@ -57,12 +57,9 @@ and nothing on the run side may borrow it."""
 
 def _archived(home: Path, payload: str) -> FileRunArchive:
     """Write `payload` where an ended run rests, and answer an archive over that directory."""
-    record = RunArchiveRecord.model_validate_json(payload)
-    root = a_state(home).archive
-    folder = root / record.workflow_id
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{record.run_id}.json").write_text(payload, encoding="utf-8")
-    return FileRunArchive(root, retention_days=KEPT_DAYS)
+    archive = FileRunArchive(a_state(home).archive, retention_days=KEPT_DAYS)
+    archive.put(RunArchiveRecord.model_validate_json(payload))
+    return archive
 
 
 def test_a_run_nobody_named_reads_as_unnamed(tmp_path: Path) -> None:

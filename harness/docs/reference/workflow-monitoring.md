@@ -500,7 +500,9 @@ and then daily, and `pinned: true` survives every sweep, the owner's per-run "fo
 /api/runs/history/{run_id} {"pinned": bool}` sets it. `DELETE /api/runs/history/{run_id}` removes a record outright,
 pinned or not, the owner's explicit delete, distinct from a sweep. Records live at
 `.state/runs/archive/<workflow_id>/<run_id>.json`, one file per run, behind the `RunArchive` protocol (`put`, `get`,
-`list_for`, `recent`, `set_pinned`, `delete`, `sweep`). A future blob-store adapter implements the same protocol
+`list_for`, `recent`, `set_pinned`, `delete`, `sweep`). A small `<run_id>.envelope.json` beside each holds the record
+without its spec, values, events, conversations and reviewed values. Listings and the sweep read only that file,
+because a whole record can run to hundreds of megabytes. A future blob-store adapter implements the same protocol
 rather than replacing these callers.
 
 ## The checked outcome: what a run did, beside how it ended

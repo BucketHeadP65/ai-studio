@@ -112,6 +112,12 @@ _TOO_MANY_REQUESTS = 429
 _SERVER_ERROR = 500
 
 
+def _failure_text(exc: Exception) -> str:
+    """The error as a run's failure names it, without the conversation a model behaviour error carries as its body."""
+    said = exc.message if isinstance(exc, UnexpectedModelBehavior) else exc
+    return f"{type(exc).__name__}: {said}"
+
+
 def is_provider_error(exc: BaseException) -> bool:
     """Whether `exc` stopped a run at its model provider: a refusal, a lost connection, a 5xx or 429, or a reply with no output.
 
@@ -348,7 +354,7 @@ def launch(  # noqa: PLR0913, PLR0915 (the same flat contract `start` forwards v
                 _logger.info("run of {workflow} ended holding a refusal it had no reach left to repair", workflow=workflow_id)
                 session.active.result = f"The run stopped with an error: {failure}"
             except Exception as exc:  # a failed run is news, not a silent stop
-                failure = f"{type(exc).__name__}: {exc}"
+                failure = _failure_text(exc)
                 provider_error = is_provider_error(exc)
                 _logger.exception("run of {workflow} failed", workflow=workflow_id)
                 session.active.result = f"The run stopped with an error: {failure}"

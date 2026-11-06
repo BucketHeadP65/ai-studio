@@ -16,6 +16,7 @@ import pytest
 from core.ai.workflows.contracts import FromNode, FromParameter, ParameterSpec, RunEvidence, RunFinished, RunNode, StepRegistry, Workflow
 from engram.authoring.contracts import AuthoringKnowledgeBase
 from engram.testing.specs import research_spec
+from pydantic_ai.exceptions import ContentFilterError
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.tools import RunContext
 from pydantic_ai.usage import RunUsage
@@ -246,6 +247,25 @@ async def _assert_one_record_of(session: Runtime, records: RunRecords, workflow_
     assert load_waiting(run_log_path(session)) is None
     assert service.run_phase(session) is None
     assert session.active.result.startswith("Finished." if ending == "completed" else "The run stopped with an error:")
+
+
+async def test_a_model_behaviour_error_records_its_message_without_the_response_body(tmp_path: Path) -> None:
+    """The error's text carries every message of the conversation as its body, which is no failure a person reads."""
+    inner = FakeEndingAwareReindex()
+
+    async def write_pages(quarter: str) -> str:
+        msg = f"Content filter triggered in {quarter}."
+        raise ContentFilterError(msg, body="[every message of the conversation]")
+
+    session = _session(tmp_path, write_pages, inner)
+    records = records_under(tmp_path)
+
+    _launch(session, records)
+    await _ended(session)
+
+    [record] = records.archive.recent(1)
+    assert record.failure == "ContentFilterError: Content filter triggered in Q2."
+    assert session.active.result == "The run stopped with an error: ContentFilterError: Content filter triggered in Q2."
 
 
 @pytest.mark.parametrize("ending", ["completed", "failed"])

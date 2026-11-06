@@ -1,8 +1,6 @@
-"""The run archive over local files: one JSON file per ended run, under its workflow's own folder."""
+"""The run archive over local files: one JSON file per ended run under its workflow's own folder, and a small envelope file beside it."""
 
 from __future__ import annotations
-
-import json
 
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -18,11 +16,14 @@ if TYPE_CHECKING:
 
 
 _ENVELOPE_ONLY: dict[str, object] = {"spec": {}, "values": {}, "events": [], "conversations": {}, "reviewed": []}
-"""Overridden onto a parsed payload for a listing read: the heavy fields never enter the record."""
+"""Overridden onto a record for its envelope file: the heavy fields never enter it."""
+
+_ENVELOPE_SUFFIX = ".envelope.json"
+"""How an envelope file's name ends. Every listing and sweep reads these files, never a whole record."""
 
 
 class FileRunArchive:
-    """`RunArchive` over one JSON file per run, at `<root>/<workflow_id>/<run_id>.json`."""
+    """`RunArchive` over one JSON file per run, at `<root>/<workflow_id>/<run_id>.json`, with its envelope at `<run_id>.envelope.json`."""
 
     def __init__(self, root: Path, *, retention_days: int) -> None:
         """Hold the folder the archive lives in and how long an unpinned record is kept.
@@ -35,7 +36,7 @@ class FileRunArchive:
         self.retention_days = retention_days
 
     def put(self, record: RunArchiveRecord) -> None:
-        """Write `record` to its own file, creating the workflow's folder as needed.
+        """Write `record` to its own file and its envelope beside it, creating the workflow's folder as needed.
 
         Args:
             record: The ended run's record.
@@ -43,6 +44,7 @@ class FileRunArchive:
         path = self._path_for(record.workflow_id, record.run_id)
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(path, record.model_dump_json())
+        atomic_write(self._envelope_of(path), record.model_copy(update=_ENVELOPE_ONLY).model_dump_json())
 
     def get(self, run_id: str) -> RunArchiveRecord | None:
         """The whole record for `run_id`, read from wherever its workflow filed it.
@@ -69,7 +71,7 @@ class FileRunArchive:
         folder = self._root / workflow_id
         if not folder.is_dir():
             return []
-        return self._newest(folder.glob("*.json"), limit)
+        return self._newest(folder.glob(f"*{_ENVELOPE_SUFFIX}"), limit)
 
     def recent(self, limit: int) -> list[RunArchiveRecord]:
         """Every workflow's folder, newest first, envelope fields only.
@@ -80,7 +82,7 @@ class FileRunArchive:
         Returns:
             The records with their heavy fields empty, the latest ended first.
         """
-        return self._newest(self._root.glob("*/*.json"), limit)
+        return self._newest(self._root.glob(f"*/*{_ENVELOPE_SUFFIX}"), limit)
 
     def set_pinned(self, run_id: str, *, pinned: bool) -> bool:
         """Load the record, set its pin, and write it back.
@@ -102,7 +104,7 @@ class FileRunArchive:
         return True
 
     def delete(self, run_id: str) -> bool:
-        """Remove the file `run_id` is filed under.
+        """Remove the files `run_id` is filed under.
 
         Args:
             run_id: The run to delete.
@@ -113,6 +115,7 @@ class FileRunArchive:
         path = self._find(run_id)
         if path is None:
             return False
+        self._envelope_of(path).unlink(missing_ok=True)
         path.unlink()
         return True
 
@@ -127,42 +130,33 @@ class FileRunArchive:
         """
         cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
         removed = 0
-        for path in self._root.glob("*/*.json"):
-            record = self._read_envelope(path)
+        for envelope in self._root.glob(f"*/*{_ENVELOPE_SUFFIX}"):
+            record = self._read(envelope)
             if record is None or record.pinned:
                 continue
             if datetime.fromisoformat(record.ended_at) < cutoff:
-                path.unlink()
+                envelope.unlink()
+                self._path_for(record.workflow_id, record.run_id).unlink(missing_ok=True)
                 removed += 1
         return removed
 
     def _path_for(self, workflow_id: str, run_id: str) -> Path:
         return self._root / workflow_id / f"{run_id}.json"
 
+    def _envelope_of(self, path: Path) -> Path:
+        return path.with_name(f"{path.stem}{_ENVELOPE_SUFFIX}")
+
     def _find(self, run_id: str) -> Path | None:
         return next(self._root.glob(f"*/{run_id}.json"), None)
 
     def _newest(self, paths: Iterable[Path], limit: int) -> list[RunArchiveRecord]:
-        records = [record for path in paths if (record := self._read_envelope(path)) is not None]
+        records = [record for path in paths if (record := self._read(path)) is not None]
         records.sort(key=lambda record: record.ended_at, reverse=True)
         return records[:limit]
 
     def _read(self, path: Path) -> RunArchiveRecord | None:
-        """The full record at `path`, or `None` when the file is missing or unreadable."""
+        """The record at `path`, whole or an envelope, or `None` when the file is missing or unreadable."""
         try:
             return RunArchiveRecord.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValidationError, ValueError):
-            return None
-
-    def _read_envelope(self, path: Path) -> RunArchiveRecord | None:
-        """`path`'s record with the heavy fields dropped, for a listing read."""
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        if not isinstance(raw, dict):
-            return None
-        try:
-            return RunArchiveRecord.model_validate({**raw, **_ENVELOPE_ONLY})
-        except ValidationError:
             return None

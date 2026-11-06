@@ -143,6 +143,50 @@ def test_recent_reads_across_every_workflow_newest_first(tmp_path: Path) -> None
     assert [item.run_id for item in archive.recent(10)] == ["b", "a"]
 
 
+def _whole_record_file(root: Path, run_id: str, workflow_id: str = "wf.report") -> Path:
+    return root / workflow_id / f"{run_id}.json"
+
+
+def test_a_listing_never_reads_a_whole_record(tmp_path: Path) -> None:
+    """A run's values and transcripts can run to hundreds of megabytes, and a listing has to stay cheap beside them."""
+    archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
+    archive.put(_record(run_id="run-1", run_title="Quarterly"))
+    _whole_record_file(tmp_path, "run-1").write_text("not a record", encoding="utf-8")
+
+    assert [(item.run_id, item.run_title) for item in archive.recent(10)] == [("run-1", "Quarterly")]
+    assert [item.run_id for item in archive.list_for("wf.report", limit=10)] == ["run-1"]
+    assert archive.get("run-1") is None, "get does read the whole record, and this one no longer parses"
+
+
+def test_a_sweep_decides_without_reading_a_whole_record(tmp_path: Path) -> None:
+    archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
+    archive.put(_record(run_id="old", ended_at=(datetime.now(UTC) - timedelta(days=40)).isoformat()))
+    _whole_record_file(tmp_path, "old").write_text("not a record", encoding="utf-8")
+
+    assert archive.sweep(30) == 1
+
+
+def test_a_pin_shows_in_the_listing(tmp_path: Path) -> None:
+    archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
+    archive.put(_record(run_id="run-1"))
+
+    assert archive.set_pinned("run-1", pinned=True) is True
+
+    assert [item.pinned for item in archive.recent(10)] == [True]
+
+
+def test_delete_and_sweep_leave_no_file_behind(tmp_path: Path) -> None:
+    archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
+    archive.put(_record(run_id="deleted"))
+    archive.put(_record(run_id="swept", ended_at=(datetime.now(UTC) - timedelta(days=40)).isoformat()))
+
+    assert archive.delete("deleted") is True
+    assert archive.sweep(30) == 1
+
+    assert archive.recent(10) == []
+    assert list((tmp_path / "wf.report").iterdir()) == [], "a record's files all go with it"
+
+
 def test_sweep_removes_old_unpinned_keeps_pinned_and_fresh(tmp_path: Path) -> None:
     archive = FileRunArchive(tmp_path, retention_days=KEPT_DAYS)
     now = datetime.now(UTC)
