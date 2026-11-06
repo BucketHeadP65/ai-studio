@@ -75,7 +75,7 @@ async def save(
         saved_by: Who is saving (`human:<id>`, or a tool identifier). Recorded, not inferred.
         supplied_parameters: Parameter names a caller will provide, if you want that checked too.
         environment: Extra stamps for the fingerprint, such as capability versions and whatever else
-            the host promotes. Step contracts and grants are stamped regardless.
+            the host promotes. Step contracts and the tools the workflow's steps ask for are stamped regardless.
         lineage: The typed diff that produced this workflow, if it is an adaptation.
         presentation: The author's words about this workflow, if it travels with any.
         intent: What the person who wanted this automation asked for, if it travels with one. It

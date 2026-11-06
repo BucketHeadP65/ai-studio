@@ -13,12 +13,30 @@ only a model can see is a verdict the person cannot act on.
 from __future__ import annotations
 
 import json
+import re
 
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from core.ai.workflows.contracts import Grade, Outcome, RunEvidence, StepRegistry, Workflow, WorkflowFingerprint, adapt, save, spec_identity
+from core.ai.workflows.contracts import (
+    Briefing,
+    FromNode,
+    FromParameter,
+    Grade,
+    Outcome,
+    ParameterSpec,
+    RunEvidence,
+    RunNode,
+    Shape,
+    StepRegistry,
+    Workflow,
+    WorkflowFingerprint,
+    adapt,
+    save,
+    spec_identity,
+)
+from core.ai.workflows.domain.vocabulary import SameAs
 from core.ai.workflows.infrastructure.folder import FolderLibrary
 
 from harness.adapters.model_tiers import environment_stamps
@@ -182,20 +200,66 @@ async def test_an_artifact_nobody_adapted_has_no_lineage(library: FolderLibrary,
 
 
 async def test_a_stamp_that_no_longer_parses_is_unknown_rather_than_a_crash(library: FolderLibrary, quarterly_report: Workflow, registry: StepRegistry, tmp_path: Path) -> None:
-    """A library can hand back anything; the view still has to answer."""
+    """A library can hand back anything, and the view still has to answer. Here the tools are one string, not a list of names."""
     workflow_id = await library.put(
         quarterly_report,
         title="Q",
         summary="s",
         applicability="a",
         provenance={"saved_by": "test"},
-        fingerprint=WorkflowFingerprint(grants="abc"),
+        fingerprint=WorkflowFingerprint(grants=("abc",)),
     )
     path = next((library._root).glob("*.md"))  # type: ignore[attr-defined]
-    path.write_text(path.read_text(encoding="utf-8").replace("grants: abc", "grants: {oh: dear}"), encoding="utf-8")
+    stored, replaced = re.subn(r"grants:\n\s*- abc", "grants: abc", path.read_text(encoding="utf-8"))
+    assert replaced == 1, "the stamp's list of tools was not found to corrupt"
+    path.write_text(stored, encoding="utf-8")
     controller = _install(registry, library, tmp_path)
 
     assert (await _body(controller, workflow_id))["staleness"] is None
+
+
+async def test_a_tool_granted_after_the_save_leaves_the_workflow_fresh(library: FolderLibrary, call_log: CallLog, tmp_path: Path) -> None:
+    """Granting the host one more tool moves nothing a saved workflow asked for, so the view reports no staleness."""
+
+    async def perform(task: Briefing, output_type: type, /, **inputs: object) -> object:
+        del task, output_type, inputs
+        msg = "opening a saved workflow never performs a briefing"
+        raise AssertionError(msg)
+
+    at_save = StepRegistry(perform=perform, grants=("search",))
+    register_quarterly_steps(at_save, call_log)
+    workflow_id = await save(_searched_ledger(), library, at_save, title="Q", summary="s", applicability="a", saved_by="test")
+    now = StepRegistry(perform=perform, grants=("search", "check_change"))
+    register_quarterly_steps(now, call_log)
+    controller = _install(now, library, tmp_path)
+
+    assert (await _body(controller, workflow_id))["staleness"] == []
+
+
+def _searched_ledger() -> Workflow:
+    """The quarterly ledger, then a step the workflow brings that asks for the `search` tool."""
+    return Workflow(
+        name="searched-ledger",
+        version=1,
+        description="reconcile the quarter, then judge the ledger with a step it brings that may search",
+        parameters={"quarter": ParameterSpec(description="which quarter", json_schema={"type": "string"})},
+        inline=(
+            Briefing(
+                name="judge",
+                instructions="Read the ledger, search for anything unusual, and say in one line whether the quarter looks healthy.",
+                inputs={"ledger": SameAs(like="reconcile")},
+                output=Shape(json_schema={"type": "object", "title": "Verdict", "properties": {"healthy": {"type": "boolean"}}}),
+                tools=("search",),
+            ),
+        ),
+        nodes=(
+            RunNode(id="sales", work="fetch_sales", inputs={"quarter": FromParameter(parameter="quarter")}),
+            RunNode(id="costs", work="fetch_costs", inputs={"quarter": FromParameter(parameter="quarter")}),
+            RunNode(id="ledger", work="reconcile", inputs={"sales": FromNode(node="sales"), "costs": FromNode(node="costs")}),
+            RunNode(id="judge", work="judge", inputs={"ledger": FromNode(node="ledger")}),
+        ),
+        output=FromNode(node="judge"),
+    )
 
 
 async def _record_evidence(spec: Workflow, workflow_id: str, produced: dict[str, str], tmp_path: Path) -> None:

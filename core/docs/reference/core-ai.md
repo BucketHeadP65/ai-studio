@@ -74,7 +74,7 @@ Three rules keep them from collapsing into each other:
 - **Only the presentation is checked against the graph.** `verify_presentation` refuses a labelled
   input naming no parameter and an action naming no declared artifact. An intent is checked against
   nothing, because a request is not a claim about the graph, and it grants nothing: it selects no
-  work, names no tool, and leaves the fingerprint's grant digest as it was.
+  work, names no tool, and leaves the fingerprint's grants as they were.
 - **Only the outcome is derived.** Nobody writes an `Outcome`. It is classified from item facts,
   gate decisions and the execution status, and it is never rewritten afterwards. Whether the work
   was worth having is a different record entirely, produced by a different layer, over bytes a

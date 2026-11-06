@@ -254,7 +254,7 @@ async def test_a_stamp_with_no_registered_steps_survives_the_store() -> None:
         summary="s",
         applicability="a",
         provenance={"saved_by": "test"},
-        fingerprint=WorkflowFingerprint(steps={}, grants="1ad78e801fceeeb4", environment={"model": "gpt-5.2"}),
+        fingerprint=WorkflowFingerprint(steps={}, grants=("fetch", "search"), environment={"model": "gpt-5.2"}),
     )
     assert "steps" not in written["frontmatter"]["fingerprint"], "the store really did drop it"
 
@@ -263,8 +263,35 @@ async def test_a_stamp_with_no_registered_steps_survives_the_store() -> None:
 
     assert recovered is not None, "an artifact that stamped its environment must not read back as unstamped"
     assert recovered.steps == {}
-    assert recovered.grants == "1ad78e801fceeeb4"
+    assert recovered.grants == ("fetch", "search")
     assert recovered.environment == {"model": "gpt-5.2"}
+
+
+async def test_a_stamp_of_a_workflow_whose_steps_ask_for_no_tool_survives_the_store() -> None:
+    """The store drops the empty list of tools too, and the stamp reads back holding none rather than as no stamp."""
+    written: dict[str, Any] = {}
+
+    async def ingest_dropping_empties(payload: Mapping[str, Any], *, collection: str, events: Sequence[Event] = ()) -> None:
+        del collection, events
+        frontmatter = dict(payload["frontmatter"])
+        stamp = {key: value for key, value in frontmatter["fingerprint"].items() if value not in ({}, [])}
+        written["frontmatter"] = {**frontmatter, "fingerprint": stamp}
+
+    store = LibraryCollection(FakeRows(), ingest_dropping_empties)
+    await store.put(
+        _spec(),
+        title="Audit",
+        summary="s",
+        applicability="a",
+        provenance={"saved_by": "test"},
+        fingerprint=WorkflowFingerprint(environment={"model": "gpt-5.2"}),
+    )
+    assert "grants" not in written["frontmatter"]["fingerprint"], "the store really did drop it"
+
+    recovered = await LibraryCollection(FakeRows(value=written["frontmatter"]), FakeIngest()).fetch_fingerprint("wf.audit-a-claim")
+
+    assert recovered is not None
+    assert recovered.grants == ()
 
 
 # --- supersession is a link, not a deletion ------------------------------------------------------
