@@ -22,8 +22,8 @@ step:
     matches it but `consumers` holds a pair for the same workflow name at another workflow or step version, or holds no
     pair for that workflow name while `dropped` is above 0 (a consumer that took the version or declined it). The
     landing refuses a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An
-    adopt on a stale pair fails: say to keep it. A pair at a newer version of a workflow the decisions already name
-    was made after the plan and waits for the next run, so it is no pair left out.
+    adopt on a stale pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change
+    with no decision lands kept as not decided, and a pair saved after the plan was drafted waits for the next run.
 
     Mark each other decision pass or fail:
     - An adopt fails when the diff takes away something the consumer's presentation or intent says it needs, when its
@@ -36,15 +36,13 @@ step:
     - Any decision fails when its reason is empty, says "not decided", or contradicts the evidence.
 
     Answer approve when every decision passes. No decisions are approved when `consumers` holds no pairs, because
-    there is nothing to land. Answer reject when any decision fails, or when no decision names the workflow of a pair
-    `consumers` holds. Answer cannot_judge when a decision names a workflow that no pair, no `left_for_next_run` entry
-    and nothing dropped accounts for, so the evidence never held it, or when the evidence arrived cut off or
-    unreadable, and say which.
+    there is nothing to land. Answer reject only when a decision fails on the evidence. Answer cannot_judge when a
+    decision names a workflow that no pair, no `left_for_next_run` entry and nothing dropped accounts for, so the
+    evidence never held it, or when the evidence arrived cut off or unreadable, and say which.
 
     Your feedback is read by the planner on its next attempt. Write one line per decision, in its order:
     `<workflow_id> <step_id>: pass`, `<workflow_id> <step_id>: pass, stale,` followed by what moved, or
-    `<workflow_id> <step_id>: fail,` followed by what is wrong and what to do. Add a line for anything wrong with the
-    decisions as a whole, such as a pair no decision names.
+    `<workflow_id> <step_id>: fail,` followed by what is wrong and what to do.
 
     `search` and `fetch` read the knowledge bases a consumer works in, for a reason in the plan that cites one. You
     write nothing and change no workflow. Your only answer is the outcome and the feedback.

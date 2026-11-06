@@ -522,6 +522,12 @@ def _moved(inputs: Mapping[str, object]) -> bool:
     )
 
 
+def _unnamed(inputs: Mapping[str, object]) -> bool:
+    """Whether the evidence holds a pair for a workflow no decision names at any version."""
+    named = {re.sub(r"^wf\.|\.v\d+$", "", decision.workflow_id) for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions}
+    return any(pair.workflow not in named for pair in ConsumerList.model_validate(inputs["consumers"]).pairs)
+
+
 def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check_and_cannot_judge() -> None:
     dataset = _dataset("judge_plan")
     expected = [_outcome(case.expected_output) for case in dataset.cases]
@@ -537,6 +543,8 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     )
     moved = [_outcome(case.expected_output) for case in dataset.cases if _moved(case.inputs)]
     assert moved == ["approve"], "a pair that moved between the plan and the evidence is passed as stale, never a rejection"
+    unnamed = [_outcome(case.expected_output) for case in dataset.cases if _unnamed(case.inputs)]
+    assert unnamed == ["approve"], "a pair no decision names, such as a consumer saved after the plan, is never a reason to reject"
 
 
 def test_the_repository_judge_s_cases_keep_one_draft_and_drop_another() -> None:
