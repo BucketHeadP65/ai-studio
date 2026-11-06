@@ -660,6 +660,44 @@ class LibraryCollection:
             raise LibraryError(msg)
         return saved_by
 
+    async def restamp(self, workflow_id: str, fingerprint: WorkflowFingerprint) -> None:
+        """Write a new environment stamp on one workflow version, keeping every other key, the card and the body as stored.
+
+        The lineage, the live trial marker, the consumer record and an archive mark stay as they are. A stamp equal to the
+        stored one writes nothing. A page with no stored stamp holds the empty one, because the store drops an empty stamp.
+
+        Args:
+            workflow_id: The workflow version's id, `wf.<name>.v<version>`.
+            fingerprint: The environment stamp to keep under `fingerprint`.
+
+        Raises:
+            WorkflowUnknownError: If no workflow page has that id. Nothing is written.
+            LibraryError: If the version is superseded, because writing it again would drop its successor link, or the
+                ingest refuses the write. Nothing is written in each case.
+        """
+        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        if superseded and bool(superseded[0].get("superseded")):
+            msg = f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link, so it is not restamped."
+            raise LibraryError(msg)
+        found = await self._rows.fetch(PAGE_SQL, workflow_id)
+        if not found or str(found[0]["type"]) != PAGE_TYPE:
+            msg = f"no workflow {workflow_id!r} in collection {self._collection!r}"
+            raise WorkflowUnknownError(msg)
+        page = found[0]
+        stored = page["frontmatter"]
+        long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
+        try:
+            held = WorkflowFingerprint.model_validate(long_tail.get("fingerprint") or {})
+        except ValidationError:
+            held = None
+        if held == fingerprint:
+            return
+        try:
+            await self._rewrite(page, {**long_tail, "fingerprint": fingerprint.model_dump(mode="json")})
+        except Exception as exc:
+            msg = f"the collection refused the new stamp of {workflow_id!r}: {exc}"
+            raise LibraryError(msg) from exc
+
     async def current(self, workflow_id: str) -> str:
         """The newest live version of the workflow `workflow_id` names, or `workflow_id` itself.
 

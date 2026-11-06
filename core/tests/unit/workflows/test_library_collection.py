@@ -30,6 +30,7 @@ from core.ai.workflows.contracts import (
     LibraryCollection,
     LibraryError,
     Lineage,
+    LiveTrialMarker,
     ParameterSpec,
     PresentationRefusedError,
     Program,
@@ -718,6 +719,86 @@ async def test_saved_by_refuses_a_page_that_records_no_saved_by() -> None:
 
     with pytest.raises(LibraryError, match="records no saved_by"):
         await library.saved_by("wf.audit-a-claim.v1")
+
+
+OLD_STAMP = WorkflowFingerprint(environment={"model": "old-model"})
+
+NEW_STAMP = WorkflowFingerprint(environment={"model": "new-model"})
+
+
+async def _adopted_audit(store: FakeCollection) -> LibraryCollection:
+    """A library holding `weigh` v1, `audit-a-claim` v1, and v2 saved with a lineage, a live trial marker and `OLD_STAMP`."""
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    weigh = _spec().inline[0]
+    await library.put_step(weigh, version=1, title="Weigh", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    await library.put(_spec(), title="Audit a claim", summary="One contested claim.", applicability="Use when one claim is contested.", provenance={"saved_by": "owner:cli"})
+    await library.put(
+        _spec(version=2),
+        title="Audit a claim",
+        summary="One contested claim.",
+        applicability="Use when one claim is contested.",
+        provenance={"saved_by": "agent:step-maintenance"},
+        fingerprint=OLD_STAMP,
+        lineage=Lineage(parent_name="audit-a-claim", parent_version=1, ops=({"op": "set_description", "to": "x"},), touched=()),
+        live_trial=LiveTrialMarker(previous="wf.audit-a-claim.v1", step="weigh", step_hash="abc"),
+    )
+    return library
+
+
+async def test_restamp_writes_only_the_fingerprint_and_keeps_every_other_key_the_card_and_the_body() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted_audit(store)
+    before = dict(store.pages["wf.audit-a-claim.v2"])
+    written = len(store.payloads)
+
+    await library.restamp("wf.audit-a-claim.v2", NEW_STAMP)
+
+    after = store.pages["wf.audit-a-claim.v2"]
+    assert len(store.payloads) == written + 1
+    assert await library.fetch_fingerprint("wf.audit-a-claim.v2") == NEW_STAMP
+    assert {key: value for key, value in after["frontmatter"].items() if key != "fingerprint"} == {
+        key: value for key, value in before["frontmatter"].items() if key != "fingerprint"
+    }, "lineage, live_trial, reusable_steps and saved_by are kept"
+    assert {key: after[key] for key in ("title", "summary", "status", "superseded", "sections")} == {
+        key: before[key] for key in ("title", "summary", "status", "superseded", "sections")
+    }
+
+
+async def test_restamp_with_the_stored_stamp_writes_nothing() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted_audit(store)
+    written = len(store.payloads)
+
+    await library.restamp("wf.audit-a-claim.v2", OLD_STAMP)
+
+    assert len(store.payloads) == written
+
+
+async def test_restamp_with_an_empty_stamp_on_a_page_that_holds_none_writes_nothing() -> None:
+    """The store drops an empty stamp, so writing one would store the page exactly as it is."""
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    await library.put(_spec(), title="Audit a claim", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    written = len(store.payloads)
+
+    await library.restamp("wf.audit-a-claim.v1", WorkflowFingerprint())
+
+    assert len(store.payloads) == written
+
+
+async def test_restamp_refuses_a_superseded_version_and_a_page_that_is_not_a_workflow_writing_nothing() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted_audit(store)
+    written = len(store.payloads)
+
+    with pytest.raises(LibraryError, match=r"wf\.audit-a-claim\.v1.*superseded"):
+        await library.restamp("wf.audit-a-claim.v1", NEW_STAMP)
+    with pytest.raises(WorkflowUnknownError, match=r"st\.weigh\.v1"):
+        await library.restamp("st.weigh.v1", NEW_STAMP)
+    with pytest.raises(WorkflowUnknownError, match=r"wf\.nowhere\.v1"):
+        await library.restamp("wf.nowhere.v1", NEW_STAMP)
+
+    assert len(store.payloads) == written
 
 
 async def test_the_collection_s_write_tool_carries_a_diff_into_the_frontmatter() -> None:
