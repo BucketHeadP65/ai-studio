@@ -24,8 +24,10 @@ started by hand.
 **Amended (2026-11-06), step maintenance never adopts into itself.** Its planner, its judges and its drafter are
 reusable steps, so a new version of one would have been adopted into `step-maintenance` on live trial, a model choosing
 the steps that judge its own plans. `list_consumers` never pairs a consumer named `step-maintenance` and names it as left
-to the repository, which the run's report says, apart from the consumers it dropped as current or declined. Its own
-steps reach it through the repository and `harness import`, as before.
+to the repository, which the run's report says, apart from the consumers it dropped as current or declined. The plan
+judge (`judge_plan` v2) treats a decision about it as stale, as it treats one about a dropped consumer, never as cannot
+judge. Its own steps reach it through the repository and `harness import`, as before, so a new version of one of them
+fires a run that pairs nothing.
 
 ## Context
 

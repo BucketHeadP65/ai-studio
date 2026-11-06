@@ -559,6 +559,25 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     assert unnamed == ["approve"], "a pair no decision names, such as a consumer saved after the plan, is never a reason to reject"
 
 
+def _left_to_repository(inputs: Mapping[str, object]) -> bool:
+    """Whether a decision names a workflow the evidence left to the repository."""
+    left = set(ConsumerList.model_validate(inputs["consumers"]).left_to_repository)
+    return any(decision.workflow_id in left for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions)
+
+
+def test_the_plan_judge_passes_a_decision_about_a_workflow_left_to_the_repository_as_stale() -> None:
+    document = _documents()["judge_plan"]
+    front = yaml.safe_load(WORKFLOW_FILE.read_text(encoding="utf-8").split("---", 2)[1])
+    left = [_outcome(case.expected_output) for case in _dataset("judge_plan").cases if _left_to_repository(case.inputs)]
+
+    assert left == ["approve"], "a decision about step maintenance itself is stale, never a rejection or a cannot judge"
+    assert _step("judge_plan").instructions.count("`dropped`, `left_for_next_run` or `left_to_repository`") == 2, (
+        "the stale rule and the cannot judge rule both count the workflows left to the repository"
+    )
+    assert document.version == 2
+    assert "st.judge_plan.v2" in front["uses"]
+
+
 def test_the_repository_judge_s_cases_keep_one_draft_and_drop_another() -> None:
     dataset = _dataset("judge_repository_change")
     decisions = [

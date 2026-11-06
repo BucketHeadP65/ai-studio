@@ -25,8 +25,8 @@
       "version": 2
     },
     "judge_plan": {
-      "step_hash": "4d84d15666bc0fbc6ea89f153c46ee2daac61992ac6a5f29254884e458fd2752",
-      "version": 1
+      "step_hash": "2e27966149f7e8b9c497208818489d9133b3a5496952d45989a31bbc29d02bea",
+      "version": 2
     },
     "judge_repository_change": {
       "step_hash": "8917095a6cd85cdcb1080a59d00f69eeee5f5032833a4190ed5ac363b6873f48",

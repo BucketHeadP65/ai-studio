@@ -4,7 +4,7 @@ description: >-
   Checks a new reusable step version against every workflow holding a copy of the step, adopts it on live trial where
   a judge approves the plan, declines or flags the rest, tells the owner, and drafts a repository change for a step its
   consumers split over.
-uses: [st.plan_changes.v1, st.judge_plan.v1, st.draft_repository_change.v1, st.judge_repository_change.v1]
+uses: [st.plan_changes.v1, st.judge_plan.v2, st.draft_repository_change.v1, st.judge_repository_change.v1]
 presentation:
   purpose: >-
     Keep every workflow built on a reusable step current when the step gets a new version, without a person

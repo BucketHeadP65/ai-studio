@@ -1154,5 +1154,31 @@ cases:
       refused: null
   expected_output:
     outcome: approve
+- name: a decision about step maintenance itself, which it leaves to the repository
+  inputs:
+    decisions:
+      decisions:
+      - workflow_id: wf.step-maintenance.v2
+        step_id: st.judge_plan.v2
+        disposition: keep
+        reason: Step maintenance takes its own judge from the repository, so its copy stays as the import left it.
+    consumers:
+      pairs: []
+      left_for_next_run: []
+      left_to_repository:
+      - wf.step-maintenance.v2
+      dropped: []
+    checks: []
+    cases:
+    - step_id: st.judge_plan.v2
+      step_hash: 2e27966149f7e8b9c497208818489d9133b3a5496952d45989a31bbc29d02bea
+      cases_hash: 74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b
+      results: []
+      blocked_by: null
+      no_cases: true
+      stand_in_calls: 0
+      refused: null
+  expected_output:
+    outcome: approve
 evaluators:
 - OutcomeMatches
