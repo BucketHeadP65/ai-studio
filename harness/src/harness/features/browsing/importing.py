@@ -10,6 +10,8 @@ import yaml
 from core.ai.workflows.contracts import (
     DocumentError,
     LibraryError,
+    PresentationRefusedError,
+    SaveRefusedError,
     StepVersionChangedError,
     Workflow,
     WorkflowPresentation,
@@ -155,9 +157,10 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
         The ids the library holds from the folder and the workflow files it skipped.
 
     Raises:
-        SaveRefusedError: A workflow that would not run on this registry.
-        PresentationRefusedError: A workflow whose `presentation` names an input or an artifact
-            the workflow does not declare.
+        SaveRefusedError: A workflow that would not run on this registry. A note names the workflow file. Nothing is
+            written.
+        PresentationRefusedError: A workflow whose `presentation` names an input or an artifact the workflow does not
+            declare. A note names the workflow file. Nothing is written.
         StepVersionChangedError: The library holds a step file's version with other content. A note names the
             step file. Nothing is written.
         WorkflowNameRepeatedError: Two workflow files hold the same workflow. Nothing is written.
@@ -236,12 +239,16 @@ async def _read_workflows(
         uses = tuple(_USES.validate_python(document.frontmatter.get("uses", [])))
         copied = tuple([by_id[step_id] if step_id in by_id else await library.fetch_step(step_id) for step_id in uses])
         workflow = document.workflow.model_copy(update={"inline": (*document.workflow.inline, *copied)})
-        verify_savable(workflow, registry)  # the same check a save to the library runs before it writes
-        # The file's own words, read as declared: a workflow that ships without them ships without
-        # them, and the procedural `description` is never turned into a purpose it did not state.
-        presentation = _PRESENTATION.validate_python(document.frontmatter.get("presentation"))
-        if presentation is not None:
-            verify_presentation(workflow, presentation)
+        try:
+            verify_savable(workflow, registry)  # the same check a save to the library runs before it writes
+            # The file's own words, read as declared: a workflow that ships without them ships without
+            # them, and the procedural `description` is never turned into a purpose it did not state.
+            presentation = _PRESENTATION.validate_python(document.frontmatter.get("presentation"))
+            if presentation is not None:
+                verify_presentation(workflow, presentation)
+        except (SaveRefusedError, PresentationRefusedError) as error:
+            error.add_note(f"The workflow file is {file}.")
+            raise
         ready.append(
             _ReadyWorkflow(
                 file=file,

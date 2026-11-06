@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from core.ai.workflows.contracts import StepVersionChangedError
+import pytest
+
+from core.ai.workflows.contracts import DocumentError, PresentationRefusedError, SaveRefusedError, StepVersionChangedError
+from core.ai.workflows.domain.validator import ValidationReport
 from typer.testing import CliRunner
 
 from harness.cli import app
@@ -36,10 +39,37 @@ def test_import_prints_every_id_steps_first_then_each_skipped_file_with_why_it_w
     ]
 
 
-def test_an_import_refusal_prints_as_one_line_with_its_notes_and_exits_1(monkeypatch) -> None:
-    refusal = StepVersionChangedError("st.find_undigested.v1")
-    refusal.add_note("The step file is workflows/steps/find-undigested.md.")
+def _noted(refusal: Exception, note: str) -> Exception:
+    refusal.add_note(note)
+    return refusal
 
+
+@pytest.mark.parametrize(
+    ("refusal", "line"),
+    [
+        (
+            _noted(StepVersionChangedError("st.find_undigested.v1"), "The step file is workflows/steps/find-undigested.md."),
+            (
+                "st.find_undigested.v1 already holds different content. Raise version in the step file and import again. "
+                "The step file is workflows/steps/find-undigested.md."
+            ),
+        ),
+        (
+            _noted(SaveRefusedError(ValidationReport(issues=()), ("quarter",)), "The workflow file is workflows/workflows/digest.md."),
+            "refused to save an unexecutable workflow: parameters nothing supplies: quarter The workflow file is workflows/workflows/digest.md.",
+        ),
+        (
+            _noted(PresentationRefusedError("presentation input 'quarter' names no parameter"), "The workflow file is workflows/workflows/digest.md."),
+            "presentation input 'quarter' names no parameter The workflow file is workflows/workflows/digest.md.",
+        ),
+        (
+            DocumentError("workflows/steps/broken.md: the file has no frontmatter"),
+            "workflows/steps/broken.md: the file has no frontmatter",
+        ),
+    ],
+    ids=["a library refusal", "an unrunnable workflow", "a presentation", "a document"],
+)
+def test_an_import_refusal_prints_as_one_line_with_its_notes_and_exits_1(monkeypatch, refusal: Exception, line: str) -> None:
     async def refusing_import_path(path: Path, *, by: str) -> FolderImport:
         del path, by
         raise refusal
@@ -51,9 +81,4 @@ def test_an_import_refusal_prints_as_one_line_with_its_notes_and_exits_1(monkeyp
 
     assert result.exit_code == 1
     assert result.exception is None or isinstance(result.exception, SystemExit), "no traceback"
-    assert result.output.splitlines() == [
-        (
-            "st.find_undigested.v1 already holds different content. Raise version in the step file and import again. "
-            "The step file is workflows/steps/find-undigested.md."
-        )
-    ]
+    assert result.output.splitlines() == [line]

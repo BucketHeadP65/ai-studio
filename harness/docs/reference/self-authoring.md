@@ -187,7 +187,8 @@ The import compares each workflow file whose version the library holds with that
   workflow, `WorkflowVersionUnreadableError` refuses the folder, naming the file and the version.
 
 Two workflow files of one workflow refuse the folder with `WorkflowNameRepeatedError`, naming both. `harness import`
-prints any of these refusals as one line and exits 1.
+prints a refusal as one line and exits 1: any of these, a step refusal, a workflow that would not run, a presentation
+that names what the workflow does not declare, and a file that does not parse. A workflow refusal names its file.
 
 ### A turn that only designs starts nothing
 

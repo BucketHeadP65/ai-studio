@@ -225,9 +225,10 @@ async def test_a_workflow_that_fails_validation_writes_nothing(tmp_path: Path) -
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    with pytest.raises(SaveRefusedError):
+    with pytest.raises(SaveRefusedError) as refused:
         await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
+    assert getattr(refused.value, "__notes__", []) == [f"The workflow file is {tmp_path / 'workflows' / 'broken.md'}."]
     assert ingest.payloads == []
 
 
@@ -362,9 +363,10 @@ async def test_a_presentation_naming_an_undeclared_input_refuses_the_whole_folde
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    with pytest.raises(PresentationRefusedError, match="quarter"):
+    with pytest.raises(PresentationRefusedError, match="quarter") as refused:
         await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
+    assert getattr(refused.value, "__notes__", []) == [f"The workflow file is {tmp_path / 'workflows' / 'two-step.md'}."]
     assert ingest.payloads == []
 
 

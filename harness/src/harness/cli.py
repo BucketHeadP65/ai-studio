@@ -309,11 +309,11 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
 
     from pathlib import Path  # noqa: PLC0415 (same)
 
-    from core.ai.workflows.contracts import LibraryError  # noqa: PLC0415 (same)
+    from core.ai.workflows.contracts import DocumentError, LibraryError, PresentationRefusedError, SaveRefusedError  # noqa: PLC0415 (same)
 
     try:
         imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
-    except LibraryError as refusal:
+    except (LibraryError, SaveRefusedError, PresentationRefusedError, DocumentError) as refusal:
         fail(" ".join(" ".join([str(refusal), *getattr(refusal, "__notes__", [])]).split()))
     for written in imported.written:
         typer.echo(written)
