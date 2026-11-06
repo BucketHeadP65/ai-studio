@@ -1,4 +1,7 @@
-"""A deployment on the temporal engine composes its chat session, and the session's workflow contract reads its library's versions.
+"""A deployment on the temporal engine composes its chat session, and the session's contract and registry are what runs need.
+
+The workflow contract reads the library's versions, and the registry holds the step maintenance steps and grants
+`check_change`.
 
 The chat agent runs in this process and never inside a durable workflow, so it carries no durability
 capability on either engine. Proven by running `harness_session` to the end with the temporal engine
@@ -26,7 +29,7 @@ from harness.adapters.notify import NoopNotifier
 from harness.adapters.store import DatabaseBinding
 from harness.adapters.studio_http import studio_http_client
 from harness.composition import harness_session
-from harness.domain.contracts import EmbeddingContract
+from harness.domain.contracts import CHECK_CHANGE_TOOL, EmbeddingContract
 from harness.features.authoring.contracts import WorkflowProcess
 from harness.features.running.infrastructure.durable import DurableTurns
 from harness.features.running.spend_report import SpendReporter
@@ -49,6 +52,7 @@ from tests.support.fakes.sessions import APool
 from tests.support.fakes.step_store import FakeContinuationCheckpoints, FakeStepStore
 from tests.support.fakes.telemetry import FakeTelemetry
 from tests.support.grants import app_knowledge_base_surface
+from tests.support.maintenance import MAINTENANCE_STEPS
 from tests.support.runtime import a_runtime
 from tests.support.state import a_session_log, a_state, a_transcript, records_under
 from tests.support.tiers import tiers_under
@@ -182,3 +186,11 @@ async def test_the_workflow_contract_reads_every_saved_version_from_the_session_
 
     assert len(processes) == 1
     assert processes[0].port.versions is session.library
+
+
+async def test_the_session_s_registry_holds_the_step_maintenance_steps_and_grants_check_change(tmp_path: Path) -> None:
+    """A run in any session executes on a copy of this registry, so the steps a step maintenance run names are here."""
+    session = await _a_session(tmp_path, RunSettings())
+
+    assert set(MAINTENANCE_STEPS) <= set(session.registry.names)
+    assert CHECK_CHANGE_TOOL in session.registry.grants

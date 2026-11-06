@@ -24,6 +24,7 @@ from harness.composition import library_composition
 from harness.domain.contracts import CHECK_CHANGE_TOOL
 from harness.settings import HarnessSettings, SelfAuthoringSettings, StoreSettings
 from tests.support.environment import fake_engram, fake_plugins
+from tests.support.maintenance import MAINTENANCE_STEPS
 from tests.support.state import records_under
 from tests.support.tiers import tiers_under
 
@@ -69,19 +70,6 @@ async def _fake_studio_read_tools(
     del positional, mounted
     yield fake_engram(), ProgressiveDisclosure[object](), fake_plugins()
 
-
-MAINTENANCE_STEPS = (
-    "list_consumers",
-    "check_contracts",
-    "run_step_cases",
-    "prepare_plan",
-    "land_changes",
-    "report_changes",
-    "select_disagreements",
-    "repository_verdict",
-    "hand_over_repository_changes",
-)
-"""The registered steps of step maintenance."""
 
 A_FAKE_BINDING = DatabaseBinding(description="knowledge_base=fake:0/knowledge_bases (test)", named=True)
 """What this process would say it is about to open. Handed in, so nothing reads engram's settings file."""

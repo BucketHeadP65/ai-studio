@@ -2,8 +2,8 @@
 
 `build_environment` derives what a step may be granted from the knowledge base surface it is handed: every tool
 that surface offers minus the ones no step sees, plus the shell, web search, the grounding
-plugins and the host's own tools. This composes the same `RetrievalKnowledgeBase` the app composes -- engram's two
-read tools plus its four authoring tools -- over engram's shipped fakes, and reads `WEB_SEARCH_TOOL`,
+plugins and the host's own tools. This composes the same `RetrievalKnowledgeBase` the app composes (engram's two
+read tools plus its four authoring tools) over engram's shipped fakes, and reads `WEB_SEARCH_TOOL`,
 `GROUNDING_TOOLS` and `CHECK_CHANGE_TOOL` off the same constants the app grants from, so a test asserts
 against the surface the app really builds rather than against a typed-out list that can silently
 disagree with it.
