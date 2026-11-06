@@ -520,6 +520,12 @@ again writes the flag. So `flags(kind="diverged_copy", status="open")` lists the
 save of each workflow name, archived versions left out. One case stays open until a person resolves it: an adaptation
 saved under a new name leaves the old name's open flag as it was.
 
+Step maintenance's landing writes a `consumer_flag` for each pair its plan flags, with the contract check and the
+planner's reason in Evidence, and resolves, as `agent:step-maintenance`, the open `consumer_flag` of each pair it adopts.
+Its hand-over writes a `repository_change`, `mf.change.<step>`, for each drafted change its judge kept. Both put every
+text a model wrote inside a fenced block and write each double percent sign with a space between its two signs, so
+none is refused ([workflow monitoring](workflow-monitoring.md#the-step-maintenance-steps)).
+
 ### 2.7 The live trial and the revert
 
 An adoption step maintenance lands is a new consumer version on live trial: it carries a `LiveTrialMarker` under the

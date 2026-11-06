@@ -21,6 +21,7 @@ import harness.composition
 
 from harness.adapters.store import DatabaseBinding
 from harness.composition import library_composition
+from harness.domain.contracts import CHECK_CHANGE_TOOL
 from harness.settings import HarnessSettings, SelfAuthoringSettings, StoreSettings
 from tests.support.environment import fake_engram, fake_plugins
 from tests.support.state import records_under
@@ -68,6 +69,19 @@ async def _fake_studio_read_tools(
     del positional, mounted
     yield fake_engram(), ProgressiveDisclosure[object](), fake_plugins()
 
+
+MAINTENANCE_STEPS = (
+    "list_consumers",
+    "check_contracts",
+    "run_step_cases",
+    "prepare_plan",
+    "land_changes",
+    "report_changes",
+    "select_disagreements",
+    "repository_verdict",
+    "hand_over_repository_changes",
+)
+"""The registered steps of step maintenance."""
 
 A_FAKE_BINDING = DatabaseBinding(description="knowledge_base=fake:0/knowledge_bases (test)", named=True)
 """What this process would say it is about to open. Handed in, so nothing reads engram's settings file."""
@@ -126,3 +140,17 @@ async def test_registry_session_decides_gates_only_by_refusing(monkeypatch: pyte
         assert registry.decide_gate is not None
         with pytest.raises(RuntimeError, match="only a harness session runs a workflow"):
             await registry.decide_gate("check_flags", "review the flags", {"flags": []})
+
+
+async def test_registry_session_holds_the_step_maintenance_steps_and_grants_check_change(
+    monkeypatch: pytest.MonkeyPatch, settings: HarnessSettings, tmp_path: Path
+) -> None:
+    """`harness import` validates the step maintenance workflow against this registry, so it holds the steps a session runs."""
+    monkeypatch.setattr(harness.composition, "knowledge_base_capability", _refuse("knowledge_base_capability"))
+    monkeypatch.setattr(harness.composition, "build_agent", _refuse("build_agent"))
+
+    async with library_composition(
+        settings, records_under(tmp_path), tiers_under(tmp_path), A_FAKE_BINDING, open_read_tools=_fake_studio_read_tools
+    ) as (_store, registry):
+        assert set(MAINTENANCE_STEPS) <= set(registry.names)
+        assert CHECK_CHANGE_TOOL in registry.grants

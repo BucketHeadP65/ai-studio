@@ -39,7 +39,9 @@ only shrink. The tiers, inward first:
   reaches inward and into itself, never into another slice. A slice with routes carries a `controller.py` (its
   routes, one class, its own router and prefix) and a `wiring.py` (`REGISTRATIONS`, what the slice puts in the
   container).
-- `composition.py`, the one module that knows every slice: `harness_session`, `build_environment`.
+- `composition.py`, the one module that knows every slice: `harness_session`, `build_environment`. Both
+  `harness_session` and `library_composition` register the step maintenance steps on their registry and grant
+  `check_change`, so `harness import` validates the `step-maintenance` workflow against the same steps a session runs.
 - `container.py`, the composition map: the sections, the adapters' leaves and every slice's
   registrations, in one `create_container(settings)`, plus the run-end observer, which tells the scheduler's arming,
   the live trial watch, the maintenance run watch and the failed-fire notice about each run's ending, in that order.

@@ -15,8 +15,9 @@ from collections.abc import Awaitable
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass
 from decimal import Decimal
+from functools import partial
 from types import NoneType
-from typing import TYPE_CHECKING, get_args, get_origin
+from typing import TYPE_CHECKING, Protocol, get_args, get_origin
 
 from core.ai.sandbox import SandboxDiscipline
 from core.ai.spend_store import FileSpendStore
@@ -100,6 +101,7 @@ from harness.adapters.contracts import (
 from harness.domain.contracts import (
     BRIEFING_ONLY_BUDGET,
     CASE_RUN_TOOLS,
+    CHECK_CHANGE_TOOL,
     DEFINED_STEP_BUDGET,
     JUDGE_TOOLS,
     NOT_FOR_STEPS,
@@ -122,7 +124,10 @@ from harness.features.authoring.contracts import (
 from harness.features.authoring.infrastructure.studio import StudioKnowledgeBaseRefresher
 from harness.features.browsing import contracts as browsing
 from harness.features.browsing.contracts import CardRefusedError, WorkflowCardPatch
+from harness.features.evals.infrastructure.case_reports import FileCaseReports
 from harness.features.followme.contracts import FollowMe, act_toolset, verb_toolset
+from harness.features.maintenance.contracts import MaintenanceSteps
+from harness.features.maintenance.wiring import StepCaseRuns
 from harness.features.projects.contracts import memory_plugin_mounts, sanitize_segment
 from harness.features.running import contracts as running
 from harness.features.running.contracts import (
@@ -573,6 +578,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     turns: DurableTurns | None = None,
     wrap_model: StepModelWrapper | None = None,
     stand_ins: StandInCalls | None = None,
+    host_tools: FunctionToolset[object] | None = None,
 ) -> StepRegistry:
     """Wire the retrieval surface into the one thing this process can execute: a registry of steps.
 
@@ -622,6 +628,9 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
             program's calls, so a step's case run lands nothing. Such a registry grants, mounts and reaches only the
             tools in `CASE_RUN_TOOLS`, never the shell, runs no agent step, and registers neither `notify_owner`,
             `run_external_agent` nor any custom step. `None` mounts the real tools.
+        host_tools: The host's own tools a declared step may ask for by name beside the reads, such as `check_change`,
+            mounted for a briefing's grant. Their names are read when the environment is built, so add every tool first.
+            A stand-in registry grants only those in `CASE_RUN_TOOLS`. `None` adds none.
 
     Returns:
         The registry of steps a session executes, with the owner's active custom steps loaded.
@@ -633,9 +642,10 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     """The only tools a stand-in registry grants, mounts or reaches. `None` narrows nothing."""
     reads = _within((tool.name for tool in await engram.list_tools() if tool.name not in NOT_FOR_STEPS), scope)
     grounding = GROUNDING_TOOLS if plugins is not None else ()
-    grantable = _within((*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding), scope)
+    hosted = _within(host_tools.tools if host_tools is not None else (), scope)
+    grantable = _within((*reads, SHELL_TOOL, WEB_SEARCH_TOOL, *grounding, *hosted), scope)
     """What a declared step may ask for by name: the server's reads, the shell it acts with, web
-    search, and the grounding tools and `skip_digest` when this environment has plugins."""
+    search, the grounding tools and `skip_digest` when this environment has plugins, and the host's own tools."""
 
     stood_in, program_calls = _stand_ins_over(engram, stand_ins, plugins)
     writes = frozenset(stood_in.tools)
@@ -646,10 +656,11 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
     `custom_capability_types=`, and `capability_grants` below opens exactly this set to a worker."""
 
     def _step_toolsets(granted: frozenset[str]) -> list[AbstractToolset[None]]:
-        """The reads, web search, grounding and stand-ins a briefing's grant reaches, narrowed to exactly `granted`."""
+        """The reads, web search, grounding, stand-ins and host tools a briefing's grant reaches, narrowed to exactly `granted`."""
         reads_granted = tuple(name for name in reads if name in granted and name not in writes)
         grounding_granted = tuple(name for name in grounding if name in granted and name not in writes)
         writes_granted = tuple(name for name in writes if name in granted)
+        hosted_granted = tuple(name for name in hosted if name in granted)
         return [
             *([engram.filtered(lambda _ctx, tool: tool.name in reads_granted)] if reads_granted else []),
             *([web_search_toolset(web_search.tavily_api_key)] if WEB_SEARCH_TOOL in granted else []),
@@ -659,6 +670,7 @@ async def build_environment(  # noqa: PLR0913, PLR0915 (each keyword is a separa
                 else []
             ),
             *([stood_in.filtered(lambda _ctx, tool: tool.name in writes_granted)] if writes_granted else []),
+            *([host_tools.filtered(lambda _ctx, tool: tool.name in hosted_granted)] if host_tools is not None and hosted_granted else []),
         ]
 
     tier_models: dict[Tier, Model] = {
@@ -916,6 +928,37 @@ def deployment_brakes() -> tuple[SpendLimit, ...]:
     return spend_limits(SpendLimits[object](budgets=_DEPLOYMENT_BUDGETS, price=price_response))
 
 
+class _EnvironmentBuild(Protocol):
+    """`build_environment` with every term but the stand-ins and the host's own tools already set."""
+
+    def __call__(self, *, stand_ins: StandInCalls | None, host_tools: FunctionToolset[object]) -> Awaitable[StepRegistry]: ...
+
+
+async def _with_step_maintenance(  # noqa: PLR0913 (each keyword is one collaborator the steps are built over)
+    build: _EnvironmentBuild, *, library: LibraryCollection, records: RunRecords, notifier: Notifier, state: StateSettings, custom: Path
+) -> StepRegistry:
+    """The registry `build` makes, holding the step maintenance steps, whose case runs each build a stand-in registry with `build`."""
+    tools = FunctionToolset[object]()
+
+    async def stand_in_registry(calls: StandInCalls) -> StepRegistry:
+        """A registry for one step's case run, whose write tools are stand-ins recording into `calls`."""
+        return await build(stand_ins=calls, host_tools=tools)
+
+    steps = MaintenanceSteps(
+        library=library,
+        history=records.evidence,
+        notifier=notifier,
+        cases=StepCaseRuns(stand_in_registry, FileCaseReports(state.step_case_reports)),
+        clock=utcnow,
+        environment=environment_stamps(custom),
+        current_run=current_run_id,
+    )
+    tools.add_function(steps.check_change, name=CHECK_CHANGE_TOOL)
+    registry = await build(stand_ins=None, host_tools=tools)
+    steps.register(registry)
+    return registry
+
+
 def _no_external_agents() -> Mapping[str, ExternalAgentEntry]:
     """No ACP agent at all: what a session that only saves and evaluates reads the registry as."""
     return {}
@@ -970,7 +1013,9 @@ async def library_composition(
         embed = query_embedder() if settings.store.hybrid_search else None
         store = LibraryCollection(connection, ingest, embed=embed)
         notifier = MacNotifier() if sys.platform == "darwin" else NoopNotifier()
-        registry = await build_environment(
+        custom = custom_root(settings.self_authoring)
+        build = partial(
+            build_environment,
             TierModel("worker", tiers),
             engram=reader,
             sandbox=await stack.enter_async_context(sandbox_pool()),
@@ -978,12 +1023,13 @@ async def library_composition(
             plugins=plugins,
             external_agents=_no_external_agents,
             session_log=NoSessionLog(),
-            custom=custom_root(settings.self_authoring),
+            custom=custom,
             records=records,
             spend=_default_spend_limits(settings.state),
             web_search=settings.web_search,
             tiers=tiers,
         )
+        registry = await _with_step_maintenance(build, library=store, records=records, notifier=notifier, state=settings.state, custom=custom)
         registry.decide_gate = _refuse_gate_outside_a_session
         yield store, registry
 
@@ -1148,7 +1194,8 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
     active = ActiveRun()
     # The sandbox is entered here rather than inside `build_environment` because a registry that closed
     # its own sandbox when it went out of scope would take running workflows with it.
-    registry = await build_environment(
+    build = partial(
+        build_environment,
         TierModel("worker", tiers),
         engram=reader,
         sandbox=await stack.enter_async_context(sandbox_pool()),
@@ -1165,6 +1212,7 @@ async def harness_session(  # noqa: PLR0913 (each keyword is one collaborator th
         turns=turns,
         wrap_model=wrap_model,
     )
+    registry = await _with_step_maintenance(build, library=library, records=records, notifier=notifier, state=state, custom=custom)
     # `expose=()` means none of the host's own tools reach the model: the port's three verbs are
     # the whole surface, so `search` never sits beside `search_workflows` for the agent to thrash
     # between.

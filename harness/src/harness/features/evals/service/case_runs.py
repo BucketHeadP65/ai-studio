@@ -6,9 +6,6 @@ lands in a knowledge base.
 
 from __future__ import annotations
 
-import hashlib
-import json
-
 from typing import TYPE_CHECKING, get_type_hints
 
 from core.ai.workflows.contracts import AgentStep, Briefing, Program, Shape, StepIdentity, build_type, performing_step, step_content_address
@@ -27,10 +24,9 @@ from pydantic_ai.exceptions import (
     ModelUnavailableError,
 )
 from pydantic_ai_harness.spend import SpendLimitExceeded
-from pydantic_core import to_jsonable_python
 from pydantic_evals.evaluators import LLMJudge
 
-from harness.domain.contracts import CASE_RUN_TOOLS, CaseReport, CaseResult
+from harness.domain.contracts import CASE_RUN_TOOLS, CaseReport, CaseResult, cases_address
 from harness.features.evals.domain.step_evaluation import CaseDataset, OutcomeMatches, case_result
 from harness.features.evals.exceptions import CaseRunRefusedError
 
@@ -109,11 +105,12 @@ async def perform_step_cases(  # noqa: PLR0913, PLR0917 (each argument is a sepa
     report = CaseReport(
         step_id=step_id,
         step_hash=step_content_address(step),
-        cases_hash=_cases_address(cases),
+        cases_hash=cases_address(cases),
         results=(),
         blocked_by=None,
         no_cases=True,
         stand_in_calls=0,
+        refused=None,
     )
     if cases is None or not cases.get("cases"):
         return report
@@ -272,12 +269,6 @@ def _outside_names() -> frozenset[str]:
             found.add(error.__name__)
             pending.extend(error.__subclasses__())
     return frozenset(found)
-
-
-def _cases_address(cases: Mapping[str, JsonValue] | None) -> str:
-    """The SHA-256 of the dataset's canonical JSON, so the same cases written two ways share one address."""
-    canonical = json.dumps(to_jsonable_python(dict(cases)) if cases is not None else None, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _output_type(step: Briefing | Program) -> type | None:

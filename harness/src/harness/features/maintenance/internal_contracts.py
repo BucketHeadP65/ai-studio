@@ -1,17 +1,30 @@
-"""The ports the maintenance slice's watches read through."""
+"""The ports the maintenance slice reads and writes through: the evidence log, the library and a step's case runs."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from core.ai.workflows.contracts import (
+    ConsumerRecords,
+    LiveTrialLibrary,
+    MaintenanceFlags,
+    ReusableStepQueries,
+    StepVersionQueries,
+    WorkflowVersionQueries,
+)
 
-    from core.ai.workflows.contracts import Approval, Grade, RunEvidence
+if TYPE_CHECKING:
+    from collections.abc import Collection, Mapping, Sequence
+
+    from core.ai.workflows.contracts import Approval, Grade, InlineStep, RunEvidence, SavedWorkflow, Workflow
+    from pydantic import JsonValue
+
+    from harness.adapters.contracts import StandInCalls
+    from harness.domain.contracts import CaseReport
 
 
 class RunHistoryQueries(Protocol):
-    """The evidence log's read by content address: every run, approval and grade one workflow version holds."""
+    """The evidence log's reads by content address: every run, approval and grade one or several workflow versions hold."""
 
     async def history_for(self, *, spec_hash: str) -> Sequence[RunEvidence | Approval | Grade]:
         """Everything the evidence log holds about one workflow version.
@@ -24,5 +37,96 @@ class RunHistoryQueries(Protocol):
 
         Raises:
             ValueError: If `spec_hash` is empty.
+        """
+        ...
+
+    async def history_for_any(self, *, spec_hashes: Collection[str]) -> Sequence[RunEvidence | Approval | Grade]:
+        """Everything the evidence log holds about any of several workflow versions, read at once.
+
+        Args:
+            spec_hashes: The versions' content addresses. None may be empty. No address answers nothing.
+
+        Returns:
+            Their events, oldest first.
+
+        Raises:
+            ValueError: If one of `spec_hashes` is empty.
+        """
+        ...
+
+
+class MaintenanceLibrary(
+    ConsumerRecords, StepVersionQueries, ReusableStepQueries, MaintenanceFlags, LiveTrialLibrary, WorkflowVersionQueries, Protocol
+):
+    """Every library read and write the step maintenance steps make: consumers, step versions, flags and adoptions."""
+
+    async def fetch_workflow(self, workflow_id: str) -> Workflow:
+        """The workflow version `workflow_id` names.
+
+        Args:
+            workflow_id: The workflow version's id, `wf.<name>.v<version>`.
+
+        Returns:
+            The workflow.
+
+        Raises:
+            WorkflowUnknownError: If no workflow has that id.
+        """
+        ...
+
+    async def fetch_card(self, workflow_id: str) -> SavedWorkflow | None:
+        """One workflow version's card: its title, summary, applicability, presentation and intent.
+
+        Args:
+            workflow_id: The workflow version's id.
+
+        Returns:
+            The card, or None when the library has no such workflow.
+        """
+        ...
+
+    async def current(self, workflow_id: str) -> str:
+        """The id of the newest live version of the workflow `workflow_id` names, or `workflow_id` itself.
+
+        Args:
+            workflow_id: The id of any version of the workflow.
+
+        Returns:
+            The id of the newest live version, or `workflow_id` when the library names no newer one.
+        """
+        ...
+
+
+class CaseRunner(Protocol):
+    """How step maintenance runs a reusable step's own cases: the case file checked first, then the cases performed."""
+
+    def refusal(self, step_id: str, cases: Mapping[str, JsonValue]) -> str | None:
+        """Why a step's case file cannot run, before any case runs, or None when it can.
+
+        Args:
+            step_id: The step version's id, which the refusal names.
+            cases: The step's dataset in `pydantic_evals` form.
+
+        Returns:
+            The refusal, saying what to change in the case file, or None.
+        """
+        ...
+
+    async def perform(self, step: InlineStep, step_id: str, cases: Mapping[str, JsonValue] | None, calls: StandInCalls) -> CaseReport:
+        """The case report of one step version: the kept one, or a new one from running every case over stand-ins.
+
+        Pass a new `calls` list for each step, because the report counts the stand-in calls by how much it grew.
+
+        Args:
+            step: The step version whose cases run.
+            step_id: The step version's id, which the report names.
+            cases: The step's dataset in `pydantic_evals` form, or None when it has none.
+            calls: The list the stand-ins of this step's case run record into.
+
+        Returns:
+            The case report.
+
+        Raises:
+            RuntimeError: The registry the cases run through cannot perform the step. Nothing has run.
         """
         ...

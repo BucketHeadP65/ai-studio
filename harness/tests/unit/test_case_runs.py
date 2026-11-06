@@ -465,7 +465,7 @@ class TestPerformStepCases:
 class TestFileCaseReports:
     def test_a_second_put_under_the_same_content_address_keeps_the_first_report(self, tmp_path: Path) -> None:
         reports = FileCaseReports(tmp_path)
-        first = CaseReport(step_id="st.a.v1", step_hash="s", cases_hash="c", results=(), blocked_by=None, no_cases=False, stand_in_calls=1)
+        first = CaseReport(step_id="st.a.v1", step_hash="s", cases_hash="c", results=(), blocked_by=None, no_cases=False, stand_in_calls=1, refused=None)
         second = first.model_copy(update={"stand_in_calls": 2})
 
         reports.put(first)

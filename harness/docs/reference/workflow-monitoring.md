@@ -1396,6 +1396,32 @@ tick while the schedule's previous fire is still live stamps `last_outcome: "mis
 is never queued. `POST .../run-now` shares this same firing path, so a fire an owner clicks and one the ticker takes
 leave identical session state and tick-log entries behind them.
 
+## The step maintenance steps
+
+The `step-maintenance` workflow is built on registered steps the maintenance slice holds (`MaintenanceSteps`). Both
+compositions register them on the registry of steps, the session's own and the one `harness import` and
+`harness evals run` validate against, and every candidate they check is validated against that same registry. Each step
+hands the next a pydantic model, so a workflow file wires a briefing to a registered step by naming the step that
+produces the model: a briefing answers `{like: prepare_plan}`, a drafter answers
+`{like: select_disagreements, element: true}`, and a judge answers `{like: repository_verdict}`.
+
+| Step | What it does |
+|---|---|
+| `list_consumers(changed_step_ids)` | For each changed step, taken at its highest named version, every consumer whose copy is behind it or diverged: the step's unified diff from the copy, the nodes that run it, the consumer's presentation, intent and trust (current and total). A copy at that version or later, and a consumer whose record declines it, is dropped and counted. At most twenty pairs, by step name and consumer name, and the rest are named for the next run. |
+| `check_contracts(consumers)` | Each pair's contract check: the consumer adapted with its copy replaced by the changed version, then validated. A failing check is a result. |
+| `run_step_cases(changed_step_ids)` | The case report of each changed version and of each older version a behind consumer holds. A case file that cannot run gives a failed report whose `refused` says why, and the other steps still run. Each step's cases run through a stand-in registry built for that step, over a stand-in list of its own, and reports are kept under the state home in `step-case-reports/`. A registry that cannot perform a step fails the run. |
+| `prepare_plan(consumers, checks, cases)` | One planned change per pair, `keep` and `not yet decided`, carrying its check and case reports, the type the planner answers in. |
+| `land_changes(plan)` | An adoption copies the step from the library by its id, applies the change's further edit operations, validates the candidate and saves the consumer's next version saved by `agent:step-maintenance`, with a `live_trial` marker naming the version it replaces, a lineage whose `touched` names the nodes that run the step, the prediction `completes` and evidence naming the run. It then resolves the pair's open `consumer_flag` page. A kept pair declines the step version in the consumer's record. A flagged pair writes `mf.consumer.<workflow name>.<step>` with the contract check and the planner's reason. Changes land one at a time, so a second change to one consumer builds on the first. A change to a consumer someone saved past since the listing is refused. Every writable change lands, then `LandingRefusedError` names each refused one, its report holding every outcome. |
+| `report_changes(landed)` | One notice to the owner naming each changed workflow and why, and the consumers left for the next run. A failed notice is said in the answer. |
+| `select_disagreements(landed, consumers)` | One `RepositoryChange` per changed step some consumers adopted and others kept or flagged, each side's evidence filled and the drafted fields empty. |
+| `repository_verdict(step)` | An undecided verdict. No graph places it: it carries the type a repository judge answers in. |
+| `hand_over_repository_changes(report, disagreements, drafts, verdicts)` | Writes each draft its judge kept as `mf.change.<step>`, the drafted step files and file edits in its Proposed change section, drops the rest with their reasons (a draft no verdict came for, and a step no draft came for), and tells the owner once. It carries `report_changes`'s answer, so the graph ends here with no dead end and the run's answer holds the whole report. A failed flag write or notice is said in the answer. |
+
+`check_change(workflow_id, step_id, extra_ops)` is a tool a briefing is granted by name. It builds the version the
+landing would build and answers its validation report, saving nothing. A stand-in registry grants it too. Text a model
+wrote reaches a flag page inside a fenced block with each `%%` written `% %`, so a heading or a `%%` in a reason or a
+drafted file never cuts the page.
+
 ## What hears a run's ending
 
 Once a workflow run's evidence is written, one composite observer (`RunEndObservers`, composed in `container.py`) tells
