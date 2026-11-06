@@ -144,6 +144,32 @@ class WorkflowVersionChangedError(LibraryError):
         """The version the file names."""
 
 
+class WorkflowVersionArchivedError(LibraryError):
+    """A workflow file holds other content under a version the library archived, so the archived version would change in place.
+
+    The message names the file, the version and the next free version number to raise the file to.
+    """
+
+    def __init__(self, file: Path, workflow_id: str, *, next_version: int) -> None:
+        """Name the file, the archived version and the version number the file's content can be saved under.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the archived version the file names.
+            next_version: One above every version the library holds of the workflow.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id}, and the library archived that version with other content. The library keeps one "
+            f"workflow per version, archived ones included, and the archived version keeps the runs that ran it. Raise "
+            f"`version` in the file to {next_version}, one above every version the library holds of the workflow, then import "
+            f"again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The archived version the file names."""
+        self.next_version = next_version
+        """The version number the file's content can be saved under."""
+
+
 class WorkflowNotLiveError(LibraryError):
     """A workflow file names a version the library superseded, and no newer version of its workflow is live.
 

@@ -17,6 +17,7 @@ from core.ai.workflows.contracts import (
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
+    next_version,
     spec_identity,
     step_content_address,
     step_page_id,
@@ -29,6 +30,7 @@ from harness.features.browsing.exceptions import (
     WorkflowCardChangedError,
     WorkflowNameRepeatedError,
     WorkflowNotLiveError,
+    WorkflowVersionArchivedError,
     WorkflowVersionChangedError,
     WorkflowVersionSupersededError,
     WorkflowVersionUnreadableError,
@@ -130,9 +132,10 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
     file there is saved with none, which removes any cases its version held. When it does not, every version keeps
     the cases it holds.
 
-    A workflow file whose version the library holds is compared with it before the first write. An archived version is
-    skipped and stays archived. When the library's newest live version of the workflow is higher, the file is skipped if
-    `moved_past_by` saved that version, and refuses the folder otherwise. A superseded version with no newer live
+    A workflow file whose version the library holds is compared with it before the first write. An archived version
+    holding the file's content is skipped and stays archived, and one holding other content refuses the folder. When
+    the library's newest live version of the workflow is higher, the file is skipped if `moved_past_by` saved that
+    version, and refuses the folder otherwise. A superseded version with no newer live
     version refuses the folder. Other content at the same version refuses the folder, and so does the same workflow
     under another title, description, body or presentation. The same workflow under the same words is written only
     when its stamp changed, and then only the stamp, so the page keeps its lineage, its live trial marker and its
@@ -173,6 +176,8 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
             Nothing is written.
         WorkflowVersionChangedError: The library holds a workflow file's version with other content, after the drop of
             null values and empty lists and mappings the library applies. Nothing is written.
+        WorkflowVersionArchivedError: The library archived a workflow file's version with other content. The error
+            names the next free version number. Nothing is written.
         WorkflowCardChangedError: The library holds a workflow file's workflow at its version under another title,
             description, body or presentation. Nothing is written.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
@@ -270,6 +275,8 @@ async def _held(ready: _ReadyWorkflow, library: SavedVersionQueries, *, moved_pa
     if held_id is None or card is None:
         return None
     if card.archived_at is not None:
+        if not _holds(await _stored(ready, held_id, library), workflow):
+            raise WorkflowVersionArchivedError(ready.file, held_id, next_version=await next_version(workflow.name, above=workflow.version, versions=library))
         return SkippedWorkflowFile(file=ready.file, version=workflow.version, reason="archived", newer_id=None, newer_version=None)
     if (moved_past := await _moved_past(ready, held_id, library, moved_past_by=moved_past_by)) is not None:
         return moved_past
@@ -277,15 +284,7 @@ async def _held(ready: _ReadyWorkflow, library: SavedVersionQueries, *, moved_pa
     if live is None or live.id != held_id:
         highest = max(version for version, _ in await library.versions(workflow.name))
         raise WorkflowNotLiveError(ready.file, held_id, highest_version=highest)
-    try:
-        stored = await library.fetch_workflow(held_id)
-    except ValidationError as error:
-        first = error.errors()[0]
-        reason = f"{'.'.join(str(part) for part in first['loc'])}: {first['msg']}"
-        raise WorkflowVersionUnreadableError(ready.file, held_id, reason) from error
-    except LibraryError as error:
-        raise WorkflowVersionUnreadableError(ready.file, held_id, " ".join(str(error).split())) from error
-    if spec_identity(stored) not in {spec_identity(workflow), _stored_address(workflow)}:
+    if not _holds(await _stored(ready, held_id, library), workflow):
         raise WorkflowVersionChangedError(ready.file, held_id)
     words = {
         "title": (ready.title, card.title),
@@ -315,6 +314,23 @@ async def _moved_past(ready: _ReadyWorkflow, held_id: str, library: SavedVersion
     if saved_by != moved_past_by:
         raise WorkflowVersionSupersededError(ready.file, held_id, newest_id=newest_id, newest_version=newest_version, saved_by=saved_by)
     return SkippedWorkflowFile(file=ready.file, version=ready.workflow.version, reason="moved_past", newer_id=newest_id, newer_version=newest_version)
+
+
+async def _stored(ready: _ReadyWorkflow, held_id: str, library: SavedVersionQueries) -> Workflow:
+    """The workflow the library holds under `held_id`, refused naming the file when it no longer reads."""
+    try:
+        return await library.fetch_workflow(held_id)
+    except ValidationError as error:
+        first = error.errors()[0]
+        reason = f"{'.'.join(str(part) for part in first['loc'])}: {first['msg']}"
+        raise WorkflowVersionUnreadableError(ready.file, held_id, reason) from error
+    except LibraryError as error:
+        raise WorkflowVersionUnreadableError(ready.file, held_id, " ".join(str(error).split())) from error
+
+
+def _holds(stored: Workflow, workflow: Workflow) -> bool:
+    """Whether `stored` is `workflow` by content address, as written or as the library reads it back."""
+    return spec_identity(stored) in {spec_identity(workflow), _stored_address(workflow)}
 
 
 def _stored_address(workflow: Workflow) -> str | None:
