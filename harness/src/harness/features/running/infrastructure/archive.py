@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-_ENVELOPE_ONLY: dict[str, object] = {"spec": {}, "values": {}, "events": [], "conversations": {}, "reviewed": []}
+_ENVELOPE_ONLY: dict[str, object] = {"spec": {}, "values": {}, "events": [], "conversations": {}, "reviewed": ()}
 """Overridden onto a record for its envelope file: the heavy fields never enter it."""
 
 _ENVELOPE_SUFFIX = ".envelope.json"

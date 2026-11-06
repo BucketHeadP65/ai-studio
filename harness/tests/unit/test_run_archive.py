@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -156,6 +157,12 @@ def test_a_listing_never_reads_a_whole_record(tmp_path: Path) -> None:
     assert [(item.run_id, item.run_title) for item in archive.recent(10)] == [("run-1", "Quarterly")]
     assert [item.run_id for item in archive.list_for("wf.report", limit=10)] == ["run-1"]
     assert archive.get("run-1") is None, "get does read the whole record, and this one no longer parses"
+
+
+def test_an_envelope_is_written_without_a_serializer_warning(tmp_path: Path) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        FileRunArchive(tmp_path, retention_days=KEPT_DAYS).put(_record(run_id="run-1"))
 
 
 def test_a_sweep_decides_without_reading_a_whole_record(tmp_path: Path) -> None:
