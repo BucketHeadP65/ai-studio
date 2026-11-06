@@ -83,7 +83,7 @@ class ConsumerPair(BaseModel):
 
 
 class ConsumerList(BaseModel):
-    """The consumer pairs one step maintenance run takes, the consumers it leaves for a later run, and those it dropped."""
+    """The consumer pairs one step maintenance run takes, the consumers it leaves for a later run or to the repository, and those it dropped."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -95,6 +95,9 @@ class ConsumerList(BaseModel):
     dropped: list[str]
     """The consumer workflow ids whose pair was dropped because the copy is current or the consumer declined the changed
     version, each once."""
+    left_to_repository: list[str]
+    """The consumer workflow ids of step maintenance itself, each once, which never adopts into its own workflow: its
+    steps reach it through the repository and an import."""
 
 
 class ContractCheck(BaseModel):
@@ -138,13 +141,15 @@ class PlannedChange(BaseModel):
 
 
 class MaintenancePlan(BaseModel):
-    """Every planned change of one step maintenance run, and the consumers it leaves for a later run."""
+    """Every planned change of one step maintenance run, and the consumers it leaves for a later run or to the repository."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     changes: list[PlannedChange]
     left_for_next_run: list[str]
     """The consumer workflow ids past the pair cap, as `list_consumers` named them."""
+    left_to_repository: list[str]
+    """The consumer workflow ids of step maintenance itself, as `list_consumers` named them."""
 
 
 class PlanDecision(BaseModel):
@@ -198,12 +203,14 @@ class LandedChange(BaseModel):
 
 
 class LandingReport(BaseModel):
-    """What one landing did with every planned change, and the consumers it leaves for a later run."""
+    """What one landing did with every planned change, and the consumers it leaves for a later run or to the repository."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     changes: list[LandedChange]
     left_for_next_run: list[str]
+    left_to_repository: list[str]
+    """The consumer workflow ids of step maintenance itself, which the landing never touches."""
 
 
 class ConsumerSide(BaseModel):

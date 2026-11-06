@@ -43,6 +43,7 @@ from pydantic import JsonValue
 from harness.domain.contracts import CaseReport, cases_address
 from harness.features.maintenance.domain import (
     ADOPTION_EDITS,
+    MAINTENANCE_WORKFLOW,
     NOT_DECIDED,
     PAIR_CAP,
     ConsumerList,
@@ -170,23 +171,25 @@ class MaintenanceSteps:
     async def list_consumers(self, changed_step_ids: str) -> ConsumerList:
         """Every consumer whose copy of a changed step is behind it or diverged, at most twenty, with what the planner decides by.
 
-        Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
-        matches that version, or whose record declines it, is dropped and named. The consumers past the cap are named
-        once each for a later run.
+        Each named step is taken at its newest saved version, whichever version the id names. Step maintenance itself
+        is never a pair: it is named once as left to the repository, through which its own steps reach it. Any other
+        consumer whose copy matches that version, or whose record declines it, is dropped and named. The consumers past
+        the cap are named once each for a later run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
 
         Returns:
-            The pairs, by step name and then by consumer name, the consumers left for a later run and those dropped.
+            The pairs, by step name and then by consumer name, the consumers left for a later run or to the repository,
+            and those dropped.
 
         Raises:
             LibraryError: A step id names no saved reusable step version, or a library read fails.
         """
-        taken, left, dropped = await self._candidates(await self._changed(changed_step_ids))
+        taken, left, dropped, own = await self._candidates(await self._changed(changed_step_ids))
         pairs = [await self._pair(candidate) for candidate in taken]
         left_ids = list(dict.fromkeys(candidate.card.workflow_id for candidate in left))
-        return ConsumerList(pairs=pairs, left_for_next_run=left_ids, dropped=dropped)
+        return ConsumerList(pairs=pairs, left_for_next_run=left_ids, dropped=dropped, left_to_repository=own)
 
     async def check_contracts(self, consumers: ConsumerList) -> list[ContractCheck]:
         """Each pair's contract check: whether the consumer validates with its copy replaced by the changed version.
@@ -220,7 +223,7 @@ class MaintenanceSteps:
             RuntimeError: The registry the cases run through cannot perform a step. The run then fails.
         """
         changed = await self._changed(changed_step_ids)
-        taken, _, _ = await self._candidates(changed)
+        taken, _, _, _ = await self._candidates(changed)
         versions = {version.step_id: version for version, _ in changed}
         for candidate in taken:
             if candidate.state == "behind":
@@ -262,7 +265,9 @@ class MaintenanceSteps:
                     cases=[report for report in cases if report.step_id in reported],
                 )
             )
-        return MaintenancePlan(changes=changes, left_for_next_run=list(consumers.left_for_next_run))
+        return MaintenancePlan(
+            changes=changes, left_for_next_run=list(consumers.left_for_next_run), left_to_repository=list(consumers.left_to_repository)
+        )
 
     async def land_changes(self, plan: MaintenancePlan, decisions: PlanDecisions) -> LandingReport:
         """Land the drafted plan as the planner decided it: save each adoption on live trial, decline each kept copy and flag each flagged pair.
@@ -323,7 +328,7 @@ class MaintenanceSteps:
             if index not in outcomes and isinstance(change, PlannedChange):
                 outcomes[index] = await self._land(change, saved.get(change.workflow_id, change.workflow_id))
         changes = await self._settle_rejected_plans([outcomes[index] for index in range(len(merged))])
-        report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run))
+        report = LandingReport(changes=changes, left_for_next_run=list(plan.left_for_next_run), left_to_repository=list(plan.left_to_repository))
         refused = sum(change.outcome == "refused" for change in changes)
         if refused:
             _, told = await self._tell_owner(f"Step maintenance refused {refused} of {len(changes)} planned changes", report)
@@ -331,9 +336,10 @@ class MaintenanceSteps:
         return report
 
     async def report_changes(self, landed: LandingReport) -> str:
-        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for a later run.
+        """Tell the owner in one notice what changed in which workflow and why, and the consumers left for a later run or to the repository.
 
-        A notice that fails is said in the answer and never fails the run. A landing that changed nothing tells nobody.
+        A notice that fails is said in the answer and never fails the run. A landing that changed nothing tells nobody,
+        and its answer still names what it left to the repository.
 
         Args:
             landed: What the landing did.
@@ -342,12 +348,13 @@ class MaintenanceSteps:
             The notice's text and whether it went out.
         """
         if not landed.changes and not landed.left_for_next_run:
-            return "Step maintenance changed nothing, so nobody was told."
+            nothing = "Step maintenance changed nothing, so nobody was told."
+            return f"{nothing}\n{_left_to_repository(landed.left_to_repository)}" if landed.left_to_repository else nothing
         message, told = await self._tell_owner(f"Step maintenance landed {', '.join(sorted({change.step_id for change in landed.changes}))}", landed)
         return f"{message}\n{told}"
 
     async def _tell_owner(self, title: str, landed: LandingReport) -> tuple[str, str]:
-        """Send the owner one notice saying every change of `landed` and the consumers past the cap, and answer it and whether it went out."""
+        """Send the owner one notice saying every change of `landed` and the consumers past the cap or left to the repository, and answer it and whether it went out."""
         lines = [change_line(change) for change in landed.changes]
         if landed.left_for_next_run:
             lines.append(
@@ -355,6 +362,8 @@ class MaintenanceSteps:
                 f"takes them when it next runs for their steps, with a step's next version, or run step-maintenance by hand "
                 f"with the same step ids to take them now."
             )
+        if landed.left_to_repository:
+            lines.append(_left_to_repository(landed.left_to_repository))
         message = "\n".join(lines)
         try:
             delivered = await self._notifier.notify(title, message)
@@ -541,13 +550,17 @@ class MaintenanceSteps:
             taken[newest.name] = (newest, saved)
         return tuple(taken[name] for name in sorted(taken))
 
-    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], list[str]]:
-        """The behind or diverged consumers within the cap, those past it, and the ids of the current or declined ones, each once."""
+    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], list[str], list[str]]:
+        """The behind or diverged consumers within the cap, those past it, the ids of the current or declined ones and of step maintenance itself, each once."""
         candidates: list[_Candidate] = []
         dropped: dict[str, None] = {}
+        own: dict[str, None] = {}
         for version, saved in changed:
             by_version = {each.version: each for each in saved}
             for card in await self._library.consumers_of(version.name):
+                if card.name == MAINTENANCE_WORKFLOW:
+                    own[card.workflow_id] = None
+                    continue
                 entry = card.entry
                 if entry.declined == version.step_hash or (entry.version is not None and entry.version >= version.version):
                     dropped[card.workflow_id] = None
@@ -559,7 +572,7 @@ class MaintenanceSteps:
                     raise LibraryError(msg)
                 candidates.append(_Candidate(version=version, card=card, held=held))
         candidates.sort(key=lambda candidate: (candidate.version.name, candidate.card.name, candidate.card.version))
-        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], list(dropped)
+        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], list(dropped), list(own)
 
     async def _pair(self, candidate: _Candidate) -> ConsumerPair:
         """The pair one candidate makes, with its diff, its nodes, its card's words and its trust."""
@@ -866,6 +879,14 @@ def _adopted(
     except ValueError as exc:
         msg = f"an edit operation does not apply: {exc}"
         raise AdaptationRefusedError(msg) from exc
+
+
+def _left_to_repository(workflow_ids: Sequence[str]) -> str:
+    """The owner's line naming the consumers of step maintenance itself and where their steps come from."""
+    return (
+        f"Left to the repository: {', '.join(workflow_ids)}. Step maintenance never adopts into its own workflow, whose steps "
+        f"reach it through the repository and harness import."
+    )
 
 
 def _nodes_running(workflow: Workflow, name: str) -> list[str]:

@@ -21,6 +21,12 @@ to a run by hand. The notice names the ids put back and those that need a run by
 inside the run, such as a refused landing or the judge's third rejection, puts nothing back, and neither does a run
 started by hand.
 
+**Amended (2026-11-06), step maintenance never adopts into itself.** Its planner, its judges and its drafter are
+reusable steps, so a new version of one would have been adopted into `step-maintenance` on live trial, a model choosing
+the steps that judge its own plans. `list_consumers` never pairs a consumer named `step-maintenance` and names it as left
+to the repository, which the run's report says, apart from the consumers it dropped as current or declined. Its own
+steps reach it through the repository and `harness import`, as before.
+
 ## Context
 
 A workflow keeps the copy of each reusable step it was saved with. A new version of a step reaches a consumer only as

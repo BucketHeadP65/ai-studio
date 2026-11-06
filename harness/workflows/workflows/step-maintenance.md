@@ -26,7 +26,7 @@ presentation:
     - {label: Repository changes handed over, path: values.hand_over_repository_changes}
 workflow:
   name: step-maintenance
-  version: 1
+  version: 2
   description: >-
     List each changed step's behind or diverged consumers, check their contracts and run the step's cases, plan
     adopt, keep or flag per consumer under a judge, land the plan, report it, and draft and judge a repository change
@@ -149,7 +149,8 @@ Use on the `on step change` schedule, which fires it with the reusable step vers
 by hand with `changed_step_ids` naming the versions to check. Each named step is taken at its newest saved version.
 
 The stages: `list_consumers` takes at most twenty consumer pairs per run and names the rest, which a later run for
-their step takes: the step's next version, or a run by hand with its id.
+their step takes: the step's next version, or a run by hand with its id. It never pairs this workflow itself, whose own
+steps reach it through the repository and `harness import`, and names it as left to the repository, which the report says.
 `check_contracts` and `run_step_cases` gather the evidence side by side, and `prepare_plan` copies it into one undecided
 change per pair. The planner, `plan_changes`, decides adopt, keep or flag per pair on the orchestrator tier, checking
 every adoption with `check_change`, and answers only its decisions, so it never retypes the evidence. Once the plan exists, `pass_changed_ids` hands the run's own `changed_step_ids` to

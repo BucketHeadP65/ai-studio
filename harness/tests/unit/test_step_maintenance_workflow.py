@@ -175,7 +175,7 @@ async def test_the_workflow_file_loads_and_validates_against_the_app_s_registry(
 def test_the_workflow_takes_the_changed_step_ids_and_answers_with_the_hand_over_after_the_landing_its_judge_gates() -> None:
     spec = _spec()
 
-    assert (spec.name, spec.version) == (MAINTENANCE_WORKFLOW, 1)
+    assert (spec.name, spec.version) == (MAINTENANCE_WORKFLOW, 2)
     assert spec.parameters == {
         CHANGED_STEPS: ParameterSpec(
             description=spec.parameters[CHANGED_STEPS].description, json_schema={"type": "string", "minLength": 1}, required=True
@@ -700,7 +700,7 @@ async def test_a_run_with_no_consumer_behind_is_approved_and_lands_writes_and_te
     )
 
     assert scripted.models.performed == ["plan_changes", PLAN_GATE], "approved on the first attempt, and no repository change to draft"
-    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=[current])
+    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=[current], left_to_repository=[])
     assert isinstance(handed, HandOver)
     assert handed.report == "Step maintenance changed nothing, so nobody was told."
     assert (handed.flags, handed.dropped, handed.problems) == ([], [], [])

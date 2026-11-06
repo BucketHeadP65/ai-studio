@@ -130,6 +130,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -289,6 +290,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -390,6 +392,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.board-actions.v1
@@ -551,6 +554,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -715,6 +719,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -875,6 +880,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -1092,6 +1098,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
+      left_to_repository: []
       dropped: []
     checks:
     - workflow_id: wf.meeting-actions.v1
@@ -1132,6 +1139,7 @@ cases:
     consumers:
       pairs: []
       left_for_next_run: []
+      left_to_repository: []
       dropped:
       - wf.meeting-actions.v1
     checks: []
