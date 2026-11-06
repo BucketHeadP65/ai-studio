@@ -45,6 +45,7 @@ only shrink. The tiers, inward first:
 - `container.py`, the composition map: the sections, the adapters' leaves and every slice's
   registrations, in one `create_container(settings)`, plus the run-end observer, which tells the scheduler's arming,
   the live trial watch, the maintenance run watch and the failed-fire notice about each run's ending, in that order.
+  The notice has the scheduler put back the changed steps of an on-step-change fire that stopped with a provider error.
 - entries: `main` (`create_app(settings)`, the HTTP composition root), `acp`, `cli`. Each builds the
   same container. Nothing imports them. The loop also serves the inspection's three job kinds
   (`inspect_run`, `attribute_lead`, `scan_run`) from the `coordination` schema of the sessions database

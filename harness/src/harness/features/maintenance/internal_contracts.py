@@ -1,4 +1,4 @@
-"""The ports the maintenance slice reads and writes through: the evidence log, the library and a step's case runs."""
+"""The ports the maintenance slice reads and writes through: the evidence log, the library, a step's case runs and the schedules."""
 
 from __future__ import annotations
 
@@ -20,7 +20,25 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
     from harness.adapters.contracts import StandInCalls
-    from harness.domain.contracts import CaseReport
+    from harness.domain.contracts import CaseReport, FailedFireSteps
+
+
+class StepSchedules(Protocol):
+    """The on-step-change schedules, which take back the changed steps of a fire that ended failed."""
+
+    async def put_back_steps(self, evidence: RunEvidence) -> FailedFireSteps | None:
+        """Put the changed steps of a failed on-step-change fire back on its schedule when the run stopped with a provider error.
+
+        A step goes back on one schedule once, and a paused schedule takes nothing back.
+
+        Args:
+            evidence: What the failed run's ending recorded.
+
+        Returns:
+            Which steps were put back and which need a run by hand, or None when no on-step-change schedule fired the run
+            with changed steps.
+        """
+        ...
 
 
 class RunHistoryQueries(Protocol):

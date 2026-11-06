@@ -1391,7 +1391,8 @@ at most 86400 seconds, and adds the saved version's id (`st.<name>.v<version>`) 
 event id is recorded under `schedules.on_step_change` in the same transaction, so an event delivered twice arms
 nothing the second time, and an event no schedule waits for is recorded, closed and never seen by a schedule created
 later. A fire that launches passes the collected ids, sorted and comma-separated, to the workflow parameter
-`changed_step_ids` and removes exactly the ids it passed, as the on-index cadence does with its pages. A fire whose
+`changed_step_ids` and removes exactly the ids it passed, as the on-index cadence does with its pages. When that run
+stops with a provider error, the failed-fire notice puts the ids back once (see "What hears a run's ending"). A fire whose
 newest workflow version declares no `changed_step_ids` stamps `refused: <workflow id> declares no changed_step_ids` and
 rests. `POST /api/schedules` and `PATCH /api/schedules/{id}` answer 400 to an on-step-change schedule over a workflow
 that declares no `changed_step_ids`. The arguments need not hold `changed_step_ids` even when the workflow requires it,
@@ -1499,7 +1500,20 @@ four parts in turn, and a part that fails is logged while the next is still told
    for the step resolves it.
 4. **The failed-fire notice** (`FailedFireNotice`) tells the owner once about each run a schedule fired (its runner
    starts with `app:schedule:`) that ended failed, by its outcome or its checked status. A completed run whose checked
-   status is failed tells the owner too. A run started by hand tells nobody.
+   status is failed tells the owner too. A run started by hand tells nobody and changes no schedule. Before it tells
+   the owner, it asks the scheduler (`Scheduler.put_back_steps`) about a fire of an `on step change` schedule. When the
+   run stopped with a provider error, the step ids the fire passed in `changed_step_ids` go back into
+   `pending_step_ids`, beside any that arrived during the run, each id once, and the fire moves to the run's end plus
+   the quiet period. `RunEvidence.provider_error` says so, set where an in-process run ends from the error it stopped
+   with: a content filter, a lost connection or timeout, a server error, an unavailable model or a rate limit (HTTP 5xx
+   or 429), or a reply with no output after every output retry. Each step id goes back on one schedule once, recorded in
+   `coordination.event_deliveries` under `schedules.put_back_steps` with an event id made from the schedule's id and the
+   step id, so the fire that took it again and failed again puts it back no more. A failure inside the run (a landing
+   refusal, a validation error, a judge's last rejection, a map that aborted after repeated failures), a paused
+   schedule, and a run on the durable engine, whose evidence never says provider error, put nothing back. The notice
+   then names the ids put back and those that need a run by hand, with why and the run to start (`Run <workflow id> by
+   hand with changed_step_ids <ids> to plan them.`). A put back that raises is said in the notice, and the notice still
+   goes.
 
 ## What this station does not do (v1)
 

@@ -548,3 +548,55 @@ async def test_update_that_leaves_the_pending_steps_keeps_them(store: PostgresSc
     fetched = await store.get(held.id)
     assert fetched is not None
     assert fetched.pending_step_ids == ("st.a.v1",)
+
+
+async def test_put_back_steps_adds_each_step_once_per_schedule_and_moves_the_fire(store: PostgresSchedules, migrated: str) -> None:  # noqa: F811 (pytest resolves the imported fixture by this name)
+    ended_at = datetime(2026, 11, 6, 8, 2, tzinfo=UTC)
+    waiting = _schedule(cadence="on step change quiet 10m", pending_step_ids=("st.arrived.v1", "st.b.v2"))
+    other = _schedule(cadence="on step change")
+    for row in (waiting, other):
+        await store.insert(row)
+
+    first = await store.put_back_steps(waiting.id, step_ids=["st.a.v2", "st.b.v2"], at=ended_at)
+    again = await store.put_back_steps(waiting.id, step_ids=["st.a.v2", "st.c.v1"], at=ended_at + timedelta(hours=1))
+    elsewhere = await store.put_back_steps(other.id, step_ids=["st.a.v2"], at=ended_at)
+
+    assert (first, again, elsewhere) == (("st.a.v2", "st.b.v2"), ("st.c.v1",), ("st.a.v2",)), "a step goes back on one schedule once"
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert fetched.pending_step_ids == ("st.a.v2", "st.arrived.v1", "st.b.v2", "st.c.v1"), "each id once, beside those that arrived"
+    assert fetched.next_run_at == ended_at + timedelta(hours=1)
+    connection = await asyncpg.connect(_asyncpg_dsn(migrated))
+    try:
+        recorded = await connection.fetchval("SELECT count(*) FROM coordination.event_deliveries WHERE subscriber = 'schedules.put_back_steps'")
+    finally:
+        await connection.close()
+    assert recorded == 4
+
+
+async def test_put_back_steps_that_were_all_put_back_before_leaves_the_schedule_alone(store: PostgresSchedules) -> None:
+    ended_at = datetime(2026, 11, 6, 8, 2, tzinfo=UTC)
+    waiting = _schedule(cadence="on step change")
+    await store.insert(waiting)
+    await store.put_back_steps(waiting.id, step_ids=["st.a.v2"], at=ended_at)
+    await store.stamp(
+        waiting.id, last_run_at=ended_at, last_outcome="launched", next_run_at=None, session_id="", cleared_page_ids=[], cleared_step_ids=["st.a.v2"]
+    )
+
+    assert await store.put_back_steps(waiting.id, step_ids=["st.a.v2"], at=ended_at + timedelta(hours=1)) == ()
+
+    fetched = await store.get(waiting.id)
+    assert fetched is not None
+    assert (fetched.next_run_at, fetched.pending_step_ids) == (None, ())
+
+
+async def test_put_back_steps_on_a_paused_or_missing_schedule_records_nothing(store: PostgresSchedules) -> None:
+    ended_at = datetime(2026, 11, 6, 8, 2, tzinfo=UTC)
+    paused = _schedule(cadence="on step change", enabled=False)
+    await store.insert(paused)
+
+    assert await store.put_back_steps(paused.id, step_ids=["st.a.v2"], at=ended_at) is None
+    assert await store.put_back_steps(uuid4(), step_ids=["st.a.v2"], at=ended_at) is None
+
+    assert await store.update(paused.id, ScheduleUpdate(enabled=True)) is True
+    assert await store.put_back_steps(paused.id, step_ids=["st.a.v2"], at=ended_at) == ("st.a.v2",), "a refusal recorded nothing"

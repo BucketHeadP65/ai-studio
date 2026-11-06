@@ -10,6 +10,17 @@ app: harness
 created: '2026-11-06'
 ---
 
+**Amended (2026-11-06), a fire stopped by a provider error fires again once.** The first live fire failed when Azure's
+content filter refused the plan judge's reply, and nothing planned its step versions again, because the fire had cleared
+them. Now a run's evidence says whether it stopped with a provider error (`RunEvidence.provider_error`: a content filter,
+a lost connection or timeout, a server error, an unavailable model, a rate limit, or a reply with no output after every
+output retry). When an on-step-change fire ends failed with one, the failed-fire notice has the scheduler put the step
+ids it was fired with back on the schedule, beside any that arrived during the run, and the schedule fires again after
+its quiet period. Each step id goes back on one schedule once, so the fire that took it again and failed again leaves it
+to a run by hand. The notice names the ids put back and those that need a run by hand, with the run to start. A failure
+inside the run, such as a refused landing or the judge's third rejection, puts nothing back, and neither does a run
+started by hand.
+
 ## Context
 
 A workflow keeps the copy of each reusable step it was saved with. A new version of a step reaches a consumer only as

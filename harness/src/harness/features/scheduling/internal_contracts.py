@@ -170,6 +170,23 @@ class Schedules(Protocol):
         """
         ...
 
+    async def put_back_steps(self, schedule_id: UUID, *, step_ids: Sequence[str], at: datetime) -> tuple[str, ...] | None:
+        """Add to one enabled schedule's pending changed steps each of `step_ids` it never took back, and give it the next fire `at`.
+
+        A step id is put back on one schedule once: each one put back is recorded in the same write, and one recorded
+        before is left out. When every id was put back before, the schedule is left as it is. Each id is added once,
+        beside the changed steps the schedule already holds, and the fire given replaces the one it holds.
+
+        Args:
+            schedule_id: The schedule the failed fire was fired by.
+            step_ids: The changed steps that fire passed on.
+            at: The next fire the schedule gets when a step is put back.
+
+        Returns:
+            The step ids put back, in the order given, or `None` when no enabled schedule has that id.
+        """
+        ...
+
 
 class ScheduleQueries(Protocol):
     """Reads over the stored schedules that change nothing."""

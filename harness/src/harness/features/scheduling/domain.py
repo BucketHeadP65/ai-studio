@@ -432,6 +432,10 @@ scheduler armed for it."""
 CHANGED_STEPS_PARAMETER = "changed_step_ids"
 """The workflow parameter an on-step-change schedule's fire passes its changed steps to, sorted and comma separated."""
 
+PUT_BACK_SUBSCRIBER = "schedules.put_back_steps"
+"""The subscriber name each changed step a failed fire put back is recorded under in `coordination.event_deliveries`, with
+an event id made from the schedule's id and the step id, so a step is put back on one schedule once."""
+
 
 class Armed(BaseModel, frozen=True):
     """What one arming did: whether its event was handled before, and which schedules it armed."""
