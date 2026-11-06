@@ -25,6 +25,7 @@ from core.ai.workflows.contracts import (
     JudgeGate,
     LibraryCollection,
     LiveTrialMarker,
+    LiveTrialStep,
     MapNode,
     ParameterSpec,
     Program,
@@ -672,7 +673,7 @@ async def test_one_run_adopts_one_consumer_on_live_trial_and_keeps_the_other_onc
     adopted = "wf.meeting-actions.v2"
     assert await world.library.current(meeting) == adopted
     assert world.store.written(adopted)["saved_by"] == STEP_MAINTENANCE_AGENT
-    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=meeting, step="extract_actions", step_hash=CHANGED_HASH)
+    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=meeting, steps=(LiveTrialStep(step="extract_actions", step_hash=CHANGED_HASH),))
     assert await world.library.current(standup) == standup
     (kept,) = await world.library.fetch_consumer_record(standup)
     assert (kept.declined, kept.declined_because) == (CHANGED_HASH, "kept")

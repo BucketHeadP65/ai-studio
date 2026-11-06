@@ -12,13 +12,13 @@ import math
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.ai.workflows.domain.validator import wires_of
 from core.ai.workflows.domain.vocabulary import FromNode
 
 if TYPE_CHECKING:
-    from collections.abc import Collection, Mapping, Sequence
+    from collections.abc import Collection, Iterable, Mapping, Sequence
 
     from core.ai.workflows.domain.evidence import Grade, RunEvidence
     from core.ai.workflows.domain.outcome import OutcomeStatus
@@ -33,19 +33,53 @@ _RANKS: Mapping[OutcomeStatus, int] = {"succeeded": 3, "noop": 3, "partial": 2, 
 _GATE_KINDS = frozenset({"gate", "judge", "orchestrator-gate"})
 
 
-class LiveTrialMarker(BaseModel):
-    """What a consumer version on live trial carries, under the frontmatter key `live_trial`."""
+class LiveTrialStep(BaseModel):
+    """One reusable step version a live trial covers."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    previous: str
-    """The consumer version the adoption replaced, `wf.<name>.v<version>`, whose runs are the baseline."""
     step: str
     """The reusable step's name."""
     step_hash: str
     """The content address of the step version adopted."""
+
+
+class LiveTrialMarker(BaseModel):
+    """What a consumer version on live trial carries, under the frontmatter key `live_trial`: every step on trial and the baseline.
+
+    A revert makes `previous` live again and declines every step the marker holds.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    previous: str
+    """The consumer version before the first adoption the live trial covers, `wf.<name>.v<version>`, whose runs are the
+    baseline and which a revert makes live again."""
+    steps: tuple[LiveTrialStep, ...] = Field(min_length=1)
+    """Every reusable step version on live trial, each step name once."""
     runs: int = Field(default=3, ge=1)
     """How many runs that count close the live trial."""
+
+    @model_validator(mode="after")
+    def _each_step_once(self) -> LiveTrialMarker:
+        names = [each.step for each in self.steps]
+        if repeated := sorted({name for name in names if names.count(name) > 1}):
+            msg = f"a live trial marker names each step once, and this one names {', '.join(repeated)} more than once"
+            raise ValueError(msg)
+        return self
+
+    def with_steps(self, added: Iterable[LiveTrialStep]) -> LiveTrialMarker:
+        """This marker with `added` after its steps, an earlier step of the same name replaced, and the same baseline.
+
+        Args:
+            added: The step versions a new adoption puts on live trial.
+
+        Returns:
+            The marker the new adoption carries.
+        """
+        adopted = tuple(added)
+        replaced = {each.step for each in adopted}
+        return LiveTrialMarker(previous=self.previous, steps=(*(each for each in self.steps if each.step not in replaced), *adopted), runs=self.runs)
 
 
 class LiveTrialVerdict(BaseModel):

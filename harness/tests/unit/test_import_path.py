@@ -25,6 +25,7 @@ from core.ai.workflows.contracts import (
     LibraryCollection,
     Lineage,
     LiveTrialMarker,
+    LiveTrialStep,
     ParameterSpec,
     PresentationRefusedError,
     Program,
@@ -578,7 +579,7 @@ async def _moved_past(saved_by: str) -> tuple[FakeCollection, LibraryCollection]
         provenance={"saved_by": saved_by},
         fingerprint=_stamp(_say_x(4, STEPS_A[2])),
         lineage=ADOPTION,
-        live_trial=LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2])),
+        live_trial=LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),)),
     )
     await library.record_decline("wf.say-x.v4", step="step_a", step_hash=step_content_address(STEPS_A[3]), because="kept")
     assert await library.current("wf.say-x.v3") == "wf.say-x.v4"
@@ -620,7 +621,7 @@ async def test_a_file_whose_workflow_and_words_equal_the_stored_version_writes_n
     assert imported == FolderImport(written=("wf.say-x.v4",), skipped=())
     assert len(store.payloads) == before, "the unchanged version writes nothing"
     assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
-    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),))
     (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
     assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
 
@@ -652,7 +653,7 @@ async def test_a_file_whose_workflow_equals_the_stored_version_and_whose_words_d
 async def _assert_adoption_kept(library: LibraryCollection) -> None:
     """`say-x` v4 still carries the lineage, the live trial marker and the decline `_moved_past` gave it."""
     assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
-    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", steps=(LiveTrialStep(step="step_a", step_hash=step_content_address(STEPS_A[2])),))
     (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
     assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
 

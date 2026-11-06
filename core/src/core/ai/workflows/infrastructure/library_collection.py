@@ -1056,22 +1056,24 @@ class LibraryCollection:
             raise LibraryError(msg) from exc
 
     async def revert(self, workflow_id: str) -> str:
-        """Undo an adoption: write its lineage parent back without `superseded_by`, then archive the version.
+        """Undo an adoption on live trial: write the version its marker names as previous back without `superseded_by`, then archive it.
 
-        The parent is written first, every other key it holds kept, so a failed archive leaves both versions live with
-        this one still the newest, and the revert can be asked again. Nothing is written when the call is refused.
+        The previous version is written first, every other key it holds kept, so a failed archive leaves both versions
+        live with this one still the newest, and the revert can be asked again. A version between the two stays
+        superseded. Nothing is written when the call is refused.
 
         Args:
             workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
-                its name.
+                its name and carry a live trial marker.
 
         Returns:
-            The parent's id, now the newest live version.
+            The previous version's id, now the newest live version.
 
         Raises:
             LibraryError: If `workflow_id` is not a workflow version id or not the newest live version of its name, it
-                carries no lineage parent of the same name, the parent is not there, holds no workflow or is archived,
-                or the ingest refuses a write. A refused archive says the parent is live again and to revert again.
+                carries no live trial marker or one that does not parse, the marker names no lower version of the same
+                name, that version is not there, holds no workflow or is archived, or the ingest refuses a write. A
+                refused archive says the previous version is live again and to revert again.
         """
         match = _VERSIONED_ID.match(workflow_id)
         if match is None:
@@ -1086,41 +1088,48 @@ class LibraryCollection:
                 f"Nothing was written."
             )
             raise LibraryError(msg)
-        lineage = await self.fetch_lineage(workflow_id)
-        if lineage is None or lineage.parent_name != name:
-            msg = f"{workflow_id!r} carries no lineage parent of the same name to go back to, so it is not reverted. Nothing was written."
+        marker = await self.fetch_live_trial(workflow_id)
+        if marker is None:
+            msg = f"{workflow_id!r} carries no live trial marker, so it is no adoption to undo and it is not reverted. Nothing was written."
             raise LibraryError(msg)
-        parent_id = page_id(name, lineage.parent_version)
-        found = await self._rows.fetch(PAGE_SQL, parent_id)
+        previous = _VERSIONED_ID.match(marker.previous)
+        if previous is None or previous["name"] != name or int(previous["version"]) >= int(match["version"]):
+            msg = (
+                f"the live trial marker of {workflow_id!r} names {marker.previous!r} as its previous version, which is no lower "
+                f"version of {name!r}, so it is not reverted. Nothing was written."
+            )
+            raise LibraryError(msg)
+        previous_id = marker.previous
+        found = await self._rows.fetch(PAGE_SQL, previous_id)
         if not found:
-            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} is not in collection {self._collection!r}, so it is not reverted. Nothing was written."
+            msg = f"the previous version {previous_id!r} of {workflow_id!r} is not in collection {self._collection!r}, so it is not reverted. Nothing was written."
             raise LibraryError(msg)
-        parent = found[0]
-        stored = parent["frontmatter"]
+        page = found[0]
+        stored = page["frontmatter"]
         long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
         if "spec" not in long_tail:
-            msg = f"the lineage parent {parent_id!r} of {workflow_id!r} holds no workflow, so it is not reverted. Nothing was written."
+            msg = f"the previous version {previous_id!r} of {workflow_id!r} holds no workflow, so it is not reverted. Nothing was written."
             raise LibraryError(msg)
         if long_tail.get("archived_at") is not None:
             msg = (
-                f"the lineage parent {parent_id!r} of {workflow_id!r} is archived. Restore it, then revert {workflow_id!r} again. "
+                f"the previous version {previous_id!r} of {workflow_id!r} is archived. Restore it, then revert {workflow_id!r} again. "
                 f"Nothing was written."
             )
             raise LibraryError(msg)
         try:
-            await self._rewrite(parent, long_tail)
+            await self._rewrite(page, long_tail)
         except Exception as exc:
-            msg = f"the collection refused to make {parent_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
+            msg = f"the collection refused to make {previous_id!r} live again, so {workflow_id!r} is not reverted: {exc}"
             raise LibraryError(msg) from exc
         try:
             await self.set_archived(workflow_id, archived=True)
         except LibraryError as exc:
             msg = (
-                f"{parent_id} is live again, and archiving {workflow_id} failed, so both are live and {workflow_id} is still "
+                f"{previous_id} is live again, and archiving {workflow_id} failed, so both are live and {workflow_id} is still "
                 f"the newest. Revert {workflow_id} again to finish: {exc}"
             )
             raise LibraryError(msg) from exc
-        return parent_id
+        return previous_id
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.

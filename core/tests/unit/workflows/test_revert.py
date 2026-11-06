@@ -17,6 +17,7 @@ from core.ai.workflows.contracts import (
     LibraryError,
     LiveTrialLibrary,
     LiveTrialMarker,
+    LiveTrialStep,
     ParameterSpec,
     RunNode,
     Shape,
@@ -49,7 +50,11 @@ CONSUMER = Workflow(
     nodes=(RunNode(id="digest", work="digest", inputs={"source": FromParameter(parameter="source")}),),
     output=FromNode(node="digest"),
 )
-MARKER = LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash=step_content_address(DIGEST[2]))
+MARKER = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
+SUMMARIZE = {
+    1: Briefing(name="summarize", instructions="Summarize the digest page in three sentences for the weekly note.", inputs={"text": TEXT}, output=TEXT),
+    2: Briefing(name="summarize", instructions="Summarize the digest page in two sentences that name every claim.", inputs={"text": TEXT}, output=TEXT),
+}
 
 
 async def _adopted(store: FakeCollection) -> LibraryCollection:
@@ -121,16 +126,49 @@ async def test_revert_of_a_version_a_person_saved_past_raises_and_writes_nothing
     assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v3"
 
 
-async def test_revert_of_a_version_with_no_lineage_parent_raises_and_writes_nothing() -> None:
+async def test_revert_of_a_version_with_no_live_trial_marker_raises_and_writes_nothing() -> None:
     store = FakeCollection(prune=True)
-    library = LibraryCollection(store, store.ingest, collection=store.collection)
-    await library.put(CONSUMER, title="Digest sources", summary="s", applicability="Use per source.", provenance={"saved_by": "owner:cli"})
+    library = await _adopted(store)
+    person, lineage = adapt(await library.fetch_workflow("wf.digest-sources.v2"), ops=[{"op": "set_description", "to": "Digest one source, briefly."}])
+    await library.put(person, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:studio"}, lineage=lineage)
     written = len(store.payloads)
 
-    with pytest.raises(LibraryError, match="lineage"):
-        await library.revert("wf.digest-sources.v1")
+    with pytest.raises(LibraryError, match="live trial marker"):
+        await library.revert("wf.digest-sources.v3")
 
     assert len(store.payloads) == written
+
+
+async def test_revert_of_a_stacked_adoption_makes_the_marker_s_previous_version_live_and_leaves_the_version_between_superseded() -> None:
+    store = FakeCollection(prune=True)
+    library = await _adopted(store)
+    for version, step in SUMMARIZE.items():
+        await library.put_step(step, version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    between = await library.fetch_workflow("wf.digest-sources.v2")
+    with_summary = between.model_copy(
+        update={
+            "inline": (*between.inline, SUMMARIZE[1]),
+            "nodes": (*between.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(
+        with_summary, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, live_trial=MARKER
+    )
+    child, lineage = adapt(with_summary, ops=[{"op": "replace_inline_step", "name": "summarize", "with": SUMMARIZE[2].model_dump(mode="json")}])
+    stacked = MARKER.with_steps((LiveTrialStep(step="summarize", step_hash=step_content_address(SUMMARIZE[2])),))
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=stacked
+    )
+
+    restored = await library.revert("wf.digest-sources.v3")
+
+    assert restored == "wf.digest-sources.v1"
+    assert "archived_at" in store.pages["wf.digest-sources.v3"]["frontmatter"]
+    assert not store.pages["wf.digest-sources.v1"]["superseded"]
+    assert store.pages["wf.digest-sources.v2"]["superseded"], "the version between stays superseded"
+    assert "archived_at" not in store.pages["wf.digest-sources.v2"]["frontmatter"]
+    assert await library.current("wf.digest-sources.v3") == "wf.digest-sources.v1"
 
 
 @pytest.mark.parametrize("named", ["digest-sources", "wf.digest-sources"])

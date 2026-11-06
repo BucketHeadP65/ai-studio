@@ -16,7 +16,7 @@ from core.ai.workflows.contracts import (
 if TYPE_CHECKING:
     from collections.abc import Collection, Mapping, Sequence
 
-    from core.ai.workflows.contracts import Approval, Grade, InlineStep, RunEvidence, SavedWorkflow, Workflow
+    from core.ai.workflows.contracts import Approval, Grade, InlineStep, Lineage, RunEvidence, SavedWorkflow, Workflow
     from pydantic import JsonValue
 
     from harness.adapters.contracts import StandInCalls
@@ -55,10 +55,8 @@ class RunHistoryQueries(Protocol):
         ...
 
 
-class MaintenanceLibrary(
-    ConsumerRecords, StepVersionQueries, ReusableStepQueries, MaintenanceFlags, LiveTrialLibrary, WorkflowVersionQueries, Protocol
-):
-    """Every library read and write the step maintenance steps make: consumers, step versions, flags and adoptions."""
+class LiveTrialReads(Protocol):
+    """The library reads a live trial is judged by: a workflow version, where it came from, and the id of another version."""
 
     async def fetch_workflow(self, workflow_id: str) -> Workflow:
         """The workflow version `workflow_id` names.
@@ -73,6 +71,45 @@ class MaintenanceLibrary(
             WorkflowUnknownError: If no workflow has that id.
         """
         ...
+
+    async def fetch_lineage(self, workflow_id: str) -> Lineage | None:
+        """The adaptation that made the workflow version `workflow_id` names, or None when nobody adapted anything to make it.
+
+        Args:
+            workflow_id: The workflow version's id.
+
+        Returns:
+            The lineage, or None.
+
+        Raises:
+            WorkflowUnknownError: If no workflow has that id.
+        """
+        ...
+
+    async def locate(self, name: str, version: int) -> str | None:
+        """The id one version of a workflow is kept under, or None when the library does not have it.
+
+        Args:
+            name: The workflow's name.
+            version: The version number.
+
+        Returns:
+            The id, or None.
+        """
+        ...
+
+
+class MaintenanceLibrary(
+    ConsumerRecords,
+    StepVersionQueries,
+    ReusableStepQueries,
+    MaintenanceFlags,
+    LiveTrialLibrary,
+    WorkflowVersionQueries,
+    LiveTrialReads,
+    Protocol,
+):
+    """Every library read and write the step maintenance steps make: consumers, step versions, flags and adoptions."""
 
     async def fetch_card(self, workflow_id: str) -> SavedWorkflow | None:
         """One workflow version's card: its title, summary, applicability, presentation and intent.

@@ -524,20 +524,21 @@ class LiveTrialLibrary(Protocol):
         ...
 
     async def revert(self, workflow_id: str) -> str:
-        """Undo an adoption: make the version's lineage parent live again, then archive the version.
+        """Undo an adoption on live trial: make the version its marker names as previous live again, then archive the version.
 
-        The parent keeps every other key it holds. Nothing is written when the call is refused.
+        The previous version keeps every other key it holds, and a version between the two stays superseded. Nothing is
+        written when the call is refused.
 
         Args:
             workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
-                its name.
+                its name and carry a live trial marker.
 
         Returns:
-            The parent's id, now the newest live version.
+            The previous version's id, now the newest live version.
 
         Raises:
             LibraryError: `workflow_id` is not a workflow version id or not the newest live version of its name, it
-                carries no lineage parent, the parent is not there or is archived, or a write fails.
+                carries no live trial marker, the previous version is not there or is archived, or a write fails.
         """
         ...
 

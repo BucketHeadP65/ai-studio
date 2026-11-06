@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from core.ai.workflows.contracts import ConsumerEntry, DurableWorkflowRun, LiveTrialMarker, RunRequest, StepRegistry
+from core.ai.workflows.contracts import ConsumerEntry, DurableWorkflowRun, LiveTrialMarker, LiveTrialStep, RunRequest, StepRegistry
 from core.ai.workflows.infrastructure.temporal import bind as bind_registry
 from core.ai.workflows.infrastructure.temporal import sandbox_runner, step_activities
 from pydantic_monty import AsyncMonty
@@ -99,7 +99,7 @@ async def test_a_durable_run_adopts_one_consumer_on_live_trial_and_keeps_the_oth
     assert f"{adopted} adopts {CHANGED} on live trial in place of {meeting}" in handed.report
     assert await world.library.current(meeting) == adopted
     assert world.store.written(adopted)["saved_by"] == STEP_MAINTENANCE_AGENT
-    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=meeting, step="extract_actions", step_hash=CHANGED_HASH)
+    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=meeting, steps=(LiveTrialStep(step="extract_actions", step_hash=CHANGED_HASH),))
     (kept,) = await world.library.fetch_consumer_record(standup)
     assert isinstance(kept, ConsumerEntry)
     assert (kept.declined, kept.declined_because) == (CHANGED_HASH, "kept")

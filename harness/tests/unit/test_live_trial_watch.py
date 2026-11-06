@@ -16,6 +16,7 @@ from core.ai.workflows.contracts import (
     FromParameter,
     LibraryCollection,
     LiveTrialMarker,
+    LiveTrialStep,
     Outcome,
     ParameterSpec,
     RunEvidence,
@@ -58,6 +59,24 @@ CONSUMER = Workflow(
     ),
     output=FromNode(node="digest"),
 )
+SUMMARIZE = {
+    1: Briefing(name="summarize", instructions="Summarize the digest page in three sentences for the weekly note.", inputs={"text": TEXT}, output=TEXT),
+    2: Briefing(name="summarize", instructions="Summarize the digest page in two sentences that name every claim.", inputs={"text": TEXT}, output=TEXT),
+}
+NOTES = Workflow(
+    name="digest-notes",
+    version=1,
+    description="Digest one source and summarize the digest.",
+    parameters={"source": ParameterSpec(description="the source", json_schema={"type": "string"})},
+    inline=(DIGEST[1], SUMMARIZE[1]),
+    nodes=(
+        RunNode(id="fetch", work="fetch", inputs={"source": FromParameter(parameter="source")}),
+        RunNode(id="digest", work="digest", inputs={"text": FromNode(node="fetch")}),
+        RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")}),
+    ),
+    output=FromNode(node="summarize"),
+)
+"""A consumer of two reusable steps, for a live trial that stacks one adoption onto another."""
 LIVE_TRIAL_ID = "wf.digest-sources.v2"
 PARENT_ID = "wf.digest-sources.v1"
 FLAG_ID = "mf.reverted.digest-sources.digest"
@@ -79,11 +98,33 @@ class World:
             await self.library.put_step(step, version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
         await self.library.put(CONSUMER, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
         child, lineage = adapt(CONSUMER, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
-        marker = LiveTrialMarker(previous=PARENT_ID, step="digest", step_hash=step_content_address(DIGEST[2]))
+        marker = LiveTrialMarker(previous=PARENT_ID, steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
         await self.library.put(
             child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=marker
         )
         return child
+
+    async def stack(self) -> Workflow:
+        """Save both versions of both steps, `digest-notes` at v1, v2 adopting `digest` v2, and v3 adopting `summarize` v2 onto it.
+
+        Returns:
+            v3, on a live trial covering both steps against v1.
+        """
+        for version in (1, 2):
+            await self.library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+            await self.library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await self.library.put(NOTES, title="Digest notes", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        first = LiveTrialMarker(previous="wf.digest-notes.v1", steps=(LiveTrialStep(step="digest", step_hash=step_content_address(DIGEST[2])),))
+        between, lineage = adapt(NOTES, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+        await self.library.put(
+            between, title="Digest notes", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=first
+        )
+        stacked = first.with_steps((LiveTrialStep(step="summarize", step_hash=step_content_address(SUMMARIZE[2])),))
+        newest, lineage = adapt(between, ops=[{"op": "replace_inline_step", "name": "summarize", "with": SUMMARIZE[2].model_dump(mode="json")}])
+        await self.library.put(
+            newest, title="Digest notes", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=stacked
+        )
+        return newest
 
     async def baseline(self, *statuses: OutcomeStatus) -> None:
         """Record completed runs of the consumer's v1, the oldest first, each a day before the live trial's runs."""
@@ -244,3 +285,31 @@ async def test_a_run_launched_by_the_workflows_name_is_read_as_the_version_that_
     await world.ended(_failed_at_the_step(live_trial, workflow_id="digest-sources"))
 
     assert await world.library.current(LIVE_TRIAL_ID) == PARENT_ID
+
+
+async def test_a_stacked_live_trial_failing_at_the_earlier_step_reverts_to_its_baseline_declining_and_flagging_every_step(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    newest = await world.stack()
+    for days in (3, 2, 1):
+        await world.log.append(_ran(NOTES, "wf.digest-notes.v1", produced={"fetch": "str", "digest": "str", "summarize": "str"}, at=T0 - timedelta(days=days)))
+    run = _ran(newest, "wf.digest-notes.v3", outcome="failed", status="failed", produced={"fetch": "str"})
+
+    await world.ended(run)
+
+    assert await world.library.current("wf.digest-notes.v3") == "wf.digest-notes.v1", "the revert goes back to the marker's previous version"
+    assert "archived_at" in world.store.pages["wf.digest-notes.v3"]["frontmatter"]
+    assert world.store.pages["wf.digest-notes.v2"]["superseded"], "the version between stays superseded"
+    declined = {entry.step: (entry.declined, entry.declined_because) for entry in await world.library.fetch_consumer_record("wf.digest-notes.v1")}
+    assert declined == {
+        "digest": (step_content_address(DIGEST[2]), "reverted"),
+        "summarize": (step_content_address(SUMMARIZE[2]), "reverted"),
+    }
+    for step, step_id in (("digest", "st.digest.v2"), ("summarize", "st.summarize.v2")):
+        flag = await world.library.fetch_flag(f"mf.reverted.digest-notes.{step}")
+        assert flag is not None
+        assert (flag.kind, flag.step_id, flag.workflow, flag.status) == ("live_trial_reverted", step_id, "wf.digest-notes.v3", "open")
+        assert "digest, which runs the adopted step, produced nothing" in flag.evidence
+        assert "digest, summarize" in flag.evidence
+    ((title, message),) = world.notifier.sent
+    assert "digest, summarize" in title
+    assert "wf.digest-notes.v1" in message

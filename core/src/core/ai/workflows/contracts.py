@@ -55,7 +55,7 @@ from core.ai.workflows.domain.lineage import (
     moved_nodes,
     prediction_record,
 )
-from core.ai.workflows.domain.live_trial import LiveTrialMarker, LiveTrialVerdict, live_trial_verdict
+from core.ai.workflows.domain.live_trial import LiveTrialMarker, LiveTrialStep, LiveTrialVerdict, live_trial_verdict
 from core.ai.workflows.domain.outcome import GateReview, MapBatch, Outcome, OutcomeStatus, WorkItemFact, observed_outcome
 from core.ai.workflows.domain.parameter_values import WorkflowArguments, normalize_arguments
 from core.ai.workflows.domain.presentation import (
@@ -208,6 +208,7 @@ __all__ = [
     "Lineage",
     "LiveTrialLibrary",
     "LiveTrialMarker",
+    "LiveTrialStep",
     "LiveTrialVerdict",
     "MaintenanceFlag",
     "MaintenanceFlags",

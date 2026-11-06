@@ -13,6 +13,7 @@ from core.ai.workflows.contracts import (
     Grade,
     JudgeGate,
     LiveTrialMarker,
+    LiveTrialStep,
     LiveTrialVerdict,
     Outcome,
     ParameterSpec,
@@ -223,8 +224,27 @@ def test_an_empty_baseline_makes_only_failed_possible() -> None:
 
 
 def test_a_marker_counts_three_runs_unless_it_says_otherwise_and_refuses_none() -> None:
-    marker = LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash="abc")
+    marker = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"),))
 
     assert marker.runs == 3
     with pytest.raises(ValueError, match="greater than or equal to 1"):
-        LiveTrialMarker(previous="wf.digest-sources.v1", step="digest", step_hash="abc", runs=0)
+        LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"),), runs=0)
+
+
+def test_a_marker_holds_at_least_one_step_and_each_step_once() -> None:
+    with pytest.raises(ValueError, match="at least 1"):
+        LiveTrialMarker(previous="wf.digest-sources.v1", steps=())
+    with pytest.raises(ValueError, match="digest"):
+        LiveTrialMarker(
+            previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="abc"), LiveTrialStep(step="digest", step_hash="def"))
+        )
+
+
+def test_a_marker_with_steps_keeps_its_previous_puts_each_new_step_after_the_earlier_ones_and_replaces_an_earlier_step_of_the_same_name() -> None:
+    earlier = LiveTrialMarker(previous="wf.digest-sources.v1", steps=(LiveTrialStep(step="digest", step_hash="a"), LiveTrialStep(step="fetch", step_hash="b")))
+
+    stacked = earlier.with_steps((LiveTrialStep(step="summarize", step_hash="c"), LiveTrialStep(step="digest", step_hash="d")))
+
+    assert stacked.previous == "wf.digest-sources.v1"
+    assert [(each.step, each.step_hash) for each in stacked.steps] == [("fetch", "b"), ("summarize", "c"), ("digest", "d")]
+    assert stacked.runs == earlier.runs

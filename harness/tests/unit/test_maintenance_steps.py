@@ -19,6 +19,7 @@ from core.ai.workflows.contracts import (
     FromParameter,
     LibraryCollection,
     LiveTrialMarker,
+    LiveTrialStep,
     MaintenanceFlag,
     Outcome,
     ParameterSpec,
@@ -90,6 +91,8 @@ SUMMARIZE = {
 }
 V4 = "st.digest.v4"
 HASH4 = step_content_address(DIGEST[4])
+SUMMARIZE2 = "st.summarize.v2"
+SUMMARIZE2_HASH = step_content_address(SUMMARIZE[2])
 PRESENTATION = WorkflowPresentation(purpose="One weekly digest page per source.", produces="A digest page the owner reviews.")
 INTENT = WorkflowIntent(request="Digest each week's sources into one page each.")
 CASES: Mapping[str, JsonValue] = {"cases": [{"name": "quotes", "inputs": {"text": "A source."}}]}
@@ -434,7 +437,7 @@ async def test_land_changes_adopts_on_live_trial_declines_a_kept_copy_flags_a_fl
     assert outcomes == {sources_id: ("adopted", "wf.digest-sources.v2"), weekly_id: ("kept", ""), daily_id: ("flagged", "")}
     adopted = "wf.digest-sources.v2"
     assert world.store.written(adopted)["saved_by"] == STEP_MAINTENANCE_AGENT
-    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=sources_id, step="digest", step_hash=HASH4)
+    assert await world.library.fetch_live_trial(adopted) == LiveTrialMarker(previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4),))
     lineage = await world.library.fetch_lineage(adopted)
     assert lineage is not None
     assert (lineage.parent_name, lineage.parent_version, lineage.touched, lineage.predictions) == (
@@ -542,20 +545,93 @@ async def test_a_consumer_a_person_saved_past_since_the_listing_is_refused_and_t
     assert world.store.written(newer)["saved_by"] == "owner:cli"
 
 
-async def test_two_changed_steps_adopted_in_one_consumer_land_one_after_the_other(tmp_path: Path) -> None:
+async def test_two_changed_steps_adopted_in_one_consumer_land_as_one_version_on_one_live_trial_covering_both(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     await world.save_summarize()
     sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
-    plan = await world.plan(f"{V4},st.summarize.v2", {sources_id: ("adopt", "It fits.")})
+    plan = await world.plan(f"{V4},{SUMMARIZE2}", {sources_id: ("adopt", "It fits.")})
 
     landed = await _land(world, plan)
 
-    assert [(change.step_id, change.saved_id) for change in landed.changes] == [(V4, "wf.digest-sources.v2"), ("st.summarize.v2", "wf.digest-sources.v3")]
-    second = await world.library.fetch_live_trial("wf.digest-sources.v3")
-    assert second == LiveTrialMarker(previous="wf.digest-sources.v2", step="summarize", step_hash=step_content_address(SUMMARIZE[2]))
-    child = await world.library.fetch_workflow("wf.digest-sources.v3")
-    assert sorted(step_content_address(step) for step in child.inline) == sorted([HASH4, step_content_address(SUMMARIZE[2])])
+    assert [(change.step_id, change.outcome, change.saved_id) for change in landed.changes] == [
+        (V4, "adopted", "wf.digest-sources.v2"),
+        (SUMMARIZE2, "adopted", "wf.digest-sources.v2"),
+    ]
+    marker = await world.library.fetch_live_trial("wf.digest-sources.v2")
+    assert marker == LiveTrialMarker(
+        previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4), LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH))
+    )
+    lineage = await world.library.fetch_lineage("wf.digest-sources.v2")
+    assert lineage is not None
+    assert (lineage.parent_version, sorted(lineage.touched)) == (1, ["digest", "summarize"])
+    child = await world.library.fetch_workflow("wf.digest-sources.v2")
+    assert [step_content_address(step) for step in child.inline] == [HASH4, SUMMARIZE2_HASH]
+    assert await world.library.locate("digest-sources", 3) is None, "one landing saves one version per consumer"
+    told = await world.steps.report_changes(landed)
+    assert f"wf.digest-sources.v2 adopts {V4} on live trial in place of {sources_id}." in told
+    assert f"wf.digest-sources.v2 adopts {SUMMARIZE2} on live trial in place of {sources_id}." in told
+
+
+async def test_two_adoptions_into_one_consumer_whose_save_the_library_refuses_are_refused_together_each_naming_the_other(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    plan = await world.plan(f"{V4},{SUMMARIZE2}", {sources_id: ("adopt", "It fits.")})
+    world.store.refused_ids = frozenset({"wf.digest-sources.v2"})
+
+    with pytest.raises(LandingRefusedError) as raised:
+        await _land(world, plan)
+
+    digest, summarize = raised.value.report.changes
+    assert (digest.outcome, summarize.outcome) == ("refused", "refused")
+    assert "refused the page wf.digest-sources.v2" in digest.reason
+    assert f"adopted together with {SUMMARIZE2}" in digest.reason
+    assert f"adopted together with {V4}" in summarize.reason
+    assert await world.library.current(sources_id) == sources_id
+
+
+async def test_an_adoption_into_a_version_still_on_live_trial_builds_on_it_keeps_its_baseline_and_carries_its_steps(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    on_trial = "wf.digest-sources.v2"
+    await world.log.append(_ran(await world.library.fetch_workflow(on_trial), on_trial, at=T0))
+
+    landed = await _land(world, await world.plan(SUMMARIZE2, {on_trial: ("adopt", "It names every claim.")}))
+
+    (change,) = landed.changes
+    assert (change.workflow_id, change.saved_id) == (on_trial, "wf.digest-sources.v3")
+    assert await world.library.fetch_live_trial("wf.digest-sources.v3") == LiveTrialMarker(
+        previous=sources_id, steps=(LiveTrialStep(step="digest", step_hash=HASH4), LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH))
+    )
+    lineage = await world.library.fetch_lineage("wf.digest-sources.v3")
+    assert lineage is not None
+    assert (lineage.parent_version, lineage.touched) == (2, ("summarize",))
+    assert f"wf.digest-sources.v3 adopts {SUMMARIZE2} on live trial in place of {on_trial}." in await world.steps.report_changes(landed)
+
+
+async def test_an_adoption_into_a_version_whose_live_trial_closed_starts_a_live_trial_of_its_own(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    await world.save_steps(3, 4)
+    await world.save_summarize()
+    sources_id = await world.save(consumer("digest-sources", DIGEST[3], also=SUMMARIZE[1]))
+    await _land(world, await world.plan(V4, {sources_id: ("adopt", "It quotes every claim.")}))
+    closed = "wf.digest-sources.v2"
+    closed_workflow = await world.library.fetch_workflow(closed)
+    for hour in range(3):
+        await world.log.append(_ran(closed_workflow, closed, at=T0 + timedelta(hours=hour)))
+
+    landed = await _land(world, await world.plan(SUMMARIZE2, {closed: ("adopt", "It names every claim.")}))
+
+    (change,) = landed.changes
+    assert change.saved_id == "wf.digest-sources.v3"
+    assert await world.library.fetch_live_trial("wf.digest-sources.v3") == LiveTrialMarker(
+        previous=closed, steps=(LiveTrialStep(step="summarize", step_hash=SUMMARIZE2_HASH),)
+    )
 
 
 async def test_check_change_answers_the_validation_issues_of_an_op_that_breaks_the_wiring_and_saves_nothing(tmp_path: Path) -> None:
