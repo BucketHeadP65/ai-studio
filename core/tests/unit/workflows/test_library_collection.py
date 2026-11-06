@@ -42,10 +42,12 @@ from core.ai.workflows.contracts import (
     WorkflowIntent,
     WorkflowPresentation,
     WorkflowResultSpec,
+    WorkflowUnknownError,
     intent_issues,
 )
 from core.ai.workflows.domain.presentation import RecordOwnerReviewAction, SaveNoteAction
 from core.ai.workflows.infrastructure.library_collection import CATALOG_COUNT_SQL, FLAGS_SQL, LIVE_VERSIONS_SQL, collection_toolset
+from tests.support.fakes.library_collection import FakeCollection
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -683,6 +685,39 @@ async def test_a_parent_is_located_by_name_and_version_because_only_the_store_mi
     store = LibraryCollection(rows, FakeIngest())
     assert await store.locate("audit-a-claim", 1) == "wf.audit-a-claim.v1"
     assert await store.locate("audit-a-claim", 2) is None, "a page the collection does not hold has no address"
+
+
+async def test_saved_by_names_who_saved_each_workflow_version() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    await library.put(_spec(), title="Audit a claim", summary="One contested claim.", applicability="Use when one claim is contested.", provenance={"saved_by": "owner:cli"})
+    await library.put(
+        _spec(version=2), title="Audit a claim", summary="One contested claim.", applicability="Use when one claim is contested.", provenance={"saved_by": "agent:step-maintenance"}
+    )
+
+    assert await library.saved_by("wf.audit-a-claim.v1") == "owner:cli", "a superseded version still names who saved it"
+    assert await library.saved_by("wf.audit-a-claim.v2") == "agent:step-maintenance"
+
+
+async def test_saved_by_refuses_an_id_no_workflow_page_has() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    await library.put_step(_spec().inline[0], version=1, title="Weigh", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+
+    with pytest.raises(WorkflowUnknownError, match=r"wf\.audit-a-claim\.v1"):
+        await library.saved_by("wf.audit-a-claim.v1")
+    with pytest.raises(WorkflowUnknownError, match=r"st\.weigh\.v1"):
+        await library.saved_by("st.weigh.v1")
+
+
+async def test_saved_by_refuses_a_page_that_records_no_saved_by() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    await library.put(_spec(), title="Audit a claim", summary="One contested claim.", applicability="Use when one claim is contested.", provenance={"saved_by": "owner:cli"})
+    del store.pages["wf.audit-a-claim.v1"]["frontmatter"]["saved_by"]
+
+    with pytest.raises(LibraryError, match="records no saved_by"):
+        await library.saved_by("wf.audit-a-claim.v1")
 
 
 async def test_the_collection_s_write_tool_carries_a_diff_into_the_frontmatter() -> None:

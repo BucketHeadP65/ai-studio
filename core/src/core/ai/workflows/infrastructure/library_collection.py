@@ -255,6 +255,13 @@ SUPERSEDED_SQL = "select c.superseded from api.cards c where c.id = $1"
 
 `api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good."""
 
+SAVED_BY_SQL = """
+select c.frontmatter ->> 'saved_by' as saved_by
+from api.cards c
+where c.type = 'workflow' and c.src_collection = $1 and c.id = $2
+"""
+"""Who saved workflow page `$2` of collection `$1`, as its frontmatter records it. No row when no workflow page has that id."""
+
 
 def page_id(name: str, version: int) -> str:
     """The page id one version of a workflow lives at, `wf.<name>.v<version>`.
@@ -629,6 +636,29 @@ class LibraryCollection:
         """
         workflow_id = page_id(name, version)
         return workflow_id if await self._rows.fetchval(FETCH_SQL, workflow_id) is not None else None
+
+    async def saved_by(self, workflow_id: str) -> str:
+        """Who saved one workflow version, as its page records it.
+
+        Args:
+            workflow_id: The workflow version's id, `wf.<name>.v<version>`. Superseded and archived versions are answered too.
+
+        Returns:
+            The `saved_by` its save recorded, such as `owner:cli` or `agent:step-maintenance`.
+
+        Raises:
+            WorkflowUnknownError: If no workflow page has that id.
+            LibraryError: If the page records no `saved_by`.
+        """
+        found = await self._rows.fetch(SAVED_BY_SQL, self._collection, workflow_id)
+        if not found:
+            msg = f"no workflow {workflow_id!r} in collection {self._collection!r}"
+            raise WorkflowUnknownError(msg)
+        saved_by = found[0]["saved_by"]
+        if not isinstance(saved_by, str):
+            msg = f"{workflow_id!r} records no saved_by, so who saved it is unknown"
+            raise LibraryError(msg)
+        return saved_by
 
     async def current(self, workflow_id: str) -> str:
         """The newest live version of the workflow `workflow_id` names, or `workflow_id` itself.
