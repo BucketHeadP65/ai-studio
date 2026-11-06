@@ -12,6 +12,7 @@ import type { GateMode, JsonValue } from "@/api/studio-types";
 import {
   type KnowledgeBaseRegistry,
   type ParameterDraft,
+  type ParameterField,
   ParameterFields,
   draftFrom,
   emptyDraft,
@@ -83,6 +84,30 @@ const FAIL_AFTER = /^fail_after:(.*)$/;
 
 function isEventCadence(text: string): boolean {
   return EVENT_CADENCES.some((pattern) => pattern.test(text));
+}
+
+// The parameter each collecting cadence's fire fills with the ids it collected. The harness counts
+// it as answered on such a schedule, so the form asks for it only on any other cadence.
+const FILLED_BY_FIRE: readonly { cadence: RegExp; key: string; note: string }[] = [
+  {
+    cadence: ON_STEP_CHANGE,
+    key: "changed_step_ids",
+    note: "Every fire of this schedule fills this with the step versions it collected, so leave it empty.",
+  },
+  {
+    cadence: ON_INDEX,
+    key: "changed_page_ids",
+    note: "Every fire of this schedule fills this with the changed pages it collected, so leave it empty.",
+  },
+];
+
+// The fields as this cadence asks them: the one its fire fills is optional, and says why under it.
+function askedFor(fields: readonly ParameterField[], cadence: string): readonly ParameterField[] {
+  const filled = FILLED_BY_FIRE.find((entry) => entry.cadence.test(cadence));
+  if (filled === undefined) return fields;
+  return fields.map((field) =>
+    field.key === filled.key ? { ...field, required: false, note: filled.note } : field,
+  );
 }
 
 // A stored cadence split back into the fields that show it. Anything the interval and cron fields
@@ -454,7 +479,8 @@ export function ScheduleForm(props: ScheduleFormProps) {
       registry.data === undefined ? null : registry.data.knowledge_bases.map((base) => base.name),
     error: registry.isError ? studioErrorMessage(registry.error) : null,
   };
-  const read = readParameters(fields, draft, { knowledgeBases });
+  const asked = askedFor(fields, cadence);
+  const read = readParameters(asked, draft, { knowledgeBases });
   const unanswered = Object.keys(read.errors).length;
   const payload = composePayload(effectiveWorkflowId, read.values, values);
   // The schedule as the form opened on it, composed the same way as what is typed now.
@@ -549,7 +575,7 @@ export function ScheduleForm(props: ScheduleFormProps) {
           <fieldset className="flex flex-col gap-1.5">
             <legend className={FIELD_LABEL}>Arguments</legend>
             <ParameterFields
-              fields={fields}
+              fields={asked}
               draft={draft}
               errors={showErrors ? read.errors : {}}
               knowledgeBases={knowledgeBases}

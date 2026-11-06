@@ -143,6 +143,39 @@ function knowledgeBaseWorkflowFixture() {
 // A second workflow asking the very same questions: two schedules, two drafts.
 const OTHER_CARD = { ...CARD, id: "wf-costs", title: "Fetch costs" };
 
+// A workflow that requires the ids an event cadence collects, as step maintenance requires
+// `changed_step_ids`, and the quarter besides.
+function collectingWorkflowFixture(id: string, parameter: string) {
+  const plain = workflowFixture();
+  return {
+    ...plain,
+    id,
+    name: id,
+    graph: {
+      ...plain.graph,
+      nodes: [
+        plain.graph.nodes[0],
+        {
+          key: `param:${parameter}`,
+          id: parameter,
+          kind: "param",
+          signature: "string",
+          required: true,
+          detail: "the collected ids, comma separated",
+          tools: [],
+          is_output: false,
+          unknown: false,
+          brought: false,
+          briefing: "",
+          input_schemas: {},
+          output_schema: { type: "string", minLength: 1 },
+          source: "",
+        },
+      ],
+    },
+  };
+}
+
 function mountApi(): void {
   server.use(
     http.get(`${BASE}/api/library`, () => HttpResponse.json([CARD, OTHER_CARD])),
@@ -152,6 +185,12 @@ function mountApi(): void {
     ),
     http.get(`${BASE}/api/workflow/wf-digest`, () =>
       HttpResponse.json(knowledgeBaseWorkflowFixture()),
+    ),
+    http.get(`${BASE}/api/workflow/wf-steps`, () =>
+      HttpResponse.json(collectingWorkflowFixture("wf-steps", "changed_step_ids")),
+    ),
+    http.get(`${BASE}/api/workflow/wf-pages`, () =>
+      HttpResponse.json(collectingWorkflowFixture("wf-pages", "changed_page_ids")),
     ),
     http.get(`${KNOWLEDGE}/api/knowledge-bases`, () =>
       HttpResponse.json({
@@ -828,6 +867,48 @@ describe("ScheduleForm", () => {
     expect(screen.queryByText(/does not ask for a knowledge base/)).toBeNull();
   });
 
+  it.each([
+    ["wf-steps", "on step change quiet 10m", "changed_step_ids", "step versions"],
+    ["wf-pages", "on index notes", "changed_page_ids", "changed pages"],
+  ])(
+    "on %s with %s, leaves %s to the fire and says so beside it",
+    async (workflowId, cadence, parameter, collected) => {
+      mountApi();
+      const onSubmit = vi.fn();
+      render(
+        <ScheduleForm
+          open
+          workflowId={workflowId}
+          submitting={false}
+          onSubmit={onSubmit}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      await userEvent.type(await screen.findByLabelText("quarter"), "Q1");
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      // A clock cadence collects nothing, so the parameter still needs an answer.
+      expect(screen.getByText("This is required.")).toBeInTheDocument();
+      expect(onSubmit).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByRole("radio", { name: /On an event/ }));
+      await userEvent.type(screen.getByRole("textbox", { name: "Event" }), cadence);
+
+      const note = `Every fire of this schedule fills this with the ${collected} it collected, so leave it empty.`;
+      expect(screen.getByText(note)).toBeInTheDocument();
+      expect(note).toMatch(/^[\w\s,.?()]*$/);
+      expect(screen.getByLabelText(parameter)).toHaveAttribute("aria-required", "false");
+      expect(screen.getByLabelText(parameter)).toHaveAccessibleDescription(
+        expect.stringContaining(note),
+      );
+      expect(screen.queryByText("This is required.")).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "Create" }));
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ cadence, arguments: { quarter: "Q1" } }),
+      );
+    },
+  );
+
   it("shows the create mutation's own error", async () => {
     mountApi();
     render(
@@ -949,6 +1030,23 @@ describe("ScheduleForm, editing a schedule", () => {
     await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(onSave).toHaveBeenCalledWith({ arguments: { quarter: "Q2", dry_run: false } });
+  });
+
+  it("saves an on step change schedule that holds no changed_step_ids, which its fire fills", async () => {
+    mountApi();
+    const { onSave } = renderEdit({
+      workflow_id: "wf-steps",
+      cadence: "on step change quiet 10m",
+      arguments: { quarter: "Q1" },
+      next_run_at: null,
+    });
+
+    await waitFor(() => expect(screen.getByLabelText("quarter")).toHaveValue("Q1"));
+    expect(screen.getByLabelText("changed_step_ids")).toHaveValue("");
+    await userEvent.click(screen.getByRole("radio", { name: "The orchestrator decides" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSave).toHaveBeenCalledWith({ gate_mode: "orchestrate" });
   });
 
   it("sends no cadence it only rewrote while opening", async () => {
