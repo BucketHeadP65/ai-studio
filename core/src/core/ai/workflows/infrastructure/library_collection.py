@@ -70,9 +70,9 @@ class SupersessionIncompleteWarning(UserWarning):
 
 
 class FlagWriteIncompleteWarning(UserWarning):
-    """A workflow was saved or archived, but a maintenance flag that change raises or resolves was not written.
+    """A workflow was saved, archived or made live again by a revert, but a maintenance flag that change raises or resolves was not written.
 
-    Saving or archiving the workflow again writes the flag.
+    Saving or archiving the workflow again writes the flag. For a version a revert made live, saving it again does.
     """
 
 
@@ -354,9 +354,9 @@ def _flag_of(page: Mapping[str, Any]) -> MaintenanceFlag:
         raise LibraryError(msg) from exc
 
 
-def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived"]) -> None:
-    """Warn that `workflow_id` was saved or archived but `failure` happened to its flags, and that doing it again writes them."""
-    again = "Saving" if change == "saved" else "Archiving"
+def _warn_flag_not_written(workflow_id: str, failure: str, exc: Exception, *, change: Literal["saved", "archived", "restored"]) -> None:
+    """Warn that `workflow_id` was saved, archived or made live again by a revert but `failure` happened to its flags, and what writes them."""
+    again = "Archiving" if change == "archived" else "Saving"
     warnings.warn(
         f"{change} {workflow_id!r}, but {failure} ({exc}). {again} the workflow again writes it.",
         FlagWriteIncompleteWarning,
@@ -958,7 +958,7 @@ class LibraryCollection:
         )
         for stale_id in retired:
             await self._supersede(stale_id, by=workflow_id)
-        await self._settle_diverged_flags(workflow, workflow_id, record, versions)
+        await self._settle_diverged_flags(workflow, workflow_id, record, versions, change="saved")
         return workflow_id
 
     async def _consumer_record(
@@ -980,9 +980,15 @@ class LibraryCollection:
         return consumer_record(workflow, versions, prior=prior), versions
 
     async def _settle_diverged_flags(
-        self, workflow: Workflow, workflow_id: str, record: Sequence[ConsumerEntry], versions: Mapping[str, Sequence[StepVersion]]
+        self,
+        workflow: Workflow,
+        workflow_id: str,
+        record: Sequence[ConsumerEntry],
+        versions: Mapping[str, Sequence[StepVersion]],
+        *,
+        change: Literal["saved", "restored"],
     ) -> None:
-        """Raise the flag of each diverged copy in `record`, then resolve the open one of each step this save no longer holds diverged."""
+        """Raise the flag of each diverged copy in `record`, then resolve the open one of each step this version no longer holds diverged."""
         raised_at = datetime.now(UTC)
         held = {entry.step: entry for entry in record}
         for entry in record:
@@ -993,7 +999,7 @@ class LibraryCollection:
                 await self.put_flag(diverged_copy_flag(workflow, workflow_id, entry, version, raised_at=raised_at))
             except Exception as exc:
                 _warn_flag_not_written(
-                    workflow_id, f"the maintenance flag {flag_id('diverged_copy', entry.step, workflow.name)!r} was not written", exc, change="saved"
+                    workflow_id, f"the maintenance flag {flag_id('diverged_copy', entry.step, workflow.name)!r} was not written", exc, change=change
                 )
 
         def settled_here(flag: MaintenanceFlag) -> bool:
@@ -1008,7 +1014,7 @@ class LibraryCollection:
                 return f"{workflow_id} holds no copy of {flag.step}."
             return f"{workflow_id} holds {flag.step} v{entry.version}, a saved version, again."
 
-        await self._resolve_open_diverged_flags(workflow_id, settled_here, reason=reason, change="saved")
+        await self._resolve_open_diverged_flags(workflow_id, settled_here, reason=reason, change=change)
 
     async def _resolve_open_diverged_flags(
         self,
@@ -1016,7 +1022,7 @@ class LibraryCollection:
         settled: Callable[[MaintenanceFlag], bool],
         *,
         reason: Callable[[MaintenanceFlag], str],
-        change: Literal["saved", "archived"],
+        change: Literal["saved", "archived", "restored"],
     ) -> None:
         """Resolve as `library` each open `diverged_copy` flag `settled` picks, read in one statement, warning on each failure."""
         try:
@@ -1060,7 +1066,10 @@ class LibraryCollection:
 
         The previous version is written first, every other key it holds kept, so a failed archive leaves both versions
         live with this one still the newest, and the revert can be asked again. A version between the two stays
-        superseded. Nothing is written when the call is refused.
+        superseded. Archiving resolves the open `diverged_copy` flags this version raised, and then the previous version
+        raises again, as `put` does, the flag of each diverged copy its record holds, warning with
+        `FlagWriteIncompleteWarning` when a flag is not written, the revert standing. Nothing is written when the call is
+        refused.
 
         Args:
             workflow_id: The workflow version to revert, `wf.<name>.v<version>`. It must be the newest live version of
@@ -1129,7 +1138,19 @@ class LibraryCollection:
                 f"the newest. Revert {workflow_id} again to finish: {exc}"
             )
             raise LibraryError(msg) from exc
+        await self._raise_diverged_flags_again(previous_id, long_tail)
         return previous_id
+
+    async def _raise_diverged_flags_again(self, workflow_id: str, long_tail: Mapping[str, Any]) -> None:
+        """Settle the diverged copy flags of a version a revert made live again, from its stored workflow and record."""
+        try:
+            workflow = Workflow.model_validate(long_tail["spec"])
+            record = _consumer_entries(long_tail.get("reusable_steps"), workflow_id=workflow_id)
+            versions = await self.step_versions_of([step.name for step in workflow.inline]) if workflow.inline else {}
+        except Exception as exc:
+            _warn_flag_not_written(workflow_id, "its diverged_copy flags were not read, so none was raised again", exc, change="restored")
+            return
+        await self._settle_diverged_flags(workflow, workflow_id, record, versions, change="restored")
 
     async def consumers_of(self, step_name: str) -> tuple[ConsumerCard, ...]:
         """Every live workflow version whose consumer record names the reusable step, by workflow name and then version.

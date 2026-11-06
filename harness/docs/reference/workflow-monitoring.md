@@ -1465,17 +1465,17 @@ four parts in turn, and a part that fails is logged while the next is still told
 1. **The arming** (`RunEndArming`, scheduling slice) arms every `after <workflow name>` schedule the run satisfies.
 2. **The live trial watch** (`LiveTrialWatch`, maintenance slice) reads a run of a consumer version on live trial, one
    that carries a `live_trial` marker, by core's `live_trial_verdict` against the newest three completed runs of the
-   version the marker names as `previous`, read from the evidence log. The touched nodes are read along the lineages from
-   the version on live trial back to `previous`, so a version that stacked an adoption onto another still on live trial
-   is judged at the nodes of every step it covers. Ignored runs change nothing, a run that failed in execution anywhere but at a
-   node running the adopted step among them. A completed run whose checked status is failed is ranked against the
-   baseline like any completed run, failed ranking lowest. Once three runs counted (the marker's `runs`)
+   version the marker names as `previous`, read from the evidence log. The touched nodes are read along the lineages
+   from the version on live trial back to `previous`, so a version that stacked an adoption onto another still on live
+   trial is judged at the nodes of every step it covers. Ignored runs change nothing, a run that failed in execution
+   anywhere but at a node running an adopted step among them. A completed run whose checked status is failed is ranked
+   against the baseline like any completed run, failed ranking lowest. Once three runs counted (the marker's `runs`)
    the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
    the version the marker names as `previous` is live again (a version between them stays superseded), its consumer
-   record declines every step version on the marker as reverted, one `live_trial_reverted` flag
-   `mf.reverted.<workflow name>.<step>` per step on the marker carries the run's end time, the verdict's reason and every
-   step the live trial covered, and the owner is told once. A version that is no longer the newest live one of its name, because a person saved a newer
-   one, is never reverted.
+   record declines every step version on the marker as reverted, the flag of each diverged copy it still holds is
+   raised again, one `live_trial_reverted` flag `mf.reverted.<workflow name>.<step>` per step on the marker carries the
+   run's end time, the verdict's reason and every step the live trial covered, and the owner is told once. A version
+   that is no longer the newest live one of its name, because a person saved a newer one, is never reverted.
 3. **The maintenance run watch** (`MaintenanceRunWatch`) raises one `plan_rejected` flag `mf.rejected.<step>` per step
    named in `changed_step_ids` when a `step-maintenance` run ended failed with `judge_plan` rejected as many times as its
    `max_attempts`, which is how a run ends with nothing landed. The flag is about the newest saved version of the step,

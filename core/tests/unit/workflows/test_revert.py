@@ -258,3 +258,33 @@ async def test_a_save_over_an_archived_version_is_refused_naming_the_next_free_v
     assert len(store.payloads) == written
     assert store.pages["wf.digest-sources.v2"]["frontmatter"] == archived_before, "the archived version keeps its spec, lineage, marker and archived_at"
     assert await library.current("wf.digest-sources.v1") == "wf.digest-sources.v1"
+
+
+async def test_revert_raises_again_the_diverged_copy_flags_of_the_version_it_makes_live() -> None:
+    store = FakeCollection(prune=True)
+    library = LibraryCollection(store, store.ingest, collection=store.collection)
+    for version in (1, 2):
+        await library.put_step(DIGEST[version], version=version, title="Digest", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+        await library.put_step(SUMMARIZE[version], version=version, title="Summarize", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    edited = SUMMARIZE[1].model_copy(update={"instructions": "Summarize the digest page in three sentences for the weekly note, plainly."})
+    consumer = CONSUMER.model_copy(
+        update={
+            "inline": (DIGEST[1], edited),
+            "nodes": (*CONSUMER.nodes, RunNode(id="summarize", work="summarize", inputs={"text": FromNode(node="digest")})),
+            "output": FromNode(node="summarize"),
+        }
+    )
+    await library.put(consumer, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "owner:cli"})
+    child, lineage = adapt(consumer, ops=[{"op": "replace_inline_step", "name": "digest", "with": DIGEST[2].model_dump(mode="json")}])
+    await library.put(
+        child, title="Digest sources", summary="s", applicability="a", provenance={"saved_by": "agent:step-maintenance"}, lineage=lineage, live_trial=MARKER
+    )
+    flag = await library.fetch_flag("mf.diverged.digest-sources.summarize")
+    assert flag is not None
+    assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v2")
+
+    await library.revert("wf.digest-sources.v2")
+
+    flag = await library.fetch_flag("mf.diverged.digest-sources.summarize")
+    assert flag is not None
+    assert (flag.status, flag.workflow) == ("open", "wf.digest-sources.v1"), "the restored version still holds the diverged copy"
