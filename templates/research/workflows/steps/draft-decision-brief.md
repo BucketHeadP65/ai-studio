@@ -1,7 +1,7 @@
 ---
 title: Draft a decision brief
 summary: One question becomes a structured brief, recommend change, keep current or insufficient evidence, every claim carrying the ref the knowledge base returned for it.
-version: 1
+version: 2
 step:
   name: draft_decision_brief
   instructions: |-

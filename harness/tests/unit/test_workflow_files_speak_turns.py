@@ -357,7 +357,7 @@ async def test_importing_every_template_folder_writes_every_step_then_every_work
         written.extend(imported.written)
     assert [page_id for page_id in written if page_id.startswith("wf.")] == [
         "wf.research-compound.v14",
-        "wf.research-decision-brief.v1",
+        "wf.research-decision-brief.v2",
         "wf.research-digest.v16",
         "wf.research-stance-refresh.v25",
         "wf.docs-notes-to-analysis.v2",

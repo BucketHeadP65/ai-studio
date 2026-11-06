@@ -1,7 +1,7 @@
 ---
 title: Review a decision brief
 summary: Reads the brief's own sources back and answers approve, reject with what to fix, or cannot judge, for the person who asked the question.
-version: 1
+version: 2
 step:
   name: review_decision_brief
   instructions: |-

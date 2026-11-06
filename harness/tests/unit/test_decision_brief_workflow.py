@@ -475,7 +475,7 @@ def test_the_workflow_keeps_its_stable_identity() -> None:
     spec = _spec()
     document = load_spec_document((RESEARCH / "workflows" / "research-decision-brief.md").read_text(encoding="utf-8"))
 
-    assert (spec.name, spec.version) == ("research-decision-brief", 1)
+    assert (spec.name, spec.version) == ("research-decision-brief", 2)
     assert document.frontmatter["title"] == "Settle one decision from the reading"
     presentation = WorkflowPresentation.model_validate(document.frontmatter["presentation"])
     assert [shown.key for shown in presentation.inputs] == ["question", "knowledge_bases", "project_context", "constraints"]
