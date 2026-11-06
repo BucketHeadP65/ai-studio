@@ -49,7 +49,8 @@ is never removed by a model.
 completed runs are the baseline. Schedules fire the newest live version, so its next real runs are the live trial. Each
 run is read once by `live_trial_verdict`, from what the run and its grades recorded, with no model asked:
 
-- ignored when a person stopped it, or when it failed in execution anywhere but at a node running an adopted step,
+- ignored when a person stopped it, when it failed in execution anywhere but at a node running an adopted step, or
+  when it completed with its checks failed and the previous version has no completed run to rank it against,
 - failed when it failed in execution and a touched node did not produce while every node it reads did,
 - worse when, against the baseline, its checked status ranks below every baseline run's (a completed run checked
   failed ranks lowest), a gate both versions hold was rejected more times, or a structural grade fell more than 0.1

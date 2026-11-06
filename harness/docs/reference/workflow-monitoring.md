@@ -1469,7 +1469,7 @@ four parts in turn, and a part that fails is logged while the next is still told
    from the version on live trial back to `previous`, so a version that stacked an adoption onto another still on live
    trial is judged at the nodes of every step it covers. Ignored runs change nothing, a run that failed in execution
    anywhere but at a node running an adopted step among them. A completed run whose checked status is failed is ranked
-   against the baseline like any completed run, failed ranking lowest. Once three runs counted (the marker's `runs`)
+   against the baseline like any completed run, failed ranking lowest, and ignored when the baseline is empty. Once three runs counted (the marker's `runs`)
    the live trial is over and later runs are not read. The first failed or worse run reverts the version (`revert`):
    the version the marker names as `previous` is live again (a version between them stays superseded), its consumer
    record declines every step version on the marker as reverted, the flag of each diverged copy it still holds is

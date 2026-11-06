@@ -3,7 +3,8 @@
 A run is ignored when it says nothing about the adopted step, which a run that failed in execution anywhere but at the
 step never does, failed when it failed in execution and the step did not produce while everything it reads did, and
 worse when it did less well than the version the adoption replaced, a completed run whose checked status is failed
-ranking lowest. Any other run counts. The rule reads only what the run and its grades recorded, and asks no model.
+ranking lowest. A completed run whose checked status is failed is ignored when that version has no completed run to
+rank it against. Any other run counts. The rule reads only what the run and its grades recorded, and asks no model.
 """
 
 from __future__ import annotations
@@ -111,8 +112,8 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
     completed run is read against the baseline whatever its checked status, a failed one ranking lowest. Against a
     baseline it is worse when its checked status ranks below every one of the baseline's, when a gate both versions
     hold was rejected more times than in any baseline run, or when one of its structural grades is more than
-    `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible.
-    Any other run counts.
+    `STRUCTURAL_MARGIN` below the baseline's mean for the same measure. An empty baseline makes only failed possible,
+    and with it a completed run whose checked status is failed is ignored. Any other run counts.
 
     Args:
         workflow: The version on live trial.
@@ -130,6 +131,11 @@ def live_trial_verdict(  # noqa: PLR0913 (each argument is one separate record t
         return LiveTrialVerdict(kind="ignored", reason="A person stopped the run, so it says nothing about the step.")
     if run.outcome == "failed":
         return _failed_at_a_touched_node(workflow, touched, run)
+    if not baseline and run.result.status == "failed":
+        return LiveTrialVerdict(
+            kind="ignored",
+            reason="The run's checks failed, and the previous version has no completed run to compare it with, so it says nothing about the step.",
+        )
     if not baseline:
         return LiveTrialVerdict(
             kind="counts", reason="The run did not fail in execution, and the previous version has no completed run to compare it with."

@@ -145,10 +145,12 @@ def test_a_completed_run_whose_checked_status_is_failed_counts_against_a_baselin
     assert verdict.kind == "counts"
 
 
-def test_a_completed_run_whose_checked_status_is_failed_counts_without_a_baseline() -> None:
-    verdict = _verdict(_run(status="failed", produced={"fetch": "str"}))
+@pytest.mark.parametrize("produced", [{"fetch": "str"}, EVERY_NODE], ids=["the touched node silent", "every node produced"])
+def test_a_completed_run_whose_checked_status_is_failed_is_ignored_without_a_baseline(produced: Mapping[str, str]) -> None:
+    verdict = _verdict(_run(status="failed", produced=produced))
 
-    assert verdict.kind == "counts"
+    assert verdict.kind == "ignored"
+    assert "no completed run" in verdict.reason
 
 
 def test_a_completed_partial_run_against_three_succeeded_runs_is_worse() -> None:
