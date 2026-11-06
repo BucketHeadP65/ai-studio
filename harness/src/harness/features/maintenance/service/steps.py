@@ -702,7 +702,7 @@ class MaintenanceSteps:
             reasons = " ".join(f"{change.step_id}: {change.reason}" for change, _ in adopted)
             evidence = f"Step maintenance adopted {', '.join(change.step_id for change, _ in adopted)} in {base}{ran_in}. {reasons}"
         child, lineage = _adopted(workflow, [(step, change.extra_ops) for change, step in adopted], evidence=evidence)
-        child = child.model_copy(update={"version": await next_version(workflow, versions=self._library)})
+        child = child.model_copy(update={"version": await next_version(workflow.name, above=workflow.version, versions=self._library)})
         registry = self._registered()
         verify_savable(child, registry)
         try:

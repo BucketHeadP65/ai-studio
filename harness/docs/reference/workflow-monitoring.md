@@ -156,6 +156,11 @@ reason in their own words. None of the three is graded by anything. Whatever `ev
 caller sent is kept under those three rather than taken out by them, so citing a run never costs a
 reader the sentence the caller wrote.
 
+The child is numbered one above its parent and every saved version of its name (`next_version`), and numbered
+again when the draft is saved, unless a version above the parent already holds that same workflow. So a version saved
+while the draft waited, such as a step maintenance adoption on live trial, is never written over, and saving the same
+draft twice keeps one number.
+
 A `source_run_id` this deployment has not archived is a `404`: a citation of a run nobody can read
 back is not evidence, so the child is not made at all. An adaptation with no ops is refused by
 `core.ai.workflows.contracts.adapt`, because an adaptation with no operations is not one.

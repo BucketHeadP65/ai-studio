@@ -35,6 +35,7 @@ from core.ai.workflows.contracts import (
     next_version,
     prepare,
     save,
+    spec_identity,
 )
 from core.observability import get_logger
 from pydantic import ValidationError
@@ -209,7 +210,7 @@ async def adapt_saved(
     workflow = await library.fetch_workflow(workflow_id)
     child, lineage = adapt(workflow, ops=tuple(ops), evidence=evidence, predictions=tuple(predictions))
     versions = library if isinstance(library, WorkflowVersionQueries) else None
-    child = child.model_copy(update={"version": await next_version(workflow, versions=versions)})
+    child = child.model_copy(update={"version": await next_version(workflow.name, above=workflow.version, versions=versions)})
     card = await _card(library, workflow_id)
     return (
         Draft(
@@ -313,13 +314,32 @@ async def _honest_about_what_moved(lineage: Lineage, workflow: Workflow, *, libr
     return lineage.model_copy(update={"touched": tuple(sorted(set(lineage.touched) | set(moved_nodes(parent, workflow))))})
 
 
+async def _numbered_at_save(workflow: Workflow, lineage: Lineage, library: WorkflowLibrary) -> Workflow:
+    """The adapted draft's workflow at the version above its parent that already holds it, else numbered above every saved version."""
+    if lineage.parent_name != workflow.name or not isinstance(library, WorkflowVersionQueries):
+        return workflow
+    for version, held in await library.versions(workflow.name):
+        if version <= lineage.parent_version:
+            continue
+        candidate = workflow.model_copy(update={"version": version})
+        try:
+            if spec_identity(await library.fetch_workflow(held)) == spec_identity(candidate):
+                return candidate
+        except (LibraryError, ValidationError):
+            continue
+    return workflow.model_copy(update={"version": await next_version(workflow.name, above=lineage.parent_version, versions=library)})
+
+
 async def save_draft(
     draft: Draft, *, library: WorkflowLibrary, registry: StepRegistry, self_authoring: SelfAuthoringSettings, lineage: Lineage | None = None
 ) -> str:
     """Validate the draft and save it to the library, or refuse with the reason and write nothing.
 
     A draft whose card and author's words are not filled in is refused. This code never composes them.
-    The draft's intent is saved with it, complete or not.
+    The draft's intent is saved with it, complete or not. An adapted draft is numbered when it is saved: one above its
+    parent and every saved version of its name, unless a version above its parent already holds the same workflow,
+    which it saves again. So a version saved since the draft was made, such as an adoption on live trial, is never
+    written over, and saving the same draft twice keeps one number.
 
     Args:
         draft: The draft to save.
@@ -348,6 +368,10 @@ async def save_draft(
     if not readiness.described:
         raise DraftNotSavableError(refusal_text(readiness), readiness)
     if lineage is not None:
+        try:
+            workflow = await _numbered_at_save(workflow, lineage, library)
+        except LibraryError as exc:
+            raise DraftNotSavableError(str(exc)) from exc
         lineage = await _honest_about_what_moved(lineage, workflow, library=library)
     try:
         return await save(

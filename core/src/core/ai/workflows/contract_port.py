@@ -798,7 +798,7 @@ class WorkflowContract(AbstractCapability[AgentDepsT]):
     async def _numbered(self, child: Workflow, parent: Workflow) -> Workflow:
         """`child` numbered one above `parent` and every saved version of its name, refused when those cannot be read."""
         try:
-            return child.model_copy(update={"version": await next_version(parent, versions=self.versions)})
+            return child.model_copy(update={"version": await next_version(parent.name, above=parent.version, versions=self.versions)})
         except LibraryError as exc:
             msg = f"REFUSED. Nothing was written. The saved versions of {parent.name!r} could not be read: {exc}"
             raise _WriteRefusedError(msg) from exc
