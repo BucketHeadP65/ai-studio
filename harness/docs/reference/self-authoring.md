@@ -163,6 +163,19 @@ and a lock file that does not parse. `tests/unit/test_step_locks.py` fails
 when a step file in the repository no longer matches its folder's lock, so every edit to a step file raises its
 `version` and runs `harness steps lock <folder>`.
 
+### What the import does with a workflow file the library already holds
+
+The import compares each workflow file whose version the library holds with that version before it writes anything.
+
+- **A version the library moved past.** When the newest live version of the workflow is higher than the file's and
+  step maintenance (`agent:step-maintenance`) saved it, the import writes nothing for the file and prints
+  `skipped <file> (version <n>)` with the version to raise the file to. The rest of the folder is written. When anyone
+  else saved the newer version, `WorkflowVersionSupersededError` refuses the whole folder.
+- **The same version, unchanged.** When the library holds the file's workflow (the same content address) under the
+  same title, description, body and presentation, the import writes nothing for it, so the page keeps its lineage,
+  its live trial marker and its consumer record. A changed title, description, body or presentation at an unchanged
+  version refuses the whole folder with `WorkflowCardChangedError`, which says to raise `version` in the workflow file.
+
 ### A turn that only designs starts nothing
 
 A request carrying `design_only: true` (the Studio's guided authoring route sends it) has

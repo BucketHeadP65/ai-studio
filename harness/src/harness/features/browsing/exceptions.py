@@ -1,11 +1,13 @@
-"""The errors the browsing slice raises when a workflow's card cannot be rewritten or a step lock file cannot be written."""
+"""The errors the browsing slice raises when a card cannot be rewritten, a step lock file cannot be written, or an import refuses a workflow file."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from core.ai.workflows.contracts import LibraryError
+
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from harness.domain.contracts import DraftReadiness
@@ -48,3 +50,54 @@ class StepLockRefusedError(Exception):
         )
         self.steps = tuple(changed)
         """The names of the steps that changed at an unchanged version."""
+
+
+class WorkflowVersionSupersededError(LibraryError):
+    """The library moved past a workflow file's version, and someone other than the import's `moved_past_by` saved the newer one.
+
+    The message names the file, its version, the newest live version and who saved it, and says how to bring the file up.
+    """
+
+    def __init__(self, file: Path, workflow_id: str, *, newest_id: str, newest_version: int, saved_by: str) -> None:
+        """Name the file, its version and the newest live version, and say how to import the file.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the version the file names.
+            newest_id: The library id of the newest live version of the workflow.
+            newest_version: The newest live version's number.
+            saved_by: Who saved the newest live version.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id}, which the library has moved past: its newest live version is {newest_id}, saved by "
+            f"{saved_by}. Bring the file up to {newest_id}, or raise `version` in it above {newest_version} to save its content "
+            f"as a new version, then import again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The version the file names."""
+        self.newest_id = newest_id
+        """The newest live version of the workflow."""
+
+
+class WorkflowCardChangedError(LibraryError):
+    """A workflow file holds the workflow its saved version holds under other words, so the version would change in place.
+
+    The message names the file, the version and each word that differs, and says to raise the version.
+    """
+
+    def __init__(self, file: Path, workflow_id: str, fields: Sequence[str]) -> None:
+        """Name the file, the version and each word that differs, and say how to save the new words.
+
+        Args:
+            file: The workflow file.
+            workflow_id: The library id of the version the file names.
+            fields: Each differing word, as the file names it: `title`, `description`, `body` or `presentation`.
+        """
+        super().__init__(
+            f"{file} holds {workflow_id} with the workflow the library holds and a different {', '.join(fields)}. The library "
+            f"keeps one card per version. Raise `version` in the workflow file and import again. Nothing was written."
+        )
+        self.workflow_id = workflow_id
+        """The version the file names."""
+        self.fields = tuple(fields)
+        """Each differing word, as the file names it."""

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from wireup import AsyncContainer
 
     from harness.adapters.contracts import SessionLog
+    from harness.features.browsing.contracts import FolderImport
     from harness.features.evals.contracts import (
         BenchmarkCases,
         BenchmarkInputs,
@@ -238,30 +239,36 @@ def search_sessions(term: str, limit: int = typer.Option(20, "--limit", help="St
         typer.echo(f"no matches for {term!r}.")
 
 
-async def import_path_in_session(path: Path, *, by: str) -> tuple[str, ...]:
+async def import_path_in_session(path: Path, *, by: str) -> FolderImport:
     """Open the library and the registry once and import the folder at `path` into the library.
 
     Each workflow is stamped with this host's environment and the registry it was checked against.
-    Each step's case file is checked as its case run would check it. One refused file refuses the whole folder, and
-    nothing is written.
+    Each step's case file is checked as its case run would check it. A workflow file whose version step maintenance
+    moved past in the library is skipped. One refused file refuses the whole folder, and nothing is written.
 
     Args:
         path: A folder holding `steps/` and `workflows/` files.
         by: Who the import is recorded as, such as `owner:cli`.
 
     Returns:
-        The ids written, the reusable steps first and then the workflows.
+        The ids the library holds from the folder, the reusable steps first and then the workflows, and the workflow
+        files it skipped.
 
     Raises:
         SaveRefusedError: A workflow would not run on this registry.
         PresentationRefusedError: A workflow's `presentation` names an input or an artifact the
             workflow does not declare.
         StepVersionChangedError: The library holds a step file's version with other content.
+        WorkflowVersionSupersededError: The library moved past a workflow file's version with a version step
+            maintenance did not save.
+        WorkflowCardChangedError: The library holds a workflow file's workflow at its version under other words.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
             file is refused. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
     """
     from contextlib import AsyncExitStack  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
+
+    from core.ai.workflows.contracts import STEP_MAINTENANCE_AGENT  # noqa: PLC0415 (same)
 
     from harness.adapters.contracts import environment_stamps  # noqa: PLC0415 (same)
     from harness.features.browsing.contracts import import_path  # noqa: PLC0415 (same)
@@ -273,20 +280,35 @@ async def import_path_in_session(path: Path, *, by: str) -> tuple[str, ...]:
         library, registry = await _library_session(stack, settings)
         custom = custom_root(settings.self_authoring)
         return await import_path(
-            path, library=library, registry=registry, by=by, check_cases=check_step_cases, environment=environment_stamps(custom)
+            path,
+            library=library,
+            registry=registry,
+            by=by,
+            check_cases=check_step_cases,
+            moved_past_by=STEP_MAINTENANCE_AGENT,
+            environment=environment_stamps(custom),
         )
 
 
 @app.command(name="import")
 def import_files(path: str = typer.Argument(..., help="A directory holding steps/ and workflows/ files.")) -> None:
-    """Import a folder of workflow and step files into the library, steps first, then the workflows that use them."""
+    """Import a folder of workflow and step files into the library, steps first, then the workflows that use them.
+
+    It prints each id the library holds from the folder, then each workflow file it skipped because step maintenance
+    saved a newer version of that workflow in the library, with the version to raise the file to.
+    """
     import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
 
     from pathlib import Path  # noqa: PLC0415 (same)
 
-    ids = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
-    for written in ids:
+    imported = asyncio.run(import_path_in_session(Path(path).resolve(), by="owner:cli"))
+    for written in imported.written:
         typer.echo(written)
+    for skipped in imported.skipped:
+        typer.echo(
+            f"skipped {skipped.file} (version {skipped.version}): step maintenance saved version {skipped.newer_version} in the "
+            f"library. Raise the file to version {skipped.newer_version}."
+        )
 
 
 @steps_app.command(name="lock")

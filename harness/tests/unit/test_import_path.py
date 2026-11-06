@@ -18,15 +18,21 @@ import pytest
 import yaml
 
 from core.ai.workflows.contracts import (
+    STEP_MAINTENANCE_AGENT,
     DocumentError,
+    FromNode,
     InlineStep,
     LibraryCollection,
+    Lineage,
+    LiveTrialMarker,
     PresentationRefusedError,
     Program,
     ReusableStepSaved,
+    RunNode,
     SaveRefusedError,
     StepRegistry,
     StepVersionChangedError,
+    Workflow,
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
@@ -36,7 +42,8 @@ from core.ai.workflows.contracts import (
 )
 from pydantic import TypeAdapter
 
-from harness.features.browsing.importing import import_path
+from harness.features.browsing.exceptions import WorkflowCardChangedError, WorkflowVersionSupersededError
+from harness.features.browsing.importing import FolderImport, SkippedWorkflowFile, import_path
 from harness.features.evals.contracts import check_step_cases
 from tests.support.fakes.library_collection import FakeCollection, pruned
 
@@ -176,9 +183,9 @@ async def test_save_path_writes_steps_before_the_workflow_that_uses_them(tmp_pat
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    written = await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    imported = await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
-    assert written == ("st.step_a.v1", "st.step_b.v1", "wf.two-step.v1")
+    assert imported == FolderImport(written=("st.step_a.v1", "st.step_b.v1", "wf.two-step.v1"), skipped=())
     assert len(ingest.payloads) == 3
     types = [payload["frontmatter"]["type"] for payload, _ in ingest.payloads]
     assert types == ["step", "step", "workflow"]
@@ -195,7 +202,7 @@ async def test_an_import_of_new_step_versions_hands_one_event_per_step_and_none_
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert [page for page, _ in ingest.events] == ["st.step_a.v1", "st.step_b.v1"], "the workflow's page carries no event"
     assert [(page, event.step_id, event.version, event.saved_by) for page, event in ingest.events if isinstance(event, ReusableStepSaved)] == [
@@ -210,7 +217,7 @@ async def test_a_workflow_that_fails_validation_writes_nothing(tmp_path: Path) -
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(SaveRefusedError):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert ingest.payloads == []
 
@@ -221,7 +228,7 @@ async def test_a_second_broken_step_file_means_nothing_is_written(tmp_path: Path
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(DocumentError, match=r"step-broken\.md"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert ingest.payloads == []
 
@@ -232,7 +239,7 @@ async def test_a_broken_workflow_file_is_refused_by_name(tmp_path: Path) -> None
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(DocumentError, match=r"no-frontmatter\.md"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert ingest.payloads == []
 
@@ -244,7 +251,7 @@ async def test_a_saved_workflow_carries_the_fingerprint_the_contract_port_would_
     registry = _registry()
     environment = {"model": "some-model", "promoted_capabilities": "abc123"}
 
-    await import_path(tmp_path, library=store, registry=registry, by="test:save", check_cases=check_step_cases, environment=environment)
+    await import_path(tmp_path, library=store, registry=registry, by="test:save", check_cases=check_step_cases, environment=environment, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     saved = ingest.payloads[2][0]["frontmatter"]["fingerprint"]
     # The port stamps `fingerprint(spec, registry, environment=...)` over the spec it is about to write:
@@ -264,7 +271,9 @@ async def test_an_import_with_no_environment_still_stamps_the_tools_its_steps_as
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(grants=("fetch", "search")), by="test:save", check_cases=check_step_cases)
+    await import_path(
+        tmp_path, library=store, registry=_registry(grants=("fetch", "search")), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT
+    )
 
     assert pruned(ingest.payloads[2][0]["frontmatter"]["fingerprint"]) == {"grants": ["fetch"]}
 
@@ -320,7 +329,7 @@ async def test_an_imported_workflow_carries_the_presentation_its_file_declared(t
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     saved = ingest.payloads[2][0]["frontmatter"]["presentation"]
     declared = WorkflowPresentation.model_validate(load_spec_document(PRESENTED_WORKFLOW).frontmatter["presentation"])
@@ -333,7 +342,7 @@ async def test_a_workflow_file_with_no_presentation_writes_none(tmp_path: Path) 
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert "presentation" not in ingest.payloads[2][0]["frontmatter"]
 
@@ -345,7 +354,7 @@ async def test_a_presentation_naming_an_undeclared_input_refuses_the_whole_folde
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
     with pytest.raises(PresentationRefusedError, match="quarter"):
-        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert ingest.payloads == []
 
@@ -391,7 +400,7 @@ async def test_a_step_changed_at_an_unchanged_version_refuses_the_folder_before_
     _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": CHANGED_STEP_B}, workflows={})
 
     with pytest.raises(StepVersionChangedError, match=r"st\.step_b\.v1") as refused:
-        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert refused.value.step_id == "st.step_b.v1"
     assert getattr(refused.value, "__notes__", []) == [f"The step file is {tmp_path / 'steps' / 'step-b.md'}."]
@@ -404,7 +413,9 @@ async def test_a_step_whose_only_change_writes_a_field_at_its_default_imports_as
     _write(tmp_path, steps={"step-a.md": STEP_A_WITH_TOOLS}, workflows={})
     _write_cases(tmp_path, "step-a.yaml", CASES)
 
-    assert await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases) == ("st.step_a.v1",)
+    imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported.written == ("st.step_a.v1",)
 
     assert len(store.payloads) == written, "the same version with the same content writes nothing"
 
@@ -417,7 +428,7 @@ async def test_a_step_the_library_would_read_back_different_is_refused_by_its_fi
     _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B_WITH_NULL_DEFAULT}, workflows={})
 
     with pytest.raises(DocumentError, match=r"step-b\.md.*inputs\.prefix\.json_schema\.default"):
-        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert store.payloads == []
 
@@ -428,7 +439,7 @@ async def test_a_step_s_case_file_is_carried_to_the_cases_of_its_page(tmp_path: 
     _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B}, workflows={})
     _write_cases(tmp_path, "step-a.yaml", CASES)
 
-    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert json.loads(store.written("st.step_a.v1")["cases"]) == CASES
     assert await library.fetch_step_cases("st.step_a.v1") == CASES
@@ -441,7 +452,7 @@ async def test_a_step_with_no_case_file_in_the_folder_s_evals_removes_the_cases_
     _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
     _write_cases(tmp_path, "another-step.yaml", CASES)
 
-    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert await library.fetch_step_cases("st.step_a.v1") is None
 
@@ -452,7 +463,7 @@ async def test_a_folder_with_no_evals_folder_keeps_the_cases_each_version_holds(
     written = len(store.payloads)
     _write(tmp_path, steps={"step-a.md": STEP_A}, workflows={})
 
-    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert await library.fetch_step_cases("st.step_a.v1") == CASES
     assert len(store.payloads) == written, "an unchanged step whose cases are kept writes nothing"
@@ -475,7 +486,7 @@ async def test_a_case_file_its_case_run_would_refuse_refuses_the_folder_by_name(
     _write_cases(tmp_path, "step-a.yaml", cases)
 
     with pytest.raises(DocumentError, match=r"evals/step-a\.yaml"):
-        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert store.payloads == []
 
@@ -503,7 +514,118 @@ async def test_the_repo_docs_steps_import_with_the_cases_their_case_file_holds(t
     library = LibraryCollection(store, store.ingest, collection=store.collection)
     check_adrs = load_step_document((source / "steps" / "check-adrs.md").read_text(encoding="utf-8"))
 
-    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     shipped = yaml.safe_load((source / "evals" / "check-adrs.yaml").read_text(encoding="utf-8"))
     assert await library.fetch_step_cases(step_page_id("check_adrs", check_adrs.version)) == shipped
+
+
+STEP_A_V2 = STEP_A.replace("version: 1", "version: 2").replace('"a"', '"a2"')
+
+STEP_A_V3 = STEP_A.replace("version: 1", "version: 3").replace('"a"', '"a3"')
+
+SAY_X_BODY = "Use when a run needs an x."
+
+STEPS_A = {document.version: document.step for document in map(load_step_document, (STEP_A, STEP_A_V2, STEP_A_V3))}
+
+ADOPTION = Lineage(parent_name="say-x", parent_version=3, ops=({"op": "replace_inline_step", "name": "step_a"},), touched=("a",))
+
+
+def _say_x(version: int, step: InlineStep) -> Workflow:
+    """`say-x` at `version`, holding a copy of `step` and running it once."""
+    return Workflow(name="say-x", version=version, description="Says x.", inline=(step,), nodes=(RunNode(id="a", work=step.name),), output=FromNode(node="a"))
+
+
+def _say_x_file(
+    workflow: Workflow, *, title: str = "Say x", description: str = "Says x.", body: str = SAY_X_BODY, presentation: WorkflowPresentation | None = None
+) -> str:
+    """The workflow file of `workflow` under these words."""
+    document: dict[str, object] = {"title": title, "description": description, "workflow": workflow.model_dump(mode="json")}
+    if presentation is not None:
+        document["presentation"] = presentation.model_dump(mode="json")
+    return f"---\n{yaml.safe_dump(document, sort_keys=False)}---\n\n{body}\n"
+
+
+async def _moved_past(saved_by: str) -> tuple[FakeCollection, LibraryCollection]:
+    """A library holding `step_a` v1 to v3, `say-x` v3 with `step_a` v1, and `say-x` v4 adopting `step_a` v2, saved by `saved_by`.
+
+    v4 carries a lineage, a live trial marker and a decline of `step_a` v3, as an adoption does, and v3 is superseded.
+    """
+    store, library = await _holding(STEP_A, STEP_A_V2, STEP_A_V3)
+    await library.put(_say_x(3, STEPS_A[1]), title="Say x", summary="Says x.", applicability=SAY_X_BODY, provenance={"saved_by": "owner:cli"})
+    await library.put(
+        _say_x(4, STEPS_A[2]),
+        title="Say x",
+        summary="Says x.",
+        applicability=SAY_X_BODY,
+        provenance={"saved_by": saved_by},
+        lineage=ADOPTION,
+        live_trial=LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2])),
+    )
+    await library.record_decline("wf.say-x.v4", step="step_a", step_hash=step_content_address(STEPS_A[3]), because="kept")
+    assert await library.current("wf.say-x.v3") == "wf.say-x.v4"
+    return store, library
+
+
+async def test_a_file_the_library_moved_past_by_step_maintenance_is_skipped_by_name_and_the_rest_is_written(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(3, STEPS_A[1])), "two-step.md": WORKFLOW})
+
+    imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported == FolderImport(
+        written=("st.step_b.v1", "wf.two-step.v1"), skipped=(SkippedWorkflowFile(file=tmp_path / "workflows" / "say-x.md", version=3, newer_version=4),)
+    )
+    assert [payload["frontmatter"]["id"] for payload in store.payloads[before:]] == ["st.step_b.v1", "wf.two-step.v1"]
+
+
+async def test_a_file_the_library_moved_past_by_anyone_else_refuses_the_folder_before_its_first_write(tmp_path: Path) -> None:
+    store, library = await _moved_past("human:owner")
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(3, STEPS_A[1])), "two-step.md": WORKFLOW})
+
+    with pytest.raises(WorkflowVersionSupersededError, match=r"say-x\.md holds wf\.say-x\.v3.*wf\.say-x\.v4, saved by human:owner") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert (refused.value.workflow_id, refused.value.newest_id) == ("wf.say-x.v3", "wf.say-x.v4")
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"
+
+
+async def test_a_file_whose_workflow_and_words_equal_the_stored_version_writes_nothing_and_the_page_keeps_its_adoption(tmp_path: Path) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+    _write(tmp_path, steps={}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[2]))})
+
+    imported = await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported == FolderImport(written=("wf.say-x.v4",), skipped=())
+    assert len(store.payloads) == before, "the unchanged version writes nothing"
+    assert await library.fetch_lineage("wf.say-x.v4") == ADOPTION
+    assert await library.fetch_live_trial("wf.say-x.v4") == LiveTrialMarker(previous="wf.say-x.v3", step="step_a", step_hash=step_content_address(STEPS_A[2]))
+    (entry,) = await library.fetch_consumer_record("wf.say-x.v4")
+    assert (entry.declined, entry.declined_because) == (step_content_address(STEPS_A[3]), "kept")
+
+
+@pytest.mark.parametrize(
+    ("words", "named"),
+    [
+        ({"title": "Say x louder"}, "title"),
+        ({"description": "Says x twice."}, "description"),
+        ({"body": "Use when a run needs two."}, "body"),
+        ({"presentation": WorkflowPresentation(purpose="Say x.")}, "presentation"),
+    ],
+    ids=["title", "description", "body", "presentation"],
+)
+async def test_a_file_whose_workflow_equals_the_stored_version_and_whose_words_differ_refuses_the_folder(
+    tmp_path: Path, words: Mapping[str, Any], named: str
+) -> None:
+    store, library = await _moved_past(STEP_MAINTENANCE_AGENT)
+    before = len(store.payloads)
+    _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[2]), **words)})
+
+    with pytest.raises(WorkflowCardChangedError, match=rf"say-x\.md holds wf\.say-x\.v4 .* different {named}\. .*Raise `version`") as refused:
+        await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert refused.value.fields == (named,)
+    assert len(store.payloads) == before, "nothing is written, not even the folder's step"

@@ -13,6 +13,7 @@ from core.ai.workflows.contracts import (
     WorkflowPresentation,
     fingerprint,
     load_spec_document,
+    spec_identity,
     step_content_address,
     step_page_id,
     verify_presentation,
@@ -20,6 +21,7 @@ from core.ai.workflows.contracts import (
 )
 from pydantic import JsonValue, TypeAdapter
 
+from harness.features.browsing.exceptions import WorkflowCardChangedError, WorkflowVersionSupersededError
 from harness.features.browsing.step_locks import read_step_file
 
 if TYPE_CHECKING:
@@ -36,6 +38,8 @@ if TYPE_CHECKING:
         Workflow,
     )
 
+    from harness.features.browsing.internal_contracts import SavedVersionQueries
+
 type CaseCheck = Callable[[str, Mapping[str, JsonValue]], None]
 """Raises when a step's cases, given with the step's library id, could not run."""
 
@@ -50,9 +54,33 @@ _PRESENTATION = TypeAdapter(WorkflowPresentation | None)
 
 
 @dataclass(frozen=True)
+class SkippedWorkflowFile:
+    """A workflow file the import wrote nothing for, because the library holds a newer version saved by `moved_past_by`."""
+
+    file: Path
+    version: int
+    """The version the file declares."""
+    newer_version: int
+    """The library's newest live version of the workflow, the version to raise the file to."""
+
+
+@dataclass(frozen=True)
+class FolderImport:
+    """What one import of a folder did: the ids the library holds from it, and the workflow files it skipped."""
+
+    written: tuple[str, ...]
+    """The id of every step and workflow the library holds from the folder, written now or already held unchanged.
+
+    The reusable steps come first and then the workflows, each in sorted file order. A skipped file has no id here."""
+    skipped: tuple[SkippedWorkflowFile, ...]
+    """Each workflow file skipped because the library holds a newer version saved by `moved_past_by`, in sorted file order."""
+
+
+@dataclass(frozen=True)
 class _ReadyWorkflow:
     """One workflow file with its `uses` steps copied in and checked, waiting to be written."""
 
+    file: Path
     workflow: Workflow
     title: str
     summary: str
@@ -67,9 +95,10 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
     registry: StepRegistry,
     by: str,
     check_cases: CaseCheck,
+    moved_past_by: str,
     environment: Mapping[str, str] | None = None,
-) -> tuple[str, ...]:
-    """Write every step under `path/steps` and every workflow under `path/workflows`, returning the ids in order.
+) -> FolderImport:
+    """Write every step under `path/steps` and every workflow under `path/workflows` the library does not already hold.
 
     Every file under `path` is read, parsed, and (for a workflow) checked with `verify_savable`
     before anything is written: a workflow's `uses` steps are taken from this same folder when it
@@ -82,9 +111,15 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
     file there is saved with none, which removes any cases its version held. When it does not, every version keeps
     the cases it holds.
 
-    Each workflow is stamped with the fingerprint of the environment it was checked against, exactly
-    as a save to the library stamps one, so a later change to a step, an agent or a grant reads as
-    drift here too.
+    A workflow file whose version the library holds is compared with it before the first write. When the library's
+    newest live version of the workflow is higher, the file is skipped if `moved_past_by` saved that version, and
+    refuses the folder otherwise. When the library holds the file's workflow under the same title, description, body
+    and presentation, nothing is written for it, so the page keeps its lineage, its live trial marker and its consumer
+    record. The same workflow under other words refuses the folder.
+
+    Each workflow written is stamped with the fingerprint of the environment it was checked against,
+    exactly as a save to the library stamps one, so a later change to a step, an agent or a grant reads
+    as drift here too.
 
     Args:
         path: The directory holding `steps/` and `workflows/`.
@@ -92,11 +127,13 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
         registry: What this folder is checked against, and what the fingerprint is taken over.
         by: Who imported this, recorded on every page.
         check_cases: Raises when a step's cases, given with the step's library id, could not run.
+        moved_past_by: The `saved_by` of the one writer whose newer versions a workflow file may lag behind, such
+            as `agent:step-maintenance`.
         environment: The stamps this host contributes to the fingerprint (`environment_stamps()`).
             `None` stamps the registry alone.
 
     Returns:
-        The written ids, the reusable steps first and then the workflows, each in sorted file order.
+        The ids the library holds from the folder and the workflow files it skipped.
 
     Raises:
         SaveRefusedError: A workflow that would not run on this registry.
@@ -104,6 +141,10 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
             the workflow does not declare.
         StepVersionChangedError: The library holds a step file's version with other content. A note names the
             step file. Nothing is written.
+        WorkflowVersionSupersededError: The library's newest live version of a workflow file's workflow is higher
+            than the file's, and someone other than `moved_past_by` saved it. Nothing is written.
+        WorkflowCardChangedError: The library holds a workflow file's workflow at its version under another title,
+            description, body or presentation. Nothing is written.
         DocumentError: A step or a workflow document does not parse, a step would read back different, or a case
             file does not parse or `check_cases` refuses it. The message names its file.
         pydantic.ValidationError: A step, a workflow's `uses` list, or its `presentation` does not parse.
@@ -128,6 +169,7 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
             verify_presentation(workflow, presentation)
         ready.append(
             _ReadyWorkflow(
+                file=file,
                 workflow=workflow,
                 title=str(document.frontmatter.get("title") or workflow.name),
                 summary=str(document.frontmatter.get("description") or workflow.description),
@@ -135,6 +177,7 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
                 presentation=presentation,
             )
         )
+    held = [await _held(ready_workflow, library, moved_past_by=moved_past_by) for ready_workflow in ready]
 
     written = [
         await library.put_step(
@@ -148,9 +191,13 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
         )
         for doc, step_cases in zip(steps, cases, strict=True)
     ]
-    written.extend(
-        [
-            await library.put(
+    for ready_workflow, kept in zip(ready, held, strict=True):
+        if isinstance(kept, SkippedWorkflowFile):
+            continue
+        written.append(
+            kept
+            if kept is not None
+            else await library.put(
                 ready_workflow.workflow,
                 title=ready_workflow.title,
                 summary=ready_workflow.summary,
@@ -159,10 +206,36 @@ async def import_path(  # noqa: PLR0913 (each argument is a separate term the ca
                 fingerprint=fingerprint(ready_workflow.workflow, registry, environment=dict(environment or {})),
                 presentation=ready_workflow.presentation,
             )
-            for ready_workflow in ready
-        ]
-    )
-    return tuple(written)
+        )
+    return FolderImport(written=tuple(written), skipped=tuple(kept for kept in held if isinstance(kept, SkippedWorkflowFile)))
+
+
+async def _held(ready: _ReadyWorkflow, library: SavedVersionQueries, *, moved_past_by: str) -> str | SkippedWorkflowFile | None:
+    """The id the library already holds the file under, the skip when `moved_past_by` moved past it, or None to write it."""
+    workflow = ready.workflow
+    held_id = await library.locate(workflow.name, workflow.version)
+    if held_id is None:
+        return None
+    newest_id = await library.current(held_id)
+    if newest_id != held_id:
+        newest_version = {version_id: version for version, version_id in await library.versions(workflow.name)}.get(newest_id, 0)
+        if newest_version > workflow.version:
+            saved_by = await library.saved_by(newest_id)
+            if saved_by == moved_past_by:
+                return SkippedWorkflowFile(file=ready.file, version=workflow.version, newer_version=newest_version)
+            raise WorkflowVersionSupersededError(ready.file, held_id, newest_id=newest_id, newest_version=newest_version, saved_by=saved_by)
+    card = await library.fetch_card(held_id)
+    if card is None or spec_identity(await library.fetch_workflow(held_id)) != spec_identity(workflow):
+        return None
+    words = {
+        "title": (ready.title, card.title),
+        "description": (ready.summary, card.summary),
+        "body": (ready.applicability, card.applicability.strip()),
+        "presentation": (ready.presentation, card.presentation),
+    }
+    if differing := [name for name, (in_file, saved) in words.items() if in_file != saved]:
+        raise WorkflowCardChangedError(ready.file, held_id, differing)
+    return held_id
 
 
 def _step_cases(path: Path, document: StepDocument, check_cases: CaseCheck) -> Mapping[str, JsonValue] | None:
