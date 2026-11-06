@@ -1,4 +1,4 @@
-"""Markdown helpers: frontmatter split and render, heading slugs, and a paragraph split of a section body.
+"""Markdown helpers: frontmatter split and render, heading slugs, a paragraph split of a section body, and a code block.
 
 A `---`-fenced YAML block splits from its body and renders back unchanged, with field order kept.
 The data must already be YAML-safe, with enums as their values and datetimes as ISO strings.
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
 
 _NON_SLUG_RUN = re.compile(r"[^a-z0-9]+")
+_BACKTICK_RUN = re.compile(r"`+")
 _FENCE = "---\n"
 # A frontmatter note splits into three parts on the fence: opening fence, the YAML block, and the body.
 _FENCED_PARTS = 3
@@ -96,6 +97,29 @@ def heading_for_slug(slug: str) -> str:
         The heading.
     """
     return slug.replace("_", " ").title()
+
+
+def code_block(text: str, *, info: str = "") -> str:
+    """`text` inside a fenced code block whose fence is longer than any run of backticks the text holds.
+
+    No line of the text can close the fence, so a heading, a fence or a `---` line inside it stays text. The fence is
+    three backticks at least.
+
+    Args:
+        text: The text to fence.
+        info: The info string after the opening fence, such as `diff`. Empty writes none.
+
+    Returns:
+        The opening fence and its info string, the text, and the closing fence, one per line.
+
+    Raises:
+        ValueError: If `info` holds a backtick, which a backtick fence's info string cannot.
+    """
+    if "`" in info:
+        msg = f"the info string {info!r} holds a backtick, which a backtick fence's info string cannot. Leave the backticks out"
+        raise ValueError(msg)
+    fence = "`" * max([3, *(len(run) + 1 for run in _BACKTICK_RUN.findall(text))])
+    return f"{fence}{info}\n{text}\n{fence}"
 
 
 def split_section_body(body: str, *, token_budget: int, count_tokens: Callable[[str], int]) -> tuple[str, ...]:

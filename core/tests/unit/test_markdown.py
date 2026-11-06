@@ -1,8 +1,12 @@
-"""Frontmatter split/render: round-trip, ordering, and the no-frontmatter case."""
+"""Frontmatter split/render (round-trip, ordering, the no-frontmatter case), and a fenced code block around any text."""
 
 from __future__ import annotations
 
-from core.markdown import render_frontmatter, split_frontmatter
+import pytest
+
+from markdown_it import MarkdownIt
+
+from core.markdown import code_block, render_frontmatter, split_frontmatter
 
 
 def test_split_then_render_round_trips():
@@ -57,3 +61,23 @@ def test_render_keeps_long_scalars_on_one_line():
     assert block.strip().count("\n") == 0  # not wrapped onto continuation lines
     data, _ = split_frontmatter(rendered)
     assert data["source_path"] == long_path
+
+
+def test_code_block_fences_text_with_a_fence_longer_than_any_backtick_run_it_holds():
+    text = "## not a heading\nIt is plain\n---\n```python\nprint('x')\n```\nand ```` four"
+
+    block = code_block(text, info="text")
+
+    tokens = MarkdownIt("commonmark").parse(block)
+    assert [token.type for token in tokens] == ["fence"]
+    (fence,) = tokens
+    assert (fence.markup, fence.info, fence.content) == ("`````", "text", text + "\n")
+
+
+def test_code_block_uses_three_backticks_for_text_without_any_and_takes_no_info_by_default():
+    assert code_block("plain") == "```\nplain\n```"
+
+
+def test_code_block_refuses_an_info_string_holding_a_backtick():
+    with pytest.raises(ValueError, match="backtick"):
+        code_block("plain", info="py`thon")

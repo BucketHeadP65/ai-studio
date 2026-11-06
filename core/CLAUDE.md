@@ -9,7 +9,8 @@ general-purpose, it belongs here. An app's domain stays in the app (root ADR-000
   `SessionScopedFactory` (one fresh session per call), the errors of a lost database connection
   (`DATABASE_CONNECTION_ERRORS`), and those a listening loop waits out (`LOST_CONNECTION_ERRORS`)
 - `core.files`, `core.markdown`: file and markdown utilities (atomic writes, the cooperative `exclusive_lock`,
-  `has_hidden_component`, heading slugs, the paragraph split of a section body)
+  `has_hidden_component`, heading slugs, the paragraph split of a section body, `code_block`, text inside a fence
+  longer than any backtick run it holds)
 - `core.connection_failures`: whether an error is a database connection failure, a statement timeout or a lock timeout, and
   the message that names the service a failed connection reached (an embedding endpoint, a model endpoint or the database)
 - `core.fingerprints`: SHA-256 fingerprints of text and of models, and the canonical text of a set of names
