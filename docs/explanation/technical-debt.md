@@ -260,10 +260,12 @@ TD-46 onward came from the close of the code standard refactor on
   plan judge must send its rejection to the planner, so it cannot read the evidence from `list_consumers`,
   `check_contracts` and `run_step_cases`, which come before the planner. The workflow runs those three steps a second time
   after the planner, from the run's own `changed_step_ids`, and the judge reads that second pass.
-- **Why it is debt:** the evidence is computed twice per attempt for no reason but the rewind rule, and the graph carries
-  four nodes, one of them a program, that exist only to satisfy it.
-- **Cost while it stands:** one extra pass of library and evidence log reads per judge attempt, three at most, and no
-  model call, since a kept case report is not run again. A person saving a consumer or the step between the two passes moves a
+- **Why it is debt:** the evidence is read once before the planner and once more after each plan, up to four times a
+  run, for no reason but the rewind rule, and the graph carries four nodes, one of them a program, that exist only to
+  satisfy it.
+- **Cost while it stands:** each judge attempt, three at most, reads the library and the evidence log again. A step
+  version whose first case report held an errored case has no kept report, so each attempt runs its cases again, one
+  model call per case. A rejection therefore costs the planner's new turn, that pass and the judge's new review. A person saving a consumer or the step between the two passes moves a
   pair: the judge passes a keep or a flag on it as stale and fails an adopt, and the landing refuses the stale pair.
 - **Paying it off:** let a rewind reuse the kept outputs of the producers outside the rewound region when it re-enters a
   wait, then wire the judge straight from the three evidence nodes and delete the second pass.
@@ -280,10 +282,11 @@ TD-46 onward came from the close of the code standard refactor on
   `NotImplementedError`. The error never reaches the run: the workflow task completes with nothing scheduled, and the run
   waits forever with no failure recorded. The same program holding a tool runs as an activity and finishes.
 - **Why it is debt:** replay safety is asserted for pure computation, but the code runner that performs it cannot run in
-  workflow code, so every shipped workflow holding such a program hangs on the durable engine: `step-maintenance`,
-  `source-remove`, `research-compound`, `research-stance-refresh`, `news-digest`, `news-link` and `news-relate`, and any
-  workflow copying the reusable programs `finish`, `removal_report`, `count_digests`, `fold_report`,
-  `render_decision_brief` or `report_digests`.
+  workflow code, so all twelve shipped workflows that run such a program hang on the durable engine: `step-maintenance`,
+  `source-remove`, `research-digest`, `research-compound`, `research-decision-brief`, `research-stance-refresh`,
+  `docs-notes-to-analysis`, `docs-promote-initiative`, `benchmark-digest`, `news-digest`, `news-link` and `news-relate`.
+  The programs are their own inline ones and the reusable `finish`, `report`, `removal_report`, `count_digests`,
+  `fold_report` and `render_decision_brief`.
 - **Cost while it stands:** the durable engine cannot run those workflows. `in_process` is the default engine, so no live
   run hangs today. `harness/tests/integration/test_step_maintenance_durable.py` is held as a strict expected failure on its
   timeout.

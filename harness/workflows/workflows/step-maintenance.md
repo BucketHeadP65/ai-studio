@@ -155,8 +155,9 @@ every adoption with `check_change`, and answers only its decisions, so it never 
 reviews the decisions against what they answer, marking each one pass or fail.
 A rejection sends the plan back to the planner with that feedback and re-runs everything after the planner, so each
 plan is judged on evidence made after it. The third rejection ends the run with nothing landed, which raises a
-maintenance flag per changed step. The second pass reads the library and the evidence log again and calls no model,
-and a step version's kept case report is not run again. `land_changes` merges the approved decisions into the plan
+maintenance flag per changed step. The second pass reads the library and the evidence log again, and runs again the
+cases of a step version whose first case report held an errored case, since such a report is not kept, one model call
+per case. `land_changes` merges the approved decisions into the plan
 `prepare_plan` drafted, a change no decision names staying kept as not decided, then saves each adoption as the
 consumer's next version on live trial, declines each kept copy and flags each flagged pair, landing every writable
 change before it fails naming each refusal. Only then do `report_changes` and the repository
