@@ -10,7 +10,7 @@
     },
     "draft_decision_brief": {
       "step_hash": "def006bdc4abf861c5c4bbce938c8a2c23683a8c396d4b56854e8c359e8861fb",
-      "version": 1
+      "version": 2
     },
     "extract_references": {
       "step_hash": "b5db173b3badd39dfec8eb3a19ed29f9cf2b2b0d68d0c527d04a885d4730afd8",
@@ -66,7 +66,7 @@
     },
     "review_decision_brief": {
       "step_hash": "08a1a75472feb528a1db21bb7d66726355c8187f823a740dcfabd18187d41490",
-      "version": 1
+      "version": 2
     },
     "write_flags": {
       "step_hash": "d78da894a94c507ba37c99ebf13e55ed865c20db068fc9c10fc3514f26f0f057",

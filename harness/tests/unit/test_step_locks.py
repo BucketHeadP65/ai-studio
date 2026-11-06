@@ -13,7 +13,7 @@ from core.ai.workflows.contracts import DocumentError, load_step_document, step_
 from engram.indexing.service.row_builder import _jsonable_frontmatter_value
 
 from harness.features.browsing.contracts import StepLock, StepLockEntry, StepLockRefusedError, locked_steps, read_lock, write_lock
-from harness.features.browsing.step_locks import _stored
+from harness.features.browsing.step_locks import as_stored
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -136,7 +136,7 @@ def test_the_drop_rule_is_the_one_engram_stores_frontmatter_with() -> None:
 
     assert len(dumps) > 30, "every shipped step file is read"
     for dump in dumps:
-        assert _stored(dump) == _jsonable_frontmatter_value(dump), dump["name"]
+        assert as_stored(dump) == _jsonable_frontmatter_value(dump), dump["name"]
 
 
 def test_a_folder_with_no_lock_reads_as_an_empty_one(tmp_path: Path) -> None:

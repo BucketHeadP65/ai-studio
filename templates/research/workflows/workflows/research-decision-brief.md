@@ -3,7 +3,7 @@ title: Settle one decision from the reading
 description: >-
   Turns one decision question into a reviewed brief: a recommendation, the evidence for and against it with the refs
   it was read from, what it does not settle, and a proposed question note you may keep.
-uses: [st.draft_decision_brief.v1, st.review_decision_brief.v1, st.render_decision_brief.v1]
+uses: [st.draft_decision_brief.v2, st.review_decision_brief.v2, st.render_decision_brief.v1]
 presentation:
   purpose: >-
     Answer a decision you are actually facing out of what the knowledge base already holds, rather than reading
@@ -39,7 +39,7 @@ presentation:
       destination: user_selects
 workflow:
   name: research-decision-brief
-  version: 1
+  version: 2
   description: Draft a decision brief from the knowledge bases, have it reviewed against its own sources, then render it.
   parameters:
     question:

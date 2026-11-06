@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from core.ai.workflows.contracts import (
+    STEP_MAINTENANCE_AGENT,
     Briefing,
     ConsumerEntry,
     FromNode,
@@ -169,8 +170,8 @@ async def _through_the_import(tmp_path: Path) -> list[object]:
     folder = tmp_path / "import"
     (folder / "workflows").mkdir(parents=True)
     (folder / "workflows" / "digest-sources.md").write_text(WORKFLOW_FILE, encoding="utf-8")
-    written = await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases)
-    assert written == ("wf.digest-sources.v1",)
+    imported = await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+    assert imported.written == ("wf.digest-sources.v1",)
     return store.written("wf.digest-sources.v1")["reusable_steps"]
 
 
@@ -192,7 +193,7 @@ async def test_no_save_path_writes_uses(tmp_path: Path) -> None:
     folder = tmp_path / "import"
     (folder / "workflows").mkdir(parents=True)
     (folder / "workflows" / "digest-sources.md").write_text(WORKFLOW_FILE.replace("version: 1", "version: 2"), encoding="utf-8")
-    await import_path(folder, library=LibraryCollection(store, store.ingest, collection=store.collection), registry=_registry(), by="test:import", check_cases=check_step_cases)
+    await import_path(folder, library=LibraryCollection(store, store.ingest, collection=store.collection), registry=_registry(), by="test:import", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert [("uses" in payload["frontmatter"]) for payload in store.payloads if payload["frontmatter"]["type"] == "workflow"] == [False, False, False]
 
@@ -227,6 +228,8 @@ async def test_importing_an_unchanged_version_again_keeps_its_decline_and_its_di
     document = {"title": "Digest sources", "description": "Digest one source.", "workflow": (await library.fetch_workflow("wf.digest-sources.v2")).model_dump(mode="json")}
     (folder / "workflows" / "digest-sources.md").write_text(f"---\n{yaml.safe_dump(document, sort_keys=False)}---\n\nUse per source. Not for a batch.\n", encoding="utf-8")
 
-    assert await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases) == ("wf.digest-sources.v2",)
+    imported = await import_path(folder, library=library, registry=_registry(), by="test:import", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
+
+    assert imported.written == ("wf.digest-sources.v2",)
 
     assert await library.fetch_consumer_record("wf.digest-sources.v2") == kept

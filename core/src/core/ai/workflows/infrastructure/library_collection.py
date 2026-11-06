@@ -255,6 +255,13 @@ SUPERSEDED_SQL = "select c.superseded from api.cards c where c.id = $1"
 
 `api.cards` does not say which page superseded it, so an upsert of a superseded page would lose the link for good."""
 
+SAVED_BY_SQL = """
+select c.frontmatter ->> 'saved_by' as saved_by
+from api.cards c
+where c.type = 'workflow' and c.src_collection = $1 and c.id = $2
+"""
+"""Who saved workflow page `$2` of collection `$1`, as its frontmatter records it. No row when no workflow page has that id."""
+
 
 def page_id(name: str, version: int) -> str:
     """The page id one version of a workflow lives at, `wf.<name>.v<version>`.
@@ -629,6 +636,67 @@ class LibraryCollection:
         """
         workflow_id = page_id(name, version)
         return workflow_id if await self._rows.fetchval(FETCH_SQL, workflow_id) is not None else None
+
+    async def saved_by(self, workflow_id: str) -> str:
+        """Who saved one workflow version, as its page records it.
+
+        Args:
+            workflow_id: The workflow version's id, `wf.<name>.v<version>`. Superseded and archived versions are answered too.
+
+        Returns:
+            The `saved_by` its save recorded, such as `owner:cli` or `agent:step-maintenance`.
+
+        Raises:
+            WorkflowUnknownError: If no workflow page has that id.
+            LibraryError: If the page records no `saved_by`.
+        """
+        found = await self._rows.fetch(SAVED_BY_SQL, self._collection, workflow_id)
+        if not found:
+            msg = f"no workflow {workflow_id!r} in collection {self._collection!r}"
+            raise WorkflowUnknownError(msg)
+        saved_by = found[0]["saved_by"]
+        if not isinstance(saved_by, str):
+            msg = f"{workflow_id!r} records no saved_by, so who saved it is unknown"
+            raise LibraryError(msg)
+        return saved_by
+
+    async def restamp(self, workflow_id: str, fingerprint: WorkflowFingerprint) -> None:
+        """Write a new environment stamp on one workflow version, keeping every other key, the card and the body as stored.
+
+        The lineage, the live trial marker, the consumer record and an archive mark stay as they are. A stamp equal to the
+        stored one writes nothing, and so does an empty stamp on a page that holds none. It assumes one writer at a time,
+        such as an import or a CLI.
+
+        Args:
+            workflow_id: The workflow version's id, `wf.<name>.v<version>`.
+            fingerprint: The environment stamp to keep under `fingerprint`.
+
+        Raises:
+            WorkflowUnknownError: If no workflow page has that id. Nothing is written.
+            LibraryError: If the version is superseded, or the ingest refuses the write. Nothing is written in each case.
+        """
+        superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
+        if superseded and bool(superseded[0].get("superseded")):
+            msg = f"{workflow_id!r} is superseded by a later version, and writing it again would drop that link, so it is not restamped."
+            raise LibraryError(msg)
+        found = await self._rows.fetch(PAGE_SQL, workflow_id)
+        if not found or str(found[0]["type"]) != PAGE_TYPE:
+            msg = f"no workflow {workflow_id!r} in collection {self._collection!r}"
+            raise WorkflowUnknownError(msg)
+        page = found[0]
+        stored = page["frontmatter"]
+        long_tail = dict(stored if isinstance(stored, Mapping) else json.loads(stored or "{}"))
+        try:
+            held = WorkflowFingerprint.model_validate(long_tail.get("fingerprint") or {})
+        except ValidationError:
+            held = None
+        if held == fingerprint:
+            return
+        try:
+            await self._rewrite(page, {**long_tail, "fingerprint": fingerprint.model_dump(mode="json")})
+        except Exception as exc:
+            msg = f"the collection refused the new stamp of {workflow_id!r}: {exc}"
+            raise LibraryError(msg) from exc
 
     async def current(self, workflow_id: str) -> str:
         """The newest live version of the workflow `workflow_id` names, or `workflow_id` itself.

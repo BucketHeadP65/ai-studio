@@ -75,7 +75,7 @@ def read_step_file(file: Path) -> StepDocument:
 def _refuse_stored_differently(file: Path, step: InlineStep) -> None:
     """Refuse a step the library would read back with another content address, naming the values it would drop."""
     try:
-        same = step_content_address(_STEP.validate_python(_stored(step.model_dump(mode="json")))) == step_content_address(step)
+        same = step_content_address(_STEP.validate_python(as_stored(step.model_dump(mode="json")))) == step_content_address(step)
     except ValidationError:
         same = False
     if same:
@@ -88,13 +88,20 @@ def _refuse_stored_differently(file: Path, step: InlineStep) -> None:
     raise DocumentError(msg)
 
 
-def _stored(value: JsonValue) -> JsonValue:
-    """`value` as the library stores it: null values and empty lists and mappings dropped at every depth, else None."""
+def as_stored(value: JsonValue) -> JsonValue:
+    """`value` as the library stores it: null values and empty lists and mappings dropped at every depth.
+
+    Args:
+        value: A JSON document, such as a step or a workflow dumped in JSON mode.
+
+    Returns:
+        What the library keeps of it, or None when it keeps nothing.
+    """
     if isinstance(value, list):
-        items: list[JsonValue] = [kept for kept in (_stored(item) for item in value) if kept is not None]
+        items: list[JsonValue] = [kept for kept in (as_stored(item) for item in value) if kept is not None]
         return items or None
     if isinstance(value, dict):
-        nested: dict[str, JsonValue] = {key: kept for key, kept in ((key, _stored(item)) for key, item in value.items()) if kept is not None}
+        nested: dict[str, JsonValue] = {key: kept for key, kept in ((key, as_stored(item)) for key, item in value.items()) if kept is not None}
         return nested or None
     return value
 

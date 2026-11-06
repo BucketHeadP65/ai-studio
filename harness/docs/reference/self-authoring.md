@@ -163,6 +163,33 @@ and a lock file that does not parse. `tests/unit/test_step_locks.py` fails
 when a step file in the repository no longer matches its folder's lock, so every edit to a step file raises its
 `version` and runs `harness steps lock <folder>`.
 
+### What the import does with a workflow file the library already holds
+
+The import compares each workflow file whose version the library holds with that version before it writes anything.
+
+- **An archived version.** The import writes nothing for the file, the version stays archived, and it prints
+  `skipped <file> (version <n>)` saying the library archived it.
+- **A version the library moved past.** When the newest live version of the workflow is higher than the file's and
+  step maintenance (`agent:step-maintenance`) saved it, the import writes nothing for the file and prints
+  `skipped <file> (version <n>)` naming the library's newer version, `wf.<name>.v<m>`. Bring the file up to that
+  version's content, not only its number, so a later raise does not save the old content over the adoption. The rest
+  of the folder is written. When anyone
+  else saved the newer version, `WorkflowVersionSupersededError` refuses the whole folder. When the file's version is
+  superseded and every newer version is archived, `WorkflowNotLiveError` refuses it.
+- **The same version, unchanged.** When the library holds the file's workflow (the same content address, after the
+  library drops null values and empty lists and mappings) under the same title, description, body and presentation,
+  the import writes only a changed environment stamp, so the page keeps its lineage, its live trial marker and its
+  consumer record. Other content at an unchanged version refuses the whole folder with `WorkflowVersionChangedError`,
+  which says to bring the file up to the library's version when that one is to keep, or to raise `version` above every
+  saved version when the file's content is new. A changed title, description, body or presentation refuses it with
+  `WorkflowCardChangedError`, which says to raise `version`.
+- **A stored version that no longer reads.** When the library's copy of the file's version no longer validates as a
+  workflow, `WorkflowVersionUnreadableError` refuses the folder, naming the file and the version.
+
+Two workflow files of one workflow refuse the folder with `WorkflowNameRepeatedError`, naming both. `harness import`
+prints a refusal as one line and exits 1: any of these, a step refusal, a workflow that would not run, a presentation
+that names what the workflow does not declare, and a file that does not parse. A workflow refusal names its file.
+
 ### A turn that only designs starts nothing
 
 A request carrying `design_only: true` (the Studio's guided authoring route sends it) has
