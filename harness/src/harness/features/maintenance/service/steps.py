@@ -267,8 +267,9 @@ class MaintenanceSteps:
         """Land the drafted plan as the planner decided it: save each adoption on live trial, decline each kept copy and flag each flagged pair.
 
         Each decision is merged into the drafted change with the same workflow id and step id, so the evidence stays as
-        `prepare_plan` copied it. A drafted change no decision names lands kept, with the reason "not decided". A
-        decision that names no drafted change is refused, and so is every decision of a drafted change decided twice.
+        `prepare_plan` copied it. A drafted change no decision names writes nothing and lands as not decided, so a later
+        run for its step offers it again. A decision that names no drafted change is refused, and so is every decision
+        of a drafted change decided twice.
 
         Every adoption into one consumer lands as one version: the step of each is copied from the library, each
         change's further edit operations are applied, the candidate is validated and saved as the consumer's next
@@ -400,7 +401,7 @@ class MaintenanceSteps:
     async def plan_decisions(self, plan: MaintenancePlan) -> PlanDecisions:
         """No decision for any change of `plan`, the type the planner answers in.
 
-        No graph places this step. The landing keeps every drafted change of `plan` it is handed with these decisions.
+        No graph places this step. Handed these decisions, the landing writes nothing for any drafted change of `plan`.
 
         Args:
             plan: The drafted plan.
