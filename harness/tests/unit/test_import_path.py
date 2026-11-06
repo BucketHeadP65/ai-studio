@@ -153,13 +153,13 @@ class _FakeIngest:
         self.events.extend((str(payload["frontmatter"]["id"]), event) for event in events)
 
 
-def _registry() -> StepRegistry:
-    """A registry that can build a `Program` step but registers no steps of its own."""
+def _registry(*, grants: Sequence[str] = ()) -> StepRegistry:
+    """A registry that can build a `Program` step, granting `grants`, but registers no steps of its own."""
 
     async def run_code(step: Program, output_type: type, /, **inputs: object) -> object:
         raise AssertionError
 
-    return StepRegistry(run_code=run_code)
+    return StepRegistry(run_code=run_code, grants=grants)
 
 
 def _write(path: Path, *, steps: dict[str, str], workflows: dict[str, str]) -> None:
@@ -255,16 +255,18 @@ async def test_a_saved_workflow_carries_the_fingerprint_the_contract_port_would_
     assert saved == expected.model_dump(mode="json")
 
 
-async def test_an_import_with_no_environment_still_stamps_the_registry(tmp_path: Path) -> None:
-    _write(tmp_path, steps={"step-a.md": STEP_A, "step-b.md": STEP_B}, workflows={"two-step.md": WORKFLOW})
+STEP_A_ASKING_FOR_FETCH = STEP_A.replace("  name: step_a\n", "  name: step_a\n  tools: [fetch]\n")
+
+
+async def test_an_import_with_no_environment_still_stamps_the_tools_its_steps_ask_for(tmp_path: Path) -> None:
+    """The library drops empty containers, so with no host stamp the tools are what keeps the stamp stored."""
+    _write(tmp_path, steps={"step-a.md": STEP_A_ASKING_FOR_FETCH, "step-b.md": STEP_B}, workflows={"two-step.md": WORKFLOW})
     ingest = _FakeIngest()
     store = LibraryCollection(_FakeRows(), ingest, collection="test-knowledge-base")
 
-    await import_path(tmp_path, library=store, registry=_registry(), by="test:save", check_cases=check_step_cases)
+    await import_path(tmp_path, library=store, registry=_registry(grants=("fetch", "search")), by="test:save", check_cases=check_step_cases)
 
-    stamp = ingest.payloads[2][0]["frontmatter"]["fingerprint"]
-    assert stamp["environment"] == {}
-    assert "grants" in stamp
+    assert pruned(ingest.payloads[2][0]["frontmatter"]["fingerprint"]) == {"grants": ["fetch"]}
 
 
 PRESENTED_WORKFLOW = """---
