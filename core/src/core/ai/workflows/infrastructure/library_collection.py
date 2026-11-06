@@ -664,7 +664,8 @@ class LibraryCollection:
         """Write a new environment stamp on one workflow version, keeping every other key, the card and the body as stored.
 
         The lineage, the live trial marker, the consumer record and an archive mark stay as they are. A stamp equal to the
-        stored one writes nothing. A page with no stored stamp holds the empty one, because the store drops an empty stamp.
+        stored one writes nothing, and so does an empty stamp on a page that holds none. It assumes one writer at a time,
+        such as an import or a CLI.
 
         Args:
             workflow_id: The workflow version's id, `wf.<name>.v<version>`.
@@ -672,8 +673,7 @@ class LibraryCollection:
 
         Raises:
             WorkflowUnknownError: If no workflow page has that id. Nothing is written.
-            LibraryError: If the version is superseded, because writing it again would drop its successor link, or the
-                ingest refuses the write. Nothing is written in each case.
+            LibraryError: If the version is superseded, or the ingest refuses the write. Nothing is written in each case.
         """
         superseded = await self._rows.fetch(SUPERSEDED_SQL, workflow_id)
         if superseded and bool(superseded[0].get("superseded")):
