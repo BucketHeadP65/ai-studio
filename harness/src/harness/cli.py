@@ -301,7 +301,8 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
     """Import a folder of workflow and step files into the library, steps first, then the workflows that use them.
 
     It prints each id the library holds from the folder, then each workflow file it skipped: one whose version the library
-    archived, and one whose workflow step maintenance saved a newer version of, with the version to raise the file to.
+    archived, and one whose workflow step maintenance saved a newer version of, with the library's version to bring the
+    file up to.
     A refusal prints as one line and exits 1.
     """
     import asyncio  # noqa: PLC0415 (heavy async wiring stays off the review verbs' import path)
@@ -321,8 +322,8 @@ def import_files(path: str = typer.Argument(..., help="A directory holding steps
             typer.echo(f"skipped {skipped.file} (version {skipped.version}): the library archived version {skipped.version}, so it stays archived.")
         else:
             typer.echo(
-                f"skipped {skipped.file} (version {skipped.version}): step maintenance saved version {skipped.newer_version} in the "
-                f"library. Raise the file to version {skipped.newer_version}."
+                f"skipped {skipped.file} (version {skipped.version}): step maintenance saved {skipped.newer_id} in the library. "
+                f"Bring the file up to {skipped.newer_id}, its content and not only its version number."
             )
 
 

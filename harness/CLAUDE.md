@@ -145,8 +145,8 @@ the import all refuse a step the library would read back different (one holding 
 mapping). The import also carries a step's cases from `evals/<step name with hyphens>.yaml` into the library and
 refuses a case file the step's case run would refuse. A changed workflow file (its workflow, title, description, body
 or presentation) needs a higher `version` too, or the import refuses the folder. The import skips and names a
-workflow file whose version the library archived, and one whose version step maintenance moved past, with the
-version to raise it to.
+workflow file whose version the library archived, and one whose version step maintenance moved past, naming the
+library's newer version: bring the file up to that version's content, not only its number, before raising it again.
 
 Depends on `engram`, `engram-connectors` (with the `conversion,source-queue,x,youtube,zotero` extras, because
 `request_source` classifies a pasted URL in this process and needs the real connector classes

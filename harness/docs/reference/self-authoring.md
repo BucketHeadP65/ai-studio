@@ -171,15 +171,18 @@ The import compares each workflow file whose version the library holds with that
   `skipped <file> (version <n>)` saying the library archived it.
 - **A version the library moved past.** When the newest live version of the workflow is higher than the file's and
   step maintenance (`agent:step-maintenance`) saved it, the import writes nothing for the file and prints
-  `skipped <file> (version <n>)` with the version to raise the file to. The rest of the folder is written. When anyone
+  `skipped <file> (version <n>)` naming the library's newer version, `wf.<name>.v<m>`. Bring the file up to that
+  version's content, not only its number, so a later raise does not save the old content over the adoption. The rest
+  of the folder is written. When anyone
   else saved the newer version, `WorkflowVersionSupersededError` refuses the whole folder. When the file's version is
   superseded and every newer version is archived, `WorkflowNotLiveError` refuses it.
 - **The same version, unchanged.** When the library holds the file's workflow (the same content address, after the
   library drops null values and empty lists and mappings) under the same title, description, body and presentation,
   the import writes only a changed environment stamp, so the page keeps its lineage, its live trial marker and its
   consumer record. Other content at an unchanged version refuses the whole folder with `WorkflowVersionChangedError`,
-  and a changed title, description, body or presentation with `WorkflowCardChangedError`. Both say to raise `version`
-  in the workflow file.
+  which says to bring the file up to the library's version when that one is to keep, or to raise `version` above every
+  saved version when the file's content is new. A changed title, description, body or presentation refuses it with
+  `WorkflowCardChangedError`, which says to raise `version`.
 - **A stored version that no longer reads.** When the library's copy of the file's version no longer validates as a
   workflow, `WorkflowVersionUnreadableError` refuses the folder, naming the file and the version.
 

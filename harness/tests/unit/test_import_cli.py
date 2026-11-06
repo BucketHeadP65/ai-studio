@@ -28,7 +28,10 @@ def test_import_prints_every_id_steps_first_then_each_skipped_file_with_why_it_w
     assert result.output.splitlines() == [
         "st.find_undigested.v1",
         "wf.research-digest.v1",
-        f"skipped {skipped.file} (version 3): step maintenance saved version 4 in the library. Raise the file to version 4.",
+        (
+            f"skipped {skipped.file} (version 3): step maintenance saved wf.source-remove.v4 in the library. "
+            "Bring the file up to wf.source-remove.v4, its content and not only its version number."
+        ),
         f"skipped {archived.file} (version 5): the library archived version 5, so it stays archived.",
     ]
 

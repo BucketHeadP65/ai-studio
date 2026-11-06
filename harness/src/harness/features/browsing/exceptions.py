@@ -106,11 +106,11 @@ class WorkflowCardChangedError(LibraryError):
 class WorkflowVersionChangedError(LibraryError):
     """A workflow file holds other content under a version the library holds, so the version would change in place.
 
-    The message names the file and the version and says to raise the version.
+    The message names the file and the version, and says to bring the file up to the library's version or to raise it.
     """
 
     def __init__(self, file: Path, workflow_id: str) -> None:
-        """Name the file and the version, and say how to save the new content.
+        """Name the file and the version, and say how to keep the library's content or save the file's.
 
         Args:
             file: The workflow file.
@@ -118,7 +118,9 @@ class WorkflowVersionChangedError(LibraryError):
         """
         super().__init__(
             f"{file} holds {workflow_id}, and the library holds that version with other content. The library keeps one "
-            f"workflow per version. Raise `version` in the workflow file and import again. Nothing was written."
+            f"workflow per version. If the library's {workflow_id} is the one to keep, bring the file up to it, its content "
+            f"and not only its version number. If the file's content is new, raise `version` in it above every version the "
+            f"library holds of the workflow. Then import again. Nothing was written."
         )
         self.workflow_id = workflow_id
         """The version the file names."""

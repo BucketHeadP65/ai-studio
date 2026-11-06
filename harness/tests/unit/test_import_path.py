@@ -677,7 +677,7 @@ async def test_a_file_whose_version_the_library_holds_with_other_content_refuses
     before = len(store.payloads)
     _write(tmp_path, steps={"step-b.md": STEP_B}, workflows={"say-x.md": _say_x_file(_say_x(4, STEPS_A[3]))})
 
-    with pytest.raises(WorkflowVersionChangedError, match=r"say-x\.md holds wf\.say-x\.v4.*other content.*Raise `version`") as refused:
+    with pytest.raises(WorkflowVersionChangedError, match=r"say-x\.md holds wf\.say-x\.v4.*other content.*bring the file up to it, its content.*raise `version` in it above") as refused:
         await import_path(tmp_path, library=library, registry=_registry(), by="test:save", check_cases=check_step_cases, moved_past_by=STEP_MAINTENANCE_AGENT)
 
     assert refused.value.workflow_id == "wf.say-x.v4"
