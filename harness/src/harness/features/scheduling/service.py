@@ -8,6 +8,7 @@ With `catch_up`, the first fire after the hold clears runs at once and is stampe
 A schedule whose cadence waits for an event rests after it fires, until it is armed again.
 An on-index fire passes the changed pages it collected to the workflow's `changed_page_ids` parameter, and a fire that launches nothing keeps them.
 An on-step-change fire passes the changed steps it collected to `changed_step_ids` the same way.
+A schedule whose fire fills one of those parameters need not hold a value for it, and a value it holds is replaced at every fire.
 """
 
 from __future__ import annotations
@@ -106,6 +107,21 @@ def _collected(schedule: Schedule, cadence: Cadence) -> _Collected | None:
     return None
 
 
+def _filled_by_fire(cadence: Cadence | None) -> str | None:
+    """The workflow parameter a fire of this cadence fills with the ids it collected, or `None` for a cadence that collects none."""
+    if isinstance(cadence, OnIndexCadence):
+        return CHANGED_PAGES_PARAMETER
+    if isinstance(cadence, OnStepChangeCadence):
+        return CHANGED_STEPS_PARAMETER
+    return None
+
+
+def _stops_filling(held: Schedule, cadence: Cadence | None) -> bool:
+    """Whether a new cadence stops filling the parameter a fire of the stored cadence filled."""
+    stored = _filled_by_fire(_cadence_or_none(held.cadence))
+    return cadence is not None and stored is not None and _filled_by_fire(cadence) != stored
+
+
 def live_phase(pool: Sessions, session_id: str) -> str | None:
     """Where a session's run stands right now.
 
@@ -166,7 +182,7 @@ async def _launch(session: Runtime, schedule: Schedule, run: running.RunCollabor
         return f"refused: {workflow_id} declares no {collected.parameter}"
     arguments = schedule.arguments if collected is None else {**schedule.arguments, collected.parameter: ",".join(collected.ids)}
     try:
-        _require_parameters(workflow_id, spec, arguments)
+        _require_parameters(workflow_id, spec, arguments, cadence=None)
         params = await admitted_arguments(
             spec,
             arguments,
@@ -272,9 +288,10 @@ async def _checked_workflow(library: WorkflowLibrary, registry: StepRegistry, wo
     return spec
 
 
-def _require_parameters(workflow_id: str, spec: Workflow, arguments: WorkflowArguments) -> None:
-    """Refuse arguments that leave a required parameter of the workflow unfilled."""
-    missing = unsatisfied_parameters(spec, arguments)
+def _require_parameters(workflow_id: str, spec: Workflow, arguments: WorkflowArguments, *, cadence: Cadence | None) -> None:
+    """Refuse arguments that leave a required parameter of the workflow unfilled, counting the parameter a fire of `cadence` fills as supplied."""
+    filled = _filled_by_fire(cadence)
+    missing = unsatisfied_parameters(spec, [*arguments] if filled is None else [*arguments, filled])
     if missing:
         raise WorkflowParametersMissingError(workflow_id, missing=missing)
 
@@ -496,8 +513,10 @@ class Scheduler:
     ) -> Schedule:
         """Add a schedule after checking its workflow, its arguments and every setting.
 
-        The checks run in this order: the workflow, its required parameters, its arguments, the cadence, the gate policy, the
-        blackout, the gate mode.
+        The checks run in this order: the workflow, the cadence, the gate policy, the blackout, its required parameters, its
+        arguments, the gate mode.
+        An on-index cadence fills `changed_page_ids` at every fire and an on-step-change cadence fills `changed_step_ids`, so the
+        arguments need not hold that parameter even when the workflow requires it.
 
         Args:
             library: The workflow library the workflow is read from.
@@ -521,7 +540,8 @@ class Scheduler:
         Raises:
             WorkflowUnavailableError: The library cannot serve the workflow.
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
-            WorkflowParametersMissingError: The arguments leave a required parameter without a value.
+            WorkflowParametersMissingError: The arguments leave a required parameter without a value, other than the one a fire of
+                the cadence fills.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
                 schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, an
@@ -529,8 +549,6 @@ class Scheduler:
                 on Temporal.
         """
         spec = await _checked_workflow(library, registry, workflow_id)
-        _require_parameters(workflow_id, spec, arguments)
-        admitted = await _admitted(library, workflow_id, spec, arguments, names)
         try:
             parsed_cadence = parse_cadence(cadence)
             gate_wait_seconds(gate_policy)
@@ -538,6 +556,8 @@ class Scheduler:
                 parse_blackout(blackout)
         except ValueError as exc:
             raise ScheduleSettingInvalidError(str(exc)) from exc
+        _require_parameters(workflow_id, spec, arguments, cadence=parsed_cadence)
+        admitted = await _admitted(library, workflow_id, spec, arguments, names)
         if isinstance(parsed_cadence, AfterRunCadence) and parsed_cadence.workflow_name == spec.name:
             raise ScheduleSettingInvalidError(_after_itself(spec.name))
         _refuse_cadence_without_its_parameter(workflow_id, spec, parsed_cadence)
@@ -572,6 +592,8 @@ class Scheduler:
         """Apply the set fields of `changes` to one schedule, checking each one first.
 
         A change of workflow or arguments checks the arguments against the workflow the schedule will point at.
+        A required parameter that a fire of the schedule's cadence fills needs no value.
+        A change of cadence away from one whose fire filled a required parameter checks that the arguments now hold it.
         The arguments are written only when `changes` sets them.
         A schedule with no next fire, such as one whose fire failed, gets its next fire from its cadence again.
         A change that sets a cadence waiting for an event clears the next fire, so the schedule rests until something arms it.
@@ -597,7 +619,8 @@ class Scheduler:
             ScheduleNotFoundError: No schedule has that id.
             WorkflowUnavailableError: The library cannot serve the workflow.
             WorkflowNotRunnableError: The workflow does not validate against `registry`.
-            WorkflowParametersMissingError: The arguments leave a required parameter without a value.
+            WorkflowParametersMissingError: The arguments leave a required parameter without a value, other than the one a fire of
+                the cadence fills.
             AdmissionRefused: An argument does not fit its parameter.
             ScheduleSettingInvalidError: The cadence, gate policy or blackout is not one of its shapes, an after-run cadence names the
                 schedule's own workflow, an on-index cadence names a workflow that declares no `changed_page_ids` parameter, an
@@ -607,7 +630,6 @@ class Scheduler:
         held = await self._schedules.get(schedule_id)
         if held is None:
             raise ScheduleNotFoundError(schedule_id)
-        patched = await self._patched_arguments(library, registry, held, changes, names=names)
         try:
             cadence = parse_cadence(changes.cadence) if changes.cadence is not None else None
             if changes.gate_policy is not None:
@@ -616,6 +638,7 @@ class Scheduler:
                 parse_blackout(changes.blackout)
         except ValueError as exc:
             raise ScheduleSettingInvalidError(str(exc)) from exc
+        patched = await self._patched_arguments(library, registry, held, changes, cadence, names=names)
         _refuse_orchestrate_on_temporal(changes.gate_mode, run_engine)
         await _refuse_event_cadence_change(library, registry, held, changes, cadence)
         rests = isinstance(cadence, _EVENT_CADENCES)
@@ -638,16 +661,25 @@ class Scheduler:
         self._topics.publish("schedules")
         return schedule
 
-    async def _patched_arguments(
-        self, library: WorkflowLibrary, registry: StepRegistry, held: Schedule, changes: ScheduleUpdate, *, names: KnowledgeBaseNames | None
+    async def _patched_arguments(  # noqa: PLR0913 (the change, the schedule it changes and its parsed cadence are one check)
+        self,
+        library: WorkflowLibrary,
+        registry: StepRegistry,
+        held: Schedule,
+        changes: ScheduleUpdate,
+        cadence: Cadence | None,
+        *,
+        names: KnowledgeBaseNames | None,
     ) -> WorkflowArguments | None:
-        """The arguments to write, or `None` to leave them, checked against the workflow the schedule will name."""
+        """The arguments to write, or `None` to leave them, checked against the workflow and the cadence the schedule will have."""
         if changes.workflow_id is None and changes.arguments is None:
+            if _stops_filling(held, cadence):
+                _require_parameters(held.workflow_id, await _checked_workflow(library, registry, held.workflow_id), held.arguments, cadence=cadence)
             return None
         named = changes.workflow_id if changes.workflow_id is not None else held.workflow_id
         spec = await _checked_workflow(library, registry, named)
         arguments = changes.arguments if changes.arguments is not None else held.arguments
-        _require_parameters(named, spec, arguments)
+        _require_parameters(named, spec, arguments, cadence=cadence if cadence is not None else _cadence_or_none(held.cadence))
         admitted = await _admitted(library, named, spec, arguments, names)
         return admitted if changes.arguments is not None else None
 

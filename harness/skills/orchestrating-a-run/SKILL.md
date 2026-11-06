@@ -58,6 +58,7 @@ before creating a new one, to see whether one already covers the same workflow.
   again after the fire. A schedule cannot fire after its own workflow. An `on index` fire passes the changed pages
   to the workflow's `changed_page_ids` parameter, and an `on step change` fire passes the changed steps to its
   `changed_step_ids` parameter, so either schedule is refused over a workflow that does not declare its parameter.
+  Leave that parameter out of `arguments`: every fire fills it, even when the workflow requires it.
 - `gate_mode`: `wait` opens a gate decided by a person (the default). `orchestrate` hands it to
   this schedule's own orchestrator instead. `auto` passes every person gate with nobody asked, only on
   the person's explicit instruction, and a judge that cannot decide sends the work back as a rejection. `gate_policy` (`wait`, or `fail_after, <seconds>`) governs

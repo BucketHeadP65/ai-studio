@@ -105,7 +105,8 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
             workflow must declare.
         run_engine: The engine this deployment runs workflows on. Temporal refuses gate mode `orchestrate`.
         arguments: The workflow's parameters, one per declared parameter, each as the JSON value
-            that parameter's own type asks for.
+            that parameter's own type asks for. Leave out `changed_page_ids` on an `on index` cadence and
+            `changed_step_ids` on an `on step change` one: every fire fills it with the ids it collected.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.
         gate_policy: `wait` to hold a gate for a person forever, or `fail_after:<seconds>`.
         gate_mode: `wait`, `orchestrate`, or `auto`. See `orchestrating-a-run`.
@@ -157,7 +158,7 @@ async def schedule_workflow(  # noqa: PLR0913 (a schedule's settings are one fla
         raise ModelRetry(str(exc)) from exc
     fires = preview_fires(parse_cadence(cadence), since=now)
     if not fires:
-        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run, a workflow run or an index arms it, never by the clock."
+        return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. It rests until a refresh run, a workflow run, an index or a new reusable step version arms it, never by the clock."
     when = ", ".join(moment.isoformat() for moment in fires)
     return f"Scheduled {workflow_id} as {schedule.id}, cadence {cadence}. Next three fires. {when}."
 
@@ -193,9 +194,10 @@ async def update_schedule(  # noqa: PLR0913 (mirrors the HTTP patch route's flat
         workflow_id: Point the schedule at a different saved workflow.
         cadence: Change how it fires, in any form `schedule_workflow` takes. Another cadence drops the changed pages or steps the schedule
             collected, unless it is `on index` over the same knowledge base or `on step change` again, so a change of the quiet period
-            alone keeps them.
+            alone keeps them. A cadence that no longer fills `changed_page_ids` or `changed_step_ids` needs that parameter in the
+            arguments when the workflow requires it.
         arguments: Replace the workflow's parameters, each as the JSON value that parameter's own
-            type asks for.
+            type asks for. Leave out the one an `on index` or `on step change` fire fills.
         names: Which knowledge bases are registered here, for a workflow whose parameters select one.
         enabled: Pause it (false) or resume it (true).
         gate_policy: `wait` or `fail_after:<seconds>`.

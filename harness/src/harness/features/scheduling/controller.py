@@ -143,7 +143,7 @@ class SchedulingController:
 
     @router.patch("/{schedule_id}")
     async def patch_schedule(self, schedule_id: UUID, body: SchedulePatch) -> JSONResponse:
-        """Apply the fields `body` sets to one schedule, checking again a workflow or arguments it changes."""
+        """Apply the fields `body` sets to one schedule, checking again a workflow, arguments or cadence it changes."""
         session = self._sessions.default
         try:
             schedule = await self._scheduler.update_schedule(

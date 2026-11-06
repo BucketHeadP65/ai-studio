@@ -49,6 +49,8 @@ export interface ParameterField {
   label: string;
   /** The parameter's description, shown under the control. Empty is a real state. */
   help: string;
+  /** A sentence the form adds under the description, such as who fills the field. Absent for none. */
+  note?: string;
   required: boolean;
   schema: JsonSchema;
   control: ParameterControl;
@@ -548,8 +550,10 @@ function OneField({
 }): ReactElement {
   const errorId = error === undefined ? undefined : `${id}-error`;
   const helpId = field.help === "" ? undefined : `${id}-help`;
-  // The description and the refusal both belong to the control, in reading order.
-  const describedBy = [helpId, errorId].filter((one) => one !== undefined).join(" ") || undefined;
+  const noteId = field.note === undefined ? undefined : `${id}-note`;
+  // The description, the note and the refusal all belong to the control, in reading order.
+  const describedBy =
+    [helpId, noteId, errorId].filter((one) => one !== undefined).join(" ") || undefined;
   const shared = {
     id,
     disabled,
@@ -634,11 +638,7 @@ function OneField({
       <fieldset className="flex flex-col gap-1" aria-describedby={describedBy}>
         <legend className={FIELD_LABEL}>{field.label}</legend>
         {field.required ? null : <Optional />}
-        {field.help ? (
-          <p id={helpId} className="text-caption text-label-3">
-            {field.help}
-          </p>
-        ) : null}
+        <Description field={field} helpId={helpId} noteId={noteId} />
         {field.control === "string-list" ? (
           <StringList
             field={field}
@@ -678,11 +678,7 @@ function OneField({
           </label>
           {field.required ? null : <Optional />}
         </div>
-        {field.help ? (
-          <p id={helpId} className="text-caption text-label-3">
-            {field.help}
-          </p>
-        ) : null}
+        <Description field={field} helpId={helpId} noteId={noteId} />
         {error === undefined ? null : (
           <p id={errorId} className="text-caption text-danger-ink">
             {error}
@@ -700,11 +696,7 @@ function OneField({
         </label>
         {field.required ? null : <Optional />}
       </div>
-      {field.help ? (
-        <p id={helpId} className="text-caption text-label-3">
-          {field.help}
-        </p>
-      ) : null}
+      <Description field={field} helpId={helpId} noteId={noteId} />
       {control()}
       {error === undefined ? null : (
         <p id={errorId} className="text-caption text-danger-ink">
@@ -712,6 +704,32 @@ function OneField({
         </p>
       )}
     </div>
+  );
+}
+
+// The parameter's description and the form's note under it, each its own sentence the control is described by.
+function Description({
+  field,
+  helpId,
+  noteId,
+}: {
+  field: ParameterField;
+  helpId: string | undefined;
+  noteId: string | undefined;
+}): ReactElement {
+  return (
+    <>
+      {field.help ? (
+        <p id={helpId} className="text-caption text-label-3">
+          {field.help}
+        </p>
+      ) : null}
+      {field.note === undefined ? null : (
+        <p id={noteId} className="text-caption text-label-3">
+          {field.note}
+        </p>
+      )}
+    </>
   );
 }
 
