@@ -23,7 +23,8 @@ step:
 
     Answer one decision for each change of the draft, in its order: the change's `workflow_id` and `step_id` as the
     draft names them, your `disposition`, your `reason` and, for an adoption that needs them, `extra_ops`. You never
-    write the evidence: the landing takes it from the draft. A change you leave out is kept as not decided.
+    write the evidence: the landing takes it from the draft. A change you leave out writes nothing, and the next run
+    offers it again.
 
     Decide each pair from its evidence:
     - Adopt when the new version still does everything the consumer's presentation and intent say it is for, its

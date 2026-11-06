@@ -18,12 +18,13 @@ step:
     this evidence.
 
     Because the evidence was read after the plan was made, a pair can move in between: someone saved a newer version
-    of the consumer or of the step, or the consumer took the new version itself. A decision is stale when no pair
-    matches it but `consumers` holds a pair for the same workflow name at another workflow or step version, or holds no
-    pair for that workflow name while `dropped` is above 0 (a consumer that took the version or declined it). The
-    landing refuses a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An
-    adopt on a stale pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change
-    with no decision lands kept as not decided, and a pair saved after the plan was drafted waits for the next run.
+    of the consumer or of the step, or the consumer took the new version itself or declined it. A decision is stale only
+    when no pair matches it and its workflow name is in `dropped` or `left_for_next_run` at any version, or `consumers`
+    holds a pair for its workflow name at a newer workflow or step version than the decision names. The landing refuses
+    a stale pair itself, so a keep or a flag on a stale pair passes, its feedback line saying stale. An adopt on a stale
+    pair fails: say to keep it. A pair no decision names is never a reason to reject: a drafted change with no decision
+    writes nothing and is offered again on the next run, and a pair saved after the plan was drafted waits for the next
+    run.
 
     Mark each other decision pass or fail:
     - An adopt fails when the diff takes away something the consumer's presentation or intent says it needs, when its
@@ -33,11 +34,12 @@ step:
     - A keep fails when the new version serves the consumer's goal and passes its check, so keeping the copy throws
       the change away for no stated reason.
     - A flag fails when the evidence settles the question the plan hands the owner.
+    - Two decisions for one pair fail that pair, both of them: say which one to keep.
     - Any decision fails when its reason is empty, says "not decided", or contradicts the evidence.
 
     Answer approve when every decision passes. No decisions are approved when `consumers` holds no pairs, because
     there is nothing to land. Answer reject only when a decision fails on the evidence. Answer cannot_judge when a
-    decision names a workflow that no pair, no `left_for_next_run` entry and nothing dropped accounts for, so the
+    decision names a workflow that no pair, no `dropped` entry and no `left_for_next_run` entry accounts for, so the
     evidence never held it, or when the evidence arrived cut off or unreadable, and say which.
 
     Your feedback is read by the planner on its next attempt. Write one line per decision, in its order:

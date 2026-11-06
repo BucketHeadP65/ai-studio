@@ -176,7 +176,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
-      dropped: 0
+      dropped: []
   evaluators:
   - LLMJudge:
       rubric: The answer holds two decisions, in the draft's order, each naming its change by the draft's workflow_id and
@@ -283,7 +283,7 @@ cases:
           structural_mean: null
           structural_last: null
       left_for_next_run: []
-      dropped: 0
+      dropped: []
   evaluators:
   - LLMJudge:
       rubric: The answer holds one decision, naming wf.board-actions.v1 and the draft's step_id, and it is flag or keep, never

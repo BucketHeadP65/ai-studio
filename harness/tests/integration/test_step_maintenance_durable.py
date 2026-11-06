@@ -25,8 +25,7 @@ from temporalio.worker import Worker
 
 from harness.adapters.environment import code_runner
 from harness.domain.ports import JUDGE_TOOLS
-from harness.features.maintenance.contracts import STEP_MAINTENANCE_AGENT, HandOver
-from harness.features.maintenance.domain import CHANGED_STEPS, PLAN_GATE
+from harness.features.maintenance.contracts import CHANGED_STEPS, PLAN_GATE, STEP_MAINTENANCE_AGENT, HandOver
 from tests.support.grants import app_grants, app_reads
 from tests.support.maintenance import (
     CHANGED,

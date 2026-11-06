@@ -168,14 +168,14 @@ class MaintenanceSteps:
         """Every consumer whose copy of a changed step is behind it or diverged, at most twenty, with what the planner decides by.
 
         Each named step is taken at its newest saved version, whichever version the id names. A consumer whose copy
-        matches that version, or whose record declines it, is dropped and counted. The consumers past the cap are named
+        matches that version, or whose record declines it, is dropped and named. The consumers past the cap are named
         once each for the next run.
 
         Args:
             changed_step_ids: The changed step versions' ids, comma-separated.
 
         Returns:
-            The pairs, by step name and then by consumer name, the consumers left for the next run and the count dropped.
+            The pairs, by step name and then by consumer name, the consumers left for the next run and those dropped.
 
         Raises:
             LibraryError: A step id names no saved reusable step version, or a library read fails.
@@ -225,7 +225,7 @@ class MaintenanceSteps:
         return [await self._case_report(version) for version in versions.values()]
 
     async def prepare_plan(self, consumers: ConsumerList, checks: list[ContractCheck], cases: list[CaseReport]) -> MaintenancePlan:
-        """The plan the planner starts from: one change per pair, kept and not yet decided, its evidence copied in.
+        """The drafted plan: one change per pair, kept and not decided, its evidence copied in.
 
         Each change carries its pair's contract check and the case reports of the changed version and of the version a
         behind consumer holds, so the planner decides and never writes evidence.
@@ -345,7 +345,7 @@ class MaintenanceSteps:
         for change in landed.changes:
             pair = pairs.get((change.workflow_id, change.step_id))
             outcome = change.outcome
-            if pair is None or outcome == "refused":
+            if pair is None or outcome in ("refused", "undecided"):
                 continue
             side = ConsumerSide(
                 workflow_id=change.workflow_id,
@@ -502,16 +502,16 @@ class MaintenanceSteps:
             taken[newest.name] = (newest, saved)
         return tuple(taken[name] for name in sorted(taken))
 
-    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], int]:
-        """The behind or diverged consumers within the cap, those past it, and how many current or declined ones were dropped."""
+    async def _candidates(self, changed: _Changed) -> tuple[list[_Candidate], list[_Candidate], list[str]]:
+        """The behind or diverged consumers within the cap, those past it, and the ids of the current or declined ones, each once."""
         candidates: list[_Candidate] = []
-        dropped = 0
+        dropped: dict[str, None] = {}
         for version, saved in changed:
             by_version = {each.version: each for each in saved}
             for card in await self._library.consumers_of(version.name):
                 entry = card.entry
                 if entry.declined == version.step_hash or (entry.version is not None and entry.version >= version.version):
-                    dropped += 1
+                    dropped[card.workflow_id] = None
                     continue
                 held_version = entry.version if entry.version is not None else entry.diverged_from
                 held = by_version.get(held_version) if held_version is not None else None
@@ -520,7 +520,7 @@ class MaintenanceSteps:
                     raise LibraryError(msg)
                 candidates.append(_Candidate(version=version, card=card, held=held))
         candidates.sort(key=lambda candidate: (candidate.version.name, candidate.card.name, candidate.card.version))
-        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], dropped
+        return candidates[:PAIR_CAP], candidates[PAIR_CAP:], list(dropped)
 
     async def _pair(self, candidate: _Candidate) -> ConsumerPair:
         """The pair one candidate makes, with its diff, its nodes, its card's words and its trust."""

@@ -248,6 +248,7 @@ async def test_list_consumers_answers_each_behind_pair_with_its_diff_goal_and_tr
     weekly_id = await world.save(consumer("weekly-digest", DIGEST[3]), presentation=PRESENTATION, intent=INTENT)
     declined_id = await world.save(consumer("daily-digest", DIGEST[3]))
     await world.library.record_decline(declined_id, step="digest", step_hash=HASH4, because="kept")
+    current_id = await world.save(consumer("current-digest", DIGEST[4]))
     for hour in range(2):
         await world.log.append(_ran(first, "wf.digest-sources.v1", at=T0 + timedelta(hours=hour)))
     await world.log.append(_ran(second, sources_id, at=T0 + timedelta(hours=3)))
@@ -255,7 +256,7 @@ async def test_list_consumers_answers_each_behind_pair_with_its_diff_goal_and_tr
     listed = await world.steps.list_consumers(V4)
 
     assert [pair.workflow_id for pair in listed.pairs] == [sources_id, weekly_id]
-    assert (listed.dropped, listed.left_for_next_run) == (1, [])
+    assert (sorted(listed.dropped), listed.left_for_next_run) == (sorted([declined_id, current_id]), []), "each dropped pair is named"
     sources, weekly = listed.pairs
     for pair in listed.pairs:
         assert (pair.state, pair.step, pair.step_id, pair.step_hash, pair.held_step_id, pair.nodes) == (
@@ -681,7 +682,7 @@ async def test_plan_decisions_answers_no_decision_for_the_plan(tmp_path: Path) -
     assert decisions == PlanDecisions(decisions=[])
 
 
-async def test_a_drafted_change_no_decision_names_lands_as_kept_and_not_decided(tmp_path: Path) -> None:
+async def test_a_drafted_change_no_decision_names_writes_nothing_and_is_offered_again_on_the_next_run(tmp_path: Path) -> None:
     world = World(tmp_path)
     await world.save_steps(3, 4)
     sources_id = await world.save(consumer("digest-sources", DIGEST[3]))
@@ -694,10 +695,23 @@ async def test_a_drafted_change_no_decision_names_lands_as_kept_and_not_decided(
 
     assert [(change.workflow_id, change.outcome, change.reason) for change in landed.changes] == [
         (sources_id, "adopted", "It fits."),
-        (weekly_id, "kept", "not decided"),
+        (weekly_id, "undecided", "not decided, offered again on the next run"),
     ]
-    (kept,) = await world.library.fetch_consumer_record(weekly_id)
-    assert (kept.declined, kept.declined_because) == (HASH4, "kept")
+    (record,) = await world.library.fetch_consumer_record(weekly_id)
+    assert (record.declined, record.declined_because) == (None, None), "an undecided pair writes no decline"
+    assert [pair.workflow_id for pair in (await world.steps.list_consumers(V4)).pairs] == [weekly_id]
+    assert f"{weekly_id} with {V4} was not decided, offered again on the next run." in await world.steps.report_changes(landed)
+
+
+async def test_the_owner_s_line_starts_the_reason_after_its_period_with_a_capital(tmp_path: Path) -> None:
+    world = World(tmp_path)
+    kept = _landed("wf.weekly-digest.v1", "kept", "the weekly digest keeps its own tone.")
+    flagged = _landed("wf.daily-digest.v1", "flagged", "only the owner can say.")
+
+    told = await world.steps.report_changes(LandingReport(changes=[kept, flagged], left_for_next_run=[]))
+
+    assert f"wf.weekly-digest.v1 keeps its copy instead of {V4}. The weekly digest keeps its own tone." in told
+    assert f"wf.daily-digest.v1 waits for your decision on {V4}. Only the owner can say." in told
 
 
 async def test_a_decision_naming_no_drafted_change_is_refused_and_every_drafted_change_still_lands(tmp_path: Path) -> None:

@@ -131,6 +131,7 @@ workflow:
       turns: [judge_repository_change]
       over: {node: draft_repository_changes}
       each: draft
+      inputs: {disagreements: {node: select_disagreements}}
       max_parallel: 2
       on_error: skip
     - kind: run
@@ -158,7 +159,7 @@ plan is judged on evidence made after it. The third rejection ends the run with 
 maintenance flag per changed step. The second pass reads the library and the evidence log again, and runs again the
 cases of a step version whose first case report held an errored case, since such a report is not kept, one model call
 per case. `land_changes` merges the approved decisions into the plan
-`prepare_plan` drafted, a change no decision names staying kept as not decided, then saves each adoption as the
+`prepare_plan` drafted, a change no decision names writing nothing so the next run offers it again, then saves each adoption as the
 consumer's next version on live trial, declines each kept copy and flags each flagged pair, landing every writable
 change before it fails naming each refusal. Only then do `report_changes` and the repository
 branch start: one drafter per step whose consumers split, one judge per draft, and the hand-over, which writes each

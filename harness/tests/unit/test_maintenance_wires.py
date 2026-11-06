@@ -2,7 +2,8 @@
 
 A briefing that takes `{like: prepare_plan}` and answers `{like: plan_decisions}` feeds `land_changes` its decisions
 beside the drafted plan, a map whose briefing answers one element of `select_disagreements` feeds
-`hand_over_repository_changes`'s drafts, and a map whose briefing answers `{like: repository_verdict}` feeds its verdicts. `report_changes` feeds the hand-over too, which answers for the run, so
+`hand_over_repository_changes`'s drafts, and a map whose briefing answers `{like: repository_verdict}`, reading every
+selected change beside its draft, feeds its verdicts. `report_changes` feeds the hand-over too, which answers for the run, so
 no node is a dead end. The registry holds the steps over a library that holds nothing.
 """
 
@@ -73,7 +74,7 @@ WORKFLOW = {
         {
             "name": "judge_repository_change",
             "instructions": BRIEFING,
-            "inputs": {"draft": {"like": "select_disagreements", "element": True}},
+            "inputs": {"draft": {"like": "select_disagreements", "element": True}, "disagreements": {"like": "select_disagreements"}},
             "output": {"like": "repository_verdict"},
         },
     ],
@@ -110,6 +111,7 @@ WORKFLOW = {
             "turns": ["judge_repository_change"],
             "over": {"node": "draft_repository_changes"},
             "each": "draft",
+            "inputs": {"disagreements": {"node": "select_disagreements"}},
             "on_error": "skip",
         },
         {

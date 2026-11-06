@@ -47,6 +47,9 @@ from harness.domain.ports import CHECK_CHANGE_TOOL, JUDGE_TOOLS
 from harness.features.evals.contracts import check_step_cases
 from harness.features.evals.domain.step_evaluation import CaseDataset, OutcomeMatches
 from harness.features.maintenance.contracts import (
+    CHANGED_STEPS,
+    MAINTENANCE_WORKFLOW,
+    PLAN_GATE,
     STEP_MAINTENANCE_AGENT,
     ConsumerList,
     ContractCheck,
@@ -57,7 +60,6 @@ from harness.features.maintenance.contracts import (
     RepositoryChange,
     RepositoryVerdict,
 )
-from harness.features.maintenance.domain import CHANGED_STEPS, MAINTENANCE_WORKFLOW, PLAN_GATE
 from harness.rendering import parallel_groups
 from tests.support.fakes.library_collection import FakeCollection
 from tests.support.grants import app_grants, app_reads
@@ -269,7 +271,7 @@ def test_the_drafter_checks_its_draft_with_check_change_and_answers_one_element_
     assert drafter.budget is not None
     assert "check_change" in drafter.instructions.strip().split("\n\n")[-1]
     judge = _step("judge_repository_change")
-    assert judge.inputs == {"draft": SameAs(like="select_disagreements", element=True)}
+    assert judge.inputs == {"draft": SameAs(like="select_disagreements", element=True), "disagreements": SameAs(like="select_disagreements")}
     assert judge.output == SameAs(like="repository_verdict")
 
 
@@ -298,6 +300,7 @@ def test_the_report_and_the_repository_branch_start_after_the_landing_and_the_la
     assert isinstance(verdicts, MapNode)
     assert (drafts.turns, drafts.over, drafts.each, drafts.on_error) == (("draft_repository_change",), FromNode(node="select_disagreements"), "change", "skip")
     assert (verdicts.turns, verdicts.over, verdicts.each, verdicts.on_error) == (("judge_repository_change",), FromNode(node="draft_repository_changes"), "draft", "skip")
+    assert verdicts.inputs == {"disagreements": FromNode(node="select_disagreements")}, "the judge reads the step and both sides as code selected them"
     assert _node(spec, "hand_over_repository_changes").inputs == {
         "report": FromNode(node="report_changes"),
         "disagreements": FromNode(node="select_disagreements"),
@@ -522,6 +525,12 @@ def _moved(inputs: Mapping[str, object]) -> bool:
     )
 
 
+def _decided_twice(inputs: Mapping[str, object]) -> bool:
+    """Whether two decisions name the same pair."""
+    pairs = [(decision.workflow_id, decision.step_id) for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions]
+    return len(pairs) != len(set(pairs))
+
+
 def _unnamed(inputs: Mapping[str, object]) -> bool:
     """Whether the evidence holds a pair for a workflow no decision names at any version."""
     named = {re.sub(r"^wf\.|\.v\d+$", "", decision.workflow_id) for decision in PlanDecisions.model_validate(inputs["decisions"]).decisions}
@@ -543,6 +552,8 @@ def test_the_plan_judge_s_cases_approve_reject_a_broken_goal_and_a_failing_check
     )
     moved = [_outcome(case.expected_output) for case in dataset.cases if _moved(case.inputs)]
     assert moved == ["approve"], "a pair that moved between the plan and the evidence is passed as stale, never a rejection"
+    twice = [_outcome(case.expected_output) for case in dataset.cases if _decided_twice(case.inputs)]
+    assert twice == ["reject"], "two decisions for one pair fail that pair"
     unnamed = [_outcome(case.expected_output) for case in dataset.cases if _unnamed(case.inputs)]
     assert unnamed == ["approve"], "a pair no decision names, such as a consumer saved after the plan, is never a reason to reject"
 
@@ -688,7 +699,7 @@ async def test_a_run_with_no_consumer_behind_is_approved_and_lands_writes_and_te
     )
 
     assert scripted.models.performed == ["plan_changes", PLAN_GATE], "approved on the first attempt, and no repository change to draft"
-    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=1)
+    assert scripted.models.judged[0]["consumers"] == ConsumerList(pairs=[], left_for_next_run=[], dropped=[current])
     assert isinstance(handed, HandOver)
     assert handed.report == "Step maintenance changed nothing, so nobody was told."
     assert (handed.flags, handed.dropped, handed.problems) == ([], [], [])
